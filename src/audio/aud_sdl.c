@@ -1,4 +1,7 @@
 #include "common/common.h"
+#include "common/file.h"
+#include <errno.h>
+#include <string.h>
 
 #include "audio.h"
 #include "aud_ops.h"
@@ -27,6 +30,16 @@ static int s_queuedBgmId;
 
 static void AUDIO_SDL_LoadBgmTable(void);
 static void AUDIO_SDL_LoadSfxTable(void);
+static MIX_Audio* AUDIO_SDL_LoadAudio(const char* fileName, bool predecode)
+{
+    char resolved[FILE_PATH_SIZE];
+    if (FILE_ResolvePath(fileName, resolved, sizeof(resolved), 0) != 0)
+    {
+        SDL_SetError("Cannot resolve audio file '%s': %s", fileName, strerror(errno));
+        return NULL;
+    }
+    return MIX_LoadAudio(s_mixer, resolved, predecode);
+}
 static void AUDIO_SDL_PlayBgmSub(int id);
 static void SDLCALL AUDIO_SDL_OnBgmStopped(void* userdata, MIX_Track* track);
 
@@ -78,7 +91,7 @@ static void AUDIO_SDL_LoadBgmTable(void)
     {
         char fileName[256] = {0,};
         sprintf(fileName, "BGM/%02d.ogg", i);
-        s_bgm[i] = MIX_LoadAudio(s_mixer, fileName, false);
+        s_bgm[i] = AUDIO_SDL_LoadAudio(fileName, false);
         PrintError();
     }
 }
@@ -94,7 +107,7 @@ static void AUDIO_SDL_LoadSfxTable(void)
             continue;
         }
         sprintf(fileName, "SFX/%s", r->fileName);
-        s_sfx[r->sfxId] = MIX_LoadAudio(s_mixer, fileName, true);
+        s_sfx[r->sfxId] = AUDIO_SDL_LoadAudio(fileName, true);
     }
 }
 

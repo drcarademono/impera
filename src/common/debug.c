@@ -1,4 +1,5 @@
 #include "common/common.h"
+#include "common/file.h"
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -82,7 +83,7 @@ void DEBUG_Initialize(void)
 #if defined(OS_WINDOWS)
     s_verbose = 1;
 #endif
-    s_log = fopen("LOG.TXT", "wb");
+    s_log = FILE_Open("LOG.TXT", "wb");
     if (s_log)
     {
         fputs("Ultima V runtime log. Set U5D_DEBUG=1 for verbose tracing.\n", s_log);

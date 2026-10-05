@@ -90,6 +90,20 @@ if(U5D_BUILD_TESTS)
              -DTEST_EXE=$<TARGET_FILE:u5d_savegame_test>
              -DTEST_DIR=${CMAKE_BINARY_DIR}/test-runtime
              -P ${CMAKE_SOURCE_DIR}/tests/check_missing_file.cmake)
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        add_executable(u5d_file_case_test tests/file_case_test.c src/common/file.c)
+        target_include_directories(u5d_file_case_test PRIVATE ${CMAKE_SOURCE_DIR}/src)
+        file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/case-runtime/MiXeD/SubDir"
+                            "${CMAKE_BINARY_DIR}/case-runtime/SaVeGaMe"
+                            "${CMAKE_BINARY_DIR}/case-runtime/u4SaVe"
+                            "${CMAKE_BINARY_DIR}/case-runtime/bGm")
+        add_test(NAME case_insensitive_files COMMAND u5d_file_case_test)
+        set_tests_properties(case_insensitive_files PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/case-runtime" TIMEOUT 10)
+        find_package(Python3 COMPONENTS Interpreter REQUIRED)
+        add_test(NAME runtime_filename_case COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_SOURCE_DIR}/tests/test_prepare_runtime.py)
+    endif()
 endif()
 
 foreach(U5D_TARGET IN LISTS U5D_TARGETS)

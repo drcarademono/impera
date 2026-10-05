@@ -26,14 +26,14 @@ int FILE_ReadSavegameFile(char* fileName)
     FILE* stream;
 
     char buf[256];
-    if (!strcmp(fileName, "BRIT.OOL") || !strcmp(fileName, "UNDER.OOL") || !strcmp(fileName, "SAVED.OOL") ||
-        !strcmp(fileName, "SAVED.GAM"))
+    if (FILE_NameEqual(fileName, "BRIT.OOL") || FILE_NameEqual(fileName, "UNDER.OOL") || FILE_NameEqual(fileName, "SAVED.OOL") ||
+        FILE_NameEqual(fileName, "SAVED.GAM"))
     {
         sprintf(buf, "SAVEGAME" SAVEGAME_PATH_SEPARATOR "%s", fileName);
         fileName = buf;
     }
 
-    stream = fopen(fileName, "rb");
+    stream = FILE_Open(fileName, "rb");
     if (!stream)
         return -1;
 
@@ -192,14 +192,14 @@ int FILE_WriteSavegameFile(char* fileName)
     FILE* stream;
 
     char buf[256];
-    if (!strcmp(fileName, "BRIT.OOL") || !strcmp(fileName, "UNDER.OOL") || !strcmp(fileName, "SAVED.OOL") ||
-        !strcmp(fileName, "SAVED.GAM"))
+    if (FILE_NameEqual(fileName, "BRIT.OOL") || FILE_NameEqual(fileName, "UNDER.OOL") || FILE_NameEqual(fileName, "SAVED.OOL") ||
+        FILE_NameEqual(fileName, "SAVED.GAM"))
     {
         sprintf(buf, "SAVEGAME" SAVEGAME_PATH_SEPARATOR "%s", fileName);
         fileName = buf;
     }
 
-    stream = fopen(fileName, "wb");
+    stream = FILE_Open(fileName, "wb");
     if (!stream)
         return -1;
 

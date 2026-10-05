@@ -1,5 +1,6 @@
 #include "common.h"
 #include "settings.h"
+#include "file.h"
 
 #include <stdio.h>
 #include <errno.h>
@@ -17,8 +18,11 @@
 int SETTINGS_GetString(char* section, char* key, char* defaultValue, char* outValue, int size)
 {
     char fileName[] = ".\\ultima5.ini";
+    char resolved[FILE_PATH_SIZE];
+    if (FILE_ResolvePath(fileName, resolved, sizeof(resolved), 1) != 0)
+        return 0;
 
-    return GetPrivateProfileStringA(section, key, defaultValue, outValue, size, fileName);
+    return GetPrivateProfileStringA(section, key, defaultValue, outValue, size, resolved);
 }
 
 #else

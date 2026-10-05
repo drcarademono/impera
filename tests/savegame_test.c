@@ -58,7 +58,7 @@ int main(int argc, char** argv)
     fclose(stream);
     D_55a6 = 0;
     memset(D_55a8_party, 0, sizeof(S_55a8) * 16);
-    assert(FILE_ReadSavegameFile("SAVED.GAM") == 0);
+    assert(FILE_ReadSavegameFile("sAvEd.gAm") == 0);
     assert(D_55a6 == 1234 && D_55a8_party[0].hp == 100);
     assert(strcmp(D_55a8_party[0].name, "Test") == 0);
     remove("SAVEGAME/SAVED.GAM");

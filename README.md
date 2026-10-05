@@ -31,7 +31,7 @@ The game can be played through to the ending using the original data files. Howe
 
 ### Linux Target
 
-Install a C compiler, CMake 3.16 or newer, pkg-config, SDL3, and SDL3_mixer
+Install a C compiler, CMake 3.16 or newer, Python 3, pkg-config, SDL3, and SDL3_mixer
 development packages. This target uses **SDL3_mixer 3.2 or newer**, not
 SDL2_mixer. SDL3 must include your desktop's X11 or Wayland video driver.
 If your distribution does not package these libraries, build them from the
@@ -54,7 +54,13 @@ The launcher copies the original data from `Ultima 5` to `build/runtime`
 on first run and keeps saves in `build/runtime/SAVEGAME`. Existing runtime
 files and saves are preserved on later runs. Set `U5D_DATA_DIR` to an absolute
 path to use another data directory, or `U5D_BUILD_DIR` to an absolute path
-if you configured a different build directory. Keep filename case intact.
+if you configured a different build directory. Game filenames and directory
+components are matched without regard to ASCII letter case, including fonts,
+maps, NPCs, conversations, saves, Ultima IV imports, and optional audio.
+Existing saves retain their filename spelling when written. Exact spelling
+wins; if a lookup has multiple matches differing only by case, it reports an
+error rather than choosing one. The launcher rejects conflicting source
+spellings and preserves existing runtime files and saves.
 New character creation requires the original `INIT.GAM` file (at least 4192
 bytes), which supplies the starting party and world state. Add it to the data
 directory if it is missing; `INIT.OOL` is a different file and cannot replace
