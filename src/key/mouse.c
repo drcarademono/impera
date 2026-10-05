@@ -114,7 +114,13 @@ static void LoadCursors(void)
         if (surface) {
             SDL_Surface* scaled = SDL_ScaleSurface(surface,s_cursorWidth,s_cursorHeight,SDL_SCALEMODE_NEAREST);
             if (scaled) {
-                s_cursors[i] = SDL_CreateColorCursor(scaled, i ? s_cursorWidth / 2 : 0, i ? s_cursorHeight / 2 : 0);
+                /* SDL mouse coordinates refer to this hotspot. Keep hit testing
+                 * unchanged so the visible arrow tip identifies the target. */
+                static const int tipX[9] = {0, 1, 2, 2, 2, 1, 0, 0, 0};
+                static const int tipY[9] = {0, 0, 0, 1, 2, 2, 2, 1, 0};
+                int hotspotX = tipX[i] == 2 ? s_cursorWidth - 1 : tipX[i] * (s_cursorWidth / 2);
+                int hotspotY = tipY[i] == 2 ? s_cursorHeight - 1 : tipY[i] * (s_cursorHeight / 2);
+                s_cursors[i] = SDL_CreateColorCursor(scaled, hotspotX, hotspotY);
                 SDL_DestroySurface(scaled);
             }
             SDL_DestroySurface(surface);

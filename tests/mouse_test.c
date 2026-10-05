@@ -19,8 +19,11 @@ SDL_Cursor* __wrap_SDL_CreateColorCursor(SDL_Surface* surface, int x, int y)
 {
     int width,height; GRAP_SDL_CursorSize(&width,&height);
     assert(surface->w == width && surface->h == height);
-    assert(x == (loadedCursors % 9 ? width / 2 : 0));
-    assert(y == (loadedCursors % 9 ? height / 2 : 0));
+    /* Pointer, N, NE, E, SE, S, SW, W, NW: test every scaled arrow tip. */
+    const int expectedX[9] = {0, width/2, width-1, width-1, width-1, width/2, 0, 0, 0};
+    const int expectedY[9] = {0, 0, 0, height/2, height-1, height-1, height-1, height/2, 0};
+    assert(x == expectedX[loadedCursors % 9]);
+    assert(y == expectedY[loadedCursors % 9]);
     bool transparent = false, opaque = false;
     for (int yy = 0; yy < surface->h; ++yy) for (int xx = 0; xx < surface->w; ++xx) {
         Uint8 r,g,b,a;
