@@ -575,20 +575,20 @@ void INTRO_0986_Main(void) // intro_main (initialize video) (8b46)
     if (D_52ba_vdp._52c8_videoDriverSelection == VDP_VIDEO_HERC)
     {
         // 0a64
-        while (ULTIMA_1d02_LoadCharset(/*0x3182*/ "ibm.hcs", 0) == 0)
+        while (ULTIMA_1d02_LoadCharset(/*0x3182*/ "IBM.HCS", 0) == 0)
         {
         }
-        while (ULTIMA_1d02_LoadCharset(/*0x318a*/ "runes.hcs", 1) == 0)
+        while (ULTIMA_1d02_LoadCharset(/*0x318a*/ "RUNES.HCS", 1) == 0)
         {
         }
     }
     else
     {
         // 0a84
-        while (ULTIMA_1d02_LoadCharset(/*0x3194*/ "ibm.ch", 0) == 0)
+        while (ULTIMA_1d02_LoadCharset(/*0x3194*/ "IBM.CH", 0) == 0)
         {
         }
-        while (ULTIMA_1d02_LoadCharset(/*0x319b*/ "runes.ch", 1) == 0)
+        while (ULTIMA_1d02_LoadCharset(/*0x319b*/ "RUNES.CH", 1) == 0)
         {
         }
     }
@@ -825,7 +825,8 @@ void INTRO_0986_Main(void) // intro_main (initialize video) (8b46)
             // 0ead
             ULTIMA_251e_SwitchDisks(3);
 #if !defined(TARGET_DOS16)
-            FILE_ReadSavegameFile(/*0x31e6*/ "SAVED.GAM");
+            if (FILE_ReadSavegameFile(/*0x31e6*/ "SAVED.GAM") != 0)
+                D_55a8_party[0].name[0] = '\0';
 #else
             ULTIMA_256e_ReadFileFromDisk(/*0x31e6*/ "SAVED.GAM", &D_55a6, ((int)&D_6606 - (int)&D_55a6) /*0x1060*/, 0);
 #endif
@@ -1131,7 +1132,14 @@ static void INTRO_132a_TransferFromU4(void)
 #endif
 
 #if !defined(TARGET_DOS16)
-    FILE_ReadSavegameFile(/*0x3345*/ "INIT.GAM");
+    if (FILE_ReadSavegameFile(/*0x3345*/ "INIT.GAM") != 0)
+    {
+        ULTIMA_1850_PrintString("\nMissing or incomplete INIT.GAM.\nRestore the original game file.\nPress a key to return.\n");
+        ULTIMA_1dda_WaitForKeystroke(0);
+        ULTIMA_251e_SwitchDisks(0);
+        D_5893_map_id = local_e;
+        return;
+    }
 #else
     ULTIMA_256e_ReadFileFromDisk(/*0x3345*/ "INIT.GAM", &D_55a6, ((byte*)&D_6606 - (byte*)&D_55a6), 0);
 #endif

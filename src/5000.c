@@ -822,6 +822,7 @@ void ULTIMA_5f86_SpecialMapHandler(int param_1, int param_2, int param_3)
 
     D_5894 = D_5893_map_id;
     local_4 = D_587b;
+    debug("Entering special map: mode=%d map=%d active=%d\n", param_1, D_5894, local_4);
     D_5893_map_id = 0xff;
 
     // copy actors
@@ -895,7 +896,9 @@ L_606c:
 
     ULTIMA_2900_UpdateVitalsDisplay();
 
-    if (D_55a8_party[local_4].status != STATUS_DEAD && D_55a8_party[local_4].status != STATUS_SLEEP)
+    /* 0xff means no active character; never use it as a party index. */
+    if (local_4 < (int)(sizeof(D_55a8_party) / sizeof(D_55a8_party[0])) &&
+        D_55a8_party[local_4].status != STATUS_DEAD && D_55a8_party[local_4].status != STATUS_SLEEP)
     {
         D_587b = local_4;
     }
@@ -908,4 +911,5 @@ L_606c:
     {
         D_5c5a[local_e] = D_a9fc[local_e];
     }
+    debug("Returned from special map: map=%d active=%d\n", D_5893_map_id, D_587b);
 }

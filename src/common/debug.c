@@ -1,7 +1,29 @@
 #include "common/common.h"
+#include "common/file.h"
 
 #include <stdarg.h>
 #include <stdio.h>
+
+static FILE* s_log;
+static int s_verbose;
+
+static void DEBUG_Write(const char* message, int error)
+{
+    if (error)
+        fprintf(stderr, "Error: %s\n", message);
+    if (s_log)
+    {
+        fprintf(s_log, "%s%s\n", error ? "ERROR: " : "", message);
+        fflush(s_log);
+    }
+}
+
+static void DEBUG_Close(void)
+{
+    if (s_log)
+        fclose(s_log);
+    s_log = NULL;
+}
 
 #if defined(OS_WINDOWS)
 #include <strsafe.h>
@@ -18,7 +40,11 @@ void CDECL debug(const char* str, ...)
     va_list args;
     va_start(args, str);
 
+#if defined(TARGET_DOS16)
     if (vsprintf(debugBuffer, str, args) < 0)
+#else
+    if (vsnprintf(debugBuffer, sizeof(debugBuffer), str, args) < 0)
+#endif
     {
         debugBuffer[0] = 0;
     }
@@ -27,17 +53,23 @@ void CDECL debug(const char* str, ...)
 
 #if defined(OS_WINDOWS)
     puts(debugBuffer);
-
-    FILE* fp = fopen("LOG.TXT", "ab");
-    fputs(debugBuffer, fp);
-    fputc('\n', fp);
-    fclose(fp);
-#else
-    //FILE* fp = fopen("LOG.TXT", "ab");
-    //fputs(debugBuffer, fp);
-    //fputc('\n', fp);
-    //fclose(fp);
 #endif
+    if (s_verbose)
+        DEBUG_Write(debugBuffer, 0);
+}
+
+void CDECL DEBUG_Error(const char* str, ...)
+{
+    char message[512];
+    va_list args;
+    va_start(args, str);
+#if defined(TARGET_DOS16)
+    vsprintf(message, str, args);
+#else
+    vsnprintf(message, sizeof(message), str, args);
+#endif
+    va_end(args);
+    DEBUG_Write(message, 1);
 }
 
 #if defined(OS_WINDOWS)
@@ -46,8 +78,20 @@ static LONG WINAPI UnhandledExceptionHandler(EXCEPTION_POINTERS* exceptionPointe
 
 void DEBUG_Initialize(void)
 {
-    FILE* fp = fopen("LOG.TXT", "wb");
-    fclose(fp);
+    const char* verbose = getenv("U5D_DEBUG");
+    s_verbose = verbose != NULL && verbose[0] == '1';
+#if defined(OS_WINDOWS)
+    s_verbose = 1;
+#endif
+    s_log = FILE_Open("LOG.TXT", "wb");
+    if (s_log)
+    {
+        fputs("Ultima V runtime log. Set U5D_DEBUG=1 for verbose tracing.\n", s_log);
+        fflush(s_log);
+        atexit(DEBUG_Close);
+    }
+    else
+        fputs("Unable to create LOG.TXT; errors will be written to stderr.\n", stderr);
 
 #if defined(OS_WINDOWS)
     SetUnhandledExceptionFilter(UnhandledExceptionHandler);

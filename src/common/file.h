@@ -3,6 +3,13 @@
 
 #include <stdio.h>
 
+#define FILE_PATH_SIZE 4096
+int FILE_NameEqual(const char* left, const char* right);
+/* Exact spelling wins; otherwise require a unique ASCII case-insensitive match.
+ * allowMissingLeaf is for creating files, never for creating parent directories. */
+int FILE_ResolvePath(const char* path, char* resolved, size_t capacity, int allowMissingLeaf);
+FILE* FILE_Open(const char* path, const char* mode);
+
 int FILE_ReadU32LE(FILE* fp, u32* out);
 int FILE_ReadU16LE(FILE* fp, u16* out);
 int FILE_ReadU8(FILE* fp, u8* out);

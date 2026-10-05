@@ -8,6 +8,12 @@
 
 #if !defined(TARGET_DOS16)
 
+#if defined(TARGET_DOS32) || defined(OS_WINDOWS)
+#define SAVEGAME_PATH_SEPARATOR "\\"
+#else
+#define SAVEGAME_PATH_SEPARATOR "/"
+#endif
+
 #define READ_16(TARGET) /*debug("%s: %d", #TARGET, (int)ftell(stream)); */FILE_ReadU16LE(stream, &(TARGET))
 #define READ_8(TARGET) /*debug("%s: %d", #TARGET, (int)ftell(stream)); */FILE_ReadU8(stream, &(TARGET))
 
@@ -20,16 +26,24 @@ int FILE_ReadSavegameFile(char* fileName)
     FILE* stream;
 
     char buf[256];
-    if (!strcmp(fileName, "BRIT.OOL") || !strcmp(fileName, "UNDER.OOL") || !strcmp(fileName, "SAVED.OOL") ||
-        !strcmp(fileName, "SAVED.GAM"))
+    if (FILE_NameEqual(fileName, "BRIT.OOL") || FILE_NameEqual(fileName, "UNDER.OOL") || FILE_NameEqual(fileName, "SAVED.OOL") ||
+        FILE_NameEqual(fileName, "SAVED.GAM"))
     {
-        sprintf(buf, "SAVEGAME\\%s", fileName);
+        sprintf(buf, "SAVEGAME" SAVEGAME_PATH_SEPARATOR "%s", fileName);
         fileName = buf;
     }
 
-    stream = fopen(fileName, "rb");
+    stream = FILE_Open(fileName, "rb");
     if (!stream)
         return -1;
+
+    /* Reject incomplete data before changing the active party/world. */
+    if (fseek(stream, 0, SEEK_END) != 0 || ftell(stream) < 0x1060 ||
+        fseek(stream, 0, SEEK_SET) != 0)
+    {
+        fclose(stream);
+        return -1;
+    }
 
     ASSERT(sizeof(S_55a8) == 0x20);
 
@@ -178,14 +192,14 @@ int FILE_WriteSavegameFile(char* fileName)
     FILE* stream;
 
     char buf[256];
-    if (!strcmp(fileName, "BRIT.OOL") || !strcmp(fileName, "UNDER.OOL") || !strcmp(fileName, "SAVED.OOL") ||
-        !strcmp(fileName, "SAVED.GAM"))
+    if (FILE_NameEqual(fileName, "BRIT.OOL") || FILE_NameEqual(fileName, "UNDER.OOL") || FILE_NameEqual(fileName, "SAVED.OOL") ||
+        FILE_NameEqual(fileName, "SAVED.GAM"))
     {
-        sprintf(buf, "SAVEGAME\\%s", fileName);
+        sprintf(buf, "SAVEGAME" SAVEGAME_PATH_SEPARATOR "%s", fileName);
         fileName = buf;
     }
 
-    stream = fopen(fileName, "wb");
+    stream = FILE_Open(fileName, "wb");
     if (!stream)
         return -1;
 

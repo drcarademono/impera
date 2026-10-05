@@ -600,7 +600,16 @@ void FONT_0b0a(void)
     } while (local_6 == 0);
 
 #if !defined(TARGET_DOS16)
-    FILE_ReadSavegameFile(/*0xa060*/ "INIT.GAM");
+    if (FILE_ReadSavegameFile(/*0xa060*/ "INIT.GAM") != 0)
+    {
+        ULTIMA_0be4_FreeImage(local_6);
+        ULTIMA_0fdc_FreeBitImage(local_a);
+        ULTIMA_1850_PrintString("\nMissing or incomplete INIT.GAM.\nRestore the original game file.\nPress a key to return.\n");
+        ULTIMA_1dda_WaitForKeystroke(0);
+        ULTIMA_251e_SwitchDisks(0);
+        D_5893_map_id = 0x40;
+        return;
+    }
 #else
     ULTIMA_256e_ReadFileFromDisk(/*0xa060*/ "INIT.GAM", &D_55a6, (int)&D_6606 - (int)&D_55a6, 0);
 #endif

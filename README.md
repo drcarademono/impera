@@ -29,6 +29,69 @@ The game can be played through to the ending using the original data files. Howe
 
 ## Building
 
+### Linux Target
+
+Install a C compiler, CMake 3.16 or newer, Python 3, pkg-config, SDL3, and SDL3_mixer
+development packages. This target uses **SDL3_mixer 3.2 or newer**, not
+SDL2_mixer. SDL3 must include your desktop's X11 or Wayland video driver.
+If your distribution does not package these libraries, build them from the
+official [SDL](https://github.com/libsdl-org/SDL) and
+[SDL_mixer](https://github.com/libsdl-org/SDL_mixer) releases. The cloud build
+was tested with SDL 3.4.18 and SDL_mixer 3.2.4.
+
+From the repository root:
+
+```sh
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel 4
+bash scripts/run-linux.sh
+```
+
+For libraries installed under a custom prefix, add its `lib/pkgconfig` (or
+`lib64/pkgconfig`) directory to `PKG_CONFIG_PATH` before configuring.
+
+The launcher copies the original data from `Ultima 5` to `build/runtime`
+on first run and keeps saves in `build/runtime/SAVEGAME`. Existing runtime
+files and saves are preserved on later runs. Set `U5D_DATA_DIR` to an absolute
+path to use another data directory, or `U5D_BUILD_DIR` to an absolute path
+if you configured a different build directory. Game filenames and directory
+components are matched without regard to ASCII letter case, including fonts,
+maps, NPCs, conversations, saves, Ultima IV imports, and optional audio.
+Existing saves retain their filename spelling when written. Exact spelling
+wins; if a lookup has multiple matches differing only by case, it reports an
+error rather than choosing one. The launcher rejects conflicting source
+spellings and preserves existing runtime files and saves.
+New character creation requires the original `INIT.GAM` file (at least 4192
+bytes), which supplies the starting party and world state. Add it to the data
+directory if it is missing; `INIT.OOL` is a different file and cannot replace
+it. Choose **Create New Character** before **Journey Onward** when there is
+no active saved character.
+
+Characters previously created without `INIT.GAM` have invalid starting state.
+Back up `build/runtime/SAVEGAME`, restore the original `INIT.GAM`, and create
+a new character. Rebuilding alone cannot repair an already damaged save.
+
+Optional modern music and effects belong in `BGM` and `SFX` inside the data
+directory; they are not included in the original DOS assets. Do not set
+SDL's dummy video/audio drivers when playing on your desktop. Headless cloud
+validation covered rendering, menu input, and the character-name prompt;
+desktop graphics, audible output, and a complete playthrough are unverified.
+
+Errors are written to the terminal and `build/runtime/LOG.TXT`. The log is
+replaced on each launch, so copy it before restarting when reporting a bug.
+For detailed tracing, run `U5D_DEBUG=1 bash scripts/run-linux.sh`; verbose logs
+can grow quickly. If the log cannot be created, errors still go to the terminal.
+Missing required map or NPC data now exits with an error naming the file
+instead of retrying indefinitely.
+
+To run the native settings and savegame regression checks:
+
+```sh
+cmake -S . -B build -DU5D_BUILD_TESTS=ON
+cmake --build build --parallel 4
+ctest --test-dir build --output-on-failure
+```
+
 ### Windows Target
 
 Open `u5win/u5win.slnx` with Visual Studio 2026 and build the solution.
