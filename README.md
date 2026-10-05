@@ -78,9 +78,12 @@ keyboard there. Clicking the status column does not issue map commands.
 
 Enable smooth movement independently with `--smooth-movement`. Each successful
 tile step animates a scrolling camera over roughly 120 ms, keeping the player
-icon centered and the interface fixed. This works with keyboard or mouse
-movement; collisions and actions still use the original tile and turn rules.
-Teleports, map changes, combat, and dungeon perspective views do not interpolate.
+icon centered and the interface fixed. NPCs and monsters also animate their
+visible tile steps, including combat actors. Their motion stays coordinated
+with camera scrolling; the combat camera stays fixed. This works with keyboard
+or mouse movement; collisions and actions still use the original tile and turn
+rules. Teleports, spawns, map changes, and dungeon perspective views snap to
+their new state without interpolation.
 Both options default to off. For example:
 
 ```sh

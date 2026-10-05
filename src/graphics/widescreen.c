@@ -70,7 +70,7 @@ static byte WorldTile(int x, int y)
     return tile;
 }
 
-static byte MapTile(int dx, int dy)
+byte WIDE_MapTile(int dx, int dy)
 {
     int x = D_5896_map_x + dx, y = D_5897_map_y + dy;
     if (D_5893_map_id == 0) return WorldTile(x, y);
@@ -85,7 +85,7 @@ static bool Transparent(byte tile, int distance)
     return memchr(D_6a86, tile, sizeof(D_6a86)) == NULL;
 }
 
-static bool Visible(int dx, int dy)
+bool WIDE_Visible(int dx, int dy)
 {
     if (D_58a5 == 0) return dx == 0 && dy == 0;
     /* Daylight illuminates the larger viewport; torch/night light keeps the
@@ -98,7 +98,7 @@ static bool Visible(int dx, int dy)
         if (twice > -ay) { error -= ay; x += sx; }
         if (twice < ax) { error += ax; y += sy; }
         if (x == dx && y == dy) break;
-        if (!Transparent(MapTile(x, y), x * x + y * y)) return false;
+        if (!Transparent(WIDE_MapTile(x, y), x * x + y * y)) return false;
     }
     return true;
 }
@@ -143,8 +143,8 @@ bool WIDE_Compose(byte* pixels, WideLayout l)
             for (int col = 0; col < l.columns; col++) {
                 int dx = col - cx, dy = row - cy;
                 if (abs(dx) <= 5 && abs(dy) <= 5) continue;
-                if (!Visible(dx, dy)) continue;
-                byte tile = MapTile(dx, dy);
+                if (!WIDE_Visible(dx, dy)) continue;
+                byte tile = WIDE_MapTile(dx, dy);
                 if (tile == 255) continue;
                 int idx = D_b11e[tile];
                 for (int actor = 31; actor >= 0; actor--) {
@@ -164,11 +164,11 @@ bool WIDE_Compose(byte* pixels, WideLayout l)
                             !(a->_0_tile == TILE_ACTOR_BARD && tile == TILE_MAP_CHAIR_92)) {
                             if (a->_0_tile == TILE_ACTOR_BARD) sprite -= 8;
                             sprite = ULTIMA_ResolveActorTile(sprite, tile,
-                                MapTile(dx, dy - 1), MapTile(dx, dy + 1), &reflection);
+                                WIDE_MapTile(dx, dy - 1), WIDE_MapTile(dx, dy + 1), &reflection);
                         }
                         if (sprite == -1) continue;
                         idx = sprite == -2 ? D_b11e[TILE_MAP_38] : 256 + sprite;
-                        if (reflection && row > 0 && Visible(dx, dy - 1)) {
+                        if (reflection && row > 0 && WIDE_Visible(dx, dy - 1)) {
                             for (int y = 0; y < 16; y++)
                                 for (int x = 0; x < 16; x++)
                                     pixels[(l.mapY + (row - 1) * 16 + y) * l.width + l.mapX + col * 16 + x] =

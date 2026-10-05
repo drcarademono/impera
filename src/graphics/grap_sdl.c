@@ -9,6 +9,7 @@
 #include "widescreen.h"
 #include "vars.h"
 #include "funcs.h"
+#include "macros.h"
 #include <string.h>
 
 #include <SDL3/SDL.h>
@@ -25,6 +26,51 @@ static bool s_expandedFrame;
 static bool s_smoothMovement, s_mapDrawn, s_previousValid;
 static Uint32* s_previousPixels;
 static int s_previousWidth, s_previousHeight, s_previousX, s_previousY, s_previousMap, s_previousLevel;
+typedef struct ActorVisual {
+    bool visible, sighted;
+    int x,y,worldX,worldY,kind,level;
+    Uint32 sprite[256], terrain[256];
+} ActorVisual;
+static ActorVisual s_previousActors[32];
+static Uint32 s_egaPalette[16];
+
+static void PatchActor(SDL_Surface* surface, const ActorVisual* actor, const Uint32* pixels)
+{
+    for (int y=0;y<16;y++)
+        memcpy((byte*)surface->pixels+(actor->y+y)*surface->pitch+actor->x*4,pixels+y*16,16*4);
+}
+static void CaptureActors(ActorVisual* actors, const byte* indices, int w,
+                          int mapX,int mapY,int columns,int rows)
+{
+    memset(actors,0,sizeof(ActorVisual)*32);
+    bool combat=D_5893_map_id>=128;
+    for (int i=combat?0:1;i<32;i++) {
+        ActorFmt* a=&D_5c5a[i];
+        if (!a->_0_tile || !a->_1_animTile || (!combat && a->_4_z!=D_5895_map_level)) continue;
+        int dx=a->_2_x-(combat?5:D_5896_map_x), dy=a->_3_y-(combat?5:D_5897_map_y);
+        if (!D_5893_map_id) { dx=((dx+128)&255)-128; dy=((dy+128)&255)-128; }
+        int col=columns/2+dx, row=rows/2+dy;
+        ActorVisual* v=&actors[i];
+        v->x=mapX+col*16; v->y=mapY+row*16;
+        v->worldX=a->_2_x; v->worldY=a->_3_y;
+        v->kind=a->_0_tile<0x30?a->_0_tile:a->_0_tile&0xfc;
+        v->level=a->_4_z;
+        if (!combat && !dx && !dy) continue;
+        if (abs(dx)<=5 && abs(dy)<=5) {
+            if (GetMapViewport(dx+5,dy+5)!=0 || GetActorMap(dx+5,dy+5)==0x16) continue;
+        } else if (combat || !WIDE_Visible(dx,dy)) continue;
+        v->sighted=true;
+        if (col<0 || row<0 || col>=columns || row>=rows) continue;
+        v->visible=true;
+        byte terrain=combat?*ULTIMA_4402_GetTileAddr(a->_2_x,a->_3_y):WIDE_MapTile(dx,dy);
+        for (int y=0;y<16;y++) for (int x=0;x<16;x++) {
+            v->sprite[y*16+x]=s_egaPalette[indices[(v->y+y)*w+v->x+x]&15];
+            v->terrain[y*16+x]=s_egaPalette[GRAP_BUF_TilePixel(D_b11e[terrain],x,y)&15];
+        }
+        if (memcmp(v->sprite,v->terrain,sizeof(v->sprite))==0) v->visible=v->sighted=false;
+    }
+}
+
 void GRAP_SDL_SetSmoothMovement(bool enabled) { s_smoothMovement = enabled; s_previousValid = false; }
 void GRAP_SDL_MapDrawn(void) { s_mapDrawn = true; }
 
@@ -184,7 +230,7 @@ static void LinearToRGB(void)
 static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
                         int columns, int rows, SDL_Texture* native, int sourceScale, SDL_FRect dst)
 {
-    if (!s_smoothMovement || !s_mapDrawn || !D_58a4 || D_5893_map_id > 32) return;
+    if (!s_smoothMovement || !s_mapDrawn || !D_58a4 || (D_5893_map_id>32 && D_5893_map_id<128)) return;
     s_mapDrawn = false;
     SDL_Surface* clean = SDL_CreateSurface(w, h, SDL_PIXELFORMAT_ARGB8888);
     if (!clean) { s_previousValid = false; return; }
@@ -193,16 +239,36 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
         for (int x = 0; x < w; x++) row[x] = s_egaPalette[indices[y*w+x] & 15];
     }
     int playerX = mapX + columns / 2 * 16, playerY = mapY + rows / 2 * 16;
-    byte terrain = *ULTIMA_4402_GetTileAddr(D_5896_map_x, D_5897_map_y);
-    for (int y = 0; y < 16; y++) {
+    bool combat=D_5893_map_id>=128;
+    byte terrain = combat?0:*ULTIMA_4402_GetTileAddr(D_5896_map_x, D_5897_map_y);
+    for (int y = 0; !combat && y < 16; y++) {
         Uint32* row = (Uint32*)((byte*)clean->pixels + (playerY+y)*clean->pitch);
         for (int x = 0; x < 16; x++) row[playerX+x] = s_egaPalette[GRAP_BUF_TilePixel(D_b11e[terrain],x,y) & 15];
     }
     int dx = D_5896_map_x - s_previousX, dy = D_5897_map_y - s_previousY;
     if (!D_5893_map_id) { dx = ((dx+128)&255)-128; dy = ((dy+128)&255)-128; }
-    bool animate = s_previousValid && s_previousWidth == w && s_previousHeight == h &&
+    if (combat) dx=dy=0;
+    ActorVisual actors[32];
+    bool moving[32]={false};
+    CaptureActors(actors,indices,w,mapX,mapY,columns,rows);
+    bool compatible = s_previousValid && s_previousWidth == w && s_previousHeight == h &&
         s_previousMap == D_5893_map_id && s_previousLevel == D_5895_map_level &&
-        abs(dx) <= 1 && abs(dy) <= 1 && (dx || dy);
+        abs(dx) <= 1 && abs(dy) <= 1;
+    bool animate=compatible && (dx || dy);
+    if (compatible) for (int i=0;i<32;i++) {
+        ActorVisual* old=&s_previousActors[i]; ActorVisual* next=&actors[i];
+        int ax=next->worldX-old->worldX, ay=next->worldY-old->worldY;
+        if (!D_5893_map_id) { ax=((ax+128)&255)-128; ay=((ay+128)&255)-128; }
+        moving[i]=(old->visible || next->visible) && old->sighted && next->sighted &&
+                  old->kind==next->kind && old->level==next->level &&
+                  abs(ax)<=1 && abs(ay)<=1 && (ax || ay);
+        if (moving[i]) {
+            animate=true;
+            if (next->visible) PatchActor(clean,next,next->terrain);
+            if (old->visible)
+                for (int y=0;y<16;y++) memcpy(s_previousPixels+(old->y+y)*w+old->x,old->terrain+y*16,16*4);
+        }
+    }
     if (animate) {
         debug("Smooth movement: offset=%d,%d\n", dx, dy);
         SDL_Texture* old = SDL_CreateTexture(s_sdlRenderer,SDL_PIXELFORMAT_ARGB8888,SDL_TEXTUREACCESS_STATIC,w,h);
@@ -211,6 +277,15 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
             SDL_UpdateTexture(old,NULL,s_previousPixels,w*4);
             SDL_SetTextureScaleMode(old,SDL_SCALEMODE_NEAREST);
             SDL_SetTextureScaleMode(next,SDL_SCALEMODE_NEAREST);
+            SDL_Texture* actorTextures[32]={NULL};
+            for (int i=0;i<32;i++) if (moving[i]) {
+                actorTextures[i]=SDL_CreateTexture(s_sdlRenderer,SDL_PIXELFORMAT_ARGB8888,SDL_TEXTUREACCESS_STATIC,16,16);
+                if (actorTextures[i]) {
+                    SDL_UpdateTexture(actorTextures[i],NULL,
+                        actors[i].visible?actors[i].sprite:s_previousActors[i].sprite,16*4);
+                    SDL_SetTextureScaleMode(actorTextures[i],SDL_SCALEMODE_NEAREST);
+                }
+            }
             float sx = dst.w / w, sy = dst.h / h;
             SDL_Rect clip = {(int)(dst.x+mapX*sx),(int)(dst.y+mapY*sy),
                              (int)(columns*16*sx),(int)(rows*16*sy)};
@@ -228,15 +303,28 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
                 b.x += SDL_roundf(dx*16*sx*(1-progress)); b.y += SDL_roundf(dy*16*sy*(1-progress));
                 SDL_RenderTexture(s_sdlRenderer,old,&mapSrc,&a);
                 SDL_RenderTexture(s_sdlRenderer,next,&mapSrc,&b);
-                SDL_RenderTexture(s_sdlRenderer,native,&playerSrc,&playerDst);
+                for (int i=31;i>=0;i--) if (moving[i]) {
+                    ActorVisual* a=&s_previousActors[i]; ActorVisual* b=&actors[i];
+                    SDL_FRect rect={dst.x+SDL_roundf((a->x+(b->x-a->x)*progress)*sx),
+                                    dst.y+SDL_roundf((a->y+(b->y-a->y)*progress)*sy),16*sx,16*sy};
+                    if (actorTextures[i]) SDL_RenderTexture(s_sdlRenderer,actorTextures[i],NULL,&rect);
+                    else if (b->visible) {
+                        SDL_FRect src={b->x*sourceScale,b->y*sourceScale,16*sourceScale,16*sourceScale};
+                        SDL_RenderTexture(s_sdlRenderer,native,&src,&rect);
+                    }
+                }
+                if (!combat) SDL_RenderTexture(s_sdlRenderer,native,&playerSrc,&playerDst);
                 SDL_SetRenderClipRect(s_sdlRenderer,NULL);
                 SDL_RenderPresent(s_sdlRenderer);
                 SDL_PumpEvents();
                 if (frame < 8) SDL_Delay(16);
             }
+            for (int i=0;i<32;i++) SDL_DestroyTexture(actorTextures[i]);
         }
         SDL_DestroyTexture(old); SDL_DestroyTexture(next);
     }
+    for (int i=0;i<32;i++) if (moving[i] && actors[i].visible) PatchActor(clean,&actors[i],actors[i].sprite);
+    memcpy(s_previousActors,actors,sizeof(actors));
     if (s_previousWidth != w || s_previousHeight != h || !s_previousPixels) {
         free(s_previousPixels);
         s_previousPixels = malloc((size_t)w*h*4);
@@ -255,7 +343,7 @@ extern void DisplayDebugMessages(void);
 void GRAP_SDL_FlushFrame(void)
 {
     s_expandedFrame = false;
-    if (!D_58a4 || D_5893_map_id > 32) s_previousValid = false;
+    if (!D_58a4 || (D_5893_map_id>32 && D_5893_map_id<128)) s_previousValid = false;
     LinearToRGB();
 
     SDL_UpdateTexture(s_sdlTexture, NULL, s_sdlSurface->pixels, s_sdlSurface->pitch);

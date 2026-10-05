@@ -19,10 +19,27 @@ static bool sawSleepingNpc;
 static int presented;
 static bool checkAnimation;
 static int animationRow, playerScreenX, previousMarkerX;
+static bool checkActor;
+static int actorRow, actorStart, actorEnd, actorMarker;
 bool __real_SDL_RenderPresent(SDL_Renderer* renderer);
 bool __wrap_SDL_RenderPresent(SDL_Renderer* renderer)
 {
     presented++;
+    if (checkActor) {
+        SDL_Surface* image=SDL_RenderReadPixels(renderer,NULL);
+        assert(image);
+        int marker=-1,count=0;
+        for (int x=0;x<image->w;x++) {
+            Uint8 r,g,b,a;
+            assert(SDL_ReadSurfacePixel(image,x,actorRow,&r,&g,&b,&a));
+            if (r==85 && g==255 && b==85) { if(marker<0) marker=x; count++; }
+        }
+        assert(count==48); /* exactly one sprite, with no stale copy or trail */
+        assert(marker>=actorMarker && marker<=actorEnd);
+        if (presented==1 && actorStart!=actorEnd) assert(marker>actorStart && marker<actorEnd);
+        actorMarker=marker;
+        SDL_DestroySurface(image);
+    }
     if (checkAnimation) {
         SDL_Surface* image = SDL_RenderReadPixels(renderer,NULL);
         assert(image);
@@ -53,6 +70,19 @@ SDL_MouseButtonFlags __wrap_SDL_GetMouseState(float* x, float* y) { *x=cursorX; 
 extern void GRAP_SDL_Initialize(void);
 extern void GRAP_SDL_Cleanup(void);
 extern void GRAP_SDL_FlushFrame(void);
+static void paintActor(int index,int x,int y)
+{
+    memset(g_linearEgaBuffer0,0,320*200);
+    memset(D_ab02,1,sizeof(D_ab02));
+    memset(D_5c5a,0,sizeof(D_5c5a));
+    D_5c5a[index]._0_tile=D_5c5a[index]._1_animTile=0x44;
+    D_5c5a[index]._2_x=x; D_5c5a[index]._3_y=y;
+    bool combat=D_5893_map_id>=128;
+    int col=combat?x:x-D_5896_map_x+5, row=combat?y:y-D_5897_map_y+5;
+    GetMapViewport(col,row)=0;
+    GetActorMap(col,row)=0x44;
+    for(int py=0;py<16;py++) memset(g_linearEgaBuffer0+(8+row*16+py)*320+8+col*16,10,16);
+}
 int main(void)
 {
     assert(MOUSE_Direction(-2,0)==U5_KEY_LEFT);
@@ -178,6 +208,46 @@ int main(void)
     D_5896_map_x++;
     GRAP_SDL_MapDrawn(); GRAP_SDL_FlushFrame();
     assert(presented==1);
+    /* Moving NPC, then an NPC moving together with the scrolling camera. */
+    GRAP_SDL_SetSmoothMovement(true);
+    D_5896_map_x=16;
+    paintActor(1,13,14);
+    GRAP_SDL_MapDrawn(); GRAP_SDL_FlushFrame();
+    actorStart=(l.mapX+(l.columns/2-3)*16)*l.scale;
+    actorEnd=actorStart+48; actorMarker=actorStart;
+    actorRow=(l.mapY+(l.rows/2-2)*16+8)*l.scale;
+    paintActor(1,14,14);
+    presented=0; checkActor=true;
+    GRAP_SDL_MapDrawn(); GRAP_SDL_FlushFrame();
+    checkActor=false;
+    assert(presented==9 && actorMarker==actorEnd);
+    actorStart=actorEnd; actorMarker=actorStart;
+    D_5896_map_x++;
+    paintActor(1,15,14);
+    presented=0; checkActor=true;
+    GRAP_SDL_MapDrawn(); GRAP_SDL_FlushFrame();
+    checkActor=false;
+    assert(presented==9 && actorMarker==actorEnd);
+    /* Combat does not pan when active-character coordinates change. */
+    D_5893_map_id=255;
+    paintActor(7,2,3);
+    GRAP_SDL_MapDrawn(); GRAP_SDL_FlushFrame();
+    actorStart=(l.mapX+(l.columns/2-3)*16)*l.scale;
+    actorEnd=actorStart+48; actorMarker=actorStart;
+    actorRow=(l.mapY+(l.rows/2-2)*16+8)*l.scale;
+    D_5896_map_x=3;
+    paintActor(7,3,3);
+    presented=0; checkActor=true;
+    GRAP_SDL_MapDrawn(); GRAP_SDL_FlushFrame();
+    checkActor=false;
+    assert(presented==9 && actorMarker==actorEnd);
+    GRAP_SDL_SetSmoothMovement(true);
+    paintActor(0,2,3);
+    GRAP_SDL_MapDrawn(); GRAP_SDL_FlushFrame();
+    paintActor(0,3,3);
+    presented=0;
+    GRAP_SDL_MapDrawn(); GRAP_SDL_FlushFrame();
+    assert(presented==9); /* combat party members animate too */
     GRAP_SDL_Cleanup(); SDL_Quit();
     puts("Mouse directions, action ranges, click timing, modal gating, and coordinate mapping passed.");
 }
