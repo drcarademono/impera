@@ -91,6 +91,12 @@ if(U5D_BUILD_TESTS)
              -DTEST_DIR=${CMAKE_BINARY_DIR}/test-runtime
              -P ${CMAKE_SOURCE_DIR}/tests/check_missing_file.cmake)
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        add_executable(u5d_combat_return_test tests/combat_return_test.c ${TEST_SOURCES})
+        list(APPEND U5D_TARGETS u5d_combat_return_test)
+        target_link_options(u5d_combat_return_test PRIVATE
+            "-Wl,--wrap=DNGLOOK_117e" "-Wl,--wrap=COMBAT_0b94_MainLoop"
+            "-Wl,--wrap=AUDIO_PlayBgmPerMap" "-Wl,--wrap=ULTIMA_2900_UpdateVitalsDisplay")
+        add_test(NAME combat_return COMMAND u5d_combat_return_test)
         add_executable(u5d_file_case_test tests/file_case_test.c src/common/file.c)
         target_include_directories(u5d_file_case_test PRIVATE ${CMAKE_SOURCE_DIR}/src)
         file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/case-runtime/MiXeD/SubDir"
