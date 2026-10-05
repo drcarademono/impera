@@ -5,6 +5,8 @@
 #include "common/common.h"
 #include "vars.h"
 #include "macros.h"
+#include "tiles.h"
+#include "funcs.h"
 #include "graphics/grap_buf.h"
 #include "graphics/widescreen.h"
 
@@ -46,6 +48,22 @@ int main(void)
     D_5c5a[1]._3_y = 16;
     assert(WIDE_Compose(pixels, broad));
     assert(pixel(pixels, broad, 7, 0) == 2);
+    /* A bed-bound NPC must keep the same pose across the original viewport
+     * boundary. Compare the actual original actor-map result with fullscreen. */
+    D_5c5a[1]._0_tile = D_5c5a[1]._1_animTile = 0x44;
+    GetMap(23, 16) = TILE_MAP_BED;
+    memset(tiles + (256 + 0x1a) * 128, 0x77, 128);
+    D_5896_map_x = 18;
+    memset(D_ab02, 1, sizeof(D_ab02));
+    ULTIMA_5394();
+    assert(GetActorMap(10, 5) == 0x1a);
+    D_5896_map_x = 16;
+    assert(WIDE_Compose(pixels, broad));
+    assert(pixel(pixels, broad, 7, 0) == 7);
+    bool reflection;
+    assert(ULTIMA_ResolveActorTile(0x44, TILE_MAP_CHAIR_91, 1, 1, &reflection) == 0x31);
+    assert(ULTIMA_ResolveActorTile(0x44, TILE_MAP_LADDER_UP, 1, 1, &reflection) == 0x17);
+    GetMap(23, 16) = 1;
     GetMap(22, 16) = 0x09; /* opaque tree hides actors and terrain beyond */
     assert(WIDE_Compose(pixels, broad));
     assert(pixel(pixels, broad, 6, 0) == 1);

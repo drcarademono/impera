@@ -1,5 +1,6 @@
 #ifndef _ULTIMA_5000_H
 #define _ULTIMA_5000_H
+int ULTIMA_ResolveActorTile(int actor, int terrain, int above, int below, bool* reflection);
 
 // Game cont.
 

@@ -3,6 +3,7 @@
 #include "vars.h"
 #include "funcs.h"
 #include "macros.h"
+#include "tiles.h"
 #include "grap_buf.h"
 #include "widescreen.h"
 #include <string.h>
@@ -153,8 +154,27 @@ bool WIDE_Compose(byte* pixels, WideLayout l)
                         ax = ((ax + 128) & 255) - 128;
                         ay = ((ay + 128) & 255) - 128;
                     }
-                    if (a->_0_tile && a->_1_animTile && a->_4_z == D_5895_map_level && ax == dx && ay == dy)
-                        idx = 256 + a->_1_animTile;
+                    if (a->_0_tile && a->_1_animTile && a->_4_z == D_5895_map_level && ax == dx && ay == dy) {
+                        int sprite = a->_1_animTile;
+                        bool reflection = false;
+                        if (tile == TILE_MAP_87) continue;
+                        if ((a->_0_tile & 0xfc) != TILE_ACTOR_E8 &&
+                            a->_0_tile != TILE_ACTOR_SLEEP && a->_0_tile != TILE_ACTOR_DEAD &&
+                            sprite != TILE_ACTOR_1D && sprite != TILE_ACTOR_SLEEP &&
+                            !(a->_0_tile == TILE_ACTOR_BARD && tile == TILE_MAP_CHAIR_92)) {
+                            if (a->_0_tile == TILE_ACTOR_BARD) sprite -= 8;
+                            sprite = ULTIMA_ResolveActorTile(sprite, tile,
+                                MapTile(dx, dy - 1), MapTile(dx, dy + 1), &reflection);
+                        }
+                        if (sprite == -1) continue;
+                        idx = sprite == -2 ? D_b11e[TILE_MAP_38] : 256 + sprite;
+                        if (reflection && row > 0 && Visible(dx, dy - 1)) {
+                            for (int y = 0; y < 16; y++)
+                                for (int x = 0; x < 16; x++)
+                                    pixels[(l.mapY + (row - 1) * 16 + y) * l.width + l.mapX + col * 16 + x] =
+                                        GRAP_BUF_TilePixel(D_b11e[TILE_MAP_MIRROR_9E], x, y);
+                        }
+                    }
                 }
                 for (int y = 0; y < 16; y++)
                     for (int x = 0; x < 16; x++)
