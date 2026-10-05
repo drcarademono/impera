@@ -162,13 +162,15 @@ int MOUSE_Direction(float dx, float dy)
 }
 static int AdjacentDirection(int dx, int dy)
 {
-    if (abs(dx) + abs(dy) != 1) return 0;
-    return dx ? (dx < 0 ? U5_KEY_LEFT : U5_KEY_RIGHT) : (dy < 0 ? U5_KEY_UP : U5_KEY_DOWN);
+    if (abs(dx) > 1 || abs(dy) > 1 || (!dx && !dy)) return 0;
+    return MOUSE_Direction((float)dx, (float)dy);
 }
 int MOUSE_Action(int dx, int dy, bool mainAction)
 {
     if (D_5893_map_id > 32) return 0;
-    if (!mainAction) return AdjacentDirection(dx, dy) ? 'L' : 0;
+    if (D_5893_map_id && (D_5896_map_x + dx < 0 || D_5896_map_x + dx >= 32 ||
+        D_5897_map_y + dy < 0 || D_5897_map_y + dy >= 32)) return 0;
+    if (!mainAction) return 'L';
     int x = D_5896_map_x + dx, y = D_5897_map_y + dy;
     if (!dx && !dy) {
         int tile = *ULTIMA_4402_GetTileAddr(x, y);
@@ -254,7 +256,8 @@ int MOUSE_PollCommand(void)
         int command = s_command;
         s_command = 0;
         s_right = false;
-        s_direction = AdjacentDirection(s_dx, s_dy);
+        s_direction = MOUSE_Direction((float)s_dx, (float)s_dy);
+        if (!s_direction && command == 'L') s_direction = U5_KEY_SPACE;
         debug("Mouse action: %c target_offset=%d,%d\n", command, s_dx, s_dy);
         return command;
     }
@@ -276,4 +279,12 @@ int MOUSE_TakeDirection(void)
     int direction = SamePosition() ? s_direction : 0;
     s_direction = 0;
     return direction;
+}
+
+bool MOUSE_TakeTarget(int* dx, int* dy)
+{
+    if (!s_direction || !SamePosition()) { s_direction = 0; return false; }
+    *dx = s_dx; *dy = s_dy;
+    s_direction = 0;
+    return true;
 }

@@ -277,7 +277,7 @@ void LOOKOBJ_0366(void)
     }
 }
 
-static void LOOKOBJ_0502(int param_1, int param_2, int param_3)
+static void LOOKOBJ_0502(int param_1, int param_2, int param_3, bool allowAction)
 {
     int local_4;
 
@@ -301,7 +301,14 @@ static void LOOKOBJ_0502(int param_1, int param_2, int param_3)
         param_1 = *ULTIMA_4402_GetTileAddr(param_2, param_3);
     }
 
-    if (param_1 == TILE_MAP_59)
+    if (!allowAction && (param_1 == TILE_MAP_59 || param_1 == TILE_MAP_WELL ||
+        (param_1 & 0xfc) == TILE_MAP_FOUNTAIN))
+    {
+        if (param_1 == TILE_MAP_WELL) ULTIMA_1850_PrintString("a well.\n");
+        else if ((param_1 & 0xfc) == TILE_MAP_FOUNTAIN) ULTIMA_1850_PrintString("a gurgling fountain!\n");
+        else LOOKOBJ_0000(param_1);
+    }
+    else if (param_1 == TILE_MAP_59)
     {
         LOOKOBJ_0366();
     }
@@ -582,17 +589,19 @@ void LOOKOBJ_099c_LookCmd(void)
     int local_a;
     int local_6;
     int local_c;
+    bool allowAction;
 
     if (ULTIMA_35ec_SelectDirection() == 0)
     {
         return;
     }
 
+    allowAction = abs(D_5876) <= 1 && abs(D_5878) <= 1;
     local_8 = D_5896_map_x + D_5876;
     local_a = D_5897_map_y + D_5878;
     local_4 = *ULTIMA_4402_GetTileAddr(local_8, local_a);
     local_6 = ULTIMA_368e_FindActorTileAtPos(local_8, local_a, D_5895_map_level);
-    if (local_4 == TILE_MAP_29)
+    if (allowAction && local_4 == TILE_MAP_29)
     {
         if ((local_c = ULTIMA_4988()) == -1)
         {
@@ -630,7 +639,7 @@ void LOOKOBJ_099c_LookCmd(void)
         break;
 
     default:
-        LOOKOBJ_0502(local_4, local_8, local_a);
+        LOOKOBJ_0502(local_4, local_8, local_a, allowAction);
         break;
     }
 }

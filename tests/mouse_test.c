@@ -8,6 +8,7 @@
 #include "tiles.h"
 #include "funcs.h"
 #include "talk.h"
+#include "lookobj.h"
 #include "key/mouse.h"
 #include "graphics/grap_sdl.h"
 #include "graphics/grap_buf.h"
@@ -33,7 +34,7 @@ SDL_Cursor* __wrap_SDL_CreateColorCursor(SDL_Surface* surface, int x, int y)
 }
 static Uint64 ticks = 2000;
 static float cursorX, cursorY;
-static bool sawSleepingNpc;
+static bool sawSleepingNpc, sawFountain, sawDrinkPrompt, sawWell, sawCoinPrompt;
 static int presented;
 static bool checkAnimation;
 static int animationRow, playerScreenX, previousMarkerX;
@@ -81,6 +82,10 @@ bool __wrap_SDL_RenderPresent(SDL_Renderer* renderer)
 void __wrap_ULTIMA_1850_PrintString(char* text)
 {
     if (strstr(text, "Zzzzzz")) sawSleepingNpc = true;
+    if (strstr(text, "gurgling fountain")) sawFountain = true;
+    if (strstr(text, "Who will drink")) sawDrinkPrompt = true;
+    if (strstr(text, "a well")) sawWell = true;
+    if (strstr(text, "Drop a coin")) sawCoinPrompt = true;
 }
 void __wrap_ULTIMA_16ba_PrintChar(uint ch) { (void)ch; }
 Uint64 __wrap_SDL_GetTicks(void) { return ticks; }
@@ -117,9 +122,12 @@ int main(void)
     D_5c5a[1]._0_tile=0x44; D_5c5a[1]._2_x=17; D_5c5a[1]._3_y=16;
     assert(MOUSE_Action(1,0,true)=='T');
     assert(MOUSE_Action(1,0,false)=='L');
+    D_5c5a[1]._3_y=15;
+    assert(MOUSE_Action(1,-1,true)=='T');
+    D_5c5a[1]._3_y=16;
     assert(MOUSE_Action(2,0,true)==0);
-    assert(MOUSE_Action(1,1,true)==0);
-    assert(MOUSE_Action(2,0,false)==0);
+    assert(MOUSE_Action(1,1,true)=='L');
+    assert(MOUSE_Action(2,0,false)=='L');
     D_5c5a[1]._0_tile=TILE_ACTOR_CHEST;
     assert(MOUSE_Action(1,0,true)=='O');
     D_5c5a[1]._0_tile=0;
@@ -213,6 +221,49 @@ int main(void)
     MOUSE_SetCommandInput(false);
     assert(TALK_041c_TalkCmd()==0); /* real keyboard handler, including bed rules */
     assert(sawSleepingNpc && D_5876==1 && D_5878==0);
+    /* Diagonal Talk travels through the actual keyboard command handler. */
+    MOUSE_SetCommandInput(true);
+    D_5c5a[1]._3_y=15;
+    GetMap(17,15)=TILE_MAP_BED;
+    MOUSE_Button(448,384,SDL_BUTTON_LEFT,true,1);
+    MOUSE_Button(448,384,SDL_BUTTON_LEFT,true,2);
+    assert(MOUSE_PollCommand()=='T');
+    MOUSE_SetCommandInput(false);
+    sawSleepingNpc=false;
+    assert(TALK_041c_TalkCmd()==0);
+    assert(sawSleepingNpc && D_5876==1 && D_5878==-1);
+    D_5c5a[1]._0_tile=0;
+    /* Far Look describes the exact target, without entering any action prompt. */
+    GetMap(19,16)=TILE_MAP_FOUNTAIN;
+    MOUSE_SetCommandInput(true);
+    MOUSE_Button(576,460.8f,SDL_BUTTON_LEFT,true,1);
+    ticks+=301;
+    assert(MOUSE_PollCommand()=='L');
+    MOUSE_SetCommandInput(false);
+    LOOKOBJ_099c_LookCmd();
+    assert(sawFountain && !sawDrinkPrompt);
+    GetMap(19,16)=TILE_MAP_WELL;
+    MOUSE_SetCommandInput(true);
+    MOUSE_Button(576,460.8f,SDL_BUTTON_LEFT,true,1);
+    ticks+=301;
+    assert(MOUSE_PollCommand()=='L');
+    MOUSE_SetCommandInput(false);
+    int goldBefore=D_57aa;
+    LOOKOBJ_099c_LookCmd();
+    assert(sawWell && !sawCoinPrompt && D_57aa==goldBefore);
+    /* A diagonal fountain still offers drinking. Escape dismisses party selection. */
+    GetMap(17,15)=TILE_MAP_FOUNTAIN;
+    MOUSE_SetCommandInput(true);
+    MOUSE_Button(448,384,SDL_BUTTON_LEFT,true,1);
+    ticks+=301;
+    assert(MOUSE_PollCommand()=='L');
+    MOUSE_SetCommandInput(false);
+    extern void KEY_SDL_ProcessKeyDown(SDL_KeyboardEvent ev);
+    SDL_KeyboardEvent escape={0}; escape.key=SDLK_ESCAPE;
+    KEY_SDL_ProcessKeyDown(escape);
+    LOOKOBJ_099c_LookCmd();
+    assert(sawDrinkPrompt);
+
     MOUSE_SetCommandInput(true);
     MOUSE_Cancel();
     MOUSE_SetCommandInput(false);

@@ -426,7 +426,18 @@ int ULTIMA_35ec_SelectDirection(void)
 
     local_4 = 0;
 #if defined(TARGET_SDL)
-    local_4 = MOUSE_TakeDirection();
+    {
+        int dx, dy;
+        if (MOUSE_TakeTarget(&dx, &dy)) {
+            D_5876 = dx; D_5878 = dy;
+            if (!dx && !dy) ULTIMA_1850_PrintString("Here\n");
+            else if (!dy) ULTIMA_1850_PrintString(dx < 0 ? "West\n" : "East\n");
+            else if (!dx) ULTIMA_1850_PrintString(dy < 0 ? "North\n" : "South\n");
+            else if (dy < 0) ULTIMA_1850_PrintString(dx < 0 ? "Northwest\n" : "Northeast\n");
+            else ULTIMA_1850_PrintString(dx < 0 ? "Southwest\n" : "Southeast\n");
+            return 1;
+        }
+    }
 #endif
     while (local_4 == 0 && (local_4 = ULTIMA_266c_GetChar()) != U5_KEY_SPACE &&
            local_4 != U5_KEY_UP && local_4 != U5_KEY_DOWN &&
