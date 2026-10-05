@@ -47,6 +47,17 @@ cmake --build build --parallel 4
 bash scripts/run-linux.sh
 ```
 
+To fill your display, launch with `bash scripts/run-linux.sh --fullscreen`.
+This detects the desktop resolution, adds overhead map rows and columns, and
+moves the status and command column to the right edge. Tiles and text use the
+same integer scale in both directions, with crisp pixels. Daylight reveals the
+expanded view; darkness and obstacles still restrict visibility. Combat retains
+its original 11x11 battlefield. Title screens and dungeon perspective views keep
+their original layout, centered without stretching. A few unused edge pixels
+may remain when the display dimensions are not divisible by the pixel scale.
+Without the option, the game uses the existing window size settings.
+`--help` lists launch options.
+
 For libraries installed under a custom prefix, add its `lib/pkgconfig` (or
 `lib64/pkgconfig`) directory to `PKG_CONFIG_PATH` before configuring.
 

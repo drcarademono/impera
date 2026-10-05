@@ -264,6 +264,7 @@
     <ClCompile Include="..\src\graphics\grap.c" />
     <ClCompile Include="..\src\graphics\grap_buf.c" />
     <ClCompile Include="..\src\graphics\grap_sdl.c" />
+    <ClCompile Include="..\src\graphics\widescreen.c" />
     <ClCompile Include="..\src\graphics\grap_vga.c">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Strict Debug|Win32'">true</ExcludedFromBuild>
@@ -362,6 +363,8 @@
     <ClInclude Include="..\src\graphics\animate.h" />
     <ClInclude Include="..\src\graphics\grap.h" />
     <ClInclude Include="..\src\graphics\grap_buf.h" />
+    <ClInclude Include="..\src\graphics\widescreen.h" />
+    <ClInclude Include="..\src\graphics\grap_sdl.h" />
     <ClInclude Include="..\src\graphics\grap_ops.h" />
     <ClInclude Include="..\src\graphics\image.h" />
     <ClInclude Include="..\src\graphics\origin.h" />

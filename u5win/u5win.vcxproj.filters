@@ -170,6 +170,9 @@
     <ClCompile Include="..\src\graphics\grap_sdl.c">
       <Filter>graphics</Filter>
     </ClCompile>
+    <ClCompile Include="..\src\graphics\widescreen.c">
+      <Filter>graphics</Filter>
+    </ClCompile>
     <ClCompile Include="..\src\graphics\grap_vga.c">
       <Filter>graphics</Filter>
     </ClCompile>

@@ -24,25 +24,24 @@ static int ULTIMA_51a0(void)
     }
 }
 
-static void ULTIMA_51b8(int param_1, int param_2, int param_3, int param_4, int param_5)
+/* Shared by the original viewport and the fullscreen extension. Negative
+ * results preserve terrain (-1), or substitute the special water tile (-2). */
+int ULTIMA_ResolveActorTile(int param_5, int terrain, int above, int below, bool* reflection)
 {
     int local_4;
-
-    ASSERT(param_1 >= 0 && param_1 < 32 && param_2 >= 0 && param_2 < 0xb);
-
+    *reflection = false;
     if (param_5 == 0x1c || param_5 >= 0x12 && param_5 < 0x16 || param_5 >= 0x40 || param_5 >= 0x28 && param_5 < 0x2c)
     {
         // 51e9
-        local_4 = *ULTIMA_4402_GetTileAddr(param_3, param_4);
+        local_4 = terrain;
         if (local_4 == TILE_MAP_EC || local_4 == TILE_MAP_A)
-            return;
+            return -1;
 
         // 520b?
         if (local_4 == TILE_MAP_57) // 87
         {
             // 520b
-            GetMapViewport(param_1, param_2) = TILE_MAP_38;
-            return;
+            return -2;
         }
 
         if (local_4 == TILE_MAP_6A || local_4 == TILE_MAP_6B) // 106, 107
@@ -50,11 +49,11 @@ static void ULTIMA_51b8(int param_1, int param_2, int param_3, int param_4, int 
             // 522e
             if ((param_5 & 0xf0) == 0x80)
             {
-                return;
+                return -1;
             }
             if ((param_5 & 0xfc) == 0x28)
             {
-                return;
+                return -1;
             }
         }
         else
@@ -99,8 +98,8 @@ static void ULTIMA_51b8(int param_1, int param_2, int param_3, int param_4, int 
 
                 case TILE_MAP_CHAIR_92: // 146
                     // 52aa
-                    if ((*ULTIMA_4402_GetTileAddr(param_3, param_4 + 1) == TILE_MAP_TABLE_9A) ||
-                        (*ULTIMA_4402_GetTileAddr(param_3, param_4 + 1) == TILE_MAP_TABLE_9C))
+                    if ((below == TILE_MAP_TABLE_9A) ||
+                        (below == TILE_MAP_TABLE_9C))
                     {
                         param_5 = ULTIMA_51a0() + 0x34;
                     }
@@ -112,8 +111,8 @@ static void ULTIMA_51b8(int param_1, int param_2, int param_3, int param_4, int 
 
                 case TILE_MAP_CHAIR_90: // 144
                     // 52da
-                    if ((*ULTIMA_4402_GetTileAddr(param_3, param_4 - 1) == TILE_MAP_TABLE_9B) ||
-                        (*ULTIMA_4402_GetTileAddr(param_3, param_4 - 1) == TILE_MAP_TABLE_9C))
+                    if ((above == TILE_MAP_TABLE_9B) ||
+                        (above == TILE_MAP_TABLE_9C))
                     {
                         param_5 = ULTIMA_51a0() + 0x38;
                     }
@@ -131,9 +130,9 @@ static void ULTIMA_51b8(int param_1, int param_2, int param_3, int param_4, int 
 
                 default:
                     // 532c
-                    if ((*ULTIMA_4402_GetTileAddr(param_3, param_4 - 1) == TILE_MAP_MIRROR) && (param_2 != 0))
+                    if ((above == TILE_MAP_MIRROR))
                     {
-                        GetMapViewport(param_1, param_2 - 1) = TILE_MAP_MIRROR_9E;
+                        *reflection = true;
                     }
                     break;
                 }
@@ -141,10 +140,20 @@ static void ULTIMA_51b8(int param_1, int param_2, int param_3, int param_4, int 
         }
     }
 
-    GetActorMap(param_1, param_2) = (byte)param_5;
-    GetMapViewport(param_1, param_2) = 0;
+    return param_5;
+}
 
-    // 538d
+static void ULTIMA_51b8(int x, int y, int worldX, int worldY, int actor)
+{
+    bool reflection;
+    int tile = ULTIMA_ResolveActorTile(actor, *ULTIMA_4402_GetTileAddr(worldX, worldY),
+        D_5893_map_id >= 128 && worldY == 0 ? 0 : *ULTIMA_4402_GetTileAddr(worldX, worldY - 1),
+        D_5893_map_id >= 128 && worldY == 10 ? 0 : *ULTIMA_4402_GetTileAddr(worldX, worldY + 1), &reflection);
+    if (tile == -1) return;
+    if (tile == -2) { GetMapViewport(x, y) = TILE_MAP_38; return; }
+    if (reflection && y != 0) GetMapViewport(x, y - 1) = TILE_MAP_MIRROR_9E;
+    GetActorMap(x, y) = (byte)tile;
+    GetMapViewport(x, y) = 0;
 }
 
 // CHECKED

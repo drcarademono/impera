@@ -372,6 +372,15 @@ void GRAP_BUF_LoadTileset(byte* tileset)
     s_tileset = tileset;
 }
 
+bool GRAP_BUF_HasTileset(void) { return s_tileset != NULL; }
+
+byte GRAP_BUF_TilePixel(int tile, int x, int y)
+{
+    if (!s_tileset || tile < 0 || tile >= 512) return 0;
+    byte packed = s_tileset[tile * 128 + y * 8 + x / 2];
+    return x & 1 ? packed & 15 : packed >> 4;
+}
+
 void GRAP_BUF_UnloadTileset(void)
 {
     if (s_tileset != NULL)
