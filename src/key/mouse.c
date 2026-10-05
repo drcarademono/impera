@@ -8,6 +8,13 @@
 #include <SDL3/SDL.h>
 
 static bool s_input, s_right, s_single;
+static bool s_enabled;
+
+void MOUSE_SetEnabled(bool enabled)
+{
+    s_enabled = enabled;
+    MOUSE_Cancel();
+}
 static int s_dx, s_dy, s_command, s_direction;
 static int s_map, s_level, s_x, s_y;
 static Uint64 s_singleTime, s_moveTime;
@@ -91,6 +98,7 @@ static bool SamePosition(void)
 }
 void MOUSE_Button(float x, float y, int button, bool down, int clicks)
 {
+    if (!s_enabled) return;
     if (button == SDL_BUTTON_RIGHT) {
         s_right = down && s_input;
         debug("Mouse right button: down=%d command_input=%d\n", down, s_input);
@@ -112,7 +120,7 @@ void MOUSE_Button(float x, float y, int button, bool down, int clicks)
 }
 int MOUSE_PollCommand(void)
 {
-    if (!s_input || D_5893_map_id > 32) return 0;
+    if (!s_enabled || !s_input || D_5893_map_id > 32) return 0;
     if (s_single && SDL_GetTicks() - s_singleTime >= 300) {
         s_single = false;
         if (SamePosition()) s_command = MOUSE_Action(s_dx, s_dy, false);

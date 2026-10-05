@@ -103,6 +103,7 @@ if(U5D_BUILD_TESTS)
         list(APPEND U5D_TARGETS u5d_mouse_test)
         target_link_options(u5d_mouse_test PRIVATE
             "-Wl,--wrap=SDL_GetTicks" "-Wl,--wrap=SDL_GetMouseState"
+            "-Wl,--wrap=SDL_RenderPresent"
             "-Wl,--wrap=ULTIMA_1850_PrintString" "-Wl,--wrap=ULTIMA_16ba_PrintChar")
         add_test(NAME mouse_controls COMMAND u5d_mouse_test)
         file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/mouse-runtime")

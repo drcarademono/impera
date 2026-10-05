@@ -16,6 +16,33 @@
 static Uint64 ticks = 2000;
 static float cursorX, cursorY;
 static bool sawSleepingNpc;
+static int presented;
+static bool checkAnimation;
+static int animationRow, playerScreenX, previousMarkerX;
+bool __real_SDL_RenderPresent(SDL_Renderer* renderer);
+bool __wrap_SDL_RenderPresent(SDL_Renderer* renderer)
+{
+    presented++;
+    if (checkAnimation) {
+        SDL_Surface* image = SDL_RenderReadPixels(renderer,NULL);
+        assert(image);
+        Uint8 r,g,b,a;
+        assert(SDL_ReadSurfacePixel(image,0,0,&r,&g,&b,&a));
+        assert(r==85 && g==255 && b==85); /* interface pixel stays fixed */
+        assert(SDL_ReadSurfacePixel(image,playerScreenX,animationRow,&r,&g,&b,&a));
+        assert(r==255 && g==255 && b==85); /* centered player never duplicates */
+        int marker = -1;
+        for (int x=0; x<playerScreenX; x++) {
+            assert(SDL_ReadSurfacePixel(image,x,animationRow,&r,&g,&b,&a));
+            if (r==255 && g==85 && b==85) { marker=x; break; }
+        }
+        assert(marker>=0 && marker<=previousMarkerX);
+        if (presented==1) assert(marker<previousMarkerX && marker>previousMarkerX-48);
+        previousMarkerX=marker;
+        SDL_DestroySurface(image);
+    }
+    return __real_SDL_RenderPresent(renderer);
+}
 void __wrap_ULTIMA_1850_PrintString(char* text)
 {
     if (strstr(text, "Zzzzzz")) sawSleepingNpc = true;
@@ -60,6 +87,10 @@ int main(void)
     assert(dx==1 && dy==0);
     assert(!GRAP_SDL_MouseMapPoint(1000,450,&dx,&dy,&rx,&ry));
     MOUSE_SetCommandInput(true);
+    MOUSE_Button(448,460.8f,SDL_BUTTON_LEFT,true,1);
+    ticks+=301;
+    assert(MOUSE_PollCommand()==0); /* mouse is opt-in */
+    MOUSE_SetEnabled(true);
     MOUSE_Button(448,460.8f,SDL_BUTTON_LEFT,true,1);
     assert(MOUSE_PollCommand()==0);
     ticks+=301;
@@ -117,6 +148,36 @@ int main(void)
     assert(GRAP_SDL_MouseMapPoint(centerX,centerY,&dx,&dy,&rx,&ry) && dx==0 && dy==0);
     assert(GRAP_SDL_MouseMapPoint(centerX+16*l.scale,centerY,&dx,&dy,&rx,&ry) && dx==1 && dy==0);
     assert(!GRAP_SDL_MouseMapPoint(1020,centerY,&dx,&dy,&rx,&ry));
+    GRAP_SDL_SetSmoothMovement(true);
+    memset(g_linearEgaBuffer0,0,320*200);
+    g_linearEgaBuffer0[0]=10;
+    for (int y=8;y<184;y++) memset(g_linearEgaBuffer0+y*320+40,12,4);
+    for (int y=88;y<104;y++) memset(g_linearEgaBuffer0+y*320+88,14,16);
+    GRAP_SDL_MapDrawn(); GRAP_SDL_FlushFrame();
+    presented=0;
+    D_5896_map_x++;
+    for (int y=8;y<184;y++) {
+        memset(g_linearEgaBuffer0+y*320+40,0,4);
+        memset(g_linearEgaBuffer0+y*320+24,12,4);
+    }
+    animationRow=(int)centerY;
+    playerScreenX=(int)centerX;
+    previousMarkerX=(l.mapX+(l.columns/2-5)*16+32)*l.scale;
+    int initialMarkerX=previousMarkerX;
+    checkAnimation=true;
+    GRAP_SDL_MapDrawn(); GRAP_SDL_FlushFrame();
+    checkAnimation=false;
+    assert(presented==9); /* eight intermediate frames plus the completed frame */
+    assert(previousMarkerX==initialMarkerX-16*l.scale);
+    presented=0;
+    D_5896_map_x+=5;
+    GRAP_SDL_MapDrawn(); GRAP_SDL_FlushFrame();
+    assert(presented==1); /* teleport snaps rather than sliding across the map */
+    presented=0;
+    GRAP_SDL_SetSmoothMovement(false);
+    D_5896_map_x++;
+    GRAP_SDL_MapDrawn(); GRAP_SDL_FlushFrame();
+    assert(presented==1);
     GRAP_SDL_Cleanup(); SDL_Quit();
     puts("Mouse directions, action ranges, click timing, modal gating, and coordinate mapping passed.");
 }

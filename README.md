@@ -58,8 +58,8 @@ may remain when the display dimensions are not divisible by the pixel scale.
 Without the option, the game uses the existing window size settings.
 `--help` lists launch options.
 
-Mouse controls work in the overhead town and outdoor views, in both windowed
-and fullscreen mode:
+Enable mouse controls with `--mouse`. They work in the overhead town and outdoor
+views, in both windowed and fullscreen mode:
 
 - Hold the right button over the map to walk toward the cursor in eight
   directions. Release it to stop. Diagonal steps cannot cut through blocked
@@ -75,6 +75,17 @@ do. Distant and diagonal targets do not trigger actions. Single clicks wait
 300 ms to distinguish double clicks. Mouse commands are disabled during menus,
 dialogues, combat, dungeon perspective views, and other input prompts; use the
 keyboard there. Clicking the status column does not issue map commands.
+
+Enable smooth movement independently with `--smooth-movement`. Each successful
+tile step animates a scrolling camera over roughly 120 ms, keeping the player
+icon centered and the interface fixed. This works with keyboard or mouse
+movement; collisions and actions still use the original tile and turn rules.
+Teleports, map changes, combat, and dungeon perspective views do not interpolate.
+Both options default to off. For example:
+
+```sh
+bash scripts/run-linux.sh --fullscreen --mouse --smooth-movement
+```
 
 For libraries installed under a custom prefix, add its `lib/pkgconfig` (or
 `lib64/pkgconfig`) directory to `PKG_CONFIG_PATH` before configuring.
