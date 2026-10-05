@@ -37,6 +37,14 @@ int FILE_ReadSavegameFile(char* fileName)
     if (!stream)
         return -1;
 
+    /* Reject incomplete data before changing the active party/world. */
+    if (fseek(stream, 0, SEEK_END) != 0 || ftell(stream) < 0x1060 ||
+        fseek(stream, 0, SEEK_SET) != 0)
+    {
+        fclose(stream);
+        return -1;
+    }
+
     ASSERT(sizeof(S_55a8) == 0x20);
 
     READ_16(D_55a6);

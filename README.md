@@ -55,14 +55,29 @@ on first run and keeps saves in `build/runtime/SAVEGAME`. Existing runtime
 files and saves are preserved on later runs. Set `U5D_DATA_DIR` to an absolute
 path to use another data directory, or `U5D_BUILD_DIR` to an absolute path
 if you configured a different build directory. Keep filename case intact.
-The supplied assets have no active saved character: choose **Create New
-Character** before **Journey Onward**.
+New character creation requires the original `INIT.GAM` file (at least 4192
+bytes), which supplies the starting party and world state. Add it to the data
+directory if it is missing; `INIT.OOL` is a different file and cannot replace
+it. Choose **Create New Character** before **Journey Onward** when there is
+no active saved character.
+
+Characters previously created without `INIT.GAM` have invalid starting state.
+Back up `build/runtime/SAVEGAME`, restore the original `INIT.GAM`, and create
+a new character. Rebuilding alone cannot repair an already damaged save.
 
 Optional modern music and effects belong in `BGM` and `SFX` inside the data
 directory; they are not included in the original DOS assets. Do not set
 SDL's dummy video/audio drivers when playing on your desktop. Headless cloud
 validation covered rendering, menu input, and the character-name prompt;
 desktop graphics, audible output, and a complete playthrough are unverified.
+
+To run the native settings and savegame regression checks:
+
+```sh
+cmake -S . -B build -DU5D_BUILD_TESTS=ON
+cmake --build build --parallel 4
+ctest --test-dir build --output-on-failure
+```
 
 ### Windows Target
 

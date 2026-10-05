@@ -14,12 +14,17 @@ if [[ ! -f "$data_dir/TITLE.BIT" || ! -f "$data_dir/IBM.CH" || ! -f "$data_dir/R
     echo "Original game data is missing from $data_dir (TITLE.BIT, IBM.CH, RUNES.CH)." >&2
     exit 1
 fi
+if [[ ! -f "$data_dir/INIT.GAM" ]] || [[ $(wc -c < "$data_dir/INIT.GAM") -lt 4192 ]]; then
+    echo "Missing or incomplete $data_dir/INIT.GAM (requires at least 4192 bytes)." >&2
+    echo "Restore INIT.GAM from the original game installation before creating a character." >&2
+    exit 1
+fi
 
 mkdir -p "$runtime_dir/SAVEGAME"
 for source in "$data_dir"/*; do
     [[ -f "$source" ]] || continue
     case "${source##*.}" in
-        CH|HCS|BIT|PTH|DAT|16|4|OOL|CBT|NPC|TLK|PCS)
+        CH|HCS|BIT|PTH|DAT|16|4|OOL|CBT|NPC|TLK|PCS|GAM)
             target="$runtime_dir/${source##*/}"
             if [[ ! -e "$target" ]]; then cp -- "$source" "$target"; fi
             ;;

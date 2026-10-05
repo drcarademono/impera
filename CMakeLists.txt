@@ -70,18 +70,33 @@ set(SOURCES
 
 add_executable(ultima5 ${SOURCES})
 
-target_include_directories(ultima5 PRIVATE
+option(U5D_BUILD_TESTS "Build native savegame regression tests" OFF)
+set(U5D_TARGETS ultima5)
+if(U5D_BUILD_TESTS)
+    enable_testing()
+    set(TEST_SOURCES ${SOURCES})
+    list(REMOVE_ITEM TEST_SOURCES src/ultima.c)
+    add_executable(u5d_savegame_test tests/savegame_test.c ${TEST_SOURCES})
+    list(APPEND U5D_TARGETS u5d_savegame_test)
+    file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/test-runtime/SAVEGAME")
+    add_test(NAME savegame COMMAND u5d_savegame_test)
+    set_tests_properties(savegame PROPERTIES WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/test-runtime")
+endif()
+
+foreach(U5D_TARGET IN LISTS U5D_TARGETS)
+target_include_directories(${U5D_TARGET} PRIVATE
     ${CMAKE_SOURCE_DIR}/src
     ${SDL3_INCLUDE_DIRS}
     ${SDL3_MIXER_INCLUDE_DIRS}
 )
 
-target_link_directories(ultima5 PRIVATE
+target_link_directories(${U5D_TARGET} PRIVATE
     ${SDL3_LIBRARY_DIRS}
     ${SDL3_MIXER_LIBRARY_DIRS}
 )
 
-target_link_libraries(ultima5 PRIVATE
+target_link_libraries(${U5D_TARGET} PRIVATE
     ${SDL3_LIBRARIES}
     ${SDL3_MIXER_LIBRARIES}
 )
+endforeach()
