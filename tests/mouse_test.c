@@ -13,6 +13,21 @@
 #include "graphics/grap_buf.h"
 #include "graphics/widescreen.h"
 #include <SDL3/SDL.h>
+static int loadedCursors;
+SDL_Cursor* __wrap_SDL_CreateColorCursor(SDL_Surface* surface, int x, int y)
+{
+    assert(surface->w == 16 && surface->h == 16);
+    assert(x == (loadedCursors ? 8 : 0) && y == x);
+    bool transparent = false, opaque = false;
+    for (int yy = 0; yy < 16; ++yy) for (int xx = 0; xx < 16; ++xx) {
+        Uint8 r,g,b,a;
+        assert(SDL_ReadSurfacePixel(surface,xx,yy,&r,&g,&b,&a));
+        transparent |= a == 0; opaque |= a == 255;
+    }
+    assert(transparent && opaque);
+    ++loadedCursors;
+    return NULL; /* SDL dummy driver has no native cursor support. */
+}
 static Uint64 ticks = 2000;
 static float cursorX, cursorY;
 static bool sawSleepingNpc;
@@ -121,6 +136,25 @@ int main(void)
     ticks+=301;
     assert(MOUSE_PollCommand()==0); /* mouse is opt-in */
     MOUSE_SetEnabled(true);
+    MOUSE_Initialize();
+    assert(loadedCursors == 9);
+    MOUSE_SetCommandInput(true);
+    D_58a4 = 1;
+    assert(MOUSE_CursorDirection(448,460.8f) == U5_KEY_RIGHT);
+    assert(MOUSE_CursorDirection(320,460.8f) == U5_KEY_LEFT);
+    assert(MOUSE_CursorDirection(384,384) == U5_KEY_UP);
+    assert(MOUSE_CursorDirection(384,537.6f) == U5_KEY_DOWN);
+    assert(MOUSE_CursorDirection(320,384) == U5_KEY_HOME);
+    assert(MOUSE_CursorDirection(448,384) == U5_KEY_PGUP);
+    assert(MOUSE_CursorDirection(320,537.6f) == U5_KEY_END);
+    assert(MOUSE_CursorDirection(448,537.6f) == U5_KEY_PGDN);
+    assert(MOUSE_CursorDirection(1000,450) == 0);
+    D_58a4 = 0;
+    assert(MOUSE_CursorDirection(448,460.8f) == 0);
+    D_58a4 = 1;
+    D_5893_map_id = 33;
+    assert(MOUSE_CursorDirection(448,460.8f) == 0);
+    D_5893_map_id = 13;
     MOUSE_Button(448,460.8f,SDL_BUTTON_LEFT,true,1);
     assert(MOUSE_PollCommand()==0);
     ticks+=301;
@@ -248,6 +282,7 @@ int main(void)
     presented=0;
     GRAP_SDL_MapDrawn(); GRAP_SDL_FlushFrame();
     assert(presented==9); /* combat party members animate too */
+    MOUSE_Cleanup();
     GRAP_SDL_Cleanup(); SDL_Quit();
     puts("Mouse directions, action ranges, click timing, modal gating, and coordinate mapping passed.");
 }

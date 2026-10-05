@@ -10,6 +10,7 @@
 #include "vars.h"
 #include "funcs.h"
 #include "macros.h"
+#include "key/mouse.h"
 #include <string.h>
 
 #include <SDL3/SDL.h>
@@ -317,6 +318,7 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
                 SDL_SetRenderClipRect(s_sdlRenderer,NULL);
                 SDL_RenderPresent(s_sdlRenderer);
                 SDL_PumpEvents();
+                MOUSE_UpdateCursor();
                 if (frame < 8) SDL_Delay(16);
             }
             for (int i=0;i<32;i++) SDL_DestroyTexture(actorTextures[i]);

@@ -6,9 +6,71 @@
 #include "mouse.h"
 #include "graphics/grap_sdl.h"
 #include <SDL3/SDL.h>
+#include "common/file.h"
+#define STB_IMAGE_IMPLEMENTATION
+#define STB_IMAGE_STATIC
+#define STBI_NO_LINEAR
+#define STBI_NO_HDR
+#define STBI_ONLY_PNG
+#include "third_party/stb_image.h"
+
+static bool s_enabled;
+static SDL_Cursor* s_cursors[9];
+static SDL_Cursor* s_currentCursor;
+static const int s_cursorDirections[9] = {0, U5_KEY_UP, U5_KEY_PGUP, U5_KEY_RIGHT, U5_KEY_PGDN, U5_KEY_DOWN, U5_KEY_END, U5_KEY_LEFT, U5_KEY_HOME};
+static const char* s_cursorNames[9] = {"pointer", "direction-n", "diag-ne", "direction-e", "diag-se", "direction-s", "diag-sw", "direction-w", "diag-nw"};
+
+int MOUSE_CursorDirection(float x, float y)
+{
+    int dx, dy; float rx, ry;
+    if (!D_58a4 || (D_5893_map_id > 32 && D_5893_map_id < 128) ||
+        !GRAP_SDL_MouseMapPoint(x, y, &dx, &dy, &rx, &ry)) return 0;
+    /* Combat sprites occupy fixed coordinates in the original 11x11 map. */
+    if (D_5893_map_id >= 128) { rx -= D_5896_map_x - 5; ry -= D_5897_map_y - 5; }
+    return MOUSE_Direction(rx, ry);
+}
+
+void MOUSE_UpdateCursor(void)
+{
+    if (!s_enabled) return;
+    float x, y;
+    SDL_GetMouseState(&x, &y);
+    int direction = MOUSE_CursorDirection(x, y), index = 0;
+    for (int i = 1; i < 9; ++i) if (s_cursorDirections[i] == direction) index = i;
+    SDL_Cursor* cursor = s_cursors[index] ? s_cursors[index] : s_cursors[0];
+    if (!cursor) cursor = SDL_GetDefaultCursor();
+    if (cursor && cursor != s_currentCursor && SDL_SetCursor(cursor)) s_currentCursor = cursor;
+}
+
+void MOUSE_Cleanup(void)
+{
+    SDL_Cursor* cursor = SDL_GetDefaultCursor();
+    if (cursor) SDL_SetCursor(cursor);
+    for (int i = 0; i < 9; ++i) { SDL_DestroyCursor(s_cursors[i]); s_cursors[i] = NULL; }
+    s_currentCursor = NULL;
+}
+
+static void LoadCursors(void)
+{
+    for (int i = 0; i < 9; ++i) {
+        char path[128];
+        snprintf(path, sizeof(path), "textures/cursors/cursor-%s.png", s_cursorNames[i]);
+        FILE* fp = FILE_Open(path, "rb");
+        if (!fp) { debug("Cannot load mouse cursor: %s\n", path); continue; }
+        int w, h, channels;
+        unsigned char* pixels = stbi_load_from_file(fp, &w, &h, &channels, 4);
+        fclose(fp);
+        if (!pixels) { debug("Invalid mouse cursor PNG: %s\n", path); continue; }
+        SDL_Surface* surface = SDL_CreateSurfaceFrom(w, h, SDL_PIXELFORMAT_RGBA32, pixels, w * 4);
+        if (surface) {
+            s_cursors[i] = SDL_CreateColorCursor(surface, i ? w / 2 : 0, i ? h / 2 : 0);
+            SDL_DestroySurface(surface);
+        }
+        stbi_image_free(pixels);
+    }
+}
 
 static bool s_input, s_right, s_single;
-static bool s_enabled;
 
 void MOUSE_SetEnabled(bool enabled)
 {
@@ -24,6 +86,7 @@ void MOUSE_Initialize(void)
     SDL_SetHint(SDL_HINT_MOUSE_DOUBLE_CLICK_TIME, "300");
     MOUSE_Cancel();
     s_input = false;
+    if (s_enabled) { MOUSE_Cleanup(); LoadCursors(); MOUSE_UpdateCursor(); }
 }
 void MOUSE_Cancel(void)
 {

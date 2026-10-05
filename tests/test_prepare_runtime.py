@@ -31,7 +31,12 @@ class PrepareRuntimeTests(unittest.TestCase):
             self.assertFalse((runtime / "SAVEGAME").exists())
             self.assertTrue((runtime / "SFX/Title1.WAV").exists())
             self.assertTrue((runtime / "init.gam").exists())
+            cursor = runtime / "textures/cursors/cursor-pointer.png"
+            self.assertTrue(cursor.is_file())
+            original = cursor.read_bytes()
+            cursor.write_bytes(b"stale")
             module.prepare(root / "game", root / "RUNTIME")
+            self.assertEqual(cursor.read_bytes(), original)
             self.assertEqual(save.read_bytes(), b"existing save")
             (data / "TITLE.BIT").write_bytes(b"conflict")
             with self.assertRaises(ValueError):

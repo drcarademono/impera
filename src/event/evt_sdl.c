@@ -52,6 +52,7 @@ void EVT_Yield(void)
 {
 	GRAP_FlushPendingPresent();
 	EVT_PollMessages();
+    MOUSE_UpdateCursor();
 
 	for (int i = 0; i < s_registeredCallbackCount; i++)
 	{

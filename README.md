@@ -58,6 +58,12 @@ may remain when the display dimensions are not divisible by the pixel scale.
 Without the option, the game uses the existing window size settings.
 `--help` lists launch options.
 
+Enable mouse controls with `--mouse`. The supplied PNG cursors show the eight
+movement directions over the overhead map and a pointer over menus, cutscenes,
+and the status/text column. The launcher copies `textures/cursors` into the
+runtime directory; copy that folder alongside the game data when running the
+binary directly.
+
 Enable mouse controls with `--mouse`. They work in the overhead town and outdoor
 views, in both windowed and fullscreen mode:
 

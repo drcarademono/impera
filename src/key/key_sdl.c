@@ -19,7 +19,7 @@ void KEY_Initialize(void)
 { MOUSE_Initialize(); }
 
 void KEY_Cleanup(void)
-{}
+{ MOUSE_Cleanup(); }
 
 static u16 s_lastDownKeycode = 0;
 
