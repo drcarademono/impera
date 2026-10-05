@@ -1,4 +1,5 @@
 #include "common/common.h"
+#include "common/file.h"
 #include "vars.h"
 #include "funcs.h"
 #include "macros.h"
@@ -9,6 +10,8 @@
 #include "time/time.h"
 
 #include <stdlib.h>
+#include <errno.h>
+#include <string.h>
 #include <time.h>
 
 u16 ULTIMA_2032_ToUpper(u8 x)
@@ -380,13 +383,11 @@ void ULTIMA_256e_ReadFileFromDisk(char* fileName, void* addr, u16 size, u16 offs
     int local_4 = 0;
 
 #if !defined(TARGET_DOS16)
-    while (local_4 == 0)
+    if (FILE_ReadFile(fileName, addr, size, offset) != 0)
     {
-        local_4 = ULTIMA_7234_ReadFile(fileName, addr, size, offset);
-        if (local_4 == 0)
-        {
-            EVT_Yield();
-        }
+        DEBUG_Error("Cannot read required game file '%s' (offset=%u, size=%u): %s. Check the runtime data directory and filename case.",
+                    fileName, (unsigned int)offset, (unsigned int)size, strerror(errno));
+        exit(EXIT_FAILURE);
     }
     return;
 #endif

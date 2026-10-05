@@ -79,8 +79,17 @@ if(U5D_BUILD_TESTS)
     add_executable(u5d_savegame_test tests/savegame_test.c ${TEST_SOURCES})
     list(APPEND U5D_TARGETS u5d_savegame_test)
     file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/test-runtime/SAVEGAME")
+    foreach(NPC_FILE TOWNE.NPC DWELLING.NPC CASTLE.NPC KEEP.NPC)
+        configure_file("${CMAKE_SOURCE_DIR}/Ultima 5/${NPC_FILE}"
+                       "${CMAKE_BINARY_DIR}/test-runtime/${NPC_FILE}" COPYONLY)
+    endforeach()
     add_test(NAME savegame COMMAND u5d_savegame_test)
     set_tests_properties(savegame PROPERTIES WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/test-runtime")
+    set_tests_properties(savegame PROPERTIES TIMEOUT 10)
+    add_test(NAME missing_required_file COMMAND ${CMAKE_COMMAND}
+             -DTEST_EXE=$<TARGET_FILE:u5d_savegame_test>
+             -DTEST_DIR=${CMAKE_BINARY_DIR}/test-runtime
+             -P ${CMAKE_SOURCE_DIR}/tests/check_missing_file.cmake)
 endif()
 
 foreach(U5D_TARGET IN LISTS U5D_TARGETS)

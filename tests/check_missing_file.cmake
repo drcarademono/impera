@@ -1,0 +1,15 @@
+execute_process(COMMAND "${TEST_EXE}" --missing-required
+                WORKING_DIRECTORY "${TEST_DIR}"
+                RESULT_VARIABLE status ERROR_VARIABLE error TIMEOUT 5)
+if(NOT status STREQUAL "1")
+    message(FATAL_ERROR "Missing data must exit with status 1, got: ${status}")
+endif()
+string(FIND "${error}" "missing-required.dat" error_index)
+if(error_index LESS 0)
+    message(FATAL_ERROR "Missing filename was not reported to stderr: ${error}")
+endif()
+file(READ "${TEST_DIR}/LOG.TXT" log)
+string(FIND "${log}" "missing-required.dat" log_index)
+if(log_index LESS 0)
+    message(FATAL_ERROR "Missing filename was not recorded in LOG.TXT")
+endif()

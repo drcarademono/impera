@@ -71,6 +71,13 @@ SDL's dummy video/audio drivers when playing on your desktop. Headless cloud
 validation covered rendering, menu input, and the character-name prompt;
 desktop graphics, audible output, and a complete playthrough are unverified.
 
+Errors are written to the terminal and `build/runtime/LOG.TXT`. The log is
+replaced on each launch, so copy it before restarting when reporting a bug.
+For detailed tracing, run `U5D_DEBUG=1 bash scripts/run-linux.sh`; verbose logs
+can grow quickly. If the log cannot be created, errors still go to the terminal.
+Missing required map or NPC data now exits with an error naming the file
+instead of retrying indefinitely.
+
 To run the native settings and savegame regression checks:
 
 ```sh
