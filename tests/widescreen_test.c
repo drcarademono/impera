@@ -17,7 +17,7 @@ int main(void)
     WideLayout l = WIDE_Layout(1920, 1080);
     assert(l.scale == 4 && l.columns == 21 && l.rows == 15);
     WideLayout tall = WIDE_Layout(1920, 1200);
-    assert(tall.columns == 15 && tall.rows == 13);
+    assert(tall.columns == 15 && tall.rows == 14);
     WideLayout broad = WIDE_Layout(2560, 1080);
     assert(broad.columns == 31 && broad.rows == 15);
     assert(WIDE_Layout(320, 200).columns == 11);
@@ -83,6 +83,23 @@ int main(void)
     D_5893_map_id = 0xff;
     assert(WIDE_Compose(pixels, broad));
     assert(pixel(pixels, broad, 7, 0) == 0); /* combat never fabricates terrain */
+    /* Border strips must reach the final row, with one centered opening and
+     * no orphaned arrow tips copied near the outer corners. */
+    for (int y = 0; y < 8; y++) {
+        memset(g_linearEgaBuffer0 + y * 320, 2, 192);
+        memset(g_linearEgaBuffer0 + (184 + y) * 320, 2, 192);
+        memset(g_linearEgaBuffer0 + y * 320 + 40, 5, 112);
+        memset(g_linearEgaBuffer0 + (184 + y) * 320 + 40, 6, 112);
+    }
+    assert(WIDE_Compose(pixels, tall));
+    int middle = tall.sidebarX / 2;
+    assert(pixels[40] == 2 && pixels[tall.sidebarX - 40] == 2);
+    assert(pixels[middle - 56] == 5 && pixels[middle + 55] == 5);
+    assert(pixels[middle - 57] == 2 && pixels[middle + 56] == 2);
+    int lastRow = (tall.height - 1) * tall.width;
+    assert(pixels[lastRow + 40] == 2);
+    assert(pixels[lastRow + middle] == 6);
+    assert(tall.mapY + tall.rows * 16 <= tall.height - 8);
     free(pixels);
     GRAP_BUF_Cleanup();
     puts("Expanded map, sidebar, visibility, actors, and layout tests passed.");

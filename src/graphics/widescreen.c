@@ -19,9 +19,9 @@ WideLayout WIDE_Layout(int width, int height)
     l.height = height / l.scale;
     l.sidebarX = l.width - 128;
     l.columns = (l.sidebarX - 16) / 16;
-    l.rows = (l.height - 24) / 16;
+    l.rows = (l.height - 16) / 16;
     l.mapX = 8 + ((l.sidebarX - 16) - l.columns * 16) / 2;
-    l.mapY = 8 + ((l.height - 24) - l.rows * 16) / 2;
+    l.mapY = 8 + ((l.height - 16) - l.rows * 16) / 2;
     return l;
 }
 
@@ -116,7 +116,7 @@ bool WIDE_Compose(byte* pixels, WideLayout l)
     memset(pixels, 0, (size_t)l.width * l.height);
     /* Relocate the original status and command column intact. */
     Copy(pixels, l.width, l.sidebarX, 0, 192, 0, 128, 200);
-    for (int y = 8; y < l.height - 16; y++) {
+    for (int y = 8; y < l.height - 8; y++) {
         Copy(pixels, l.width, 0, y, 0, 16, 8, 1);
         Copy(pixels, l.width, l.sidebarX - 8, y, 184, 16, 8, 1);
     }
@@ -124,15 +124,17 @@ bool WIDE_Compose(byte* pixels, WideLayout l)
     for (int x = 0; x < l.sidebarX; x++) {
         for (int y = 0; y < 8; y++)
             pixels[y * l.width + x] = g_linearEgaBuffer0[y * 320 + 16];
-        for (int y = 0; y < 16; y++)
-            pixels[(l.height - 16 + y) * l.width + x] = g_linearEgaBuffer0[(184 + y) * 320 + 16];
+        for (int y = 0; y < 8; y++)
+            pixels[(l.height - 8 + y) * l.width + x] = g_linearEgaBuffer0[(184 + y) * 320 + 16];
     }
-    Copy(pixels, l.width, 0, 0, 0, 0, 48, 8);
-    Copy(pixels, l.width, l.sidebarX - 48, 0, 144, 0, 48, 8);
-    Copy(pixels, l.width, l.sidebarX / 2 - 48, 0, 48, 0, 96, 8);
-    Copy(pixels, l.width, 0, l.height - 16, 0, 184, 48, 16);
-    Copy(pixels, l.width, l.sidebarX - 48, l.height - 16, 144, 184, 48, 16);
-    Copy(pixels, l.width, l.sidebarX / 2 - 48, l.height - 16, 48, 184, 96, 16);
+    /* Corners stay at the edges. Each central opening travels with both of
+     * its arrow tips, leaving uninterrupted blue strips between them. */
+    Copy(pixels, l.width, 0, 0, 0, 0, 8, 8);
+    Copy(pixels, l.width, l.sidebarX - 8, 0, 184, 0, 8, 8);
+    Copy(pixels, l.width, l.sidebarX / 2 - 56, 0, 40, 0, 112, 8);
+    Copy(pixels, l.width, 0, l.height - 8, 0, 184, 8, 8);
+    Copy(pixels, l.width, l.sidebarX - 8, l.height - 8, 184, 184, 8, 8);
+    Copy(pixels, l.width, l.sidebarX / 2 - 56, l.height - 8, 40, 184, 112, 8);
 
     int cx = l.columns / 2, cy = l.rows / 2;
     if (D_5893_map_id < 33) {
