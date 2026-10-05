@@ -1,4 +1,5 @@
 #include "common/common.h"
+#include "key/mouse.h"
 #include "funcs.h"
 #include "vars.h"
 #include "macros.h"
@@ -1599,7 +1600,7 @@ static int CMDS_18be(void)
     do
     {
         ULTIMA_1b94_SelectTextWindow(2);
-        local_a = ULTIMA_266c_GetChar();
+        local_a = MOUSE_MenuRead(192, 16, 120, local_16, local_6);
         switch (local_a)
         {
         case U5_KEY_LEFT:

@@ -60,7 +60,13 @@ Without the option, the game uses the existing window size settings.
 
 Enable mouse controls with `--mouse`. The supplied PNG cursors show the eight
 movement directions over the overhead map and a pointer over menus, cutscenes,
-and the status/text column. The launcher copies `textures/cursors` into the
+and the status/text column. Cursor pixels scale with the displayed game pixels
+using nearest-neighbor scaling, including when the window size changes. Hover
+over an item in the main menu, party selector, equipment/scroll selector,
+reagent list, shop inventory, or inn guest register to highlight it; left-click
+to select it. Keyboard selection remains available.
+
+The launcher copies `textures/cursors` into the
 runtime directory; copy that folder alongside the game data when running the
 binary directly.
 

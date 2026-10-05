@@ -15,6 +15,50 @@
 #include "third_party/stb_image.h"
 
 static bool s_enabled;
+static bool s_input, s_right, s_single;
+static int s_cursorWidth, s_cursorHeight;
+static void LoadCursors(void);
+static bool s_menu, s_menuClick;
+static int s_menuX, s_menuY, s_menuWidth, s_menuCount, s_menuSelected, s_menuTarget = -1;
+static float s_hoverX = -1, s_hoverY = -1;
+
+void MOUSE_MenuSet(int x, int y, int width, int count, int selected)
+{
+    if (x != s_menuX || y != s_menuY || width != s_menuWidth || count != s_menuCount) {
+        s_menuTarget = -1; s_menuClick = false; s_hoverX = s_hoverY = -1;
+    }
+    s_menuX=x; s_menuY=y; s_menuWidth=width; s_menuCount=count; s_menuSelected=selected;
+    s_menu = s_enabled && count > 0;
+    if (s_menu) { s_right = false; s_single = false; }
+}
+void MOUSE_MenuEnd(void) { s_menu = false; }
+int MOUSE_MenuRead(int x, int y, int width, int count, int selected)
+{
+    MOUSE_MenuSet(x,y,width,count,selected);
+    int key = ULTIMA_266c_GetChar();
+    MOUSE_MenuEnd();
+    return key;
+}
+static int MenuItem(float x, float y)
+{
+    float ux, uy;
+    if (!GRAP_SDL_MouseUIPoint(x,y,&ux,&uy) || ux < s_menuX || ux >= s_menuX+s_menuWidth ||
+        uy < s_menuY || uy >= s_menuY+s_menuCount*8) return -1;
+    return (int)((uy-s_menuY)/8);
+}
+static int PollMenu(void)
+{
+    float x,y; SDL_GetMouseState(&x,&y);
+    if (!s_menuClick && (x != s_hoverX || y != s_hoverY)) {
+        s_hoverX=x; s_hoverY=y; s_menuTarget=MenuItem(x,y);
+    }
+    if (s_menuTarget < 0) return 0;
+    if (s_menuTarget < s_menuSelected) return U5_KEY_UP;
+    if (s_menuTarget > s_menuSelected) return U5_KEY_DOWN;
+    if (s_menuClick) { s_menuClick=false; s_menuTarget=-1; return U5_KEY_ENTER; }
+    return 0;
+}
+
 static SDL_Cursor* s_cursors[9];
 static SDL_Cursor* s_currentCursor;
 static const int s_cursorDirections[9] = {0, U5_KEY_UP, U5_KEY_PGUP, U5_KEY_RIGHT, U5_KEY_PGDN, U5_KEY_DOWN, U5_KEY_END, U5_KEY_LEFT, U5_KEY_HOME};
@@ -33,9 +77,13 @@ int MOUSE_CursorDirection(float x, float y)
 void MOUSE_UpdateCursor(void)
 {
     if (!s_enabled) return;
+    int width,height; GRAP_SDL_CursorSize(&width,&height);
+    if (width != s_cursorWidth || height != s_cursorHeight) {
+        MOUSE_Cleanup(); LoadCursors();
+    }
     float x, y;
     SDL_GetMouseState(&x, &y);
-    int direction = MOUSE_CursorDirection(x, y), index = 0;
+    int direction = s_menu ? 0 : MOUSE_CursorDirection(x, y), index = 0;
     for (int i = 1; i < 9; ++i) if (s_cursorDirections[i] == direction) index = i;
     SDL_Cursor* cursor = s_cursors[index] ? s_cursors[index] : s_cursors[0];
     if (!cursor) cursor = SDL_GetDefaultCursor();
@@ -52,6 +100,7 @@ void MOUSE_Cleanup(void)
 
 static void LoadCursors(void)
 {
+    GRAP_SDL_CursorSize(&s_cursorWidth,&s_cursorHeight);
     for (int i = 0; i < 9; ++i) {
         char path[128];
         snprintf(path, sizeof(path), "textures/cursors/cursor-%s.png", s_cursorNames[i]);
@@ -63,14 +112,16 @@ static void LoadCursors(void)
         if (!pixels) { debug("Invalid mouse cursor PNG: %s\n", path); continue; }
         SDL_Surface* surface = SDL_CreateSurfaceFrom(w, h, SDL_PIXELFORMAT_RGBA32, pixels, w * 4);
         if (surface) {
-            s_cursors[i] = SDL_CreateColorCursor(surface, i ? w / 2 : 0, i ? h / 2 : 0);
+            SDL_Surface* scaled = SDL_ScaleSurface(surface,s_cursorWidth,s_cursorHeight,SDL_SCALEMODE_NEAREST);
+            if (scaled) {
+                s_cursors[i] = SDL_CreateColorCursor(scaled, i ? s_cursorWidth / 2 : 0, i ? s_cursorHeight / 2 : 0);
+                SDL_DestroySurface(scaled);
+            }
             SDL_DestroySurface(surface);
         }
         stbi_image_free(pixels);
     }
 }
-
-static bool s_input, s_right, s_single;
 
 void MOUSE_SetEnabled(bool enabled)
 {
@@ -90,6 +141,8 @@ void MOUSE_Initialize(void)
 }
 void MOUSE_Cancel(void)
 {
+    s_menuTarget = -1; s_menuClick = false;
+    SDL_GetMouseState(&s_hoverX,&s_hoverY);
     s_right = s_single = false;
     s_command = s_direction = 0;
 }
@@ -162,6 +215,13 @@ static bool SamePosition(void)
 void MOUSE_Button(float x, float y, int button, bool down, int clicks)
 {
     if (!s_enabled) return;
+    if (s_menu) {
+        if (down && button == SDL_BUTTON_LEFT) {
+            s_menuTarget = MenuItem(x,y);
+            s_menuClick = s_menuTarget >= 0;
+        }
+        return;
+    }
     if (button == SDL_BUTTON_RIGHT) {
         s_right = down && s_input;
         debug("Mouse right button: down=%d command_input=%d\n", down, s_input);
@@ -183,6 +243,7 @@ void MOUSE_Button(float x, float y, int button, bool down, int clicks)
 }
 int MOUSE_PollCommand(void)
 {
+    if (s_enabled && s_menu) return PollMenu();
     if (!s_enabled || !s_input || D_5893_map_id > 32) return 0;
     if (s_single && SDL_GetTicks() - s_singleTime >= 300) {
         s_single = false;

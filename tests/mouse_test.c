@@ -16,12 +16,15 @@
 static int loadedCursors;
 SDL_Cursor* __wrap_SDL_CreateColorCursor(SDL_Surface* surface, int x, int y)
 {
-    assert(surface->w == 16 && surface->h == 16);
-    assert(x == (loadedCursors ? 8 : 0) && y == x);
+    int width,height; GRAP_SDL_CursorSize(&width,&height);
+    assert(surface->w == width && surface->h == height);
+    assert(x == (loadedCursors % 9 ? width / 2 : 0));
+    assert(y == (loadedCursors % 9 ? height / 2 : 0));
     bool transparent = false, opaque = false;
-    for (int yy = 0; yy < 16; ++yy) for (int xx = 0; xx < 16; ++xx) {
+    for (int yy = 0; yy < surface->h; ++yy) for (int xx = 0; xx < surface->w; ++xx) {
         Uint8 r,g,b,a;
         assert(SDL_ReadSurfacePixel(surface,xx,yy,&r,&g,&b,&a));
+        assert((r==0 || r==255) && g==r && b==r && (a==0 || a==255));
         transparent |= a == 0; opaque |= a == 255;
     }
     assert(transparent && opaque);
@@ -125,6 +128,9 @@ int main(void)
     assert(SDL_Init(SDL_INIT_VIDEO));
     GRAP_SDL_Initialize();
     MOUSE_Initialize();
+    int pixelWidth,pixelHeight;
+    GRAP_SDL_CursorSize(&pixelWidth,&pixelHeight);
+    assert(pixelWidth==64 && pixelHeight==77);
     int dx,dy; float rx,ry;
     assert(GRAP_SDL_MouseMapPoint(384,460.8f,&dx,&dy,&rx,&ry));
     assert(dx==0 && dy==0);
@@ -155,6 +161,35 @@ int main(void)
     D_5893_map_id = 33;
     assert(MOUSE_CursorDirection(448,460.8f) == 0);
     D_5893_map_id = 13;
+    /* Hover walks the native selection; a click confirms only its own row. */
+    cursorX = 800; cursorY = 115.2f;
+    MOUSE_MenuSet(192,8,120,3,0);
+    assert(MOUSE_PollCommand()==U5_KEY_DOWN);
+    MOUSE_MenuSet(192,8,120,3,1);
+    assert(MOUSE_PollCommand()==U5_KEY_DOWN);
+    MOUSE_MenuSet(192,8,120,3,2);
+    assert(MOUSE_PollCommand()==0);
+    MOUSE_Button(cursorX,cursorY,SDL_BUTTON_LEFT,true,1);
+    assert(MOUSE_PollCommand()==U5_KEY_ENTER);
+    assert(MOUSE_PollCommand()==0);
+    MOUSE_Button(400,115.2f,SDL_BUTTON_LEFT,true,1);
+    assert(MOUSE_PollCommand()==0); /* map is outside the party list */
+    MOUSE_Cancel();
+    MOUSE_MenuSet(192,8,120,3,0);
+    assert(MOUSE_PollCommand()==0); /* keyboard selection takes priority until mouse moves */
+    MOUSE_MenuEnd();
+    assert(MOUSE_PollCommand()==0);
+    /* Exercise the actual party selector, not only synthetic menu keystrokes. */
+    static byte testFont[2048];
+    D_5398_currentCharset = testFont;
+    for (int i=0;i<4;i++) D_539c[i]=testFont;
+    int savedPartySize = D_585b;
+    D_585b = 3;
+    MOUSE_MenuSet(192,8,120,3,0);
+    MOUSE_Button(800,115.2f,SDL_BUTTON_LEFT,true,1);
+    assert(ULTIMA_2d7a(0)==2);
+    D_585b = savedPartySize;
+    MOUSE_Cancel();
     MOUSE_Button(448,460.8f,SDL_BUTTON_LEFT,true,1);
     assert(MOUSE_PollCommand()==0);
     ticks+=301;
@@ -212,6 +247,18 @@ int main(void)
     assert(GRAP_SDL_MouseMapPoint(centerX,centerY,&dx,&dy,&rx,&ry) && dx==0 && dy==0);
     assert(GRAP_SDL_MouseMapPoint(centerX+16*l.scale,centerY,&dx,&dy,&rx,&ry) && dx==1 && dy==0);
     assert(!GRAP_SDL_MouseMapPoint(1020,centerY,&dx,&dy,&rx,&ry));
+    int cursorWidth,cursorHeight;
+    GRAP_SDL_CursorSize(&cursorWidth,&cursorHeight);
+    assert(cursorWidth==48 && cursorHeight==48);
+    /* Menu coordinates follow the shifted sidebar in expanded fullscreen. */
+    float uiX,uiY;
+    float sidebarX=(1024-l.width*l.scale)/2+(l.sidebarX+8)*l.scale;
+    assert(GRAP_SDL_MouseUIPoint(sidebarX,24*l.scale,&uiX,&uiY));
+    assert(uiX==200 && uiY==24);
+    cursorX=sidebarX; cursorY=24*l.scale;
+    MOUSE_MenuSet(192,8,120,3,0);
+    assert(MOUSE_PollCommand()==U5_KEY_DOWN);
+    MOUSE_MenuEnd(); MOUSE_Cancel();
     GRAP_SDL_SetSmoothMovement(true);
     memset(g_linearEgaBuffer0,0,320*200);
     g_linearEgaBuffer0[0]=10;

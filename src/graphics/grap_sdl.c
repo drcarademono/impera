@@ -76,6 +76,39 @@ void GRAP_SDL_SetSmoothMovement(bool enabled) { s_smoothMovement = enabled; s_pr
 void GRAP_SDL_MapDrawn(void) { s_mapDrawn = true; }
 
 
+void GRAP_SDL_CursorSize(int* width, int* height)
+{
+    int w = 320, h = 200, outputW, outputH;
+    if (s_sdlWindow) SDL_GetWindowSize(s_sdlWindow, &w, &h);
+    float sx = w / 320.0f, sy = h / 200.0f;
+    if (s_fullscreen && SDL_GetRenderOutputSize(s_sdlRenderer, &outputW, &outputH)) {
+        WideLayout l = WIDE_Layout(outputW, outputH);
+        sx = l.scale * (float)w / outputW;
+        sy = l.scale * (float)h / outputH;
+    }
+    *width = SDL_max(16, (int)SDL_roundf(16 * sx));
+    *height = SDL_max(16, (int)SDL_roundf(16 * sy));
+}
+
+bool GRAP_SDL_MouseUIPoint(float x, float y, float* ux, float* uy)
+{
+    int w, h, ow, oh;
+    if (!s_sdlWindow || !SDL_GetWindowSize(s_sdlWindow, &w, &h) || w <= 0 || h <= 0) return false;
+    if (!s_fullscreen) { *ux = x * 320 / w; *uy = y * 200 / h; return true; }
+    if (!SDL_GetRenderOutputSize(s_sdlRenderer, &ow, &oh)) return false;
+    WideLayout l = WIDE_Layout(ow, oh);
+    int cw = s_expandedFrame ? l.width : 320, ch = s_expandedFrame ? l.height : 200;
+    *ux = (x * ow / w - (ow - cw * l.scale) / 2) / l.scale;
+    *uy = (y * oh / h - (oh - ch * l.scale) / 2) / l.scale;
+    if (*ux < 0 || *uy < 0 || *ux >= cw || *uy >= ch) return false;
+    /* The original right-hand 128 pixels move to the far edge in widescreen. */
+    if (s_expandedFrame) {
+        if (*ux < l.sidebarX) return false;
+        *ux -= l.sidebarX - 192;
+    }
+    return true;
+}
+
 bool GRAP_SDL_MouseMapPoint(float x, float y, int* dx, int* dy, float* rx, float* ry)
 {
     int width, height, windowW, windowH;

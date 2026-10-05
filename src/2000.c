@@ -1,4 +1,5 @@
 #include "common/common.h"
+#include "key/mouse.h"
 #include "common/file.h"
 #include "vars.h"
 #include "funcs.h"
@@ -910,7 +911,7 @@ int ULTIMA_2d7a(int param_1)
 
         do
         {
-            local_8 = ULTIMA_266c_GetChar();
+            local_8 = MOUSE_MenuRead(192, 8, 120, D_585b, local_4);
         } while (local_8 > '7');
 
         if (local_8 > '0' && local_8 < '7' && local_8 - '1' < D_585b)

@@ -7,6 +7,8 @@
 void GRAP_SDL_SetFullscreen(bool fullscreen);
 void GRAP_SDL_SetSmoothMovement(bool enabled);
 void GRAP_SDL_MapDrawn(void);
+void GRAP_SDL_CursorSize(int* width, int* height);
+bool GRAP_SDL_MouseUIPoint(float x, float y, float* ux, float* uy);
 bool GRAP_SDL_MouseMapPoint(float x, float y, int* dx, int* dy, float* rx, float* ry);
 
 #endif

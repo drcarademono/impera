@@ -1,6 +1,15 @@
 #ifndef U5D_MOUSE_H
 #define U5D_MOUSE_H
 #include "common/common.h"
+#if defined(TARGET_SDL)
+void MOUSE_MenuSet(int x, int y, int width, int count, int selected);
+void MOUSE_MenuEnd(void);
+int MOUSE_MenuRead(int x, int y, int width, int count, int selected);
+#else
+#define MOUSE_MenuSet(x,y,w,n,s) ((void)0)
+#define MOUSE_MenuEnd() ((void)0)
+#define MOUSE_MenuRead(x,y,w,n,s) ULTIMA_266c_GetChar()
+#endif
 void MOUSE_Initialize(void);
 void MOUSE_Cleanup(void);
 void MOUSE_UpdateCursor(void);

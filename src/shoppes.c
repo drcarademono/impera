@@ -1,4 +1,5 @@
 #include "common/common.h"
+#include "key/mouse.h"
 #include "funcs.h"
 #include "vars.h"
 #include "macros.h"
@@ -1036,7 +1037,12 @@ static void SHOPPES_0f64(int param_1)
         while (local_a == 0)
         {
             // b320
-            local_8 = ULTIMA_266c_GetChar();
+            int mouseCount = 0, mouseItem = local_6;
+            while (mouseItem != -1 && mouseCount < 4) {
+                mouseCount++;
+                mouseItem = ZSTATS_05a4(mouseItem, 0x30, D_57c0, 0xff);
+            }
+            local_8 = MOUSE_MenuRead(198, 16, 106, mouseCount, local_c - 1);
 
             switch (local_8)
             {
