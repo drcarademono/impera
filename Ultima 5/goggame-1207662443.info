@@ -1,0 +1,55 @@
+{
+    "buildId": "52095641327989411",
+    "clientId": "49964620374278578",
+    "gameId": "1207662443",
+    "language": "English",
+    "languages": [
+        "en-US"
+    ],
+    "name": "Ultima V - Warriors of Destiny",
+    "playTasks": [
+        {
+            "arguments": "-conf \"..\\dosboxULTIMA5.conf\" -conf \"..\\dosboxULTIMA5_single.conf\" -noconsole -c \"exit\"",
+            "category": "game",
+            "isPrimary": true,
+            "languages": [
+                "*"
+            ],
+            "name": "Ultima V - Warriors of Destiny",
+            "path": "DOSBOX\\dosbox.exe",
+            "type": "FileTask",
+            "workingDir": "DOSBOX"
+        },
+        {
+            "arguments": "1207662443",
+            "category": "tool",
+            "languages": [
+                "*"
+            ],
+            "name": "Graphic Mode Setup",
+            "path": "DOSBOX\\GOGDOSConfig.exe",
+            "type": "FileTask",
+            "workingDir": "DOSBOX"
+        },
+        {
+            "category": "document",
+            "languages": [
+                "*"
+            ],
+            "link": "http://www.gog.com/support/ultima_456",
+            "name": "Support",
+            "type": "URLTask"
+        },
+        {
+            "category": "document",
+            "languages": [
+                "*"
+            ],
+            "name": "Manual",
+            "path": "manual.pdf",
+            "type": "FileTask"
+        }
+    ],
+    "rootGameId": "1207662443",
+    "version": 1
+}
