@@ -44,7 +44,7 @@ int CDECL main(int argc, char** argv/*, char** envp*/)
         else if (strcmp(argv[arg], "--help") == 0)
         {
             puts("Usage: ultima5 [--fullscreen] [C|H|T|E]\n"
-                 "  --fullscreen  Fill the desktop display, stretching the game image to fit.");
+                 "  --fullscreen  Expand the overhead map with uniform integer pixel scaling.");
             return EXIT_SUCCESS;
         }
         else if (argv[arg][0] == '-')

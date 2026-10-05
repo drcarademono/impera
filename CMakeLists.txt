@@ -58,6 +58,7 @@ set(SOURCES
 	src/graphics/grap_buf.c
 	src/graphics/origin.c
 	src/graphics/grap_sdl.c
+	src/graphics/widescreen.c
 	src/graphics/grap.c
 	src/graphics/reveal.c
 	src/graphics/wd.c
@@ -78,6 +79,12 @@ if(U5D_BUILD_TESTS)
     list(REMOVE_ITEM TEST_SOURCES src/ultima.c)
     add_executable(u5d_savegame_test tests/savegame_test.c ${TEST_SOURCES})
     list(APPEND U5D_TARGETS u5d_savegame_test)
+    add_executable(u5d_widescreen_test tests/widescreen_test.c ${TEST_SOURCES})
+    list(APPEND U5D_TARGETS u5d_widescreen_test)
+    add_test(NAME widescreen COMMAND u5d_widescreen_test)
+    file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/widescreen-runtime")
+    set_tests_properties(widescreen PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/widescreen-runtime" TIMEOUT 10)
     file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/test-runtime/SAVEGAME")
     foreach(NPC_FILE TOWNE.NPC DWELLING.NPC CASTLE.NPC KEEP.NPC)
         configure_file("${CMAKE_SOURCE_DIR}/Ultima 5/${NPC_FILE}"

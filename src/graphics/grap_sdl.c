@@ -6,6 +6,7 @@
 #include "origin.h"
 #include "wd.h"
 #include "grap_sdl.h"
+#include "widescreen.h"
 
 #include <SDL3/SDL.h>
 
@@ -14,6 +15,9 @@ static SDL_Renderer* s_sdlRenderer;
 static SDL_Surface* s_sdlSurface;
 static SDL_Texture* s_sdlTexture;
 static bool s_fullscreen;
+static SDL_Texture* s_wideTexture;
+static SDL_Surface* s_wideSurface;
+static byte* s_widePixels;
 
 void GRAP_SDL_SetFullscreen(bool fullscreen)
 {
@@ -64,7 +68,7 @@ void GRAP_SDL_Initialize(void)
     s_sdlSurface = SDL_CreateSurface(hiresWidth, hiresHeight, SDL_GetPixelFormatForMasks(32, 0xff0000, 0xff00, 0xff, 0xff000000));
 
     s_sdlTexture = SDL_CreateTextureFromSurface(s_sdlRenderer, s_sdlSurface);
-    SDL_SetTextureScaleMode(s_sdlTexture, SDL_SCALEMODE_LINEAR);
+    SDL_SetTextureScaleMode(s_sdlTexture, s_fullscreen ? SDL_SCALEMODE_NEAREST : SDL_SCALEMODE_LINEAR);
 
     if (SDL_MUSTLOCK(s_sdlSurface))
     {
@@ -82,6 +86,13 @@ void GRAP_SDL_Initialize(void)
 void GRAP_SDL_Cleanup(void)
 {
     GRAP_BUF_Cleanup();
+
+    SDL_DestroyTexture(s_wideTexture);
+    SDL_DestroySurface(s_wideSurface);
+    free(s_widePixels);
+    s_wideTexture = NULL;
+    s_wideSurface = NULL;
+    s_widePixels = NULL;
 
     SDL_DestroyTexture(s_sdlTexture);
     SDL_DestroySurface(s_sdlSurface);
@@ -136,9 +147,59 @@ void GRAP_SDL_FlushFrame(void)
     SDL_UpdateTexture(s_sdlTexture, NULL, s_sdlSurface->pixels, s_sdlSurface->pitch);
 
     SDL_FRect srcRect = {0, 0, hiresWidth, hiresHeight};
-    /* NULL fills the current renderer output, including fullscreen and HiDPI.
-     * The original image is stretched to fit rather than letterboxed. */
-    SDL_RenderTexture(s_sdlRenderer, s_sdlTexture, &srcRect, NULL);
+    SDL_SetRenderDrawColor(s_sdlRenderer, 0, 0, 0, 255);
+    SDL_RenderClear(s_sdlRenderer);
+    if (s_fullscreen)
+    {
+        int width, height;
+        if (!SDL_GetRenderOutputSize(s_sdlRenderer, &width, &height)) return;
+        WideLayout layout = WIDE_Layout(width, height);
+        if (!s_wideSurface || s_wideSurface->w != layout.width || s_wideSurface->h != layout.height)
+        {
+            SDL_DestroyTexture(s_wideTexture);
+            SDL_DestroySurface(s_wideSurface);
+            free(s_widePixels);
+            s_wideSurface = SDL_CreateSurface(layout.width, layout.height, SDL_PIXELFORMAT_ARGB8888);
+            s_widePixels = malloc((size_t)layout.width * layout.height);
+            if (!s_wideSurface || !s_widePixels)
+            {
+                DEBUG_Error("Cannot allocate expanded game viewport\n");
+                exit(EXIT_FAILURE);
+            }
+            s_wideTexture = SDL_CreateTexture(s_sdlRenderer, SDL_PIXELFORMAT_ARGB8888,
+                                             SDL_TEXTUREACCESS_STREAMING, layout.width, layout.height);
+            if (!s_wideTexture)
+            {
+                DEBUG_Error("Cannot create expanded viewport texture: %s\n", SDL_GetError());
+                exit(EXIT_FAILURE);
+            }
+            SDL_SetTextureScaleMode(s_wideTexture, SDL_SCALEMODE_NEAREST);
+            debug("Expanded layout: %dx%d tiles, pixel scale=%d\n", layout.columns, layout.rows, layout.scale);
+        }
+        if (WIDE_Compose(s_widePixels, layout))
+        {
+            for (int y = 0; y < layout.height; y++)
+            {
+                Uint32* row = (Uint32*)((byte*)s_wideSurface->pixels + y * s_wideSurface->pitch);
+                for (int x = 0; x < layout.width; x++)
+                    row[x] = s_egaPalette[s_widePixels[y * layout.width + x] & 15];
+            }
+            SDL_UpdateTexture(s_wideTexture, NULL, s_wideSurface->pixels, s_wideSurface->pitch);
+            SDL_FRect dst = {(width - layout.width * layout.scale) / 2,
+                             (height - layout.height * layout.scale) / 2,
+                             layout.width * layout.scale, layout.height * layout.scale};
+            SDL_RenderTexture(s_sdlRenderer, s_wideTexture, NULL, &dst);
+        }
+        else
+        {
+            SDL_FRect dst = {(width - 320 * layout.scale) / 2,
+                             (height - 200 * layout.scale) / 2,
+                             320 * layout.scale, 200 * layout.scale};
+            SDL_RenderTexture(s_sdlRenderer, s_sdlTexture, &srcRect, &dst);
+        }
+    }
+    else
+        SDL_RenderTexture(s_sdlRenderer, s_sdlTexture, &srcRect, NULL);
     SDL_RenderPresent(s_sdlRenderer);
 }
 
