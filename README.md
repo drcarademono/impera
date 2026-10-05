@@ -47,6 +47,12 @@ cmake --build build --parallel 4
 bash scripts/run-linux.sh
 ```
 
+To fill your display, launch with `bash scripts/run-linux.sh --fullscreen`.
+This detects the primary display's desktop resolution and stretches the entire
+game image to fill it, including 16:9 and 16:10 screens. Widescreen mode changes
+the image proportions; it does not add extra map tiles. Without the option, the
+game uses the existing window size settings. `--help` lists launch options.
+
 For libraries installed under a custom prefix, add its `lib/pkgconfig` (or
 `lib64/pkgconfig`) directory to `PKG_CONFIG_PATH` before configuring.
 

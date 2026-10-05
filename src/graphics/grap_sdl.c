@@ -5,6 +5,7 @@
 #include "grap_ops.h"
 #include "origin.h"
 #include "wd.h"
+#include "grap_sdl.h"
 
 #include <SDL3/SDL.h>
 
@@ -12,6 +13,12 @@ static SDL_Window* s_sdlWindow;
 static SDL_Renderer* s_sdlRenderer;
 static SDL_Surface* s_sdlSurface;
 static SDL_Texture* s_sdlTexture;
+static bool s_fullscreen;
+
+void GRAP_SDL_SetFullscreen(bool fullscreen)
+{
+    s_fullscreen = fullscreen;
+}
 
 int windowWidth = 1280;
 int windowHeight = 960;
@@ -32,7 +39,27 @@ void GRAP_SDL_Initialize(void)
     windowWidth = SETTINGS_GetInt("window", "width", windowWidth);
     windowHeight = SETTINGS_GetInt("window", "height", windowHeight);
 
-    SDL_CreateWindowAndRenderer("Ultima V: Warriors of Destiny", windowWidth, windowHeight, 0, &s_sdlWindow, &s_sdlRenderer);
+    SDL_WindowFlags flags = SDL_WINDOW_HIGH_PIXEL_DENSITY;
+    if (s_fullscreen)
+    {
+        const SDL_DisplayMode* mode = SDL_GetDesktopDisplayMode(SDL_GetPrimaryDisplay());
+        if (!mode)
+        {
+            DEBUG_Error("Cannot detect desktop resolution: %s\n", SDL_GetError());
+            exit(EXIT_FAILURE);
+        }
+        windowWidth = mode->w;
+        windowHeight = mode->h;
+        flags |= SDL_WINDOW_FULLSCREEN;
+    }
+
+    if (!SDL_CreateWindowAndRenderer("Ultima V: Warriors of Destiny", windowWidth, windowHeight,
+                                    flags, &s_sdlWindow, &s_sdlRenderer))
+    {
+        DEBUG_Error("Cannot create game window: %s\n", SDL_GetError());
+        exit(EXIT_FAILURE);
+    }
+    debug("Game window: %dx%d fullscreen=%d\n", windowWidth, windowHeight, s_fullscreen);
 
     s_sdlSurface = SDL_CreateSurface(hiresWidth, hiresHeight, SDL_GetPixelFormatForMasks(32, 0xff0000, 0xff00, 0xff, 0xff000000));
 
@@ -109,8 +136,9 @@ void GRAP_SDL_FlushFrame(void)
     SDL_UpdateTexture(s_sdlTexture, NULL, s_sdlSurface->pixels, s_sdlSurface->pitch);
 
     SDL_FRect srcRect = {0, 0, hiresWidth, hiresHeight};
-    SDL_FRect dstRect = {0, 0, windowWidth, windowHeight};
-    SDL_RenderTexture(s_sdlRenderer, s_sdlTexture, &srcRect, &dstRect);
+    /* NULL fills the current renderer output, including fullscreen and HiDPI.
+     * The original image is stretched to fit rather than letterboxed. */
+    SDL_RenderTexture(s_sdlRenderer, s_sdlTexture, &srcRect, NULL);
     SDL_RenderPresent(s_sdlRenderer);
 }
 

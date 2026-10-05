@@ -1,4 +1,6 @@
 #include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
 
 #include "common/common.h"
 #include "backend/backend.h"
@@ -21,6 +23,7 @@ extern int g_enableDebugOverlay;
 
 #if defined(TARGET_SDL)
 #include <SDL3/SDL_main.h>
+#include "graphics/grap_sdl.h"
 #endif
 
 // 0000
@@ -33,6 +36,30 @@ int CDECL main(int argc, char** argv/*, char** envp*/)
 
     local_4 = 0x20;
 
+#if defined(TARGET_SDL)
+    for (int arg = 1; arg < argc; arg++)
+    {
+        if (strcmp(argv[arg], "--fullscreen") == 0)
+            GRAP_SDL_SetFullscreen(true);
+        else if (strcmp(argv[arg], "--help") == 0)
+        {
+            puts("Usage: ultima5 [--fullscreen] [C|H|T|E]\n"
+                 "  --fullscreen  Fill the desktop display, stretching the game image to fit.");
+            return EXIT_SUCCESS;
+        }
+        else if (argv[arg][0] == '-')
+        {
+            fprintf(stderr, "Unknown option: %s (use --help)\n", argv[arg]);
+            return EXIT_FAILURE;
+        }
+        else
+            local_4 = ULTIMA_2032_ToUpper((unsigned char)argv[arg][0]);
+    }
+#else
+    if (argc > 1)
+        local_4 = ULTIMA_2032_ToUpper((unsigned char)argv[1][0]);
+#endif
+
 #if defined(ENABLE_TRANSLATION)
     TRS_Initialize();
 #endif
@@ -41,11 +68,6 @@ int CDECL main(int argc, char** argv/*, char** envp*/)
     BACKEND_Initialize();
     atexit(BACKEND_Cleanup);
 #endif
-
-    if (argc > 1)
-    {
-        local_4 = ULTIMA_2032_ToUpper((unsigned char)argv[1][0]);
-    }
 
     // 0021
     D_52ba_vdp._52ba_forceCga = local_4 == 'C';
