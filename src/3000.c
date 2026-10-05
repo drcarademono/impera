@@ -1,4 +1,7 @@
 #include "common/common.h"
+#if defined(TARGET_SDL)
+#include "key/mouse.h"
+#endif
 #include "time/time.h"
 
 #include "vars.h"
@@ -421,10 +424,15 @@ int ULTIMA_35ec_SelectDirection(void)
     D_5876 = 0;
     D_5878 = 0;
 
-    while ((local_4 = ULTIMA_266c_GetChar()) != U5_KEY_SPACE &&
+    local_4 = 0;
+#if defined(TARGET_SDL)
+    local_4 = MOUSE_TakeDirection();
+#endif
+    while (local_4 == 0 && (local_4 = ULTIMA_266c_GetChar()) != U5_KEY_SPACE &&
            local_4 != U5_KEY_UP && local_4 != U5_KEY_DOWN &&
            local_4 != U5_KEY_LEFT && local_4 != U5_KEY_RIGHT)
     {
+        local_4 = 0;
     }
 
     switch (local_4)

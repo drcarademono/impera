@@ -58,6 +58,24 @@ may remain when the display dimensions are not divisible by the pixel scale.
 Without the option, the game uses the existing window size settings.
 `--help` lists launch options.
 
+Mouse controls work in the overhead town and outdoor views, in both windowed
+and fullscreen mode:
+
+- Hold the right button over the map to walk toward the cursor in eight
+  directions. Release it to stop. Diagonal steps cannot cut through blocked
+  corners; sailing retains the game's four-way headings.
+- Single-left-click an adjacent tile to Look. Double-left-click an adjacent
+  NPC to Talk, a door or chest to Open, or a loose object to Get. Other nearby
+  targets fall back to Look.
+- Double-click your own tile to Enter a town, Klimb a ladder, rest in a bed,
+  or Board a vehicle when the usual keyboard conditions allow it.
+
+Directional interactions require cardinal adjacency, just as keyboard controls
+do. Distant and diagonal targets do not trigger actions. Single clicks wait
+300 ms to distinguish double clicks. Mouse commands are disabled during menus,
+dialogues, combat, dungeon perspective views, and other input prompts; use the
+keyboard there. Clicking the status column does not issue map commands.
+
 For libraries installed under a custom prefix, add its `lib/pkgconfig` (or
 `lib64/pkgconfig`) directory to `PKG_CONFIG_PATH` before configuring.
 

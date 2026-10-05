@@ -18,6 +18,35 @@ static bool s_fullscreen;
 static SDL_Texture* s_wideTexture;
 static SDL_Surface* s_wideSurface;
 static byte* s_widePixels;
+static bool s_expandedFrame;
+
+bool GRAP_SDL_MouseMapPoint(float x, float y, int* dx, int* dy, float* rx, float* ry)
+{
+    int width, height, windowW, windowH;
+    if (!s_sdlWindow || !s_sdlRenderer || !SDL_GetWindowSize(s_sdlWindow, &windowW, &windowH) ||
+        !SDL_GetRenderOutputSize(s_sdlRenderer, &width, &height) || windowW <= 0 || windowH <= 0)
+        return false;
+    float gx = x * width / windowW, gy = y * height / windowH;
+    int mapX = 8, mapY = 8, columns = 11, rows = 11;
+    if (s_fullscreen) {
+        WideLayout l = WIDE_Layout(width, height);
+        int canvasW = s_expandedFrame ? l.width : 320;
+        int canvasH = s_expandedFrame ? l.height : 200;
+        gx = (gx - (width - canvasW * l.scale) / 2) / l.scale;
+        gy = (gy - (height - canvasH * l.scale) / 2) / l.scale;
+        if (s_expandedFrame) { mapX = l.mapX; mapY = l.mapY; columns = l.columns; rows = l.rows; }
+    } else {
+        gx = gx * 320 / width;
+        gy = gy * 200 / height;
+    }
+    if (gx < mapX || gy < mapY || gx >= mapX + columns * 16 || gy >= mapY + rows * 16)
+        return false;
+    *dx = (int)((gx - mapX) / 16) - columns / 2;
+    *dy = (int)((gy - mapY) / 16) - rows / 2;
+    *rx = (gx - mapX - columns / 2 * 16 - 8) / 16;
+    *ry = (gy - mapY - rows / 2 * 16 - 8) / 16;
+    return true;
+}
 
 void GRAP_SDL_SetFullscreen(bool fullscreen)
 {
@@ -142,6 +171,7 @@ extern void DisplayDebugMessages(void);
 
 void GRAP_SDL_FlushFrame(void)
 {
+    s_expandedFrame = false;
     LinearToRGB();
 
     SDL_UpdateTexture(s_sdlTexture, NULL, s_sdlSurface->pixels, s_sdlSurface->pitch);
@@ -178,6 +208,7 @@ void GRAP_SDL_FlushFrame(void)
         }
         if (WIDE_Compose(s_widePixels, layout))
         {
+            s_expandedFrame = true;
             for (int y = 0; y < layout.height; y++)
             {
                 Uint32* row = (Uint32*)((byte*)s_wideSurface->pixels + y * s_wideSurface->pitch);

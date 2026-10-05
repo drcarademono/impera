@@ -1,4 +1,7 @@
 #include "common/common.h"
+#if defined(TARGET_SDL)
+#include "key/mouse.h"
+#endif
 
 #include "funcs.h"
 #include "vars.h"
@@ -333,6 +336,10 @@ static int MAINOUT_0490(int param_1, int param_2)
     int local_6;
     int local_4;
 
+    if ((D_587c_partyTile & 0xfc) == TILE_ACTOR_FRIGATE_20 &&
+        param_1 >= U5_KEY_HOME && param_1 <= U5_KEY_PGDN)
+        param_1 = (param_1 == U5_KEY_HOME || param_1 == U5_KEY_END) ? DIR_LEFT : DIR_RIGHT;
+
     if ((D_587c_partyTile & 0xfc) == TILE_ACTOR_FRIGATE_20)
     {
         if (param_1 != D_5955)
@@ -354,6 +361,21 @@ static int MAINOUT_0490(int param_1, int param_2)
 
     switch (param_1)
     {
+    case U5_KEY_HOME:
+    case U5_KEY_END:
+    case U5_KEY_PGUP:
+    case U5_KEY_PGDN:
+        local_6 = (param_1 == U5_KEY_HOME || param_1 == U5_KEY_END) ? -1 : 1;
+        local_8 = (param_1 == U5_KEY_HOME || param_1 == U5_KEY_PGUP) ? -1 : 1;
+        if (!ULTIMA_2c4c_IsWalkableTile(D_587c_partyTile, GetMapViewport(5 + local_6, 5)) ||
+            !ULTIMA_2c4c_IsWalkableTile(D_587c_partyTile, GetMapViewport(5, 5 + local_8))) {
+            ULTIMA_1850_PrintString("Blocked!\n");
+            return 0;
+        }
+        ULTIMA_1850_PrintString(local_8 < 0 ? (local_6 < 0 ? "Northwest\n" : "Northeast\n") :
+                                              (local_6 < 0 ? "Southwest\n" : "Southeast\n"));
+        break;
+
     case DIR_UP:
         // 04f0
         local_8--;
@@ -860,8 +882,14 @@ static void MAINOUT_0a84_MainLoop(void)
                 return;
             }
             // 0b14
+#if defined(TARGET_SDL)
+            MOUSE_SetCommandInput(true);
+#endif
             local_6 = MAINOUT_0598();
-            if (local_6 < 0x20)
+#if defined(TARGET_SDL)
+            MOUSE_SetCommandInput(false);
+#endif
+            if (local_6 < 0x20 || (local_6 >= U5_KEY_HOME && local_6 <= U5_KEY_PGDN))
             {
                 switch (local_6 & 0xff)
                 {
@@ -908,6 +936,10 @@ static void MAINOUT_0a84_MainLoop(void)
                     D_a9ce = !D_a9ce;
                     break;
 
+                case U5_KEY_HOME:
+                case U5_KEY_END:
+                case U5_KEY_PGUP:
+                case U5_KEY_PGDN:
                 case U5_KEY_LEFT: // 0baa
                 case U5_KEY_RIGHT:
                 case U5_KEY_UP:

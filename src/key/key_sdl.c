@@ -2,6 +2,7 @@
 
 #include "vars.h"
 #include "macros.h"
+#include "mouse.h"
 
 #include <SDL3/SDL.h>
 
@@ -15,7 +16,7 @@
 #define KBD_PGDN   0x51
 
 void KEY_Initialize(void)
-{}
+{ MOUSE_Initialize(); }
 
 void KEY_Cleanup(void)
 {}
@@ -122,6 +123,10 @@ int KEY_PollKey(void)
 
     ret = s_lastDownKeycode;
     s_lastDownKeycode = 0;
+    if (!ret) {
+        ret = MOUSE_PollCommand();
+        if (ret) D_538a = 1;
+    }
 
 	return ret;
 }

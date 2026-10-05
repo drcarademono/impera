@@ -5,5 +5,6 @@
 
 /* Set before BACKEND_Initialize creates the window. */
 void GRAP_SDL_SetFullscreen(bool fullscreen);
+bool GRAP_SDL_MouseMapPoint(float x, float y, int* dx, int* dy, float* rx, float* ry);
 
 #endif
