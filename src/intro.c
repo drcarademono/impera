@@ -575,20 +575,20 @@ void INTRO_0986_Main(void) // intro_main (initialize video) (8b46)
     if (D_52ba_vdp._52c8_videoDriverSelection == VDP_VIDEO_HERC)
     {
         // 0a64
-        while (ULTIMA_1d02_LoadCharset(/*0x3182*/ "ibm.hcs", 0) == 0)
+        while (ULTIMA_1d02_LoadCharset(/*0x3182*/ "IBM.HCS", 0) == 0)
         {
         }
-        while (ULTIMA_1d02_LoadCharset(/*0x318a*/ "runes.hcs", 1) == 0)
+        while (ULTIMA_1d02_LoadCharset(/*0x318a*/ "RUNES.HCS", 1) == 0)
         {
         }
     }
     else
     {
         // 0a84
-        while (ULTIMA_1d02_LoadCharset(/*0x3194*/ "ibm.ch", 0) == 0)
+        while (ULTIMA_1d02_LoadCharset(/*0x3194*/ "IBM.CH", 0) == 0)
         {
         }
-        while (ULTIMA_1d02_LoadCharset(/*0x319b*/ "runes.ch", 1) == 0)
+        while (ULTIMA_1d02_LoadCharset(/*0x319b*/ "RUNES.CH", 1) == 0)
         {
         }
     }

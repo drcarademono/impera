@@ -29,6 +29,41 @@ The game can be played through to the ending using the original data files. Howe
 
 ## Building
 
+### Linux Target
+
+Install a C compiler, CMake 3.16 or newer, pkg-config, SDL3, and SDL3_mixer
+development packages. This target uses **SDL3_mixer 3.2 or newer**, not
+SDL2_mixer. SDL3 must include your desktop's X11 or Wayland video driver.
+If your distribution does not package these libraries, build them from the
+official [SDL](https://github.com/libsdl-org/SDL) and
+[SDL_mixer](https://github.com/libsdl-org/SDL_mixer) releases. The cloud build
+was tested with SDL 3.4.18 and SDL_mixer 3.2.4.
+
+From the repository root:
+
+```sh
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel 4
+bash scripts/run-linux.sh
+```
+
+For libraries installed under a custom prefix, add its `lib/pkgconfig` (or
+`lib64/pkgconfig`) directory to `PKG_CONFIG_PATH` before configuring.
+
+The launcher copies the original data from `Ultima 5` to `build/runtime`
+on first run and keeps saves in `build/runtime/SAVEGAME`. Existing runtime
+files and saves are preserved on later runs. Set `U5D_DATA_DIR` to an absolute
+path to use another data directory, or `U5D_BUILD_DIR` to an absolute path
+if you configured a different build directory. Keep filename case intact.
+The supplied assets have no active saved character: choose **Create New
+Character** before **Journey Onward**.
+
+Optional modern music and effects belong in `BGM` and `SFX` inside the data
+directory; they are not included in the original DOS assets. Do not set
+SDL's dummy video/audio drivers when playing on your desktop. Headless cloud
+validation covered rendering, menu input, and the character-name prompt;
+desktop graphics, audible output, and a complete playthrough are unverified.
+
 ### Windows Target
 
 Open `u5win/u5win.slnx` with Visual Studio 2026 and build the solution.
