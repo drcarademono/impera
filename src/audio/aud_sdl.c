@@ -7,6 +7,7 @@
 #include "aud_ops.h"
 #include "sfx_map.h"
 #include "pcspeaker.h"
+#include "vars.h"
 
 #include <stdio.h>
 
@@ -179,7 +180,7 @@ static void AUDIO_SDL_PlaySfx(int id)
 {
     debug("AUDIO_SDL_PlaySfx(%d)", id);
 
-    if (!AUDIO_SDL_HasSfx(id))
+    if (!D_a9ce || !AUDIO_SDL_HasSfx(id))
         return;
 
     if (!MIX_SetTrackAudio(s_sfxTrack, s_sfx[id]) || !MIX_PlayTrack(s_sfxTrack, 0)) PrintError();
@@ -187,14 +188,12 @@ static void AUDIO_SDL_PlaySfx(int id)
 
 static void AUDIO_SDL_PlayTitle1Sfx(void)
 {
-    if (AUDIO_SDL_HasSfx(SFX_ID_TITLE1)) AUDIO_SDL_PlaySfx(SFX_ID_TITLE1);
-    else PlaySpeaker(PCSPK_NOISE,1,16000,16000,0,0);
+    AUDIO_SDL_PlaySfx(SFX_ID_TITLE1);
 }
 
 static void AUDIO_SDL_PlayTitle2Sfx(void)
 {
-    if (AUDIO_SDL_HasSfx(SFX_ID_TITLE2)) AUDIO_SDL_PlaySfx(SFX_ID_TITLE2);
-    else PlaySpeaker(PCSPK_SWEEP,500,8000,8,800,0);
+    AUDIO_SDL_PlaySfx(SFX_ID_TITLE2);
 }
 
 static void AUDIO_SDL_StopSfx(void)
@@ -292,15 +291,13 @@ static int AUDIO_SDL_GetSfxType(void)
 
 static void PlaySpeaker(int kind, int a,int b,int c,int d,int e)
 {
-    if (!s_synthStream) return;
+    if (!s_synthStream || !D_a9ce) return;
     size_t frames;
-    float* pcm=PCSPK_Render(kind,a,b,c,d,e,&frames);
+    float* pcm=PCSPK_Render(kind,a,b,c,d,e,&D_5420,&frames);
     if (!pcm) return;
     /* Queue consecutive calls so paired footsteps and spell phrases survive. */
-    if (SDL_GetAudioStreamQueued(s_synthStream)<48000*4*10) {
-        SDL_PutAudioStreamData(s_synthStream,pcm,(int)(frames*sizeof(float)));
-        if (!MIX_TrackPlaying(s_synthTrack)) MIX_PlayTrack(s_synthTrack,s_synthTrackProp);
-    }
+    if (!SDL_PutAudioStreamData(s_synthStream,pcm,(int)(frames*sizeof(float)))) PrintError();
+    else if (!MIX_TrackPlaying(s_synthTrack) && !MIX_PlayTrack(s_synthTrack,s_synthTrackProp)) PrintError();
     SDL_free(pcm);
 }
 static void AUDIO_SDL_PlaySynthPulse(int freq,int delay,int dur,int width,int inc)
