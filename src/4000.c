@@ -8,6 +8,9 @@
 
 #include "outsubs.h"
 #include "town.h"
+#if !defined(TARGET_DOS16)
+#include "graphics/animate.h"
+#endif
 #if defined(TARGET_SDL)
 #include "graphics/grap_sdl.h"
 #endif
@@ -342,7 +345,7 @@ static void ULTIMA_44b8_AnimateTiles(void)
 
 // CHECKED
 // animate_actors
-void ULTIMA_4552_AnimateActors(void)
+static void AnimateSpritesOneStep(void)
 {
 	int local_e;
 	int local_6;
@@ -462,6 +465,16 @@ void ULTIMA_4552_AnimateActors(void)
 
 	ULTIMA_44b8_AnimateTiles();
     ULTIMA_6fd6_GRAP_AnimateTiles();
+}
+
+void ULTIMA_4552_AnimateActors(void)
+{
+#if !defined(TARGET_DOS16)
+    int steps = ANIMATION_NextSteps();
+#else
+    int steps = 1;
+#endif
+    for (int i = 0; i < steps; ++i) AnimateSpritesOneStep();
 }
 
 static int ULTIMA_4702(int param_1)

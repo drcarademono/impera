@@ -28,6 +28,7 @@ extern int g_enableDebugOverlay;
 #include <SDL3/SDL_main.h>
 #include "graphics/grap_sdl.h"
 #include "graphics/grap_buf.h"
+#include "graphics/animate.h"
 #include "key/mouse.h"
 #endif
 
@@ -68,7 +69,7 @@ int CDECL main(int argc, char** argv/*, char** envp*/)
                 return EXIT_FAILURE;
             }
             if (movement) GRAP_SDL_SetMovementSpeed(speed);
-            else GRAP_SDL_SetAnimationSpeed(speed);
+            else ANIMATION_SetSpeed(speed);
         }
         else if (strcmp(argv[arg], "--transparent-sprites") == 0)
             GRAP_BUF_SetTransparentSprites(true);
@@ -80,7 +81,7 @@ int CDECL main(int argc, char** argv/*, char** envp*/)
                  "  --diagonal-movement Enable diagonal movement, actions, cursors and combat.\n"
                  "  --smooth-movement  Animate overhead movement with a scrolling camera.\n"
                  "  --movement-speed N Held movement speed multiplier (0.1 to 10; default 1).\n"
-                 "  --animation-speed N Smooth animation speed multiplier (0.1 to 10; default 1).\n"
+                 "  --animation-speed N Animated sprite speed multiplier (0.1 to 10; default 1).\n"
                  "  --transparent-sprites Show ground through black sprite backgrounds with a one-pixel outline.");
             return EXIT_SUCCESS;
         }

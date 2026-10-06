@@ -6,6 +6,24 @@
 
 #include <string.h>
 
+static float s_animationSpeed = 1.0f;
+static double s_animationRemainder;
+
+void ANIMATION_SetSpeed(float speed)
+{
+    s_animationSpeed = speed;
+    s_animationRemainder = 0;
+}
+
+/* Scale visual updates only; retain fractional steps for slower playback. */
+int ANIMATION_NextSteps(void)
+{
+    s_animationRemainder += s_animationSpeed;
+    int steps = (int)(s_animationRemainder + 1e-6);
+    s_animationRemainder -= steps;
+    return steps;
+}
+
 // T1K:0263
 static const u8 s_maskBytes[0x20] =
 {

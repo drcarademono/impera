@@ -8,7 +8,6 @@ void GRAP_SDL_SetFullscreen(bool fullscreen);
 void GRAP_SDL_SetSmoothMovement(bool enabled);
 bool GRAP_SDL_SmoothMovementEnabled(void);
 void GRAP_SDL_SetMovementSpeed(float speed);
-void GRAP_SDL_SetAnimationSpeed(float speed);
 bool GRAP_SDL_CustomMovementSpeed(void);
 unsigned int GRAP_SDL_MovementInterval(void);
 void GRAP_SDL_MapDrawn(void);

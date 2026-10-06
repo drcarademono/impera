@@ -17,6 +17,7 @@
 #include "key/key.h"
 #include "graphics/grap_sdl.h"
 #include "graphics/grap_buf.h"
+#include "graphics/animate.h"
 #include "graphics/widescreen.h"
 #include <SDL3/SDL.h>
 static int loadedCursors;
@@ -373,6 +374,23 @@ int main(int argc, char** argv)
     GRAP_SDL_Initialize();
     byte* tiles=calloc(512,128);
     GRAP_BUF_LoadTileset(tiles);
+    memset(D_5c5a,0,sizeof(D_5c5a));
+    D_6a7e=0;
+    D_b11e[0xd4]=0xd4;
+    ANIMATION_SetSpeed(0.5f);
+    ULTIMA_4552_AnimateActors();
+    assert(D_6a7e==0 && D_b11e[0xd4]==0xd4);
+    ULTIMA_4552_AnimateActors();
+    assert(D_6a7e==1 && D_b11e[0xd4]==0xd5);
+    ANIMATION_SetSpeed(2);
+    ULTIMA_4552_AnimateActors();
+    assert(D_6a7e==3 && D_b11e[0xd4]==0xd7);
+    ANIMATION_SetSpeed(0.1f);
+    for(int i=0;i<10;i++) ULTIMA_4552_AnimateActors();
+    assert(D_6a7e==4 && D_b11e[0xd4]==0xd4);
+    ANIMATION_SetSpeed(1);
+    ULTIMA_4552_AnimateActors();
+    assert(D_6a7e==5 && D_b11e[0xd4]==0xd5);
     /* Smooth rendering now samples actor art with an alpha mask, rather than
      * copying a square from the already-composited framebuffer. */
     memset(tiles + (256 + 0x44) * 128, 0xaa, 128);
@@ -416,7 +434,7 @@ int main(int argc, char** argv)
     GRAP_SDL_SetMovementSpeed(1);
     GRAP_SDL_SetSmoothMovement(true);
     assert(GRAP_SDL_MovementInterval()==112);
-    GRAP_SDL_SetAnimationSpeed(2);
+    ANIMATION_SetSpeed(2);
     memset(g_linearEgaBuffer0,0,320*200);
     g_linearEgaBuffer0[0]=10;
     for (int y=8;y<184;y++) memset(g_linearEgaBuffer0+y*320+40,12,4);
@@ -437,8 +455,8 @@ int main(int argc, char** argv)
     GRAP_SDL_MapDrawn(); GRAP_SDL_FlushFrame();
     checkAnimation=false;
     assert(presented==9); /* eight intermediate frames plus the completed frame */
-    assert(animationDelay==56); /* animation speed is independent of movement speed */
-    GRAP_SDL_SetAnimationSpeed(1);
+    assert(animationDelay==112); /* sprite speed never changes movement transitions */
+    ANIMATION_SetSpeed(1);
     assert(previousMarkerX==initialMarkerX-16*l.scale);
     presented=0;
     D_5896_map_x+=5;
