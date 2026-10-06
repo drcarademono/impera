@@ -18,6 +18,7 @@ static bool s_enabled;
 static bool s_input, s_right, s_single;
 static int s_cursorWidth, s_cursorHeight;
 static void LoadCursors(void);
+static int DirectionOctant(float dx, float dy);
 static bool s_menu, s_menuClick;
 static int s_menuX, s_menuY, s_menuWidth, s_menuCount, s_menuSelected, s_menuTarget = -1;
 static float s_hoverX = -1, s_hoverY = -1;
@@ -72,7 +73,9 @@ int MOUSE_CursorDirection(float x, float y)
         !GRAP_SDL_MouseMapPoint(x, y, &dx, &dy, &rx, &ry)) return 0;
     /* Combat sprites occupy fixed coordinates in the original 11x11 map. */
     if (D_5893_map_id >= 128) { rx -= D_5896_map_x - 5; ry -= D_5897_map_y - 5; }
-    int direction = MOUSE_Direction(rx, ry);
+    /* Only the exact origin has no direction; every other point belongs
+     * to an octant, including points within the player sprite. */
+    int direction = (rx == 0 && ry == 0) ? 0 : DirectionOctant(rx, ry);
     if (direction) s_lastCursorDirection = direction;
     return s_lastCursorDirection;
 }
@@ -160,14 +163,18 @@ void MOUSE_SetCommandInput(bool enabled)
     s_input = enabled;
     if (enabled) s_direction = 0;
 }
-int MOUSE_Direction(float dx, float dy)
+static int DirectionOctant(float dx, float dy)
 {
     float ax = SDL_fabsf(dx), ay = SDL_fabsf(dy);
-    if (ax < 0.5f && ay < 0.5f) return 0;
     if (ay < ax * 0.41421356f) return dx < 0 ? U5_KEY_LEFT : U5_KEY_RIGHT;
     if (ax < ay * 0.41421356f) return dy < 0 ? U5_KEY_UP : U5_KEY_DOWN;
     if (dy < 0) return dx < 0 ? U5_KEY_HOME : U5_KEY_PGUP;
     return dx < 0 ? U5_KEY_END : U5_KEY_PGDN;
+}
+int MOUSE_Direction(float dx, float dy)
+{
+    if (SDL_fabsf(dx) < 0.5f && SDL_fabsf(dy) < 0.5f) return 0;
+    return DirectionOctant(dx, dy);
 }
 static int AdjacentDirection(int dx, int dy)
 {

@@ -168,9 +168,20 @@ int main(void)
     assert(MOUSE_CursorDirection(384,460.8f) == U5_KEY_PGDN);
     assert(MOUSE_CursorDirection(448,460.8f) == U5_KEY_RIGHT);
     assert(MOUSE_CursorDirection(384,460.8f) == U5_KEY_RIGHT);
-    assert(MOUSE_Direction(0,0)==0); /* retaining the cursor must not cause movement */
+    /* All eight zones meet inside the sprite at its exact center. */
+    assert(MOUSE_CursorDirection(385,460.8f)==U5_KEY_RIGHT);
+    assert(MOUSE_CursorDirection(383,460.8f)==U5_KEY_LEFT);
+    assert(MOUSE_CursorDirection(384,459.6f)==U5_KEY_UP);
+    assert(MOUSE_CursorDirection(384,462.0f)==U5_KEY_DOWN);
+    assert(MOUSE_CursorDirection(383,459.6f)==U5_KEY_HOME);
+    assert(MOUSE_CursorDirection(385,459.6f)==U5_KEY_PGUP);
+    assert(MOUSE_CursorDirection(383,462.0f)==U5_KEY_END);
+    assert(MOUSE_CursorDirection(385,462.0f)==U5_KEY_PGDN);
+    assert(MOUSE_CursorDirection(384,460.8f)==U5_KEY_PGDN);
+    assert(MOUSE_Direction(0,0)==0);
+    assert(MOUSE_Direction(0.1f,0.1f)==0); /* movement keeps its own dead zone */
     assert(MOUSE_CursorDirection(1000,450) == 0);
-    assert(MOUSE_CursorDirection(384,460.8f) == U5_KEY_RIGHT);
+    assert(MOUSE_CursorDirection(384,460.8f) == U5_KEY_PGDN);
     D_58a4 = 0;
     assert(MOUSE_CursorDirection(448,460.8f) == 0);
     D_58a4 = 1;
