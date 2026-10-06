@@ -7,6 +7,7 @@
 #include "grap_buf.h"
 #include "animate.h"
 #include "reveal.h"
+#include "widescreen.h"
 
 #if defined(ENABLE_GRAP_OVERLAY_DEBUG)
 #include "common/dbg_font_data.h"
@@ -401,13 +402,13 @@ int GRAP_BUF_SpritePixel(int tile, int x, int y)
 }
 
 void GRAP_BUF_DrawSprite(byte* pixels, int stride, int x, int y, int tile,
-                         int left, int top, int right, int bottom)
+                         int left, int top, int right, int bottom, int dx, int dy)
 {
     for (int sy = -1; sy <= 16; sy++)
         for (int sx = -1; sx <= 16; sx++) {
             int px = x + sx, py = y + sy;
             if (px < left || py < top || px >= right || py >= bottom) continue;
-            int color = GRAP_BUF_SpritePixel(tile, sx, sy);
+            int color = WIDE_SpritePixel(tile, dx, dy, sx, sy);
             if (color >= 0) pixels[py * stride + px] = (byte)color;
         }
 }
@@ -415,7 +416,9 @@ void GRAP_BUF_DrawSprite(byte* pixels, int stride, int x, int y, int tile,
 void GRAP_BUF_PutMapSprite(int x, int y, int tile)
 {
     byte* pixels = D_52ba_vdp._52d8_page ? g_linearEgaBuffer1 : g_linearEgaBuffer0;
-    GRAP_BUF_DrawSprite(pixels, 320, 8 + x * 16, 8 + y * 16, tile, 8, 8, 184, 184);
+    GRAP_BUF_DrawSprite(pixels, 320, 8 + x * 16, 8 + y * 16, tile, 8, 8, 184, 184,
+        x-(D_5893_map_id>=128?D_5896_map_x:5),
+        y-(D_5893_map_id>=128?D_5897_map_y:5));
     s_dirty = true;
 }
 

@@ -79,7 +79,7 @@ static void CaptureActors(ActorVisual* actors, const byte* indices, int w,
             int tx=x-1,ty=y-1;
             int nx=dx+(tx<0?-1:tx>=16?1:0),ny=dy+(ty<0?-1:ty>=16?1:0);
             int wx=a->_2_x+nx-dx, wy=a->_3_y+ny-dy;
-            int color=GRAP_BUF_SpritePixel(tile,tx,ty);
+            int color=WIDE_SpritePixel(tile,combat?a->_2_x-D_5896_map_x:dx,combat?a->_3_y-D_5897_map_y:dy,tx,ty);
             v->sprite[y*18+x]=color<0?0:s_egaPalette[color];
             v->terrain[y*18+x]=s_egaPalette[WIDE_TerrainPixel(combat?wx-D_5896_map_x:nx,combat?wy-D_5897_map_y:ny,(tx+16)%16,(ty+16)%16)&15];
         }
@@ -291,7 +291,7 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
     for (int y = -1; !combat && y <= 16; y++) {
         Uint32* row = (Uint32*)((byte*)clean->pixels + (playerY+y)*clean->pitch);
         for (int x = -1; x <= 16; x++) {
-            if (GRAP_BUF_SpritePixel(256+GetActorMap(5,5),x,y)<0) continue;
+            if (WIDE_SpritePixel(256+GetActorMap(5,5),0,0,x,y)<0) continue;
             row[playerX+x] = s_egaPalette[WIDE_TerrainPixel(x<0?-1:x>=16?1:0,y<0?-1:y>=16?1:0,(x+16)%16,(y+16)%16) & 15];
         }
     }
@@ -353,7 +353,7 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
             if (!combat) {
                 Uint32 sprite[324];
                 for(int y=0;y<18;y++) for(int x=0;x<18;x++) {
-                    int color=GRAP_BUF_SpritePixel(256+GetActorMap(5,5),x-1,y-1);
+                    int color=WIDE_SpritePixel(256+GetActorMap(5,5),0,0,x-1,y-1);
                     sprite[y*18+x]=color<0?0:s_egaPalette[color];
                 }
                 playerTexture=SDL_CreateTexture(s_sdlRenderer,SDL_PIXELFORMAT_ARGB8888,SDL_TEXTUREACCESS_STATIC,18,18);

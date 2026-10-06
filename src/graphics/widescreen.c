@@ -105,6 +105,18 @@ byte WIDE_GroundTile(int dx, int dy)
     return ground;
 }
 
+int WIDE_SpritePixel(int tile, int dx, int dy, int x, int y)
+{
+    /* Southern foreground scenery owns its pixels. Sprite art is 16x16;
+     * only the outline margin can cross into the following map row. */
+    if (GRAP_BUF_TransparentSprites() && y >= 16) {
+        int neighbor = x < 0 ? -1 : x >= 16 ? 1 : 0;
+        byte south = WIDE_MapTile(dx + neighbor, dy + 1);
+        if (memchr(D_6a86, south, sizeof(D_6a86))) return -1;
+    }
+    return GRAP_BUF_SpritePixel(tile,x,y);
+}
+
 byte WIDE_TerrainPixel(int dx, int dy, int x, int y)
 {
     byte color=GRAP_BUF_TilePixel(D_b11e[WIDE_GroundTile(dx,dy)],x,y);
@@ -113,7 +125,7 @@ byte WIDE_TerrainPixel(int dx, int dy, int x, int y)
     for(int oy=-1;oy<=1;oy++) for(int ox=-1;ox<=1;ox++) {
         byte tile=WIDE_MapTile(dx+ox,dy+oy);
         if(WIDE_GroundTile(dx+ox,dy+oy)==tile) continue;
-        int pixel=GRAP_BUF_SpritePixel(D_b11e[tile],x-ox*16,y-oy*16);
+        int pixel=WIDE_SpritePixel(D_b11e[tile],dx+ox,dy+oy,x-ox*16,y-oy*16);
         if(pixel>=0) color=(byte)pixel;
     }
     return color;
@@ -238,14 +250,14 @@ bool WIDE_Compose(byte* pixels, WideLayout l)
         byte tile=WIDE_MapTile(dx,dy);
         if(WIDE_GroundTile(dx,dy)!=tile)
             GRAP_BUF_DrawSprite(pixels,l.width,l.mapX+col*16,l.mapY+row*16,
-                D_b11e[tile],l.mapX,l.mapY,l.mapX+l.columns*16,l.mapY+l.rows*16);
+                D_b11e[tile],l.mapX,l.mapY,l.mapX+l.columns*16,l.mapY+l.rows*16,dx,dy);
     }
     for (int row = 0; row < l.rows; row++)
         for (int col = 0; col < l.columns; col++) {
             int sprite = sprites[row * l.columns + col];
             if (sprite >= 0)
                 GRAP_BUF_DrawSprite(pixels, l.width, l.mapX + col * 16, l.mapY + row * 16,
-                    sprite, l.mapX, l.mapY, l.mapX + l.columns * 16, l.mapY + l.rows * 16);
+                    sprite, l.mapX, l.mapY, l.mapX + l.columns * 16, l.mapY + l.rows * 16,col-cx,row-cy);
         }
     free(sprites);
     /* Restore outline margins at the seam after copying central effects. */
@@ -265,7 +277,7 @@ bool WIDE_Compose(byte* pixels, WideLayout l)
                     if (px < 0 || py < 0 || px >= l.columns * 16 || py >= l.rows * 16) continue;
                     if (px >= (cx - 5) * 16 && px < (cx + 6) * 16 &&
                         py >= (cy - 5) * 16 && py < (cy + 6) * 16) continue;
-                    if (GRAP_BUF_SpritePixel(tile, sx, sy) == 0)
+                    if (WIDE_SpritePixel(tile, dx, dy, sx, sy) == 0)
                         pixels[(l.mapY + py) * l.width + l.mapX + px] = 0;
                 }
         }

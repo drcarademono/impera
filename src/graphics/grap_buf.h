@@ -40,7 +40,7 @@ extern bool GRAP_BUF_TransparentSprites(void);
 extern void GRAP_BUF_SetTransparentSprites(bool enabled);
 extern int GRAP_BUF_SpritePixel(int tile, int x, int y);
 extern void GRAP_BUF_DrawSprite(byte* pixels, int stride, int x, int y, int tile,
-                                int left, int top, int right, int bottom);
+                                int left, int top, int right, int bottom, int dx, int dy);
 extern void GRAP_BUF_PutMapSprite(int x, int y, int tile);
 extern void GRAP_BUF_AnimateTileset(void);
 extern void GRAP_BUF_UpdateTimeTileset(int mode, byte hour, byte minute);

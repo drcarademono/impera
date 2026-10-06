@@ -125,6 +125,34 @@ int main(void)
     assert(WIDE_GroundTile(5,0)==TILE_MAP_WELL); /* no ground: opaque fallback */
     GetMap(22,16)=GetMap(24,16)=GetMap(23,17)=GetMap(23,15)=1;
     D_5896_map_x=16;
+    /* A southern wall stays in front of a sprite's bottom outline. Open
+     * ground still receives it, and opaque mode has no outline margin. */
+    tiles[300*128+15*8+4]=0x20;
+    D_b11e[TILE_MAP_WALL]=TILE_MAP_WALL;
+    memset(tiles+TILE_MAP_WALL*128,0x77,128);
+    GetMap(16,17)=TILE_MAP_WALL;
+    memset(D_ab02,1,sizeof(D_ab02));
+    memset(D_ac64,0x16,sizeof(D_ac64));
+    GetMapViewport(5,5)=0; GetActorMap(5,5)=44;
+    GetMapViewport(5,6)=TILE_MAP_WALL;
+    ULTIMA_56ac_DrawMap();
+    assert(g_linearEgaBuffer0[103*320+96]==2);
+    assert(g_linearEgaBuffer0[104*320+96]==7);
+    GetMap(16,17)=GetMapViewport(5,6)=1;
+    ULTIMA_56ac_DrawMap();
+    assert(g_linearEgaBuffer0[104*320+96]==0);
+    GRAP_BUF_SetTransparentSprites(false);
+    ULTIMA_56ac_DrawMap();
+    assert(g_linearEgaBuffer0[104*320+96]==1);
+    GRAP_BUF_SetTransparentSprites(true);
+    D_5c5a[1]._0_tile=D_5c5a[1]._1_animTile=44;
+    D_5c5a[1]._2_x=23; D_5c5a[1]._3_y=16;
+    GetMap(23,16)=1; GetMap(23,17)=TILE_MAP_WALL;
+    assert(WIDE_Compose(pixels,broad));
+    assert(pixels[(objectY+16)*broad.width+objectX+8]==7);
+    GetMap(23,17)=1;
+    assert(WIDE_Compose(pixels,broad));
+    assert(pixels[(objectY+16)*broad.width+objectX+8]==0);
     /* A bed-bound NPC must keep the same pose across the original viewport
      * boundary. Compare the actual original actor-map result with fullscreen. */
     D_5c5a[1]._2_x=23;
