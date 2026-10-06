@@ -6,6 +6,7 @@
 /* Set before BACKEND_Initialize creates the window. */
 void GRAP_SDL_SetFullscreen(bool fullscreen);
 void GRAP_SDL_SetSmoothMovement(bool enabled);
+bool GRAP_SDL_SmoothMovementEnabled(void);
 void GRAP_SDL_MapDrawn(void);
 void GRAP_SDL_CursorSize(int* width, int* height);
 bool GRAP_SDL_MouseUIPoint(float x, float y, float* ux, float* uy);

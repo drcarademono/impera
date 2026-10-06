@@ -87,6 +87,7 @@ static void CaptureActors(ActorVisual* actors, const byte* indices, int w,
 }
 
 void GRAP_SDL_SetSmoothMovement(bool enabled) { s_smoothMovement = enabled; s_previousValid = false; }
+bool GRAP_SDL_SmoothMovementEnabled(void) { return s_smoothMovement; }
 void GRAP_SDL_MapDrawn(void) { s_mapDrawn = true; }
 
 
@@ -365,7 +366,8 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
             }
             for (int frame = 1; frame <= 8; frame++) {
                 float t = frame / 8.0f;
-                float progress = t*t*(3-2*t);
+                /* Constant speed avoids braking and restarting at every tile. */
+                float progress = t;
                 SDL_RenderTexture(s_sdlRenderer,native,NULL,&dst);
                 SDL_SetRenderClipRect(s_sdlRenderer,&clip);
                 SDL_FRect a = mapDst, b = mapDst;
