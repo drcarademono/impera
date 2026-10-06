@@ -1,6 +1,7 @@
 #include "common/common.h"
 
 #include "savegame.h"
+#include "common/save_slots.h"
 #include "funcs.h"
 #include "vars.h"
 #include "macros.h"
@@ -1207,6 +1208,12 @@ static void CAST2_10fe_SaveGameFMT(void)
     }
     else
     {
+#if defined(TARGET_SDL)
+        ULTIMA_1850_PrintString("Yes\n");
+        if(SLOTS_ShowSave()) ULTIMA_1850_PrintString("Done.\n");
+        else ULTIMA_1850_PrintString("Cancelled.\n");
+        return;
+#endif
         ULTIMA_1850_PrintString(_TEXT(0x4c128, "Yes\nSaving...\n"));
         local_4 = D_a9bd[0];
         if (D_a9bd[0] != 5)

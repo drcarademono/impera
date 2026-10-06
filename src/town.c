@@ -3,6 +3,7 @@
 #include "common/movement.h"
 #if defined(TARGET_SDL)
 #include "key/mouse.h"
+#include "key/key.h"
 #endif
 #include "vars.h"
 #include "funcs.h"
@@ -890,10 +891,12 @@ static uint TOWN_0dc4(int param_1)
     }
 
     #if defined(TARGET_SDL)
+    KEY_SDL_SetGameplayInput(1);
     MOUSE_SetCommandInput(true);
     #endif
     local_4 = ULTIMA_266c_GetChar();
     #if defined(TARGET_SDL)
+    KEY_SDL_SetGameplayInput(0);
     MOUSE_SetCommandInput(false);
     #endif
 

@@ -3,6 +3,11 @@
 
 #include "common/common.h"
 
+struct SDL_Surface;
+struct SDL_Surface* GRAP_SDL_CaptureFrame(void);
+void GRAP_SDL_UIThumbnail(int index,const char* path,int x,int y,int w,int h);
+void GRAP_SDL_ClearUIThumbnails(void);
+
 /* Set before BACKEND_Initialize creates the window. */
 void GRAP_SDL_SetFullscreen(bool fullscreen);
 bool GRAP_SDL_Fullscreen(void);

@@ -337,11 +337,12 @@ int FILE_WriteSavegameFile(char* fileName)
     int pos = (int)ftell(stream);
     debug("pos: %d", pos);
 
-    fclose(stream);
+    int failed = ferror(stream);
+    if (fclose(stream) != 0) failed = 1;
 
     ASSERT(pos == 0x1060);
 
-    return 0;
+    return failed ? -1 : 0;
 }
 
 #endif

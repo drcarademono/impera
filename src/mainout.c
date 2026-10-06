@@ -3,6 +3,7 @@
 #include "common/movement.h"
 #if defined(TARGET_SDL)
 #include "key/mouse.h"
+#include "key/key.h"
 #endif
 
 #include "funcs.h"
@@ -895,10 +896,12 @@ static void MAINOUT_0a84_MainLoop(void)
             }
             // 0b14
 #if defined(TARGET_SDL)
+            KEY_SDL_SetGameplayInput(1);
             MOUSE_SetCommandInput(true);
 #endif
             local_6 = MAINOUT_0598();
 #if defined(TARGET_SDL)
+            KEY_SDL_SetGameplayInput(0);
             MOUSE_SetCommandInput(false);
 #endif
             if (local_6 < 0x20 || (local_6 >= U5_KEY_HOME && local_6 <= U5_KEY_PGDN))

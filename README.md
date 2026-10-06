@@ -73,6 +73,27 @@ display command line speed values outside their tick range without changing
 them until adjusted. Mouse input remains available on the settings screen
 even when Mouse Control is off, so it can be turned back on.
 
+Press `Ctrl+W`, or press `Q`, then answer **Y** to **Save game?** to open the **Save Game** browser.
+Choose **New Save**, type a name (up to 26 characters in the game font), and
+press Enter. Existing slots can be selected and overwritten after confirmation.
+Names may repeat: each slot has its own identifier. Slots have no fixed limit;
+the list shows four at a time with Up/Down, Page Up/Down, mouse wheel scrolling,
+and a draggable scrollbar. Press Delete on a named slot, then Y to confirm deletion
+or N/Escape to cancel. Escape or **Return to Game** cancels.
+
+Each slot includes the complete party save, both world-object lists, cumulative
+play time, and a small screenshot thumbnail. **Journey Onward** opens the matching
+**Load Game** browser. `Ctrl+L` opens it during gameplay and resumes the selected
+save immediately. Both `Ctrl+W` and `Ctrl+L` work at world, town, and dungeon
+command prompts; they are inactive inside other menus. The command-line-only `--legacy-save` flag enables **Legacy Save** when valid original save files exist; it is hidden by default. This preserves access to the original
+single-slot save. Slot data lives under `SAVEGAME/slots` in the runtime directory;
+back up that directory along with `SAVEGAME` when moving your saves.
+
+Play time measures elapsed time in loaded game sessions and persists with each
+slot. Creating or importing a character starts a new clock. Existing DOS saves
+have no historical play-time data, so their clock starts at zero. Menus count
+as time within a loaded session; time while the application is closed does not.
+
 Enable `--diagonal-movement` to use eight directions for movement, neighboring
 interactions, mouse cursors, and combat movement and attacks. This applies to
 keyboard and mouse controls and to AI-controlled combatants, including NPCs,
