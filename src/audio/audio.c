@@ -51,6 +51,16 @@ void AUDIO_PlaySfx(int id)
     s_sfxOps->PlaySfx(id);
 }
 
+int AUDIO_HasSfx(int id)
+{
+#if defined(TARGET_SDL)
+    extern bool AUDIO_SDL_HasSfx(int id);
+    return AUDIO_SDL_HasSfx(id);
+#else
+    return s_sfxOps != NULL;
+#endif
+}
+
 void AUDIO_PlayTitle1Sfx(void)
 {
     if (!s_sfxOps)

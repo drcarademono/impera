@@ -63,14 +63,17 @@ def prepare(data_dir, runtime_dir):
         target = resolve(saves / name, allow_missing=True)
         if not os.path.lexists(target):
             shutil.copy2(source, target)
-    for name in ("BGM", "SFX", "U4SAVE"):
+    for name in ("Music", "Sound", "BGM", "SFX", "U4SAVE"):
         try:
             source = resolve(data / name)
         except FileNotFoundError:
             continue
         target = resolve(runtime / name, allow_missing=True)
-        if source.is_dir() and not os.path.lexists(target):
-            shutil.copytree(source, target)
+        if source.is_dir():
+            if name != "U4SAVE":
+                shutil.copytree(source, target, dirs_exist_ok=True)
+            elif not os.path.lexists(target):
+                shutil.copytree(source, target)
     # Refresh shipped UI art without replacing writable game data or saves.
     cursors = resolve(Path(__file__).parent.parent / "textures" / "cursors")
     destination = resolve(runtime / "textures", allow_missing=True)

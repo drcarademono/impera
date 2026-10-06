@@ -31,6 +31,7 @@ extern void AUDIO_QueueBgm(int id);
 extern void AUDIO_StopBgm(void);
 
 extern void AUDIO_PlaySfx(int id);
+int AUDIO_HasSfx(int id);
 extern void AUDIO_PlayTitle1Sfx(void);
 extern void AUDIO_PlayTitle2Sfx(void);
 extern void AUDIO_StopSfx(void);

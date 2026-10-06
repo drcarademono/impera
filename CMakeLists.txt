@@ -10,6 +10,7 @@ pkg_check_modules(SDL3 REQUIRED sdl3)
 pkg_check_modules(SDL3_MIXER REQUIRED sdl3-mixer)
 
 set(SOURCES
+    src/audio/pcspeaker.c
 	src/town.c
 	src/mainout.c
 	src/dungeon.c
@@ -100,6 +101,13 @@ if(U5D_BUILD_TESTS)
              -DTEST_DIR=${CMAKE_BINARY_DIR}/test-runtime
              -P ${CMAKE_SOURCE_DIR}/tests/check_missing_file.cmake)
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        add_executable(u5d_audio_test tests/audio_test.c ${TEST_SOURCES})
+        list(APPEND U5D_TARGETS u5d_audio_test)
+        target_link_options(u5d_audio_test PRIVATE "-Wl,--wrap=SDL_PutAudioStreamData" "-Wl,--wrap=MIX_SetTrackAudio" "-Wl,--wrap=SDL_GetBasePath")
+        file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/audio-runtime")
+        add_test(NAME audio COMMAND u5d_audio_test)
+        set_tests_properties(audio PROPERTIES WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/audio-runtime"
+            ENVIRONMENT "SDL_AUDIO_DRIVER=dummy" TIMEOUT 10)
         add_executable(u5d_world_scroll_test tests/world_scroll_test.c ${TEST_SOURCES})
         list(APPEND U5D_TARGETS u5d_world_scroll_test)
         target_compile_definitions(u5d_world_scroll_test PRIVATE _FORTIFY_SOURCE=2)
@@ -156,4 +164,7 @@ target_link_libraries(${U5D_TARGET} PRIVATE
     ${SDL3_LIBRARIES}
     ${SDL3_MIXER_LIBRARIES}
 )
+if(UNIX)
+    target_link_libraries(${U5D_TARGET} PRIVATE m)
+endif()
 endforeach()

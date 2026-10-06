@@ -38,12 +38,13 @@ void AUDIO_DispatchPulse(int freq, int delay, int dur, int pulseWidth, int pulse
         return;
     }
 
+    bool played = false;
     // gemshard
     if (freq == 0xa50 && delay == 1 && dur == 200 && pulseWidth >= 2000 && pulseWidth <= 25000 && pulseInc == 0)
     {
         if (pulseWidth == 2000)
         {
-            AUDIO_PlaySfx(SFX_ID_GEMSHARD);
+            if (AUDIO_HasSfx(SFX_ID_GEMSHARD)) { AUDIO_PlaySfx(SFX_ID_GEMSHARD); played = true; }
         }
     }
 
@@ -52,7 +53,7 @@ void AUDIO_DispatchPulse(int freq, int delay, int dur, int pulseWidth, int pulse
     {
         if (pulseWidth == 2000)
         {
-            AUDIO_PlaySfx(SFX_ID_SHRINE1);
+            if (AUDIO_HasSfx(SFX_ID_SHRINE1)) { AUDIO_PlaySfx(SFX_ID_SHRINE1); played = true; }
         }
     }
 
@@ -61,7 +62,7 @@ void AUDIO_DispatchPulse(int freq, int delay, int dur, int pulseWidth, int pulse
     {
         if (pulseWidth == 2000)
         {
-            AUDIO_PlaySfx(SFX_ID_SHRINE2);
+            if (AUDIO_HasSfx(SFX_ID_SHRINE2)) { AUDIO_PlaySfx(SFX_ID_SHRINE2); played = true; }
         }
     }
 
@@ -70,7 +71,7 @@ void AUDIO_DispatchPulse(int freq, int delay, int dur, int pulseWidth, int pulse
     {
         if (freq == D_2746[i] && delay == 1 && dur == 4000 && pulseWidth == 20000 && pulseInc == -4)
         {
-            AUDIO_PlaySfx(SFX_ID_HARPSICHORD_BASE + i);
+            if (AUDIO_HasSfx(SFX_ID_HARPSICHORD_BASE + i)) { AUDIO_PlaySfx(SFX_ID_HARPSICHORD_BASE + i); played = true; }
             break;
         }
     }
@@ -81,7 +82,7 @@ void AUDIO_DispatchPulse(int freq, int delay, int dur, int pulseWidth, int pulse
         if (freq == D_6a36[i] && delay == 1 && dur == 2000 && pulseWidth == 20000 && pulseInc == -10)
         {
             // TODO: lute -> banjo
-            AUDIO_PlaySfx(SFX_ID_LUTE_BASE + i);
+            if (AUDIO_HasSfx(SFX_ID_LUTE_BASE + i)) { AUDIO_PlaySfx(SFX_ID_LUTE_BASE + i); played = true; }
             break;
         }
     }
@@ -92,7 +93,7 @@ void AUDIO_DispatchPulse(int freq, int delay, int dur, int pulseWidth, int pulse
         int castDur = i * 4000 + 10000;
         if (freq == D_4af6[i] && delay == 1 && dur == castDur && pulseWidth == D_4b08[i] && pulseInc == D_4b2c[i])
         {
-            AUDIO_PlaySfx(SFX_ID_CAST2_BASE + (i - 1));
+            if (AUDIO_HasSfx(SFX_ID_CAST2_BASE + (i - 1))) { AUDIO_PlaySfx(SFX_ID_CAST2_BASE + (i - 1)); played = true; }
             break;
         }
     }
@@ -102,7 +103,7 @@ void AUDIO_DispatchPulse(int freq, int delay, int dur, int pulseWidth, int pulse
     {
         if (freq == D_3720[i] && delay == 1 && dur == D_372c[i] && pulseWidth == D_3738[i] && pulseInc == D_3744[i])
         {
-            AUDIO_PlaySfx(SFX_ID_BLACKTHORN_PHRASE_BASE + i);
+            if (AUDIO_HasSfx(SFX_ID_BLACKTHORN_PHRASE_BASE + i)) { AUDIO_PlaySfx(SFX_ID_BLACKTHORN_PHRASE_BASE + i); played = true; }
             break;
         }
     }
@@ -112,7 +113,7 @@ void AUDIO_DispatchPulse(int freq, int delay, int dur, int pulseWidth, int pulse
     {
         if (freq == D_4be6[i] && delay == 1 && dur == D_4bf4[i] && pulseWidth == D_4c02[i] && pulseInc == D_4c10[i])
         {
-            AUDIO_PlaySfx(SFX_ID_CAST2_PHRASE_BASE + i);
+            if (AUDIO_HasSfx(SFX_ID_CAST2_PHRASE_BASE + i)) { AUDIO_PlaySfx(SFX_ID_CAST2_PHRASE_BASE + i); played = true; }
             break;
         }
     }
@@ -122,7 +123,7 @@ void AUDIO_DispatchPulse(int freq, int delay, int dur, int pulseWidth, int pulse
     {
         if (freq == D_3a26[i] && delay == 1 && dur == 5000 && pulseWidth == 200 && pulseInc == 0xd)
         {
-            AUDIO_PlaySfx(SFX_ID_APPARITION_PHRASE_BASE + i);
+            if (AUDIO_HasSfx(SFX_ID_APPARITION_PHRASE_BASE + i)) { AUDIO_PlaySfx(SFX_ID_APPARITION_PHRASE_BASE + i); played = true; }
             break;
         }
     }
@@ -130,8 +131,10 @@ void AUDIO_DispatchPulse(int freq, int delay, int dur, int pulseWidth, int pulse
     int id = AUDIO_LookupSfx(SFX_TYPE_PULSE, freq, delay, dur, pulseWidth, pulseInc);
     if (id >= 0)
     {
-        AUDIO_PlaySfx(id);
+        if (AUDIO_HasSfx(id)) { AUDIO_PlaySfx(id); played = true; }
     }
+
+    if (!played) AUDIO_PlaySynthPulse(freq, delay, dur, pulseWidth, pulseInc);
 
     // approximation
     if (dur > 100)
@@ -159,10 +162,11 @@ void AUDIO_DispatchWhiteNoise(uint rate, uint dur, uint limit)
     }
 
     int id = AUDIO_LookupSfx(SFX_TYPE_NOISE, rate, dur, limit, 0, 0);
-    if (id >= 0)
+    if (id >= 0 && AUDIO_HasSfx(id))
     {
         AUDIO_PlaySfx(id);
     }
+    else AUDIO_PlaySynthNoise(rate, dur, limit);
 
     // approximation
     if (dur > 100 && !(rate == 0x13 && dur == 16000 && limit == 0x96))
@@ -190,10 +194,11 @@ void AUDIO_DispatchTone(uint freq, uint dur)
     }
 
     int id = AUDIO_LookupSfx(SFX_TYPE_TONE, freq, dur, 0, 0, 0);
-    if (id >= 0)
+    if (id >= 0 && AUDIO_HasSfx(id))
     {
         AUDIO_PlaySfx(id);
     }
+    else AUDIO_PlaySynthTone(freq, dur);
 
     // approximation
     if (dur > 100)
@@ -220,10 +225,11 @@ void AUDIO_DispatchSweepTone(int startFreq, int endFreq, int tickStep, int dur)
     }
 
     int id = AUDIO_LookupSfx(SFX_TYPE_SWEEP, startFreq, endFreq, tickStep, dur, 0);
-    if (id >= 0)
+    if (id >= 0 && AUDIO_HasSfx(id))
     {
         AUDIO_PlaySfx(id);
     }
+    else AUDIO_PlaySynthSweepTone(startFreq, endFreq, tickStep, dur);
 
     // approximation
     if (dur > 100)
