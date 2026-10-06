@@ -153,12 +153,20 @@ views, in both windowed and fullscreen mode:
   corners; sailing retains the game's four-way headings.
 - Single-left-click a tile at any distance to Look. Double-left-click an adjacent
   or (with `--diagonal-movement`) diagonal NPC to Talk, a door or chest to Open, or a loose object to Get. Other nearby
-  targets fall back to Look.
+  targets fall back to Look. NPCs can also be double-clicked across one of the
+  tables, desks, doors, or other tiles supported by keyboard Talk. Food on table
+  settings can be taken from the same directions supported by keyboard Get.
 - Double-click your own tile to Enter a town, Klimb a ladder, rest in a bed,
   or Board a vehicle when the usual keyboard conditions allow it.
 
-Mouse actions work on the four or eight neighboring tiles, depending on the option. Distant targets do not
-trigger actions. Look describes distant objects without
+After typing an action such as Talk, Search, Open, Get, Push, or Klimb, select
+its direction with a single left-click on an eligible neighboring tile. Talk
+also accepts NPCs across supported furniture. Keyboard directions remain available;
+Escape or Space cancels the direction prompt.
+
+Mouse actions work on the four or eight neighboring tiles, depending on the option.
+Talk can reach an NPC two tiles away across supported furniture; other distant
+targets do not trigger contextual actions. Look describes distant objects without
 offering actions such as drinking or dropping coins; those require adjacency,
 including a diagonal neighbor. Single clicks wait 300 ms to distinguish double
 clicks. Right-button movement also works during combat command entry, relative to the

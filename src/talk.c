@@ -66,6 +66,20 @@ static int TALK_0054(int param_1, int param_2)
     return 0;
 }
 
+/* Shared keyboard/mouse target resolution, including talking across furniture. */
+int TALK_Target(int dx,int dy,int* x,int* y)
+{
+    *x=D_5896_map_x+dx;*y=D_5897_map_y+dy;
+    if(D_5893_map_id && (*x<0 || *y<0 || *x>=32 || *y>=32)) return 0;
+    int actor=ULTIMA_368e_FindActorTileAtPos(*x,*y,D_5895_map_level);
+    if(!actor && TALK_0054(*x,*y)) {
+        *x+=dx;*y+=dy;
+        if(D_5893_map_id && (*x<0 || *y<0 || *x>=32 || *y>=32)) return 0;
+        actor=ULTIMA_368e_FindActorTileAtPos(*x,*y,D_5895_map_level);
+    }
+    return actor;
+}
+
 // ask pay
 static int TALK_00ac_AskPay(void)
 {
@@ -336,23 +350,14 @@ int TALK_041c_TalkCmd(void)
     int local_4;
     int local_6;
 
-    if (ULTIMA_35ec_SelectDirection() == 0)
+    if (ULTIMA_SelectTalkDirection() == 0)
     {
         return 0;
     }
 
     local_8 = D_5876;
     local_c = D_5878;
-    local_6 = local_8 + D_5896_map_x;
-    local_a = local_c + D_5897_map_y;
-
-    if (ULTIMA_368e_FindActorTileAtPos(local_6, local_a, D_5895_map_level) == 0 && TALK_0054(local_6, local_a) != 0)
-    {
-        local_6 += local_8;
-        local_a += local_c;
-    }
-
-    if (ULTIMA_368e_FindActorTileAtPos(local_6, local_a, D_5895_map_level) == 0)
+    if (TALK_Target(local_8,local_c,&local_6,&local_a) == 0)
     {
         ULTIMA_1850_PrintString(_TEXT(0x91d6, "\nNobody's here!\n"));
     }

@@ -27,8 +27,8 @@ SDL_Cursor* __wrap_SDL_CreateColorCursor(SDL_Surface* surface, int x, int y)
     int width,height; GRAP_SDL_CursorSize(&width,&height);
     assert(surface->w == width && surface->h == height);
     /* Pointer, N, NE, E, SE, S, SW, W, NW: test every scaled arrow tip. */
-    const int expectedX[9] = {0, width/2, width-1, width-1, width-1, width/2, 0, 0, 0};
-    const int expectedY[9] = {0, 0, 0, height/2, height-1, height-1, height-1, height/2, 0};
+    const int expectedX[9] = {0,17*width/32,width-1,29*width/32,width-1,17*width/32,0,5*width/32,0};
+    const int expectedY[9] = {0,5*height/32,0,17*height/32,height-1,29*height/32,height-1,17*height/32,0};
     assert(x == expectedX[loadedCursors % 9]);
     assert(y == expectedY[loadedCursors % 9]);
     bool transparent = false, opaque = false;
@@ -39,6 +39,9 @@ SDL_Cursor* __wrap_SDL_CreateColorCursor(SDL_Surface* surface, int x, int y)
         transparent |= a == 0; opaque |= a == 255;
     }
     assert(transparent && opaque);
+    Uint8 tipR,tipG,tipB,tipA;
+    assert(SDL_ReadSurfacePixel(surface,x,y,&tipR,&tipG,&tipB,&tipA));
+    assert(tipA==255 && tipR==255 && tipG==255 && tipB==255);
     ++loadedCursors;
     return NULL; /* SDL dummy driver has no native cursor support. */
 }
@@ -184,6 +187,27 @@ int main(int argc, char** argv)
     assert(MOUSE_Action(2,0,true)==0);
     assert(MOUSE_Action(1,1,true)=='L');
     assert(MOUSE_Action(2,0,false)=='L');
+    /* Match Talk's original reach across every supported intermediate tile. */
+    const int talkThrough[]={TILE_MAP_29,TILE_MAP_TABLE_94,TILE_MAP_TABLE_95,TILE_MAP_TABLE_96,
+        TILE_MAP_97,TILE_MAP_98,TILE_MAP_99,TILE_MAP_TABLE_9A,TILE_MAP_TABLE_9B,
+        TILE_MAP_TABLE_9C,TILE_MAP_DESK,TILE_MAP_AE,TILE_MAP_DOOR_BA,TILE_MAP_DOOR_BB,
+        TILE_MAP_TABLE_BE,TILE_MAP_CA,TILE_MAP_CB};
+    D_5c5a[1]._2_x=18;
+    for(size_t i=0;i<sizeof(talkThrough)/sizeof(talkThrough[0]);i++) {
+        GetMap(17,16)=talkThrough[i];D_5876=7;
+        assert(MOUSE_Action(2,0,true)=='T');assert(D_5876==7);
+    }
+    GetMap(17,16)=TILE_MAP_WALL;assert(MOUSE_Action(2,0,true)==0);
+    GetMap(17,16)=TILE_MAP_TABLE_94;
+    D_5c5a[2]=D_5c5a[1];D_5c5a[2]._2_x=17;D_5c5a[2]._0_tile=TILE_ACTOR_CHEST;
+    assert(MOUSE_Action(2,0,true)==0);D_5c5a[2]._0_tile=0;
+    D_5c5a[1]._4_z=1;assert(MOUSE_Action(2,0,true)==0);D_5c5a[1]._4_z=0;
+    assert(MOUSE_Action(3,0,true)==0);assert(MOUSE_Action(2,1,true)==0);
+    D_5c5a[1]._3_y=14;GetMap(17,15)=TILE_MAP_DESK;
+    assert(MOUSE_Action(2,-2,true)=='T');MOVEMENT_SetDiagonal(false);
+    assert(MOUSE_Action(2,-2,true)==0);MOVEMENT_SetDiagonal(true);
+    D_5c5a[1]._2_x=17;D_5c5a[1]._3_y=16;GetMap(17,16)=1;
+
     D_5c5a[1]._0_tile=TILE_ACTOR_CHEST;
     assert(MOUSE_Action(1,0,true)=='O');
     D_5c5a[1]._0_tile=0;
@@ -311,7 +335,60 @@ int main(int argc, char** argv)
     sawSleepingNpc=false;
     assert(TALK_041c_TalkCmd()==0);
     assert(sawSleepingNpc && D_5876==1 && D_5878==-1);
+    /* Double-click an NPC across a table, then use the real Talk handler. */
+    MOUSE_SetCommandInput(true);D_5c5a[1]._2_x=16;D_5c5a[1]._3_y=14;
+    GetMap(16,15)=TILE_MAP_TABLE_94;GetMap(16,14)=TILE_MAP_BED;
+    MOUSE_Button(384,307.2f,SDL_BUTTON_LEFT,true,1);
+    MOUSE_Button(384,307.2f,SDL_BUTTON_LEFT,true,2);
+    assert(MOUSE_PollCommand()=='T');MOUSE_SetCommandInput(false);sawSleepingNpc=false;
+    assert(TALK_041c_TalkCmd()==0);assert(sawSleepingNpc && D_5876==1 && D_5878==-1);
+    /* The equivalent typed direction resolves the same actor and distance. */
+    extern void KEY_SDL_ProcessKeyDown(SDL_KeyboardEvent ev);
+    extern void KEY_SDL_ClearInput(void);
+    SDL_KeyboardEvent up={0};up.key=SDLK_UP;KEY_SDL_ProcessKeyDown(up);sawSleepingNpc=false;
+    assert(TALK_041c_TalkCmd()==0);assert(sawSleepingNpc && D_5876==1 && D_5878==-1);
+    KEY_SDL_ClearInput();D_5c5a[1]._0_tile=0;
+    /* A typed action accepts one click at its direction prompt, with no delay. */
+    SDL_Event directionClick={0};directionClick.type=SDL_EVENT_MOUSE_BUTTON_DOWN;
+    directionClick.button.button=SDL_BUTTON_LEFT;directionClick.button.clicks=1;
+    directionClick.button.x=384;directionClick.button.y=307.2f;
+    D_5c5a[1]._0_tile=0x44;sawSleepingNpc=false;
+    assert(SDL_PushEvent(&directionClick));assert(TALK_041c_TalkCmd()==0);
+    assert(sawSleepingNpc && D_5876==1 && D_5878==-1);
+    assert(MOUSE_PollCommand()==0);
+    /* General direction prompts accept neighbors, but not Talk's extended reach. */
+    MOUSE_BeginDirectionInput(false);
+    MOUSE_Button(384,307.2f,SDL_BUTTON_LEFT,true,1);assert(MOUSE_PollCommand()==0);
+    MOUSE_Button(448,384,SDL_BUTTON_LEFT,true,1);assert(MOUSE_PollCommand()==U5_KEY_PGUP);
+    MOUSE_EndDirectionInput();MOVEMENT_SetDiagonal(false);
+    MOUSE_BeginDirectionInput(false);
+    MOUSE_Button(448,384,SDL_BUTTON_LEFT,true,1);assert(MOUSE_PollCommand()==0);
+    MOUSE_Button(384,384,SDL_BUTTON_LEFT,true,1);assert(MOUSE_PollCommand()==U5_KEY_UP);
+    MOUSE_EndDirectionInput();MOVEMENT_SetDiagonal(true);
+    directionClick.button.x=448;directionClick.button.y=460.8f;
+    assert(SDL_PushEvent(&directionClick));assert(ULTIMA_35ec_SelectDirection()==1);
+    assert(D_5876==1 && D_5878==0 && MOUSE_PollCommand()==0);
+    KEY_SDL_ProcessKeyDown(up);assert(ULTIMA_35ec_SelectDirection()==1);
+    assert(D_5876==0 && D_5878==-1);KEY_SDL_ClearInput();
+    SDL_KeyboardEvent cancelDirection={0};cancelDirection.key=SDLK_ESCAPE;
+    KEY_SDL_ProcessKeyDown(cancelDirection);assert(ULTIMA_35ec_SelectDirection()==0);KEY_SDL_ClearInput();
+    MOUSE_Button(448,460.8f,SDL_BUTTON_LEFT,true,1);assert(MOUSE_PollCommand()==0);
     D_5c5a[1]._0_tile=0;
+    /* Food plates obey the same direction-dependent reach as Get. */
+    GetMap(16,15)=TILE_MAP_TABLE_9B;assert(MOUSE_Action(0,-1,true)=='G');
+    GetMap(16,15)=TILE_MAP_TABLE_9A;assert(MOUSE_Action(0,-1,true)=='L');
+    GetMap(16,17)=TILE_MAP_TABLE_9A;assert(MOUSE_Action(0,1,true)=='G');
+    GetMap(17,16)=TILE_MAP_TABLE_9C;assert(MOUSE_Action(1,0,true)=='L');
+    GetMap(16,17)=TILE_MAP_TABLE_9C;assert(MOUSE_Action(0,1,true)=='G');
+    int food=D_57a8;
+    GetMap(16,17)=TILE_MAP_TABLE_9A;MOUSE_SetCommandInput(true);
+    MOUSE_Button(384,537.6f,SDL_BUTTON_LEFT,true,1);
+    MOUSE_Button(384,537.6f,SDL_BUTTON_LEFT,true,2);
+    assert(MOUSE_PollCommand()=='G');MOUSE_SetCommandInput(false);SJOG_18ce_GetCmd();
+    assert(GetMap(16,17)==TILE_MAP_TABLE_95 && D_57a8==food+1);D_57a8=food;
+    D_5893_map_id=0;
+    byte* palace=ULTIMA_4402_GetTileAddr(D_5896_map_x,D_5897_map_y);byte previous=*palace;
+    *palace=TILE_MAP_PALACEBT;assert(MOUSE_Action(0,0,true)=='E');*palace=previous;D_5893_map_id=13;
     /* Far Look describes the exact target, without entering any action prompt. */
     GetMap(19,16)=TILE_MAP_FOUNTAIN;
     MOUSE_SetCommandInput(true);
@@ -613,6 +690,30 @@ int main(int argc, char** argv)
     assert(COMSUBS_0822(0,7,5,1,0)==1); /* diagonal attack reaches its target */
     MOVEMENT_SetDiagonal(false);
     assert(COMSUBS_0822(0,7,5,1,0)==-1);
+
+    /* Direction prompts and cursor orientation follow the active combatant,
+     * even before the legacy map-position globals catch up with a turn change. */
+    D_589e=0; D_ba14[0].x=2; D_ba14[0].y=8;
+    D_5896_map_x=5; D_5897_map_y=5;
+    MOVEMENT_SetDiagonal(true);
+    float fighterX=centerX-3*16*l.scale,fighterY=centerY+3*16*l.scale;
+    assert(MOUSE_CursorDirection(fighterX+16*l.scale,fighterY)==U5_KEY_RIGHT);
+    assert(MOUSE_CursorDirection(fighterX,fighterY-16*l.scale)==U5_KEY_UP);
+    MOUSE_BeginDirectionInput(false);
+    MOUSE_Button(fighterX+16*l.scale,fighterY,SDL_BUTTON_LEFT,true,1);
+    assert(MOUSE_PollCommand()==U5_KEY_RIGHT);
+    MOUSE_Button(centerX,centerY-16*l.scale,SDL_BUTTON_LEFT,true,1);
+    assert(MOUSE_PollCommand()==0); /* adjacent to map center, far from fighter */
+    MOUSE_EndDirectionInput();
+    D_589e=1; D_ba14[1].x=8; D_ba14[1].y=2;
+    fighterX=centerX+3*16*l.scale;fighterY=centerY-3*16*l.scale;
+    assert(MOUSE_CursorDirection(fighterX-16*l.scale,fighterY)==U5_KEY_LEFT);
+    MOUSE_BeginDirectionInput(false);
+    MOUSE_Button(fighterX-16*l.scale,fighterY+16*l.scale,SDL_BUTTON_LEFT,true,1);
+    assert(MOUSE_PollCommand()==U5_KEY_END);
+    MOUSE_EndDirectionInput();
+    D_ba14[0].x=6;D_ba14[0].y=4;
+    MOVEMENT_SetDiagonal(false);
 
     /* Real mouse targeting preserves cardinal range rules and requires a separate confirmation. */
     D_589e=0; D_ba14[0].flags=COMBAT_FLAGS_PLAYER;

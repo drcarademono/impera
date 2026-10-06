@@ -5,6 +5,7 @@
 #include "macros.h"
 #include "tiles.h"
 #include "comsubs.h"
+#include "talk.h"
 #include "mouse.h"
 #include "graphics/grap_sdl.h"
 #include <SDL3/SDL.h>
@@ -80,7 +81,10 @@ int MOUSE_CursorDirection(float x, float y)
     if (s_pointerMode || !D_58a4 || (D_5893_map_id > 32 && D_5893_map_id < 128) ||
         !GRAP_SDL_MouseMapPoint(x, y, &dx, &dy, &rx, &ry)) return 0;
     /* Combat sprites occupy fixed coordinates in the original 11x11 map. */
-    if (D_5893_map_id >= 128) { rx -= D_5896_map_x - 5; ry -= D_5897_map_y - 5; }
+    if (D_5893_map_id >= 128) {
+        if (D_589e >= 32) return 0;
+        rx -= D_ba14[D_589e].x - 5; ry -= D_ba14[D_589e].y - 5;
+    }
     /* Only the exact origin has no direction; every other point belongs
      * to an octant, including points within the player sprite. */
     int direction = (rx == 0 && ry == 0) ? 0 : DirectionOctant(rx, ry);
@@ -131,12 +135,18 @@ static void LoadCursors(void)
         if (surface) {
             SDL_Surface* scaled = SDL_ScaleSurface(surface,s_cursorWidth,s_cursorHeight,SDL_SCALEMODE_NEAREST);
             if (scaled) {
-                /* SDL mouse coordinates refer to this hotspot. Keep hit testing
-                 * unchanged so the visible arrow tip identifies the target. */
-                static const int tipX[9] = {0, 1, 2, 2, 2, 1, 0, 0, 0};
-                static const int tipY[9] = {0, 0, 0, 1, 2, 2, 2, 1, 0};
-                int hotspotX = tipX[i] == 2 ? s_cursorWidth - 1 : tipX[i] * (s_cursorWidth / 2);
-                int hotspotY = tipY[i] == 2 ? s_cursorHeight - 1 : tipY[i] * (s_cursorHeight / 2);
+                /* Visible tip pixels in the 16x16 cursor art. Cardinal arrows
+                 * are inset; diagonal arrows reach the corners. Center inset
+                 * tip pixels when scaling. SDL events already refer to this
+                 * hotspot, so every map/aim hit test uses them without offsets. */
+                static const int tipX[9] = {0,8,15,14,15,8,0,2,0};
+                static const int tipY[9] = {0,2,0,8,15,14,15,8,0};
+                int hotspotX=(2*tipX[i]+1)*s_cursorWidth/(2*w);
+                int hotspotY=(2*tipY[i]+1)*s_cursorHeight/(2*h);
+                if(tipX[i]==0) hotspotX=0;
+                if(tipY[i]==0) hotspotY=0;
+                if(tipX[i]==w-1) hotspotX=s_cursorWidth-1;
+                if(tipY[i]==h-1) hotspotY=s_cursorHeight-1;
                 s_cursors[i] = SDL_CreateColorCursor(scaled, hotspotX, hotspotY);
                 SDL_DestroySurface(scaled);
             }
@@ -155,7 +165,9 @@ void MOUSE_SetEnabled(bool enabled)
     }
 }
 bool MOUSE_Enabled(void) { return s_enabled; }
-static int s_dx, s_dy, s_command, s_direction;
+static int s_dx, s_dy, s_command, s_direction, s_targetDx, s_targetDy;
+static bool s_directionInput,s_talkInput;
+static int s_directionKey;
 static int s_map, s_level, s_x, s_y, s_combatEntity;
 static bool s_combatAttack;
 static int s_attackX, s_attackY, s_attackEntity;
@@ -208,7 +220,7 @@ void MOUSE_Cancel(void)
     s_menuTarget = -1; s_menuClick = false;
     SDL_GetMouseState(&s_hoverX,&s_hoverY);
     s_right = s_single = false;
-    s_command = s_direction = 0;
+    s_command = s_direction = s_directionKey = 0;
 }
 void MOUSE_SetCommandInput(bool enabled)
 {
@@ -234,6 +246,12 @@ static int AdjacentDirection(int dx, int dy)
 {
     if (!MOVEMENT_Adjacent(dx,dy) || (!dx && !dy)) return 0;
     return MOUSE_Direction((float)dx, (float)dy);
+}
+static int TalkTarget(int dx,int dy,int* x,int* y)
+{
+    /* The original actor lookup uses D_5876 as an output actor index. */
+    int saved=D_5876;int actor=TALK_Target(dx,dy,x,y);D_5876=saved;
+    return actor>=0x30 && (actor&0xfc)!=TILE_ACTOR_SHARD?actor:0;
 }
 int MOUSE_Action(int dx, int dy, bool mainAction)
 {
@@ -265,12 +283,19 @@ int MOUSE_Action(int dx, int dy, bool mainAction)
                 return 'B';
         }
         if (!D_5893_map_id && (tile == TILE_MAP_TOWNE || tile == TILE_MAP_CASTLE ||
-            tile == TILE_MAP_CASTLELB || (tile >= 0x16 && tile <= 0x1a))) return 'E';
+            tile == TILE_MAP_CASTLELB || tile == TILE_MAP_PALACEBT || (tile >= 0x16 && tile <= 0x1a))) return 'E';
         if (tile == TILE_MAP_LADDER_UP || tile == TILE_MAP_LADDER_DOWN) return 'K';
         if (tile == TILE_MAP_BED) return 'H';
         return 0;
     }
-    if (!AdjacentDirection(dx, dy)) return 0;
+    if (!AdjacentDirection(dx, dy)) {
+        /* A two-tile Talk target must lie exactly along a legal direction. */
+        if(D_5893_map_id && dx%2==0 && dy%2==0 && AdjacentDirection(dx/2,dy/2)) {
+            int tx,ty;int actor=TalkTarget(dx/2,dy/2,&tx,&ty);
+            if(actor>=0x30 && tx==x && ty==y) return 'T';
+        }
+        return 0;
+    }
     for (int i = 1; i < 32; i++) {
         ActorFmt* a = &D_5c5a[i];
         if (a->_0_tile && a->_2_x == (byte)x && a->_3_y == (byte)y && a->_4_z == D_5895_map_level) {
@@ -283,7 +308,13 @@ int MOUSE_Action(int dx, int dy, bool mainAction)
     int tile = *ULTIMA_4402_GetTileAddr(x, y);
     if ((tile >= TILE_MAP_DOOR_B8 && tile <= TILE_MAP_DOOR_BB) ||
         tile == TILE_MAP_TRUNK || (tile >= 0x97 && tile <= 0x99)) return 'O';
-    if (tile == TILE_MAP_CROPS || tile == TILE_MAP_B0 || tile == TILE_MAP_B1) return 'G';
+    if (tile == TILE_MAP_CROPS || tile == TILE_MAP_B0 || tile == TILE_MAP_B1 ||
+        (tile==TILE_MAP_TABLE_9A && dy==1) || (tile==TILE_MAP_TABLE_9B && dy==-1) ||
+        (tile==TILE_MAP_TABLE_9C && dx==0)) return 'G';
+    if(D_5893_map_id) {
+        int tx,ty;
+        if(TalkTarget(dx,dy,&tx,&ty)) return 'T';
+    }
     return 'L';
 }
 static void Snapshot(void)
@@ -298,6 +329,14 @@ static bool SamePosition(void)
            s_map == D_5893_map_id && s_level == D_5895_map_level &&
            s_x == D_5896_map_x && s_y == D_5897_map_y;
 }
+void MOUSE_BeginDirectionInput(bool talk)
+{
+    MOUSE_Cancel();Snapshot();s_directionInput=true;s_talkInput=talk;s_directionKey=0;
+}
+void MOUSE_EndDirectionInput(void)
+{
+    s_directionInput=false;s_directionKey=0;MOUSE_Cancel();
+}
 void MOUSE_Button(float x, float y, int button, bool down, int clicks)
 {
     if (!s_enabled) return;
@@ -305,6 +344,23 @@ void MOUSE_Button(float x, float y, int button, bool down, int clicks)
         if (down && button == SDL_BUTTON_LEFT) {
             s_menuTarget = MenuItem(x,y);
             s_menuClick = s_menuTarget >= 0;
+        }
+        return;
+    }
+    if(s_directionInput) {
+        int dx,dy;float rx,ry;
+        if(down && button==SDL_BUTTON_LEFT && SamePosition() &&
+            GRAP_SDL_MouseMapPoint(x,y,&dx,&dy,&rx,&ry)) {
+            if(D_5893_map_id && D_5893_map_id<=32 &&
+                (D_5896_map_x+dx<0 || D_5896_map_x+dx>=32 || D_5897_map_y+dy<0 || D_5897_map_y+dy>=32)) return;
+            if(D_5893_map_id>=128) {
+                if(D_589e>=32) return;
+                int tx=dx+5,ty=dy+5;
+                if(tx<0 || tx>=11 || ty<0 || ty>=11) return;
+                dx=tx-D_ba14[D_589e].x;dy=ty-D_ba14[D_589e].y;
+            }
+            if(AdjacentDirection(dx,dy)) s_directionKey=MOUSE_Direction(dx,dy);
+            else if(s_talkInput && MOUSE_Action(dx,dy,true)=='T') s_directionKey=MOUSE_Direction(dx,dy);
         }
         return;
     }
@@ -342,6 +398,9 @@ void MOUSE_Button(float x, float y, int button, bool down, int clicks)
 }
 int MOUSE_PollCommand(void)
 {
+    if(s_enabled && s_directionInput) {
+        int key=SamePosition()?s_directionKey:0;s_directionKey=0;return key;
+    }
     if (s_enabled && s_aimInput) {
         int key=s_aimKey; s_aimKey=0;
         if (s_aimEntity!=D_589e || D_5893_map_id<128) return 0;
@@ -366,6 +425,8 @@ int MOUSE_PollCommand(void)
             }
             return command;
         }
+        s_targetDx=command=='T'?(s_dx>0)-(s_dx<0):s_dx;
+        s_targetDy=command=='T'?(s_dy>0)-(s_dy<0):s_dy;
         s_direction = MOUSE_Direction((float)s_dx, (float)s_dy);
         if (!s_direction && command == 'L') s_direction = U5_KEY_SPACE;
         debug("Mouse action: %c target_offset=%d,%d\n", command, s_dx, s_dy);
@@ -396,7 +457,7 @@ int MOUSE_TakeDirection(void)
 bool MOUSE_TakeTarget(int* dx, int* dy)
 {
     if (!s_direction || !SamePosition()) { s_direction = 0; return false; }
-    *dx = s_dx; *dy = s_dy;
+    *dx = s_targetDx; *dy = s_targetDy;
     s_direction = 0;
     return true;
 }
