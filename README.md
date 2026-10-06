@@ -188,8 +188,25 @@ Characters previously created without `INIT.GAM` have invalid starting state.
 Back up `build/runtime/SAVEGAME`, restore the original `INIT.GAM`, and create
 a new character. Rebuilding alone cannot repair an already damaged save.
 
-Optional modern music and effects belong in `BGM` and `SFX` inside the data
-directory; they are not included in the original DOS assets. Do not set
+Player-supplied music belongs in `Music` inside the data directory, or beside
+the executable (for example `build/Music` when running the Linux build).
+The same locations work for `Sound` overrides. Music files are
+selected by their two-digit track prefix, so names such as
+`02 - Britannic Lands.mp3` work without renaming. MP3, Ogg, WAV, and FLAC are
+supported. Slots 01–15 use the game's existing music assignments; 16 (Amiga
+Theme) is accepted but has no automatic gameplay assignment. Music stays
+external and is not bundled into the executable. Legacy `BGM/01.ogg` through
+`BGM/15.ogg` remain supported as fallbacks.
+
+Optional WAV sound overrides belong in `Sound`, using the filenames listed in
+`src/audio/sfx_map.h` (for example `step0.wav`, `step1.wav`, and `fountain.wav`).
+Each missing or unreadable effect falls back to synthesized PC-speaker-style
+square-wave, pulse, noise, or sweep audio. Synthesized pitches use the original
+PIT divisors; timings approximate the DOS CPU-calibrated loops, so playback is
+not a bit-exact emulation. Legacy `SFX` files also remain supported.
+The Linux launcher refreshes supplied audio folders in the runtime on each
+launch; players can also place them directly in `build/runtime`.
+No audio assets are needed for synthesized effects. Do not set
 SDL's dummy video/audio drivers when playing on your desktop. Headless cloud
 validation covered rendering, menu input, and the character-name prompt;
 desktop graphics, audible output, and a complete playthrough are unverified.

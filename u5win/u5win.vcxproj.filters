@@ -152,6 +152,9 @@
     <ClCompile Include="..\src\audio\aud_sdl.c">
       <Filter>audio</Filter>
     </ClCompile>
+    <ClCompile Include="..\src\audio\pcspeaker.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\src\audio\aud_mus.c">
       <Filter>audio</Filter>
     </ClCompile>
