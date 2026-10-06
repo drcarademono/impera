@@ -280,10 +280,10 @@ boundaries; otherwise keyboard repeat retains the operating system's behavior.
 
 Enable **Dithered Darkness** in Engine Options for an Ultima 6-style pixel-pattern
 fade along night-time and line-of-sight boundaries. It is off by default. The
-player's tile and visible masonry (including doorways, windows and wall torches) stay
+player's tile and visible masonry (including doorways, closed doors, windows and wall torches) stay
 clear, fully unseen terrain stays black, and gameplay
 visibility rules are unchanged. The pattern uses original game pixels and stays
-stationary during smooth scrolling. It works in windowed and expanded fullscreen
+attached to the map during smooth scrolling. It works in windowed and expanded fullscreen
 overhead views; combat and dungeon perspective views keep their usual rendering.
 
 The matching launch flag is `--dithered-darkness`. Like other Engine Options,

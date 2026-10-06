@@ -321,10 +321,11 @@ static void PrepareDarkness(int columns,int rows,bool completed)
         SDL_DestroyTexture(s_darknessTexture);s_darknessTexture=NULL;return;
     }
     if(!completed && s_darknessTexture && columns==s_darknessColumns && rows==s_darknessRows && s_darknessMap==D_5893_map_id && s_darknessLevel==D_5895_map_level) return;
-    int width=columns*16,height=rows*16;
+    /* One tile of padding keeps the mask over every exposed scrolling edge. */
+    int width=(columns+2)*16,height=(rows+2)*16;
     byte* mask=malloc((size_t)width*height);
     SDL_Surface* surface=SDL_CreateSurface(width,height,SDL_PIXELFORMAT_ARGB8888);
-    if(mask && surface && WIDE_DarknessMask(mask,columns,rows)) {
+    if(mask && surface && WIDE_DarknessMask(mask,columns+2,rows+2)) {
         static const byte pattern[16]={0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5};
         for(int y=0;y<height;y++) {
             Uint32* pixels=(Uint32*)((byte*)surface->pixels+y*surface->pitch);
@@ -344,7 +345,8 @@ static void DrawDarkness(SDL_FRect dst,int width,int height,int mapX,int mapY,in
 {
     if(!s_darknessTexture) return;
     SDL_FRect map={dst.x+mapX*dst.w/width,dst.y+mapY*dst.h/height,columns*16*dst.w/width,rows*16*dst.h/height};
-    SDL_RenderTexture(s_sdlRenderer,s_darknessTexture,NULL,&map);
+    SDL_FRect source={16,16,columns*16,rows*16};
+    SDL_RenderTexture(s_sdlRenderer,s_darknessTexture,&source,&map);
 }
 
 /* Snapshot only completed map redraws, never intermediate text updates. The
@@ -475,10 +477,13 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
                     }
                 }
                 if (playerTexture) SDL_RenderTexture(s_sdlRenderer,playerTexture,NULL,&playerDst);
-                /* Visibility belongs to the player/camera, not to the scrolling
-                 * texture. Use the authoritative central mask and the expanded
-                 * LOS mask, covering sprites as well as ground. */
-                if(!combat && s_darknessTexture) SDL_RenderTexture(s_sdlRenderer,s_darknessTexture,NULL,&mapDst);
+                /* Cover sprites as well as ground with the authoritative
+                 * central visibility and expanded LOS result. */
+                if(!combat && s_darknessTexture) {
+                    /* Keep wall/door cutouts and the ordered pattern attached to
+                     * their terrain throughout the same interpolated movement. */
+                    SDL_RenderTexture(s_sdlRenderer,s_darknessTexture,NULL,&b);
+                }
                 else if(!combat) for(int row=0;row<rows;row++) for(int col=0;col<columns;col++) if(hidden[row*columns+col]) {
                     SDL_FRect shadow={mapDst.x+col*16*sx,mapDst.y+row*16*sy,16*sx,16*sy};
                     SDL_RenderFillRect(s_sdlRenderer,&shadow);

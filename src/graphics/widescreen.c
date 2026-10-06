@@ -315,6 +315,7 @@ static bool SolidMasonry(byte tile)
     return tile==TILE_MAP_WALL || tile==TILE_MAP_HIDDEN_DOOR ||
         tile==TILE_MAP_4A || tile==TILE_MAP_4B /* open masonry doorways */ ||
         tile==TILE_MAP_97 /* window */ ||
+        tile==TILE_MAP_DOOR_B8 || tile==TILE_MAP_DOOR_B9 /* closed doors */ ||
         tile==0xc0 || tile==0xc1; /* animated wall torch */
 }
 

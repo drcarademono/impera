@@ -56,6 +56,8 @@ static bool checkAnimation;
 static bool checkWater;
 static bool checkDarkness;
 static bool checkDither;
+static int ditherDx,ditherDy;
+static unsigned ditherPattern;
 static bool checkEdges;
 static bool edgeBright=true;
 static int lightX,lightY,darkX;
@@ -97,13 +99,19 @@ bool __wrap_SDL_RenderPresent(SDL_Renderer* renderer)
     if(checkDither) {
         SDL_Surface* image=SDL_RenderReadPixels(renderer,NULL);assert(image);
         int dark=0,lit=0;
+        unsigned pattern=0;
+        int scrollX=presented<=8 ? ditherDx*(8-presented)*6 : 0;
+        int scrollY=presented<=8 ? ditherDy*(8-presented)*6 : 0;
         for(int y=4;y<8;y++) for(int x=4;x<8;x++) {
             Uint8 r,g,b,a;
-            assert(SDL_ReadSurfacePixel(image,lightX-2+x*3,lightY-8*3+y*3,&r,&g,&b,&a));
+            assert(SDL_ReadSurfacePixel(image,lightX-2+x*3+scrollX,lightY-8*3+y*3+scrollY,&r,&g,&b,&a));
             assert(r==0 && g==0 && (b==0 || b==170));
             dark+=b==0;lit+=b==170;
+            if(b==0) pattern|=1u<<((y-4)*4+x-4);
         }
         assert(dark>0 && lit>0);
+        if(!ditherDx && !ditherDy) ditherPattern=pattern;
+        else assert(pattern==ditherPattern); /* every pixel follows the terrain */
         SDL_DestroySurface(image);
     }
     if(checkDarkness) {
@@ -702,9 +710,18 @@ int main(int argc, char** argv)
     }
     D_58a5=2;
     WIDE_SetDitheredDarkness(true);
-    checkDither=true;GRAP_SDL_MapDrawn();GRAP_SDL_FlushFrame();
-    D_5896_map_x++;D_5897_map_y++;
-    GRAP_SDL_MapDrawn();GRAP_SDL_FlushFrame();checkDither=false;
+    /* Isolate the mask from the stationary player's outline at the probe. */
+    GRAP_BUF_SetTransparentSprites(false);
+    memset(tiles+(256+GetActorMap(5,5))*128,0x11,128);
+    checkDither=true;ditherDx=ditherDy=0;GRAP_SDL_MapDrawn();GRAP_SDL_FlushFrame();
+    for(int sy=-1;sy<=1;sy++) for(int sx=-1;sx<=1;sx++) {
+        if(!sx && !sy) continue;
+        ditherDx=sx;ditherDy=sy;presented=0;
+        D_5896_map_x+=sx;D_5897_map_y+=sy;
+        GRAP_SDL_MapDrawn();GRAP_SDL_FlushFrame();assert(presented==9);
+    }
+    checkDither=false;
+    GRAP_BUF_SetTransparentSprites(transparentSprites);
     WIDE_SetDitheredDarkness(false);
     D_58a5=50;
     D_5893_map_id=1;D_5896_map_x=16;D_5897_map_y=16;
