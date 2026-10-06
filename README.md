@@ -1,6 +1,6 @@
 # Impera — Ultima 5 Engine Port
 
-**Impera** is carademono's enhanced engine port of **Ultima 5: Warriors of Destiny**,
+**Impera** is an enhanced engine port of **Ultima 5: Warriors of Destiny**,
 in the tradition of [Exult](https://exult.sourceforge.io/),
 [Nuvie](https://nuvie.sourceforge.net/), and [Pentagram](https://pentagram.sourceforge.net/).
 It runs the original game data on modern systems while adding optional graphics,
@@ -8,8 +8,7 @@ input, audio, and save-management improvements.
 
 Impera uses **[u5d — Ultima V Decompilation Project](https://github.com/wonst719/u5d)**
 by **wonst719** as its base. Credit for the original decompilation and reconstructed
-game engine belongs to that project. Impera's enhancements are maintained by
-**[carademono](https://github.com/drcarademono)**.
+game engine belongs to that project.
 
 You must supply your own Ultima 5 game files. Game data and optional music are
 external and are not bundled into the engine. The build still produces an
@@ -135,26 +134,11 @@ visible to show their state. Mouse hover selects rows, including **Return to
 Menu** / **Return to Game**; left-click activates them. Sliders accept click
 and drag. The menus use a pointer cursor rather than map direction arrows.
 
-### Command-line options
+### Command-line-only options
 
-Explicit launch flags override saved Engine Options. Feature flags enable the
-feature; use Engine Options to switch it off. New enhancement toggles initially
-default to off, speeds to `1`, and Music/Sound Effects to on.
-
-| Flag | Purpose |
-| --- | --- |
-| `--fullscreen` | Expanded fullscreen overhead view. |
-| `--mouse` | Mouse movement and contextual map actions. |
-| `--smooth-movement` | Smooth camera and actor tile transitions. |
-| `--diagonal-movement` | Eight-way movement, interactions, and combat. |
-| `--transparent-sprites` | Transparent sprite backgrounds with outlines and inferred object ground. |
-| `--movement-speed N` | Held movement and smooth-transition speed multiplier, `0.1`–`10`. |
-| `--animation-speed N` | All animated sprite playback speed multiplier, `0.1`–`10`. |
-| `--legacy-save` | Show **Legacy Save** only when valid original save files exist; command line only. |
-| `--help` | List launch options and exit. |
-
-Music and Sound Effects are toggled in Engine Options; there are no dedicated
-command-line switches for them.
+`--legacy-save` enables **Legacy Save** in the load menu when valid original save
+files exist. It is disabled by default and has no Engine Options setting.
+`--help` lists the executable's launch options.
 
 ## Saving, loading, and starting a new game
 
@@ -190,7 +174,7 @@ as time within a loaded session; time while the application is closed does not.
 
 ## Mouse controls
 
-Enable mouse controls with `--mouse`. The supplied PNG cursors show the four or eight
+Enable **Mouse Control** in Engine Options. The supplied PNG cursors show the four or eight
 movement directions over the overhead map and a pointer over menus, cutscenes,
 and the status/text column. Cursor pixels scale with the displayed game pixels
 using nearest-neighbor scaling, including when the window size changes. Hover
@@ -205,10 +189,10 @@ binary directly.
 Overhead map controls work in windowed and fullscreen mode:
 
 - Hold the right button over the map to walk toward the cursor in eight
-  directions when `--diagonal-movement` is enabled, or four otherwise. Release it to stop. Diagonal steps cannot cut through blocked
+  directions when **Diagonal Movement** is enabled, or four otherwise. Release it to stop. Diagonal steps cannot cut through blocked
   corners; sailing retains the game's four-way headings.
 - Single-left-click a tile at any distance to Look. Double-left-click an adjacent
-  or (with `--diagonal-movement`) diagonal NPC to Talk, a door or chest to Open, or a loose object to Get. Other nearby
+  or (with **Diagonal Movement**) diagonal NPC to Talk, a door or chest to Open, or a loose object to Get. Other nearby
   targets fall back to Look. NPCs can also be double-clicked across one of the
   tables, desks, doors, or other tiles supported by keyboard Talk. Food on table
   settings can be taken from the same directions supported by keyboard Get.
@@ -243,7 +227,7 @@ are relative to the **active party character**, rather than the battlefield cent
 
 ### Fullscreen maps
 
-To fill your display, launch with `bash scripts/run-linux.sh --fullscreen`.
+To fill your display, enable **Fullscreen** in Engine Options.
 This detects the desktop resolution, adds overhead map rows and columns, and
 moves the status and command column to the right edge. Tiles and text use the
 same integer scale in both directions, with crisp pixels. Daylight reveals the
@@ -256,7 +240,7 @@ Without the option, the game uses the existing window size settings.
 
 ### Diagonal movement
 
-Enable `--diagonal-movement` to use eight directions for movement, neighboring
+Enable **Diagonal Movement** in Engine Options to use eight directions for movement, neighboring
 interactions, mouse cursors, and combat movement and attacks. This applies to
 keyboard and mouse controls and to AI-controlled combatants, including NPCs,
 monsters, and party members. When one side of a diagonal is blocked, movement
@@ -268,11 +252,11 @@ Without this option, movement, actions, and combat attacks use cardinal
 directions. The map has four mouse cursor zones (north, south, east, west).
 Distant Look descriptions remain available in either mode, but Look actions
 require a cardinal neighbor by default or any of the eight neighbors when
-`--diagonal-movement` is enabled.
+**Diagonal Movement** is enabled.
 
 ### Smooth movement and speed
 
-Enable smooth movement independently with `--smooth-movement`. Each successful
+Enable **Smooth Movement** in Engine Options. Each successful
 tile step animates a scrolling camera over roughly 120 ms, keeping the player
 icon centered and the interface fixed. NPCs and monsters also animate their
 visible tile steps, including combat actors. Their motion stays coordinated
@@ -280,27 +264,20 @@ with camera scrolling; the combat camera stays fixed. This works with keyboard
 or mouse movement; collisions and actions still use the original tile and turn
 rules. Teleports, spawns, map changes, and dungeon perspective views snap to
 their new state without interpolation.
-Use `--movement-speed N` to set the held mouse and keyboard movement speed,
-and `--animation-speed N` to set animated sprite playback independently,
+Use **Movement Speed** to set the held mouse and keyboard movement speed,
+and **Animation Speed** to set animated sprite playback independently,
 including NPC poses, fountains, flames, and water effects.
-Both accept multipliers from `0.1` to `10` and default to `1`: `2` doubles the
-speed and `0.5` halves it. Sprite animation speed works with or without
-`--smooth-movement` and does not change camera transition timing or game turns.
+Both default to `1`; the menu sliders offer `0.5`, `0.75`, and `1`.
+A multiplier of `0.5` halves the speed. Sprite animation speed works with or without
+**Smooth Movement** and does not change camera transition timing or game turns.
 Movement speed also scales smooth tile transitions so held input continues
 without waiting at tile boundaries.
-For example, double both speeds with
-`--smooth-movement --movement-speed 2 --animation-speed 2`.
-Smooth movement or explicit movement speed uses timed keyboard repeats;
-otherwise keyboard repeat retains the operating system's behavior.
-Smooth Movement and Diagonal Movement initially default to off. For example:
-
-```sh
-bash scripts/run-linux.sh --fullscreen --mouse --smooth-movement --diagonal-movement
-```
+Smooth movement uses timed keyboard repeats so held input continues across tile
+boundaries; otherwise keyboard repeat retains the operating system's behavior.
 
 ### Transparent sprites
 
-Enable `--transparent-sprites` to draw player, NPC, and monster sprites over their ground
+Enable **Transparent Sprites** to draw player, NPC, and monster sprites over their ground
 instead of replacing the entire tile. Black sprite pixels are transparent,
 except for a one-pixel black outline around colored pixels (including diagonal
 neighbors). The outline can extend one pixel into adjacent map tiles and is
@@ -309,7 +286,7 @@ of overlapping sprite outlines. This also applies to expanded fullscreen maps an
 smooth movement. Fountains (all animation frames), wells, braziers, cannonballs, cannons,
 telescopes, stacks of logs, stocks (empty or occupied), guillotines,
 torture racks, pendulums (all animation frames), metal grates, portcullises,
-carpets, ladders, and bellows also use this flag. Their map cells
+carpets, ladders, and bellows also use this setting. Their map cells
 have no separate ground layer, so their background uses the most common
 immediately adjacent brick floor, grass, stone floor, or wooden floor tile
 (ties prefer that order). With no adjacent recognized ground, they stay opaque. This
@@ -324,8 +301,8 @@ Chairs, tables (including food and candelabrum variants), and all seated NPC
 poses stay opaque with no added outline.
 The sleeping-in-bed NPC, empty manacles, and all four occupied-manacles NPC
 frames retain their complete opaque artwork with no added outline, even with
-`--transparent-sprites`.
-Sprites default to opaque unless enabled by a flag or saved settings. Terrain tiles remain opaque;
+**Transparent Sprites**.
+Sprites default to opaque unless Transparent Sprites is enabled. Terrain tiles remain opaque;
 the original tile data is unchanged.
 
 ## Music and sound effects
@@ -428,3 +405,8 @@ matching. Its original linker has not been found, so perfect binary matching is
 not currently possible. FM-TOWNS disassembly is also used as a reference where
 needed. See upstream for current decompilation progress and its original
 project documentation.
+
+## Credits
+
+- **[carademono](https://github.com/drcarademono)** — Impera port and enhancements.
+- **[wonst719](https://github.com/wonst719)** — [u5d — Ultima V Decompilation Project](https://github.com/wonst719/u5d), the base engine and original decompilation.
