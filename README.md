@@ -127,8 +127,9 @@ black backgrounds around their artwork. Furniture such as barrels, beds, drawers
 tables, and street lamps already includes colored floor or grass pixels;
 these keep their original artwork. Solid walls, doors, stairs, fences, other wall fixtures,
 terrain, and effects also retain their original rendering.
-The sleeping-in-bed NPC sprite always retains its complete opaque artwork
-and has no added outline, even with `--transparent-sprites`.
+The sleeping-in-bed NPC and all four occupied-manacles NPC frames retain
+their complete opaque artwork with no added outline, even with
+`--transparent-sprites`. Empty manacles still support transparency.
 Sprites default to opaque when the flag is omitted. Terrain tiles remain opaque;
 the original tile data is unchanged.
 

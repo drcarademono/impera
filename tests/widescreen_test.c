@@ -167,6 +167,26 @@ int main(void)
     assert(pixels[(objectY+8)*broad.width+objectX+2]==5);
     memset(D_5c5a,0,sizeof(D_5c5a));
     GetMap(22,16)=GetMap(24,16)=GetMap(23,17)=0x44;
+    /* All occupied-manacles animation frames are opaque exceptions. Empty
+     * manacles still use inferred ground under the static-object rule. */
+    GetMap(23,16)=TILE_MAP_85;
+    GetMap(22,16)=GetMap(24,16)=GetMap(23,17)=0x44;
+    assert(WIDE_GroundTile(7,0)==0x44);
+    for(int frame=0x64;frame<=0x67;frame++) {
+        int sprite=256+frame;
+        memset(tiles+sprite*128,0,128);
+        tiles[sprite*128+8*8]=0x20;
+        assert(GRAP_BUF_SpritePixel(sprite,2,8)==0);
+        assert(GRAP_BUF_SpritePixel(sprite,-1,8)==-1);
+        assert(GRAP_BUF_SpritePixel(sprite,0,16)==-1);
+        GRAP_BUF_PutMapSprite(1,1,sprite);
+        assert(g_linearEgaBuffer0[32*320+26]==0);
+    }
+    D_5c5a[1]._0_tile=D_5c5a[1]._1_animTile=0x44;
+    D_5c5a[1]._2_x=23;D_5c5a[1]._3_y=16;
+    assert(WIDE_Compose(pixels,broad));
+    assert(pixels[(objectY+8)*broad.width+objectX+2]==0);
+    memset(D_5c5a,0,sizeof(D_5c5a));
     const byte opaqueObjects[]={TILE_MAP_CHAIR_90,TILE_MAP_TABLE_94,TILE_MAP_BARREL,
         TILE_MAP_BED,TILE_MAP_DRESSER,TILE_MAP_DOOR_B8,TILE_MAP_FIREPLACE,0xbd};
     for(size_t i=0;i<sizeof(opaqueObjects);i++) {
