@@ -749,7 +749,10 @@ void FONT_0b0a(void)
 #if !defined(TARGET_DOS16)
         FILE_WriteSavegameFile(/*0xa0d6*/ "SAVED.GAM");
 #if defined(TARGET_SDL)
-        SLOTS_ResetTime();
+        if(!SLOTS_CreateInitial()) {
+            ULTIMA_1850_PrintString("\nCould not create save slot. Check free space and SAVEGAME permissions.\nPress a key.\n");
+            ULTIMA_1dda_WaitForKeystroke(0);
+        }
 #endif
 #else
         ULTIMA_25d8_WriteFileToDisk(/*0xa0d6*/ "SAVED.GAM", &D_55a6, (int)&D_6606 - (int)&D_55a6);

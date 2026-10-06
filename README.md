@@ -97,8 +97,17 @@ the list shows four at a time with Up/Down, Page Up/Down, mouse wheel scrolling,
 and a draggable scrollbar. Press Delete on a named slot, then Y to confirm deletion
 or N/Escape to cancel. Escape or **Return to Game** cancels.
 
+Completing **Create New Character** automatically creates a normal named slot
+using the Avatar's name, fresh world state, and zero play time. The title-screen
+flow stays the same: return to the title, then choose **Journey Onward** to find
+the new game at the top of **Load Game**. Imported Ultima IV characters also get
+a normal slot. Existing named saves are preserved.
+
 Each slot includes the complete party save, both world-object lists, cumulative
-play time, and a small screenshot thumbnail. **Journey Onward** opens the matching
+play time, location metadata (map, level and coordinates), and a small screenshot
+thumbnail for manual saves. Save and load rows show the location using the
+existing map-name data. Older slots without location metadata remain loadable
+and show **Unknown Location**. **Journey Onward** opens the matching
 **Load Game** browser. `Ctrl+L` opens it during gameplay and resumes the selected
 save immediately. Both `Ctrl+W` and `Ctrl+L` work at world, town, and dungeon
 command prompts; they are inactive inside other menus. The command-line-only `--legacy-save` flag enables **Legacy Save** when valid original save files exist; it is hidden by default. This preserves access to the original
