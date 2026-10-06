@@ -126,7 +126,8 @@ black backgrounds around their artwork. Furniture such as barrels, beds, drawers
 tables, and street lamps already includes colored floor or grass pixels;
 these keep their original artwork. Solid walls, doors, stairs, fences, other wall fixtures,
 terrain, and effects also retain their original rendering.
-Map tiles 130–139 (decimal, `0x82`–`0x8B`) are exempt from transparency,
+Map tiles 90–96 (`0x5A`–`0x60`) and 130–139 (`0x82`–`0x8B`), in decimal
+numbering, are exempt from transparency,
 ground inference, and added outlines.
 The sleeping-in-bed NPC and all four occupied-manacles NPC
 frames retain their complete opaque artwork with no added outline, even with

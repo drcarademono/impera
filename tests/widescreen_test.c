@@ -142,8 +142,10 @@ int main(void)
         assert(pixels[(objectY+8)*broad.width+objectX+2]==0);
         GRAP_BUF_SetTransparentSprites(true);
     }
-    /* Decimal map tiles 130..139 stay opaque regardless of adjacent ground. */
-    for(int tile=130;tile<=139;tile++) {
+    /* Both exempt decimal ranges stay opaque regardless of adjacent ground. */
+    const byte exemptions[]={90,91,92,93,94,95,96,130,131,132,133,134,135,136,137,138,139};
+    for(size_t i=0;i<sizeof(exemptions);i++) {
+        int tile=exemptions[i];
         D_b11e[tile]=(byte)tile;
         memset(tiles+tile*128,0,128);
         tiles[tile*128+8*8]=0x20;
