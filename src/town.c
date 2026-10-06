@@ -1303,6 +1303,7 @@ static void TOWN_1352(int param_1)
 
 void TOWN_141e_MainLoop(void)
 {
+    debug("Entering town.c map=%u level=%u position=%u,%u",D_5893_map_id,D_5895_map_level,D_5896_map_x,D_5897_map_y);
     int local_4;
     int local_6;
     uint local_8;

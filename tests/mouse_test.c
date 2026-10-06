@@ -639,6 +639,7 @@ int main(int argc, char** argv)
     /* Right-button combat commands use the active fighter, not the map center. */
     GRAP_SDL_SetSmoothMovement(false);
     D_5896_map_x=2; D_5897_map_y=3;
+    D_589e=0;D_ba14[0].x=2;D_ba14[0].y=3;
     float fighterX=centerX+(2-5)*16*l.scale;
     float fighterY=centerY+(3-5)*16*l.scale;
     cursorX=fighterX+1; cursorY=fighterY;
@@ -696,7 +697,7 @@ int main(int argc, char** argv)
     D_589e=0; D_ba14[0].x=2; D_ba14[0].y=8;
     D_5896_map_x=5; D_5897_map_y=5;
     MOVEMENT_SetDiagonal(true);
-    float fighterX=centerX-3*16*l.scale,fighterY=centerY+3*16*l.scale;
+    fighterX=centerX-3*16*l.scale;fighterY=centerY+3*16*l.scale;
     assert(MOUSE_CursorDirection(fighterX+16*l.scale,fighterY)==U5_KEY_RIGHT);
     assert(MOUSE_CursorDirection(fighterX,fighterY-16*l.scale)==U5_KEY_UP);
     MOUSE_BeginDirectionInput(false);

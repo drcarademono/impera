@@ -2,6 +2,7 @@
 #include "graphics/grap.h"
 
 #include "event.h"
+#include "vars.h"
 #include "key/mouse.h"
 
 #include <SDL3/SDL.h>
@@ -42,6 +43,7 @@ void EVT_PollMessages(void)
 		switch (ev.type)
 		{
 		case SDL_EVENT_QUIT:
+            debug("Window close requested");
 			exit(0);
 			break;
 
@@ -62,6 +64,7 @@ void EVT_PollMessages(void)
                          ev.type == SDL_EVENT_MOUSE_BUTTON_DOWN, ev.button.clicks);
             break;
         case SDL_EVENT_WINDOW_FOCUS_LOST:
+            debug("Window focus lost; releasing held input");
             MOUSE_Cancel();
             KEY_SDL_ReleaseKey(0);
             break;
@@ -71,6 +74,11 @@ void EVT_PollMessages(void)
 
 void EVT_Yield(void)
 {
+    static int map=-1,level=-1,x=-1,y=-1,entity=-1;
+    if(map!=D_5893_map_id || level!=D_5895_map_level || x!=D_5896_map_x || y!=D_5897_map_y || entity!=D_589e) {
+        map=D_5893_map_id;level=D_5895_map_level;x=D_5896_map_x;y=D_5897_map_y;entity=D_589e;
+        debug("Game state map=%d level=%d position=%d,%d active=%d command=%d",map,level,x,y,entity,D_587a);
+    }
 	GRAP_FlushPendingPresent();
 	EVT_PollMessages();
     MOUSE_UpdateCursor();

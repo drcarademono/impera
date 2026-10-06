@@ -74,8 +74,9 @@ static void AUDIO_SDL_Init(void)
 {
     MIX_Init();
     s_mixer = MIX_CreateMixerDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, NULL);
-    if (!s_mixer) { fprintf(stderr, "Audio device unavailable: %s\n", SDL_GetError()); return; }
+    if (!s_mixer) { DEBUG_Error("Audio device unavailable: %s", SDL_GetError()); return; }
     MIX_GetMixerFormat(s_mixer, &s_mixerSpec);
+    debug("Audio mixer frequency=%d channels=%d format=%u",s_mixerSpec.freq,s_mixerSpec.channels,(unsigned)s_mixerSpec.format);
 
     s_bgmTrack = MIX_CreateTrack(s_mixer);
     s_sfxTrack = MIX_CreateTrack(s_mixer);
@@ -146,13 +147,14 @@ static void AUDIO_SDL_LoadBgmTable(void)
     for (int i=1;i<=16;i++) {
         if (s_musicPaths[i][0]) {
             s_bgm[i]=AUDIO_SDL_LoadAudio(s_musicPaths[i],false);
-            if (!s_bgm[i]) fprintf(stderr,"Cannot load music %s: %s\n",s_musicPaths[i],SDL_GetError());
+            if (!s_bgm[i]) DEBUG_Error("Cannot load music %s: %s",s_musicPaths[i],SDL_GetError());
         }
         if (!s_bgm[i] && i<=15) {
             char fileName[32];
             SDL_snprintf(fileName,sizeof(fileName),"BGM/%02d.ogg",i);
             s_bgm[i]=AUDIO_SDL_LoadAudio(fileName,false);
         }
+        debug("Music track=%d available=%d source=%s",i,s_bgm[i]!=NULL,s_musicPaths[i][0]?s_musicPaths[i]:"legacy BGM or absent");
     }
 }
 
@@ -172,6 +174,7 @@ static void AUDIO_SDL_LoadSfxTable(void)
             snprintf(fileName,sizeof(fileName),"SFX/%s",r->fileName);
             s_sfx[r->sfxId]=AUDIO_SDL_LoadAudio(fileName,true);
         }
+        debug("Sound effect=%d source=%s",r->sfxId,s_sfx[r->sfxId]?"external recording":"PC-speaker synthesis fallback");
     }
 }
 

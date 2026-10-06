@@ -386,6 +386,7 @@ static void COMBAT_063e_ProcessCommand(void)
     local_8 = 0xff;
 #endif
 
+    debug("Combat command entity=%u actor=%u flags=%u position=%u,%u hp=%u",D_589e,D_ba14[D_589e].entityIdx,D_ba14[D_589e].flags,D_ba14[D_589e].x,D_ba14[D_589e].y,D_ba14[D_589e].hp);
     D_5896_map_x = D_ba14[D_589e].x;
     D_5897_map_y = D_ba14[D_589e].y;
     local_a = D_ba14[D_589e].entityIdx;
@@ -785,6 +786,7 @@ static void COMBAT_063e_ProcessCommand(void)
 // perform combat (main loop)
 int COMBAT_0b94_MainLoop(void)
 {
+    debug("Entering combat.c map=%u level=%u position=%u,%u",D_5893_map_id,D_5895_map_level,D_5896_map_x,D_5897_map_y);
     int local_a;
     int local_4;
     register CombatEntity* local_8;

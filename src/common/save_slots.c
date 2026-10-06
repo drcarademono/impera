@@ -69,7 +69,7 @@ static void removeDir(const char* dir)
     char p[512];for(int i=0;i<4;i++) { path(p,sizeof(p),dir,files[i]);SDL_RemovePath(p); }
     SDL_RemovePath(dir);
 }
-bool SLOTS_Delete(const char* id)
+static bool SLOTS_Delete_Impl(const char* id)
 {
     if(!validId(id) || !storage()) return false;
     char dir[512],p[512];SDL_snprintf(dir,sizeof(dir),"%s/%s",ROOT,id);
@@ -165,7 +165,12 @@ static bool writeSlot(const char* id,const char* name,const char* thumbnail,cons
     return true;
 }
 bool SLOTS_Write(const char* id,const char* name,const char* thumbnail)
-{ return writeSlot(id,name,thumbnail,NULL); }
+{
+    debug("Save write requested slot=%s map=%u level=%u position=%u,%u thumbnail=%d",id?id:"new",D_5893_map_id,D_5895_map_level,D_5896_map_x,D_5897_map_y,thumbnail!=NULL);
+    bool ok=writeSlot(id,name,thumbnail,NULL);
+    if(ok) debug("Save write committed");else DEBUG_Error("Save write failed; last SDL error: %s",SDL_GetError());
+    return ok;
+}
 bool SLOTS_CreateInitial(void)
 {
     /* Character creation has initialized the complete pair of world lists. */
@@ -173,9 +178,10 @@ bool SLOTS_CreateInitial(void)
     SLOTS_ResetTime();
     char name[sizeof(D_55a8_party[0].name)+1];
     memcpy(name,D_55a8_party[0].name,sizeof(D_55a8_party[0].name));name[sizeof(name)-1]=0;
-    return writeSlot(NULL,*name?name:"Avatar",NULL,D_b21e);
+    bool ok=writeSlot(NULL,*name?name:"Avatar",NULL,D_b21e);
+    debug("Initial character slot created=%d",ok);return ok;
 }
-bool SLOTS_Load(const char* id)
+static bool SLOTS_Load_Impl(const char* id)
 {
     if(!validId(id) || !storage()) return false;
     char dir[512],p[512],name[NAME_LENGTH+2];uint64_t ms;
@@ -232,10 +238,10 @@ static SDL_EnumerationResult enumerate(void* unused,const char* dir,const char* 
     (void)unused;
     if(!validId(filename)) return SDL_ENUM_CONTINUE;
     char full[512];path(full,sizeof(full),dir,filename);Slot slot={0};
-    if(!metadata(full,slot.name,&slot.ms,slot.location,sizeof(slot.location))) return SDL_ENUM_CONTINUE;
+    if(!metadata(full,slot.name,&slot.ms,slot.location,sizeof(slot.location))) { debug("Skipping save slot=%s: missing or invalid metadata",filename);return SDL_ENUM_CONTINUE; }
     SDL_strlcpy(slot.id,filename,sizeof(slot.id));
     Slot* next=realloc(s_slots,(size_t)(s_count+1)*sizeof(Slot));
-    if(!next) { s_scanFailed=true;return SDL_ENUM_FAILURE; }
+    if(!next) { DEBUG_Error("Cannot allocate save list for %d slots",s_count+1);s_scanFailed=true;return SDL_ENUM_FAILURE; }
     s_slots=next;s_slots[s_count++]=slot;return SDL_ENUM_CONTINUE;
 }
 static int compare(const void* a,const void* b)
@@ -350,6 +356,7 @@ static bool validLegacy(void)
 }
 static bool show(bool saving,bool inGame)
 {
+    debug("Save browser open mode=%s inGame=%d legacy=%d",saving?"save":"load",inGame,s_legacyEnabled);
     s_inGame=inGame;
     extern void KEY_SDL_ClearInput(void);
     free(s_slots);s_slots=NULL;s_count=0;s_scanFailed=false;
@@ -361,6 +368,7 @@ static bool show(bool saving,bool inGame)
     char capture[FILE_PATH_SIZE];path(capture,sizeof(capture),s_saveDir,".slot-thumbnail.bmp");
     SDL_Surface* thumbnail=shot?SDL_ScaleSurface(shot,160,SDL_max(1,160*shot->h/shot->w),SDL_SCALEMODE_LINEAR):NULL;
     bool captured=thumbnail && SDL_SaveBMP(thumbnail,capture);
+    debug("Save browser slots=%d scanFailed=%d thumbnail=%d",s_count,s_scanFailed,captured);
     SDL_DestroySurface(thumbnail);SDL_DestroySurface(shot);
     KEY_SDL_ClearInput();MOUSE_Cancel();GRAP_SDL_SetPixelUI(true);MOUSE_SetPointerMode(true);
     s_hasFirstRow=saving || (s_legacyEnabled && validLegacy());
@@ -483,7 +491,7 @@ void SLOTS_ReloadActiveGame(void)
     ULTIMA_1bf2_SetTextPosition(0,12);
     ULTIMA_251e_SwitchDisks(3);
     if(FILE_ReadSavegameFile("SAVED.GAM")!=0) {
-        fprintf(stderr,"Cannot restore selected save\n");exit(1);
+        DEBUG_Error("Cannot restore selected save");exit(1);
     }
     debug("Restoring saved world objects");
     ULTIMA_256e_ReadFileFromDisk("SAVED.OOL",D_b21e,512,0);
@@ -500,3 +508,21 @@ void SLOTS_ReloadActiveGame(void)
     SLOTS_StartTime();
 }
 #endif
+
+bool SLOTS_Delete(const char* id)
+{
+    debug("Save delete requested slot=%s",id?id:"(null)");
+    bool ok=SLOTS_Delete_Impl(id);
+    if(ok) debug("Save delete completed slot=%s",id);
+    else DEBUG_Error("Save delete failed slot=%s; last SDL error: %s",id?id:"(null)",SDL_GetError());
+    return ok;
+}
+
+bool SLOTS_Load(const char* id)
+{
+    debug("Save load requested slot=%s",id?id:"(null)");
+    bool ok=SLOTS_Load_Impl(id);
+    if(ok) debug("Save load completed slot=%s",id);
+    else DEBUG_Error("Save load failed slot=%s; last SDL error: %s",id?id:"(null)",SDL_GetError());
+    return ok;
+}

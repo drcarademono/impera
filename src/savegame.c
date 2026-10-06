@@ -33,14 +33,15 @@ int FILE_ReadSavegameFile(char* fileName)
         fileName = buf;
     }
 
+    debug("Deserialize party save file=%s",fileName);
     stream = FILE_Open(fileName, "rb");
-    if (!stream)
-        return -1;
+    if (!stream) { DEBUG_Error("Cannot open party save %s",fileName);return -1; }
 
     /* Reject incomplete data before changing the active party/world. */
     if (fseek(stream, 0, SEEK_END) != 0 || ftell(stream) < 0x1060 ||
         fseek(stream, 0, SEEK_SET) != 0)
     {
+        DEBUG_Error("Invalid or truncated party save %s",fileName);
         fclose(stream);
         return -1;
     }
@@ -177,7 +178,7 @@ int FILE_ReadSavegameFile(char* fileName)
     //READ_16(D_6606);// 3ee18
 
     int pos = (int)ftell(stream);
-    debug("pos: %d", pos);
+    debug("Party serializer file=%s final offset=%d expected=4192",fileName,pos);
 
     fclose(stream);
 
@@ -199,9 +200,9 @@ int FILE_WriteSavegameFile(char* fileName)
         fileName = buf;
     }
 
+    debug("Serialize party save file=%s map=%u level=%u position=%u,%u",fileName,D_5893_map_id,D_5895_map_level,D_5896_map_x,D_5897_map_y);
     stream = FILE_Open(fileName, "wb");
-    if (!stream)
-        return -1;
+    if (!stream) { DEBUG_Error("Cannot open party save %s",fileName);return -1; }
 
     ASSERT(sizeof(S_55a8) == 0x20);
 
@@ -335,7 +336,7 @@ int FILE_WriteSavegameFile(char* fileName)
     // WRITE_16(D_6606);// 3ee18
 
     int pos = (int)ftell(stream);
-    debug("pos: %d", pos);
+    debug("Party serializer file=%s final offset=%d expected=4192",fileName,pos);
 
     int failed = ferror(stream);
     if (fclose(stream) != 0) failed = 1;

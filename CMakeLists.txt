@@ -81,6 +81,12 @@ set(U5D_TARGETS ultima5)
 if(U5D_BUILD_TESTS)
     enable_testing()
     set(TEST_SOURCES ${SOURCES})
+    add_executable(u5d_debug_test tests/debug_test.c src/common/debug.c)
+    list(APPEND U5D_TARGETS u5d_debug_test)
+    file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/debug-runtime")
+    add_test(NAME diagnostics COMMAND u5d_debug_test)
+    set_tests_properties(diagnostics PROPERTIES WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/debug-runtime" TIMEOUT 20)
+
     add_executable(u5d_pcspeaker_test tests/pcspeaker_test.c src/audio/pcspeaker.c)
     list(APPEND U5D_TARGETS u5d_pcspeaker_test)
     add_test(NAME pcspeaker_algorithms COMMAND u5d_pcspeaker_test)
@@ -176,7 +182,8 @@ if(U5D_BUILD_TESTS)
             "-Wl,--wrap=DNGLOOK_117e" "-Wl,--wrap=COMBAT_0b94_MainLoop"
             "-Wl,--wrap=AUDIO_PlayBgmPerMap" "-Wl,--wrap=ULTIMA_2900_UpdateVitalsDisplay")
         add_test(NAME combat_return COMMAND u5d_combat_return_test)
-        add_executable(u5d_file_case_test tests/file_case_test.c src/common/file.c)
+        add_executable(u5d_file_case_test tests/file_case_test.c src/common/file.c src/common/debug.c)
+        list(APPEND U5D_TARGETS u5d_file_case_test)
         target_include_directories(u5d_file_case_test PRIVATE ${CMAKE_SOURCE_DIR}/src)
         file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/case-runtime/MiXeD/SubDir"
                             "${CMAKE_BINARY_DIR}/case-runtime/SaVeGaMe"

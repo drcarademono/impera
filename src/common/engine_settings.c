@@ -39,6 +39,7 @@ void ENGINE_Set(int row,float value)
     if(!isfinite(value) || row<0 || row>=ENGINE_SETTING_COUNT) return;
     if(row<ENGINE_MOVEMENT_SPEED && value!=0 && value!=1) return;
     if(row>=ENGINE_MOVEMENT_SPEED && (value<0.1f || value>10)) return;
+    debug("Engine option %s=%.6g",keys[row],(double)value);
     switch(row) {
     case ENGINE_FULLSCREEN:GRAP_SDL_SetFullscreen(value!=0);break;
     case ENGINE_MOUSE:MOUSE_SetEnabled(value!=0);break;
@@ -65,7 +66,8 @@ void ENGINE_Load(void)
 bool ENGINE_Save(void)
 {
     FILE* f=FILE_Open("ENGINE.CFG.tmp","w");
-    if(!f) return false;
+    if(!f) { DEBUG_Error("Cannot write ENGINE.CFG.tmp");return false; }
+    debug("Writing engine settings");
     bool ok=true;
     for(int i=0;i<ENGINE_SETTING_COUNT;i++) if(fprintf(f,"%s %.6g\n",keys[i],(double)ENGINE_Get(i))<0) ok=false;
     if(fclose(f)!=0) ok=false;

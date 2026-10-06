@@ -53,6 +53,8 @@ int CDECL main(int argc, char** argv/*, char** envp*/)
     local_4 = 0x20;
 
 #if defined(TARGET_SDL)
+    DEBUG_Initialize();
+    debug("Startup argc=%d",argc);
     ENGINE_Load();
     for (int arg = 1; arg < argc; arg++)
     {
@@ -113,7 +115,7 @@ int CDECL main(int argc, char** argv/*, char** envp*/)
 #endif
 
 #if defined(TARGET_SDL)
-    if(!SETUP_Run()) return EXIT_SUCCESS;
+    if(!SETUP_Run()) { debug("Startup setup cancelled or failed");return EXIT_SUCCESS; }
 #endif
 
 #if defined(ENABLE_TRANSLATION)
@@ -121,7 +123,7 @@ int CDECL main(int argc, char** argv/*, char** envp*/)
 #endif
 
 #if !defined(TARGET_DOS16)
-    BACKEND_Initialize();
+    if(!BACKEND_Initialize()) return EXIT_FAILURE;
     atexit(BACKEND_Cleanup);
 #endif
 

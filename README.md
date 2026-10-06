@@ -362,10 +362,27 @@ a new character. Rebuilding alone cannot repair an already damaged save.
 
 ## Troubleshooting
 
-Errors are written to the terminal and `build/runtime/LOG.TXT`. The log is
-replaced on each launch, so copy it before restarting when reporting a bug.
-For detailed tracing, run `U5D_DEBUG=1 bash scripts/run-linux.sh`; verbose logs
-can grow quickly. If the log cannot be created, errors still go to the terminal.
+Runtime logging is **always enabled**, starting before the first-launch directory
+picker. No environment flag is needed. With the Linux launcher, logs live in
+`build/runtime/LOG.TXT` and `build/runtime/LOG.PREV.TXT`; direct launches write
+them in the working directory. Errors also go to the terminal. If the log cannot
+be created, error messages still go to the terminal.
+
+Logs include timestamps and sequence numbers, build/SDL/platform information,
+selected data/audio directories, renderer and audio setup, settings changes,
+map/position/active-combatant changes, gameplay commands, file transfers, and
+save/load/delete outcomes. Records are flushed immediately. Each log segment is
+limited to approximately 4 MiB; the previous segment or previous launch is kept
+as `LOG.PREV.TXT`. Copy **both files before restarting repeatedly**, and include
+the steps to reproduce, operating system, and affected save when reporting a bug.
+Logs can contain local directory paths and gameplay state.
+
+Linux/macOS fatal signals append a crash marker and retain normal signal/core-dump
+termination. Windows retains its existing crash dump handler. These diagnostics
+preserve the last recorded context; they do not guarantee a stack trace or explain
+every crash. A normal exit records **Clean application shutdown**. `U5D_DEBUG=1`
+is accepted as an environment variable but is no longer needed to enable tracing.
+
 Missing required map or NPC data now exits with an error naming the file
 instead of retrying indefinitely.
 

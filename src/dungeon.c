@@ -876,6 +876,7 @@ void DUNGEON_0c76(byte param_1, int param_2)
 
 void DUNGEON_0e2e_MainLoop(int param_1)
 {
+    debug("Entering dungeon.c map=%u level=%u position=%u,%u",D_5893_map_id,D_5895_map_level,D_5896_map_x,D_5897_map_y);
     int local_10;
     int local_e;
     int local_c;
