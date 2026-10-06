@@ -55,6 +55,8 @@ static bool confirmAimOnPoll;
 static bool checkAnimation;
 static bool checkWater;
 static bool checkDarkness;
+static bool checkEdges;
+static bool edgeBright=true;
 static int lightX,lightY,darkX;
 static SDL_Rect waterMap;
 static int animationRow, playerScreenX, previousMarkerX;
@@ -82,6 +84,13 @@ bool __wrap_SDL_RenderPresent(SDL_Renderer* renderer)
         assert(SDL_ReadSurfacePixel(image,marker+8*3,actorRow-3*3,&r,&g,&b,&a));
         if(D_5893_map_id<128) assert(r==0 && g==0 && b==(transparentSprites?170:0));
         actorMarker=marker;
+        SDL_DestroySurface(image);
+    }
+    if(checkEdges) {
+        SDL_Surface* image=SDL_RenderReadPixels(renderer,NULL);assert(image);
+        Uint8 r,g,b,a;
+        assert(SDL_ReadSurfacePixel(image,waterMap.x+1,waterMap.y+1,&r,&g,&b,&a));
+        assert(r==0 && g==0 && b==(edgeBright?170:0)); /* completed map retained during UI-only flush */
         SDL_DestroySurface(image);
     }
     if(checkDarkness) {
@@ -638,6 +647,22 @@ int main(int argc, char** argv)
         checkWater=true;presented=0;
         GRAP_SDL_MapDrawn();GRAP_SDL_FlushFrame();
         checkWater=false;assert(presented==9);
+    }
+    /* Expanded edges must wait for a complete map redraw, just as the original
+     * central 11x11 tiles do, even if position/light globals already changed. */
+    for(int smooth=0;smooth<2;smooth++) {
+        GRAP_SDL_SetSmoothMovement(smooth!=0);
+        D_58a5=50;D_5896_map_x=100;D_5897_map_y=100;
+        memset(tiles+128,0x11,128);memset(g_linearEgaBuffer0,1,320*200);
+        GRAP_SDL_MapDrawn();GRAP_SDL_FlushFrame();
+        D_58a5=2;D_5896_map_x++;D_5897_map_y++;
+        edgeBright=true;checkEdges=true;GRAP_SDL_FlushFrame();checkEdges=false;
+        edgeBright=false;checkEdges=true;
+        GRAP_SDL_MapDrawn();GRAP_SDL_FlushFrame(); /* completed night map replaces snapshot */
+        D_58a5=50;GRAP_SDL_FlushFrame(); /* retain darkness until daylight redraw */
+        checkEdges=false;edgeBright=true;checkEdges=true;
+        GRAP_SDL_MapDrawn();GRAP_SDL_FlushFrame();
+        checkEdges=false;
     }
     /* Darkness is a stationary visibility mask, not part of scrolling terrain. */
     D_58a5=2;memset(tiles+128,0x11,128);

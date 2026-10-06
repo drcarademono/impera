@@ -25,6 +25,9 @@ static int s_windowedWidth=1280, s_windowedHeight=960;
 static SDL_Texture* s_wideTexture;
 static SDL_Surface* s_wideSurface;
 static byte* s_widePixels;
+static byte* s_completedWidePixels;
+static bool s_completedWideValid;
+static int s_completedWideMap,s_completedWideLevel;
 static bool s_expandedFrame;
 static bool s_smoothMovement, s_mapDrawn, s_previousValid;
 static float s_movementSpeed = 1.0f;
@@ -260,6 +263,7 @@ void GRAP_SDL_Cleanup(void)
     SDL_DestroyTexture(s_wideTexture);
     SDL_DestroySurface(s_wideSurface);
     free(s_widePixels);
+    free(s_completedWidePixels);s_completedWidePixels=NULL;s_completedWideValid=false;
     s_wideTexture = NULL;
     s_wideSurface = NULL;
     s_widePixels = NULL;
@@ -511,7 +515,9 @@ extern void DisplayDebugMessages(void);
 
 void GRAP_SDL_FlushFrame(void)
 {
+    bool completedMap=s_mapDrawn;
     s_expandedFrame = false;
+    if(!s_fullscreen || s_pixelUI || !D_58a4) s_completedWideValid=false;
     if (!D_58a4 || (D_5893_map_id>32 && D_5893_map_id<128)) s_previousValid = false;
     LinearToRGB();
 
@@ -530,9 +536,11 @@ void GRAP_SDL_FlushFrame(void)
             SDL_DestroyTexture(s_wideTexture);
             SDL_DestroySurface(s_wideSurface);
             free(s_widePixels);
+            free(s_completedWidePixels);s_completedWideValid=false;
+            s_completedWidePixels=malloc((size_t)layout.width*layout.height);
             s_wideSurface = SDL_CreateSurface(layout.width, layout.height, SDL_PIXELFORMAT_ARGB8888);
             s_widePixels = malloc((size_t)layout.width * layout.height);
-            if (!s_wideSurface || !s_widePixels)
+            if (!s_wideSurface || !s_widePixels || !s_completedWidePixels)
             {
                 DEBUG_Error("Cannot allocate expanded game viewport\n");
                 exit(EXIT_FAILURE);
@@ -550,6 +558,20 @@ void GRAP_SDL_FlushFrame(void)
         if (!s_pixelUI && WIDE_Compose(s_widePixels, layout))
         {
             s_expandedFrame = true;
+            /* UI/effect updates can flush between a movement/light change and
+             * the original map redraw. Keep expanded tiles from that same
+             * completed map; central tiles and modal effects remain live. */
+            if(!completedMap && s_completedWideValid && s_completedWideMap==D_5893_map_id && s_completedWideLevel==D_5895_map_level) {
+                for(int row=0;row<layout.rows;row++) for(int col=0;col<layout.columns;col++) {
+                    if(abs(col-layout.columns/2)<=5 && abs(row-layout.rows/2)<=5) continue;
+                    for(int y=0;y<16;y++) {
+                        int offset=(layout.mapY+row*16+y)*layout.width+layout.mapX+col*16;
+                        memcpy(s_widePixels+offset,s_completedWidePixels+offset,16);
+                    }
+                }
+            }
+            memcpy(s_completedWidePixels,s_widePixels,(size_t)layout.width*layout.height);
+            s_completedWideMap=D_5893_map_id;s_completedWideLevel=D_5895_map_level;s_completedWideValid=true;
             for (int y = 0; y < layout.height; y++)
             {
                 Uint32* row = (Uint32*)((byte*)s_wideSurface->pixels + y * s_wideSurface->pitch);
@@ -566,6 +588,7 @@ void GRAP_SDL_FlushFrame(void)
         }
         else
         {
+            s_completedWideValid=false;
             SDL_FRect dst = {(width - 320 * layout.scale) / 2,
                              (height - 200 * layout.scale) / 2,
                              320 * layout.scale, 200 * layout.scale};
@@ -594,6 +617,7 @@ void GRAP_SDL_FlushFrame(void)
             }
         }
     }
+    s_mapDrawn=false;
     if(s_captureRequested) s_capturedFrame=SDL_RenderReadPixels(s_sdlRenderer,NULL);
     SDL_RenderPresent(s_sdlRenderer);
 }
