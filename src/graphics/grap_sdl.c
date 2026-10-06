@@ -450,10 +450,19 @@ void GRAP_SDL_ClearUIThumbnails(void)
 {
     for(int i=0;i<4;i++) { SDL_DestroyTexture(s_uiThumbnails[i]);s_uiThumbnails[i]=NULL; }
 }
+static bool s_captureRequested;
+static SDL_Surface* s_capturedFrame;
 SDL_Surface* GRAP_SDL_CaptureFrame(void)
 {
-    GRAP_BUF_FlushPendingPresent();
-    return SDL_RenderReadPixels(s_sdlRenderer,NULL);
+    /* Render the current gameplay buffer even within the same timer tick.
+       SDL backbuffer contents are undefined after SDL_RenderPresent. */
+    s_captureRequested=true;
+    s_capturedFrame=NULL;
+    GRAP_BUF_Present();
+    s_captureRequested=false;
+    SDL_Surface* frame=s_capturedFrame;
+    s_capturedFrame=NULL;
+    return frame;
 }
 void GRAP_SDL_UIThumbnail(int i,const char* path,int x,int y,int w,int h)
 {
@@ -554,6 +563,7 @@ void GRAP_SDL_FlushFrame(void)
             }
         }
     }
+    if(s_captureRequested) s_capturedFrame=SDL_RenderReadPixels(s_sdlRenderer,NULL);
     SDL_RenderPresent(s_sdlRenderer);
 }
 

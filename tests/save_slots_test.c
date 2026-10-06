@@ -122,6 +122,14 @@ int main(void)
     assert(fread(font,1,1024,f)==1024);fclose(f);D_539c[0]=font;
     D_5893_map_id=0x40;D_58a4=0;memset(g_linearEgaBuffer0,3,320*200);
     GRAP_BUF_MarkDirty();GRAP_BUF_Present();
+    /* A stale menu render must never become the next gameplay capture. */
+    GRAP_SDL_SetPixelUI(true);memset(g_linearEgaBuffer0,15,320*200);
+    GRAP_BUF_Present();GRAP_SDL_SetPixelUI(false);
+    memset(g_linearEgaBuffer0,3,320*200);
+    SDL_Surface* gameplay=GRAP_SDL_CaptureFrame();assert(gameplay);
+    Uint8 r,g,b,a;
+    assert(SDL_ReadSurfacePixel(gameplay,gameplay->w/2,gameplay->h/2,&r,&g,&b,&a));
+    assert(r==0 && g==170 && b==170);SDL_DestroySurface(gameplay);
     captureBrowser=true;
     assert(SDL_AddTimer(100,input,NULL));
     assert(SLOTS_ShowSave());
