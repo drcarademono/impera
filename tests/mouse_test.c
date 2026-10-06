@@ -27,8 +27,8 @@ SDL_Cursor* __wrap_SDL_CreateColorCursor(SDL_Surface* surface, int x, int y)
     int width,height; GRAP_SDL_CursorSize(&width,&height);
     assert(surface->w == width && surface->h == height);
     /* Pointer, N, NE, E, SE, S, SW, W, NW: test every scaled arrow tip. */
-    const int expectedX[9] = {0, width/2, width-1, width-1, width-1, width/2, 0, 0, 0};
-    const int expectedY[9] = {0, 0, 0, height/2, height-1, height-1, height-1, height/2, 0};
+    const int expectedX[9] = {0,17*width/32,width-1,29*width/32,width-1,17*width/32,0,5*width/32,0};
+    const int expectedY[9] = {0,5*height/32,0,17*height/32,height-1,29*height/32,height-1,17*height/32,0};
     assert(x == expectedX[loadedCursors % 9]);
     assert(y == expectedY[loadedCursors % 9]);
     bool transparent = false, opaque = false;
@@ -39,6 +39,9 @@ SDL_Cursor* __wrap_SDL_CreateColorCursor(SDL_Surface* surface, int x, int y)
         transparent |= a == 0; opaque |= a == 255;
     }
     assert(transparent && opaque);
+    Uint8 tipR,tipG,tipB,tipA;
+    assert(SDL_ReadSurfacePixel(surface,x,y,&tipR,&tipG,&tipB,&tipA));
+    assert(tipA==255 && tipR==255 && tipG==255 && tipB==255);
     ++loadedCursors;
     return NULL; /* SDL dummy driver has no native cursor support. */
 }

@@ -132,12 +132,18 @@ static void LoadCursors(void)
         if (surface) {
             SDL_Surface* scaled = SDL_ScaleSurface(surface,s_cursorWidth,s_cursorHeight,SDL_SCALEMODE_NEAREST);
             if (scaled) {
-                /* SDL mouse coordinates refer to this hotspot. Keep hit testing
-                 * unchanged so the visible arrow tip identifies the target. */
-                static const int tipX[9] = {0, 1, 2, 2, 2, 1, 0, 0, 0};
-                static const int tipY[9] = {0, 0, 0, 1, 2, 2, 2, 1, 0};
-                int hotspotX = tipX[i] == 2 ? s_cursorWidth - 1 : tipX[i] * (s_cursorWidth / 2);
-                int hotspotY = tipY[i] == 2 ? s_cursorHeight - 1 : tipY[i] * (s_cursorHeight / 2);
+                /* Visible tip pixels in the 16x16 cursor art. Cardinal arrows
+                 * are inset; diagonal arrows reach the corners. Center inset
+                 * tip pixels when scaling. SDL events already refer to this
+                 * hotspot, so every map/aim hit test uses them without offsets. */
+                static const int tipX[9] = {0,8,15,14,15,8,0,2,0};
+                static const int tipY[9] = {0,2,0,8,15,14,15,8,0};
+                int hotspotX=(2*tipX[i]+1)*s_cursorWidth/(2*w);
+                int hotspotY=(2*tipY[i]+1)*s_cursorHeight/(2*h);
+                if(tipX[i]==0) hotspotX=0;
+                if(tipY[i]==0) hotspotY=0;
+                if(tipX[i]==w-1) hotspotX=s_cursorWidth-1;
+                if(tipY[i]==h-1) hotspotY=s_cursorHeight-1;
                 s_cursors[i] = SDL_CreateColorCursor(scaled, hotspotX, hotspotY);
                 SDL_DestroySurface(scaled);
             }
