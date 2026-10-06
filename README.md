@@ -61,7 +61,10 @@ Without the option, the game uses the existing window size settings.
 Enable `--diagonal-movement` to use eight directions for movement, neighboring
 interactions, mouse cursors, and combat movement and attacks. This applies to
 keyboard and mouse controls and to AI-controlled combatants, including NPCs,
-monsters, and party members. Diagonal steps cannot cut blocked corners.
+monsters, and party members. When one side of a diagonal is blocked, movement
+slides along the open side for that turn. Continued input keeps trying the
+original diagonal. If both sides are blocked, movement stops; diagonal steps
+still cannot cut blocked corners.
 
 Without this option, movement, actions, and combat attacks use cardinal
 directions. The map has four mouse cursor zones (north, south, east, west).

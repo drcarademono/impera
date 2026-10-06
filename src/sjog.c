@@ -1810,6 +1810,17 @@ int SJOG_1c56_CombatMovePlayer(int param_1, int param_2)
     local_a = local_c = 0;
     local_8 = D_ba14[param_1].actorIdx;
 
+    if (MOVEMENT_Diagonal() && param_2 >= U5_KEY_HOME && param_2 <= U5_KEY_PGDN) {
+        int dx = param_2 == U5_KEY_HOME || param_2 == U5_KEY_END ? -1 : 1;
+        int dy = param_2 == U5_KEY_HOME || param_2 == U5_KEY_PGUP ? -1 : 1;
+        int x = D_ba14[param_1].x, y = D_ba14[param_1].y;
+        /* Leave combat exits to the existing boundary handling. */
+        if (x+dx >= 0 && x+dx <= 10 && y+dy >= 0 && y+dy <= 10)
+            param_2 = MOVEMENT_SlideDirection(param_2,
+                COMBAT_0000(D_5c5a[local_8]._0_tile,x+dx,y) != 0,
+                COMBAT_0000(D_5c5a[local_8]._0_tile,x,y+dy) != 0);
+    }
+
     switch (param_2)
     {
     case U5_KEY_HOME:

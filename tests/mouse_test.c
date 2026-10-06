@@ -143,6 +143,27 @@ int main(int argc, char** argv)
     assert(!MOVEMENT_AttackAllowed(1,1));
     assert(MOVEMENT_AttackAllowed(0,3));
     MOVEMENT_SetDiagonal(true);
+    D_587c_partyTile=TILE_ACTOR_AVATAR;
+    for (int direction=U5_KEY_HOME; direction<=U5_KEY_PGDN; ++direction) {
+        int horizontal=direction==U5_KEY_HOME || direction==U5_KEY_END ? U5_KEY_LEFT : U5_KEY_RIGHT;
+        int vertical=direction==U5_KEY_HOME || direction==U5_KEY_PGUP ? U5_KEY_UP : U5_KEY_DOWN;
+        assert(MOVEMENT_SlideDirection(direction,false,true)==vertical);
+        assert(MOVEMENT_SlideDirection(direction,true,false)==horizontal);
+        assert(MOVEMENT_SlideDirection(direction,true,true)==direction);
+        assert(MOVEMENT_SlideDirection(direction,false,false)==direction);
+        int dx=horizontal==U5_KEY_LEFT ? -1 : 1;
+        int dy=vertical==U5_KEY_UP ? -1 : 1;
+        GetMapViewport(5+dx,5)=TILE_MAP_WALL;
+        GetMapViewport(5,5+dy)=TILE_MAP_GRASS;
+        assert(MOVEMENT_MapSlideDirection(direction)==vertical);
+        GetMapViewport(5+dx,5)=TILE_MAP_GRASS;
+        GetMapViewport(5,5+dy)=TILE_MAP_WALL;
+        assert(MOVEMENT_MapSlideDirection(direction)==horizontal);
+        GetMapViewport(5+dx,5)=TILE_MAP_WALL;
+        assert(MOVEMENT_MapSlideDirection(direction)==direction);
+        GetMapViewport(5+dx,5)=GetMapViewport(5,5+dy)=TILE_MAP_GRASS;
+        assert(MOVEMENT_MapSlideDirection(direction)==direction);
+    }
     assert(MOUSE_Direction(-2,0)==U5_KEY_LEFT);
     assert(MOUSE_Direction(2,0)==U5_KEY_RIGHT);
     assert(MOUSE_Direction(0,-2)==U5_KEY_UP);
@@ -546,8 +567,12 @@ int main(int argc, char** argv)
     assert(SJOG_1c56_CombatMovePlayer(0,U5_KEY_PGUP)==1);
     assert(D_ba14[0].x==6 && D_ba14[0].y==4);
     GetCombatMap(7,4)=0xff;
-    assert(SJOG_1c56_CombatMovePlayer(0,U5_KEY_PGDN)==0);
-    assert(D_ba14[0].x==6 && D_ba14[0].y==4); /* cannot cut a blocked corner */
+    assert(SJOG_1c56_CombatMovePlayer(0,U5_KEY_PGDN)==1);
+    assert(D_ba14[0].x==6 && D_ba14[0].y==5); /* slide south past the east blocker */
+    assert(SJOG_1c56_CombatMovePlayer(0,U5_KEY_PGDN)==1);
+    assert(D_ba14[0].x==7 && D_ba14[0].y==6); /* same intent resumes diagonal movement */
+    D_ba14[0].x=D_5c5a[1]._2_x=6;
+    D_ba14[0].y=D_5c5a[1]._3_y=4;
     MOVEMENT_SetDiagonal(false);
     GetCombatMap(7,4)=TILE_MAP_GRASS;
     assert(SJOG_1c56_CombatMovePlayer(0,U5_KEY_PGDN)==0);
