@@ -106,6 +106,7 @@ void MOUSE_Cleanup(void)
     if (cursor) SDL_SetCursor(cursor);
     for (int i = 0; i < 9; ++i) { SDL_DestroyCursor(s_cursors[i]); s_cursors[i] = NULL; }
     s_currentCursor = NULL;
+    s_cursorWidth=s_cursorHeight=0;
 }
 
 static void LoadCursors(void)
@@ -143,7 +144,11 @@ void MOUSE_SetEnabled(bool enabled)
 {
     s_enabled = enabled;
     MOUSE_Cancel();
+    if (SDL_WasInit(SDL_INIT_VIDEO)) {
+        MOUSE_Cleanup(); /* Rebuild lazily at the current window scale. */
+    }
 }
+bool MOUSE_Enabled(void) { return s_enabled; }
 static int s_dx, s_dy, s_command, s_direction;
 static int s_map, s_level, s_x, s_y, s_combatEntity;
 static bool s_combatAttack;

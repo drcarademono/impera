@@ -11,6 +11,12 @@
 
 #include "font.h"
 #include "intro.h"
+#if defined(TARGET_SDL)
+#include "common/engine_settings.h"
+#define INTRO_MENU_COUNT 7
+#else
+#define INTRO_MENU_COUNT 6
+#endif
 
 #include <string.h>
 
@@ -394,6 +400,9 @@ static void INTRO_06bc_BuildMainMenu(int param_1)
     INTRO_0676_WriteMenuOption(param_1, 3, 9, _TEXT(0x3148, "Ultima V Introduction"));
     INTRO_0676_WriteMenuOption(param_1, 4, 0xb, _TEXT(0x315e, "Acknowledgements"));
     INTRO_0676_WriteMenuOption(param_1, 5, 10, _TEXT(0x316f, "Return to the View"));
+#if defined(TARGET_SDL)
+    INTRO_0676_WriteMenuOption(param_1, 6, 11, "Engine Settings");
+#endif
 }
 
 static void INTRO_072e_Acknowledgements(void)
@@ -508,7 +517,7 @@ void INTRO_0986_Main(void) // intro_main (initialize video) (8b46)
     byte* local_14;
 
     // 098e
-    D_a9ce = 1;
+    D_a9ce = AUDIO_SoundEnabled();
     local_e = 0;
 
     // 0995
@@ -741,7 +750,7 @@ void INTRO_0986_Main(void) // intro_main (initialize video) (8b46)
                 do
                 {
                     // 0d75
-                    MOUSE_MenuSet(64, 136, 192, 6, local_c);
+                    MOUSE_MenuSet(64, 136, 192, INTRO_MENU_COUNT, local_c);
                     local_10 = ULTIMA_2032_ToUpper(ULTIMA_1b38_PollKeyWithCursor());
                     MOUSE_MenuEnd();
                     if (local_10 == 0)
@@ -759,14 +768,14 @@ void INTRO_0986_Main(void) // intro_main (initialize video) (8b46)
                     local_c--;
                     if (local_c < 0)
                     {
-                        local_c = 5;
+                        local_c = INTRO_MENU_COUNT-1;
                     }
                     INTRO_06bc_BuildMainMenu(local_c);
                     break;
                 case U5_KEY_RIGHT:
                 case U5_KEY_DOWN:
                     local_c++;
-                    if (5 < local_c)
+                    if (INTRO_MENU_COUNT <= local_c)
                     {
                         local_c = 0;
                     }
@@ -775,7 +784,7 @@ void INTRO_0986_Main(void) // intro_main (initialize video) (8b46)
                 case U5_KEY_ENTER:  // CR
                 case U5_KEY_SPACE: // ' '
                     // 0de2
-                    local_10 = _TEXT(0x3270, "JCTUAR")[local_c];
+                    local_10 = local_c==6 ? 'E' : _TEXT(0x3270, "JCTUAR")[local_c];
                     break;
                 case 0:
                     local_10 = 0x52;
@@ -798,6 +807,11 @@ void INTRO_0986_Main(void) // intro_main (initialize video) (8b46)
                 case 0x52: // 'R'
                     INTRO_06bc_BuildMainMenu(5);
                     break;
+#if defined(TARGET_SDL)
+                case 'E':
+                    INTRO_06bc_BuildMainMenu(6);
+                    break;
+#endif
                 default:
                     local_10 = 0;
                     break;
@@ -808,6 +822,11 @@ void INTRO_0986_Main(void) // intro_main (initialize video) (8b46)
         // 0e47
         switch ((int)local_10)
         {
+#if defined(TARGET_SDL)
+        case 'E':
+            ENGINE_ShowSettings();
+            break;
+#endif
         case 0x4a: // 'J'
 #if defined(ENABLE_BGM)
             AUDIO_StopBgm();

@@ -5,6 +5,7 @@
 
 void AnimateTileset(byte* tileset);
 void ANIMATION_SetSpeed(float speed);
+float ANIMATION_Speed(void);
 int ANIMATION_NextSteps(void);
 void AnimateTimeTileset(byte* tileset, int mode, byte hour, byte minute);
 void AnimateTile_BuildMoongateTile(byte* tileset, int visibleRows, byte floorType, byte* backup);

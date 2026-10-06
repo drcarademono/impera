@@ -58,6 +58,20 @@ may remain when the display dimensions are not divisible by the pixel scale.
 Without the option, the game uses the existing window size settings.
 `--help` lists launch options.
 
+Choose **Engine Settings** below **Return to the View** in the main menu
+(or press `E`). Fullscreen, Mouse Control, Smooth Movement, Diagonal Movement,
+Transparent Sprites, Music, and Sound Effects can be switched on or off.
+Changes apply immediately. Movement Speed and Animation Speed have sliders
+with ticks at 0.5, 0.75, and 1; use Left/Right or click and drag the slider.
+Up/Down selects a setting, Enter toggles it, and Escape returns to the menu.
+The screen uses the original game font and integer-scaled pixels.
+
+Settings are saved in `ENGINE.CFG` in the runtime directory and loaded on the
+next launch. Explicit command line flags override saved settings. Sliders also
+display command line speed values outside their tick range without changing
+them until adjusted. Mouse input remains available on the settings screen
+even when Mouse Control is off, so it can be turned back on.
+
 Enable `--diagonal-movement` to use eight directions for movement, neighboring
 interactions, mouse cursors, and combat movement and attacks. This applies to
 keyboard and mouse controls and to AI-controlled combatants, including NPCs,
@@ -135,7 +149,7 @@ poses stay opaque with no added outline.
 The sleeping-in-bed NPC, empty manacles, and all four occupied-manacles NPC
 frames retain their complete opaque artwork with no added outline, even with
 `--transparent-sprites`.
-Sprites default to opaque when the flag is omitted. Terrain tiles remain opaque;
+Sprites default to opaque unless enabled by a flag or saved settings. Terrain tiles remain opaque;
 the original tile data is unchanged.
 
 Enable smooth movement independently with `--smooth-movement`. Each successful
@@ -158,7 +172,7 @@ For example, double both speeds with
 `--smooth-movement --movement-speed 2 --animation-speed 2`.
 Smooth movement or explicit movement speed uses timed keyboard repeats;
 otherwise keyboard repeat retains the operating system's behavior.
-Both options default to off. For example:
+Both options initially default to off. For example:
 
 ```sh
 bash scripts/run-linux.sh --fullscreen --mouse --smooth-movement --diagonal-movement

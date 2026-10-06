@@ -1,4 +1,5 @@
 #include "common/common.h"
+#include "audio/audio.h"
 #include "common/movement.h"
 #if defined(TARGET_SDL)
 #include "key/mouse.h"
@@ -1397,7 +1398,7 @@ void TOWN_141e_MainLoop(void)
                             ULTIMA_1850_PrintString(_TEXT(0x28ba, "On\n"));
                         }
 
-                        D_a9ce = !D_a9ce;
+                        AUDIO_SetSoundEnabled(!D_a9ce);
                         // 154b
                         local_c = 0;
                         break;

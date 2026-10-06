@@ -1,4 +1,5 @@
 #include "common/common.h"
+#include "audio/audio.h"
 #include "common/movement.h"
 #if defined(TARGET_SDL)
 #include "key/mouse.h"
@@ -944,7 +945,7 @@ static void MAINOUT_0a84_MainLoop(void)
                         ULTIMA_1850_PrintString(_TEXT(0x2b60, "On\n"));
                     }
                     // ?
-                    D_a9ce = !D_a9ce;
+                    AUDIO_SetSoundEnabled(!D_a9ce);
                     break;
 
                 case U5_KEY_HOME:

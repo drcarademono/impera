@@ -241,6 +241,7 @@
     <ClCompile Include="..\src\cmds.c" />
     <ClCompile Include="..\src\combat.c" />
     <ClCompile Include="..\src\common\settings.c" />
+    <ClCompile Include="..\src\common\engine_settings.c" />
     <ClCompile Include="..\src\common\debug.c" />
     <ClCompile Include="..\src\common\file.c" />
     <ClCompile Include="..\src\common\lzw.c" />
