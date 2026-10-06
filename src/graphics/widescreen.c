@@ -86,12 +86,18 @@ byte WIDE_MapTile(int dx, int dy)
 }
 
 /* Audited against TILES.16 and LOOK2.DAT: freestanding objects with plain
- * black backgrounds. Furniture with baked brick/grass and structural tiles
+ * black backgrounds. Other furniture with baked brick/grass and solid structural tiles
  * must not be treated as cutout sprites. */
 static bool HasObjectBackground(byte tile)
 {
     return tile == TILE_MAP_WELL || (tile & 0xfc) == TILE_MAP_FOUNTAIN ||
         tile == TILE_MAP_BRAZIER || tile == TILE_MAP_59 ||
+        (tile >= 0x80 && tile <= 0x83) /* animated pendulum */ ||
+        tile == TILE_MAP_84 /* stocks */ ||
+        tile == TILE_MAP_86 /* metal grate */ || tile == 0x8b /* torture rack */ ||
+        tile == 0x8e /* guillotine */ || tile == 0x99 /* portcullis */ ||
+        tile == 0xaa /* carpet */ || tile == TILE_MAP_LADDER_UP ||
+        tile == TILE_MAP_LADDER_DOWN ||
         tile == 0x88 /* cannonballs */ || tile == 0xa3 /* stack of logs */ ||
         (tile >= TILE_MAP_CANNON_B4 && tile <= TILE_MAP_CANNON_B7);
 }
@@ -258,6 +264,8 @@ bool WIDE_Compose(byte* pixels, WideLayout l)
     for(int row=0;row<l.rows;row++) for(int col=0;col<l.columns;col++) {
         int dx=col-cx,dy=row-cy;
         if(abs(dx)<=5 && abs(dy)<=5 || !WIDE_Visible(dx,dy)) continue;
+        int actorSprite=sprites[row*l.columns+col];
+        if(actorSprite>=0 && !GRAP_BUF_SpriteIsTransparent(actorSprite)) continue;
         byte tile=WIDE_MapTile(dx,dy);
         if(WIDE_GroundTile(dx,dy)!=tile)
             GRAP_BUF_DrawSprite(pixels,l.width,l.mapX+col*16,l.mapY+row*16,

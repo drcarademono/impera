@@ -114,19 +114,24 @@ neighbors). The outline can extend one pixel into adjacent map tiles and is
 clipped at the map frame. Blocking scenery to the south is drawn in front
 of overlapping sprite outlines. This also applies to expanded fullscreen maps and
 smooth movement. Fountains (all animation frames), wells, braziers, cannonballs, cannons,
-telescopes, and stacks of logs also use this flag. Their map cells
+telescopes, stacks of logs, stocks (empty or occupied), guillotines,
+torture racks, pendulums (all animation frames), metal grates, portcullises,
+carpets, and ladders also use this flag. Their map cells
 have no separate ground layer, so their background uses the most common
 immediately adjacent brick floor, grass, stone floor, or wooden floor tile
 (ties prefer that order). With no adjacent recognized ground, they stay opaque. This
 inference affects rendering only and leaves map data and interactions unchanged.
 The static-object audit checked all 256 map tiles against the tile art, object
 names, and town/castle map usage. It includes only freestanding objects with
-plain black backgrounds. Furniture such as barrels, beds, drawers, chairs,
+black backgrounds around their artwork. Furniture such as barrels, beds, drawers, chairs,
 tables, and street lamps already includes colored floor or grass pixels;
-these keep their original artwork. Walls, doors, stairs, fences, wall fixtures,
+these keep their original artwork. Solid walls, doors, stairs, fences, other wall fixtures,
 terrain, and effects also retain their original rendering.
-The sleeping-in-bed NPC sprite always retains its complete opaque artwork
-and has no added outline, even with `--transparent-sprites`.
+Chairs, tables (including food and candelabrum variants), and all seated NPC
+poses stay opaque with no added outline.
+The sleeping-in-bed NPC, empty manacles, and all four occupied-manacles NPC
+frames retain their complete opaque artwork with no added outline, even with
+`--transparent-sprites`.
 Sprites default to opaque when the flag is omitted. Terrain tiles remain opaque;
 the original tile data is unchanged.
 

@@ -115,7 +115,9 @@ int main(void)
         assert(WIDE_GroundTile(7,0)==0x44);
     }
     /* The audited object list shares the same inference and opt-in behavior. */
-    const byte cutouts[]={TILE_MAP_BRAZIER,TILE_MAP_59,0x88,0xa3,
+    const byte cutouts[]={TILE_MAP_BRAZIER,TILE_MAP_59,0x88,0xa3,TILE_MAP_84,0x8e,
+        0x80,0x81,0x82,0x83,TILE_MAP_86,0x8b,0x99,0xaa,
+        TILE_MAP_LADDER_UP,TILE_MAP_LADDER_DOWN,
         TILE_MAP_CANNON_B4,TILE_MAP_CANNON_B5,TILE_MAP_CANNON_B6,TILE_MAP_CANNON_B7};
     for(size_t i=0;i<sizeof(cutouts);i++) {
         byte tile=cutouts[i];
@@ -128,13 +130,101 @@ int main(void)
         assert(pixels[(objectY+8)*broad.width+objectX]==2);
         assert(pixels[(objectY+8)*broad.width+objectX+1]==0); /* outline */
         assert(pixels[(objectY+8)*broad.width+objectX+2]==3); /* floor */
+        D_5896_map_x=18;
+        memset(D_ab02,1,sizeof(D_ab02));
+        GetMapViewport(10,5)=tile;
+        ULTIMA_56ac_DrawMap();
+        assert(g_linearEgaBuffer0[96*320+170]==3);
+        D_5896_map_x=16;
         GRAP_BUF_SetTransparentSprites(false);
         assert(WIDE_GroundTile(7,0)==tile);
         assert(WIDE_Compose(pixels,broad));
         assert(pixels[(objectY+8)*broad.width+objectX+2]==0);
         GRAP_BUF_SetTransparentSprites(true);
     }
-    const byte opaqueObjects[]={TILE_MAP_CHAIR_90,TILE_MAP_TABLE_94,TILE_MAP_BARREL,
+    /* Empty and occupied stocks use the same grass backdrop; all occupied
+     * poses remain transparent through the existing actor sprite path. */
+    GetMap(22,16)=GetMap(24,16)=GetMap(23,17)=GetMap(23,15)=TILE_MAP_GRASS;
+    D_b11e[TILE_MAP_GRASS]=TILE_MAP_GRASS;
+    memset(tiles+TILE_MAP_GRASS*128,0x55,128);
+    for(int object=0;object<2;object++) {
+        GetMap(23,16)=object?0x8e:TILE_MAP_84;
+        assert(WIDE_GroundTile(7,0)==TILE_MAP_GRASS);
+        assert(WIDE_Compose(pixels,broad));
+        assert(pixels[(objectY+8)*broad.width+objectX+2]==5);
+    }
+    GetMap(23,16)=TILE_MAP_84;
+    D_5c5a[1]._0_tile=D_5c5a[1]._1_animTile=0x44;
+    D_5c5a[1]._2_x=23; D_5c5a[1]._3_y=16;
+    for(int frame=0;frame<4;frame++) {
+        memset(tiles+(256+0x60+frame)*128,0,128);
+        tiles[(256+0x60+frame)*128+8*8]=0x20;
+    }
+    bool stocksReflection;
+    int pose=ULTIMA_ResolveActorTile(0x44,TILE_MAP_84,5,5,&stocksReflection);
+    assert(pose>=0x60 && pose<=0x63);
+    assert(WIDE_Compose(pixels,broad));
+    assert(pixels[(objectY+8)*broad.width+objectX+2]==5);
+    memset(D_5c5a,0,sizeof(D_5c5a));
+    GetMap(22,16)=GetMap(24,16)=GetMap(23,17)=0x44;
+    /* Empty manacles and all occupied animation frames stay opaque. */
+    GetMap(23,16)=TILE_MAP_85;
+    GetMap(22,16)=GetMap(24,16)=GetMap(23,17)=0x44;
+    assert(WIDE_GroundTile(7,0)==TILE_MAP_85);
+    D_b11e[TILE_MAP_85]=TILE_MAP_85;
+    memset(tiles+TILE_MAP_85*128,0,128);
+    tiles[TILE_MAP_85*128+8*8]=0x20;
+    assert(GRAP_BUF_SpritePixel(TILE_MAP_85,2,8)==0);
+    assert(GRAP_BUF_SpritePixel(TILE_MAP_85,-1,8)==-1);
+    assert(WIDE_Compose(pixels,broad));
+    assert(pixels[(objectY+8)*broad.width+objectX+2]==0);
+    assert(pixels[(objectY+8)*broad.width+objectX-1]==3);
+    for(int frame=0x64;frame<=0x67;frame++) {
+        int sprite=256+frame;
+        memset(tiles+sprite*128,0,128);
+        tiles[sprite*128+8*8]=0x20;
+        assert(GRAP_BUF_SpritePixel(sprite,2,8)==0);
+        assert(GRAP_BUF_SpritePixel(sprite,-1,8)==-1);
+        assert(GRAP_BUF_SpritePixel(sprite,0,16)==-1);
+        GRAP_BUF_PutMapSprite(1,1,sprite);
+        assert(g_linearEgaBuffer0[32*320+26]==0);
+    }
+    D_5c5a[1]._0_tile=D_5c5a[1]._1_animTile=0x44;
+    D_5c5a[1]._2_x=23;D_5c5a[1]._3_y=16;
+    assert(WIDE_Compose(pixels,broad));
+    assert(pixels[(objectY+8)*broad.width+objectX+2]==0);
+    assert(pixels[(objectY+8)*broad.width+objectX-1]==3); /* no static underlay outline */
+    D_5896_map_x=23;
+    memset(D_ab02,1,sizeof(D_ab02));
+    GetMapViewport(5,5)=0;GetActorMap(5,5)=0x64;
+    GetMapViewport(4,5)=0x44;
+    ULTIMA_56ac_DrawMap();
+    assert(g_linearEgaBuffer0[96*320+87]==3);
+    D_5896_map_x=16;
+    memset(D_5c5a,0,sizeof(D_5c5a));
+    /* Chairs, table segments (including food/candelabrum variants), and every
+     * seated NPC animation frame preserve black pixels and have no borders. */
+    const int opaqueFurniture[]={0x90,0x91,0x92,0x93,0x94,0x95,0x96,
+        0x9a,0x9b,0x9c,0xbe,0x130,0x131,0x132,0x133,0x134,0x135,
+        0x136,0x137,0x138,0x139,0x13a,0x13b};
+    for(size_t i=0;i<sizeof(opaqueFurniture)/sizeof(opaqueFurniture[0]);i++) {
+        int tile=opaqueFurniture[i];
+        memset(tiles+tile*128,0,128);
+        tiles[tile*128+8*8]=0x20;
+        assert(!GRAP_BUF_SpriteIsTransparent(tile));
+        assert(GRAP_BUF_SpritePixel(tile,2,8)==0);
+        assert(GRAP_BUF_SpritePixel(tile,-1,8)==-1);
+        assert(GRAP_BUF_SpritePixel(tile,0,16)==-1);
+        memset(g_linearEgaBuffer0,5,320*200);
+        GRAP_BUF_PutMapSprite(1,1,tile);
+        assert(g_linearEgaBuffer0[32*320+26]==0);
+        assert(g_linearEgaBuffer0[32*320+23]==5);
+        if(tile<256) {
+            GetMap(23,16)=(byte)tile;
+            assert(WIDE_GroundTile(7,0)==tile);
+        }
+    }
+    const byte opaqueObjects[]={TILE_MAP_85,TILE_MAP_CHAIR_90,TILE_MAP_TABLE_94,TILE_MAP_BARREL,
         TILE_MAP_BED,TILE_MAP_DRESSER,TILE_MAP_DOOR_B8,TILE_MAP_FIREPLACE,0xbd};
     for(size_t i=0;i<sizeof(opaqueObjects);i++) {
         GetMap(23,16)=opaqueObjects[i];

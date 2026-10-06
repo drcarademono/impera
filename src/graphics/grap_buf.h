@@ -38,6 +38,7 @@ extern bool GRAP_BUF_HasTileset(void);
 extern byte GRAP_BUF_TilePixel(int tile, int x, int y);
 extern bool GRAP_BUF_TransparentSprites(void);
 extern void GRAP_BUF_SetTransparentSprites(bool enabled);
+extern bool GRAP_BUF_SpriteIsTransparent(int tile);
 extern int GRAP_BUF_SpritePixel(int tile, int x, int y);
 extern void GRAP_BUF_DrawSprite(byte* pixels, int stride, int x, int y, int tile,
                                 int left, int top, int right, int bottom, int dx, int dy);
