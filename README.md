@@ -152,10 +152,12 @@ including NPC poses, fountains, flames, and water effects.
 Both accept multipliers from `0.1` to `10` and default to `1`: `2` doubles the
 speed and `0.5` halves it. Sprite animation speed works with or without
 `--smooth-movement` and does not change camera transition timing or game turns.
+Movement speed also scales smooth tile transitions so held input continues
+without waiting at tile boundaries.
 For example, double both speeds with
 `--smooth-movement --movement-speed 2 --animation-speed 2`.
-Explicit movement speed uses timed keyboard repeats; without that option,
-keyboard repeat retains the operating system's behavior.
+Smooth movement or explicit movement speed uses timed keyboard repeats;
+otherwise keyboard repeat retains the operating system's behavior.
 Both options default to off. For example:
 
 ```sh

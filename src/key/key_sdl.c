@@ -116,7 +116,7 @@ void KEY_SDL_ProcessKeyDown(SDL_KeyboardEvent ev)
     u16 key = KeyboardEventToUltimaKeycode(ev);
     bool direction = (key >= (0x100 | U5_KEY_LEFT) && key <= (0x100 | U5_KEY_DOWN)) ||
                      (key >= (0x100 | U5_KEY_HOME) && key <= (0x100 | U5_KEY_PGDN));
-    if (GRAP_SDL_CustomMovementSpeed() && direction) {
+    if ((GRAP_SDL_CustomMovementSpeed() || GRAP_SDL_SmoothMovementEnabled()) && direction) {
         if (ev.repeat) return; /* use our timer rather than OS keyboard repeat */
         s_heldMovementKey = key;
         s_heldSDLKey = ev.key;
