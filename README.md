@@ -283,7 +283,8 @@ Enable **CRT Filter** in Engine Options or launch with `--crt-filter` for a
 **DOS Monitor** preset, inspired by a good late-1980s MS-DOS color CRT:
 subtle scanlines, slight horizontal phosphor softness, mild bloom and halation,
 a gentle vignette and nearly flat curvature. Brightness compensation keeps
-the image close to the original. RGB masks are disabled; there is no chromatic
+the image close to the original. A very subtle RGB grille is averaged in small
+windows to avoid colour aliasing; there is no chromatic
 aberration, noise or flicker. The filter uses lightweight SDL render passes
 with the same effect on OpenGL and software renderers. Original pixels are
 scaled before CRT processing, using the existing integer scaling in fullscreen

@@ -2,6 +2,11 @@
 #include <SDL3/SDL.h>
 #include <math.h>
 
+/* DOS Monitor preset. Keep tuning in normalized strengths. */
+static const float scanlineStrength=0.19f,maskStrength=0.075f;
+static const float bloomStrength=0.07f,vignetteStrength=0.055f;
+static const float horizontalSoftness=0.09f;
+static const float curvatureX=0.007f,curvatureY=0.010f;
 static bool enabled,active;
 static SDL_Renderer* owner;
 static SDL_Texture *frame,*soft,*glow,*halo,*mask;
@@ -31,17 +36,21 @@ void CRT_BeginFrame(SDL_Renderer* renderer)
         if(surface) {
             /* VGA doubles 200-line DOS modes to approximately 400 beam lines.
              * Below that output resolution average the beam to avoid aliasing.
-             * The DOS Monitor preset disables RGB stripes by default; all
-             * channels remain aligned and neutral. */
+             * A fine RGB grille modulates intensity only, never channel
+             * positions. Average it in small windows to avoid colour aliasing. */
             for(int y=0;y<h;y++) {
                 Uint32* pixels=(Uint32*)((byte*)surface->pixels+y*surface->pitch);
-                float beam=h>=800?0.925f+0.075f*cosf(6.2831853f*y*400.0f/h):0.925f;
+                float beam=1-scanlineStrength*0.5f;
+                if(h>=800) beam+=scanlineStrength*0.5f*cosf(6.2831853f*y*400.0f/h);
                 float ny=2.0f*(y+0.5f)/h-1;
                 for(int x=0;x<w;x++) {
                     float nx=2.0f*(x+0.5f)/w-1;
-                    float edge=1-0.04f*(nx*nx+ny*ny);
+                    float edge=1-vignetteStrength*0.5f*(nx*nx+ny*ny);
                     int rgb[3];
-                    for(int c=0;c<3;c++) rgb[c]=(int)(255*beam*edge);
+                    for(int c=0;c<3;c++) {
+                        float grille=w>=640?(x%3==c?1:1-maskStrength):1-maskStrength*2/3;
+                        rgb[c]=(int)(255*beam*edge*grille);
+                    }
                     pixels[x]=0xff000000u|(rgb[0]<<16)|(rgb[1]<<8)|rgb[2];
                 }
             }
@@ -53,7 +62,8 @@ void CRT_BeginFrame(SDL_Renderer* renderer)
         SDL_SetTextureBlendMode(frame,SDL_BLENDMODE_NONE);
         SDL_SetTextureScaleMode(frame,SDL_SCALEMODE_LINEAR);
         SDL_SetTextureBlendMode(glow,SDL_BLENDMODE_ADD);
-        SDL_SetTextureColorMod(glow,20,20,20);
+        Uint8 bloom=(Uint8)(255*bloomStrength+0.5f);
+        SDL_SetTextureColorMod(glow,bloom,bloom,bloom);
         SDL_SetTextureBlendMode(halo,SDL_BLENDMODE_ADD);
         SDL_SetTextureColorMod(halo,10,10,10);
         SDL_SetTextureScaleMode(halo,SDL_SCALEMODE_LINEAR);
@@ -75,8 +85,8 @@ static void ScreenMesh(SDL_Renderer* renderer,SDL_Texture* texture,int intensity
     for(int y=0;y<=rows;y++) for(int x=0;x<=columns;x++) {
         float u=(float)x/columns,v=(float)y/rows,nx=2*u-1,ny=2*v-1;
         SDL_Vertex* vertex=&vertices[y*(columns+1)+x];
-        vertex->position=(SDL_FPoint){width*(0.5f+0.5f*nx*(1-0.015f*ny*ny)),
-                                      height*(0.5f+0.5f*ny*(1-0.020f*nx*nx))};
+        vertex->position=(SDL_FPoint){width*(0.5f+0.5f*nx*(1-curvatureX*ny*ny)),
+                                      height*(0.5f+0.5f*ny*(1-curvatureY*nx*nx))};
         float brightness=intensity/255.0f;
         vertex->color=(SDL_FColor){brightness,brightness,brightness,1};
         vertex->tex_coord=(SDL_FPoint){u,v};
@@ -98,7 +108,8 @@ void CRT_EndFrame(SDL_Renderer* renderer)
     SDL_SetTextureColorMod(frame,209,209,209);
     SDL_RenderTexture(renderer,frame,NULL,NULL);
     SDL_SetTextureBlendMode(frame,SDL_BLENDMODE_ADD);
-    SDL_SetTextureColorMod(frame,13,13,13);
+    Uint8 softness=(Uint8)(255*horizontalSoftness*0.5f+0.5f);
+    SDL_SetTextureColorMod(frame,softness,softness,softness);
     float horizontal=width/320.0f*0.30f,vertical=height/200.0f*0.20f;
     SDL_FRect left={-horizontal,0,width,height},right={horizontal,0,width,height};
     SDL_RenderTexture(renderer,frame,NULL,&left);SDL_RenderTexture(renderer,frame,NULL,&right);
@@ -115,7 +126,10 @@ void CRT_EndFrame(SDL_Renderer* renderer)
     SDL_SetTextureBlendMode(soft,SDL_BLENDMODE_NONE);ScreenMesh(renderer,soft,255);
     SDL_RenderTexture(renderer,mask,NULL,NULL);
     /* Compensate beam attenuation rather than leaving the display darker. */
-    SDL_SetTextureBlendMode(soft,SDL_BLENDMODE_ADD);ScreenMesh(renderer,soft,10);
+    SDL_SetTextureBlendMode(soft,SDL_BLENDMODE_ADD);float reconstruction=(209+2*softness+6)/255.0f+bloomStrength+10/255.0f;
+    float attenuation=(1-scanlineStrength*0.5f)*(1-maskStrength*2/3);
+    int compensation=(int)(255*(1.02f/reconstruction-attenuation)+0.5f);
+    ScreenMesh(renderer,soft,compensation);
     SDL_SetTextureBlendMode(soft,SDL_BLENDMODE_NONE);
 }
 void CRT_ResumeFrame(SDL_Renderer* renderer)

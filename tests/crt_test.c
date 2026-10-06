@@ -19,11 +19,12 @@ int main(void)
     assert(red(output,480,400)==255); /* disabled filter is an exact bypass */
     CRT_SetEnabled(true);CRT_BeginFrame(r);white(r);finish(r);
     assert(red(output,480,400)>red(output,480,401)+10); /* resolvable scanlines */
-    assert(red(output,480,400)>red(output,480,0)); /* restrained edge shading */
+    assert(red(output,480,400)+red(output,480,401)>red(output,480,0)+red(output,480,1)); /* restrained edge shading */
     Uint8 a,b,c,d,e,f,g,h;
-    assert(SDL_ReadSurfacePixel(output,480,400,&a,&b,&c,&d));
-    assert(SDL_ReadSurfacePixel(output,481,400,&e,&f,&g,&h));
-    assert(a==b && b==c && e==f && f==g); /* neutral, aligned phosphors */
+    assert(SDL_ReadSurfacePixel(output,480,401,&a,&b,&c,&d));
+    assert(SDL_ReadSurfacePixel(output,481,401,&e,&f,&g,&h));
+    assert(a>b && a>c && f>e && f>g); /* fine RGB grille, aligned channels */
+    assert(a-b<=20 && f-e<=20); /* restrained mask strength */
     assert((red(output,480,400)+red(output,480,401))/2>=240); /* brightness retained */
     assert(red(output,0,0)==0); /* nearly flat curved corners */
     size_t bytes=(size_t)output->pitch*output->h;
