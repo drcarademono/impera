@@ -355,6 +355,26 @@ int main(int argc, char** argv)
     ticks+=400;
     assert(MOUSE_PollCommand()==0); /* discard stale click targets */
     D_5896_map_x--;
+    /* Smooth keyboard movement must not depend on OS repeat events, even
+     * without an explicit movement-speed option. */
+    assert(!GRAP_SDL_CustomMovementSpeed());
+    GRAP_SDL_SetSmoothMovement(true);
+    SDL_Event smoothKey={0};
+    smoothKey.type=SDL_EVENT_KEY_DOWN;
+    smoothKey.key.key=SDLK_RIGHT;
+    SDL_PushEvent(&smoothKey);
+    assert(KEY_PollKey()==U5_KEY_RIGHT);
+    ticks+=111;
+    assert(KEY_PollKey()==0);
+    ticks++;
+    assert(KEY_PollKey()==U5_KEY_RIGHT);
+    ticks+=112;
+    assert(KEY_PollKey()==U5_KEY_RIGHT);
+    smoothKey.type=SDL_EVENT_KEY_UP;
+    SDL_PushEvent(&smoothKey);
+    ticks+=112;
+    assert(KEY_PollKey()==0);
+    GRAP_SDL_SetSmoothMovement(false);
     cursorX=448; cursorY=537.6f;
     MOUSE_Button(cursorX,cursorY,SDL_BUTTON_RIGHT,true,1);
     assert(MOUSE_PollCommand()==U5_KEY_PGDN);
@@ -456,6 +476,8 @@ int main(int argc, char** argv)
     GRAP_SDL_SetSmoothMovement(true);
     assert(GRAP_SDL_MovementInterval()==112);
     ANIMATION_SetSpeed(2);
+    GRAP_SDL_SetMovementSpeed(2);
+    assert(GRAP_SDL_MovementInterval()==56);
     memset(g_linearEgaBuffer0,0,320*200);
     g_linearEgaBuffer0[0]=10;
     for (int y=8;y<184;y++) memset(g_linearEgaBuffer0+y*320+40,12,4);
@@ -476,7 +498,8 @@ int main(int argc, char** argv)
     GRAP_SDL_MapDrawn(); GRAP_SDL_FlushFrame();
     checkAnimation=false;
     assert(presented==9); /* eight intermediate frames plus the completed frame */
-    assert(animationDelay==112); /* sprite speed never changes movement transitions */
+    assert(animationDelay==56); /* transition duration matches held movement cadence */
+    GRAP_SDL_SetMovementSpeed(1);
     ANIMATION_SetSpeed(1);
     assert(previousMarkerX==initialMarkerX-16*l.scale);
     presented=0;

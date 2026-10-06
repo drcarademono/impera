@@ -94,7 +94,9 @@ void GRAP_SDL_SetMovementSpeed(float speed) { s_movementSpeed = speed; s_customM
 bool GRAP_SDL_CustomMovementSpeed(void) { return s_customMovementSpeed; }
 unsigned int GRAP_SDL_MovementInterval(void)
 {
-    return (unsigned int)SDL_roundf((s_smoothMovement ? 112.0f : 160.0f) / s_movementSpeed);
+    /* Match the seven frame waits exactly, including millisecond rounding. */
+    if (s_smoothMovement) return 7 * (unsigned int)SDL_roundf(16.0f / s_movementSpeed);
+    return (unsigned int)SDL_roundf(160.0f / s_movementSpeed);
 }
 void GRAP_SDL_MapDrawn(void) { s_mapDrawn = true; }
 
@@ -398,7 +400,7 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
                 SDL_RenderPresent(s_sdlRenderer);
                 SDL_PumpEvents();
                 MOUSE_UpdateCursor();
-                if (frame < 8) SDL_Delay(16);
+                if (frame < 8) SDL_Delay((Uint32)SDL_roundf(16.0f / s_movementSpeed));
             }
             SDL_DestroyTexture(playerTexture);
             for (int i=0;i<32;i++) SDL_DestroyTexture(actorTextures[i]);
