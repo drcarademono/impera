@@ -318,6 +318,23 @@ int main(void)
     D_58a5 = 2;
     assert(WIDE_Compose(pixels, broad));
     assert(pixel(pixels, broad, 7, 0) == 0);
+    /* Dither coverage preserves unseen cells and fades only visible edges. */
+    byte savedTown[sizeof(D_6608_map.town)],savedView[sizeof(D_ab02)];
+    memcpy(savedTown,D_6608_map.town,sizeof(savedTown));memcpy(savedView,D_ab02,sizeof(savedView));
+    memset(D_6608_map.town,1,sizeof(D_6608_map.town));memset(D_ab02,1,sizeof(D_ab02));
+    D_58a5=50;D_5896_map_x=D_5897_map_y=16;
+    byte mask[176*176],again[176*176];
+    assert(!WIDE_DitheredDarkness());WIDE_SetDitheredDarkness(true);assert(WIDE_DitheredDarkness());
+    assert(WIDE_DarknessMask(mask,11,11));
+    for(int i=0;i<176*176;i++) assert(mask[i]==0); /* clear daylight stays clear */
+    GetMapViewport(8,5)=255;
+    assert(WIDE_DarknessMask(mask,11,11));assert(WIDE_DarknessMask(again,11,11));
+    assert(!memcmp(mask,again,sizeof(mask))); /* stable pattern input */
+    assert(mask[(5*16+8)*176+8*16+8]==16); /* cannot reveal hidden terrain */
+    assert(mask[(5*16+8)*176+7*16+14]>mask[(5*16+8)*176+7*16+1]);
+    assert(mask[(5*16+8)*176+5*16+8]==0); /* player remains clear */
+    WIDE_SetDitheredDarkness(false);
+    memcpy(D_6608_map.town,savedTown,sizeof(savedTown));memcpy(D_ab02,savedView,sizeof(savedView));
     D_58a5 = 50;
     D_5896_map_x = 31;
     assert(WIDE_Compose(pixels, broad));

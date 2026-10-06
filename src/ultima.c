@@ -40,6 +40,7 @@ extern int g_enableDebugOverlay;
 #include "graphics/animate.h"
 #include "key/mouse.h"
 #include "common/engine_settings.h"
+#include "graphics/widescreen.h"
 #endif
 
 // 0000
@@ -86,11 +87,13 @@ int CDECL main(int argc, char** argv/*, char** envp*/)
         }
         else if (strcmp(argv[arg], "--transparent-sprites") == 0)
             GRAP_BUF_SetTransparentSprites(true);
+        else if (strcmp(argv[arg], "--dithered-darkness") == 0)
+            WIDE_SetDitheredDarkness(true);
         else if (strcmp(argv[arg], "--legacy-save") == 0)
             SLOTS_SetLegacyEnabled(true);
         else if (strcmp(argv[arg], "--help") == 0)
         {
-            puts("Usage: ultima5 [--fullscreen] [--mouse] [--smooth-movement] [--movement-speed N] [--animation-speed N] [--diagonal-movement] [--transparent-sprites] [--legacy-save] [C|H|T|E]\n"
+            puts("Usage: ultima5 [--fullscreen] [--mouse] [--smooth-movement] [--movement-speed N] [--animation-speed N] [--diagonal-movement] [--transparent-sprites] [--dithered-darkness] [--legacy-save] [C|H|T|E]\n"
                  "  --fullscreen       Expand the overhead map with uniform integer pixel scaling.\n"
                  "  --mouse            Enable mouse movement and contextual actions.\n"
                  "  --diagonal-movement Enable diagonal movement, actions, cursors and combat.\n"
@@ -98,6 +101,7 @@ int CDECL main(int argc, char** argv/*, char** envp*/)
                  "  --movement-speed N Held movement speed multiplier (0.1 to 10; default 1).\n"
                  "  --animation-speed N Animated sprite speed multiplier (0.1 to 10; default 1).\n"
                  "  --transparent-sprites Show ground through black sprite backgrounds with a one-pixel outline.\n"
+                 "  --dithered-darkness Fade visibility edges with a retro pixel pattern.\n"
                  "  --legacy-save      Show Legacy Save in the load menu when original save files are valid.");
             return EXIT_SUCCESS;
         }

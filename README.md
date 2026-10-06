@@ -123,6 +123,7 @@ even when Mouse Control is off, so it can be turned back on.
 | Mouse Control | Enable map movement and contextual actions; options menus remain clickable when off. |
 | Smooth Movement | Animate camera scrolling and visible actor steps. |
 | Diagonal Movement | Enable eight-way movement, neighboring actions, and combat. |
+| Dithered Darkness | Fade visibility edges with an Ultima 6-style ordered pixel pattern. |
 | Transparent Sprites | Reveal ground around character and supported object sprites. |
 | Music | Enable or mute external music playback. |
 | Sound Effects | Enable or mute WAV overrides and synthesized effects. |
@@ -274,6 +275,19 @@ Movement speed also scales smooth tile transitions so held input continues
 without waiting at tile boundaries.
 Smooth movement uses timed keyboard repeats so held input continues across tile
 boundaries; otherwise keyboard repeat retains the operating system's behavior.
+
+### Dithered darkness
+
+Enable **Dithered Darkness** in Engine Options for an Ultima 6-style pixel-pattern
+fade along night-time and line-of-sight boundaries. It is off by default. The
+player's tile stays clear, fully unseen terrain stays black, and gameplay
+visibility rules are unchanged. The pattern uses original game pixels and stays
+stationary during smooth scrolling. It works in windowed and expanded fullscreen
+overhead views; combat and dungeon perspective views keep their usual rendering.
+
+The matching launch flag is `--dithered-darkness`. Like other Engine Options,
+the setting is saved in `ENGINE.CFG`; the flag enables it for startup and overrides
+the saved value.
 
 ### Transparent sprites
 

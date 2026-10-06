@@ -4,6 +4,7 @@
 #include "graphics/grap_sdl.h"
 #include "graphics/grap_buf.h"
 #include "graphics/animate.h"
+#include "graphics/widescreen.h"
 #include "key/mouse.h"
 #include "audio/audio.h"
 #include "vars.h"
@@ -15,9 +16,9 @@
 #include <math.h>
 
 static const char* keys[]={"fullscreen","mouse","smooth","diagonal","transparent",
-    "music","sound","movement_speed","animation_speed"};
+    "dithered_darkness","music","sound","movement_speed","animation_speed"};
 static const char* labels[]={"Fullscreen","Mouse Control","Smooth Movement","Diagonal Movement",
-    "Transparent Sprites","Music","Sound Effects","Movement Speed","Animation Speed"};
+    "Transparent Sprites","Dithered Darkness","Music","Sound Effects","Movement Speed","Animation Speed"};
 static const float ticks[]={0.5f,0.75f,1.0f};
 float ENGINE_Get(int row)
 {
@@ -27,6 +28,7 @@ float ENGINE_Get(int row)
     case ENGINE_SMOOTH:return GRAP_SDL_SmoothMovementEnabled();
     case ENGINE_DIAGONAL:return MOVEMENT_Diagonal();
     case ENGINE_TRANSPARENT:return GRAP_BUF_TransparentSprites();
+    case ENGINE_DITHERED_DARKNESS:return WIDE_DitheredDarkness();
     case ENGINE_MUSIC:return AUDIO_MusicEnabled();
     case ENGINE_SOUND:return AUDIO_SoundEnabled();
     case ENGINE_MOVEMENT_SPEED:return GRAP_SDL_MovementSpeed();
@@ -46,6 +48,7 @@ void ENGINE_Set(int row,float value)
     case ENGINE_SMOOTH:GRAP_SDL_SetSmoothMovement(value!=0);break;
     case ENGINE_DIAGONAL:MOVEMENT_SetDiagonal(value!=0);break;
     case ENGINE_TRANSPARENT:GRAP_BUF_SetTransparentSprites(value!=0);break;
+    case ENGINE_DITHERED_DARKNESS:WIDE_SetDitheredDarkness(value!=0);break;
     case ENGINE_MUSIC:AUDIO_SetMusicEnabled(value!=0);break;
     case ENGINE_SOUND:AUDIO_SetSoundEnabled(value!=0);break;
     case ENGINE_MOVEMENT_SPEED:GRAP_SDL_SetMovementSpeed(value);break;
@@ -102,7 +105,7 @@ void ENGINE_UIFrame(void)
     ENGINE_UIRect(7,7,306,1,15);ENGINE_UIRect(7,7,1,186,15);
     ENGINE_UIRect(312,7,1,186,15);ENGINE_UIRect(7,192,306,1,15);
 }
-static int rowY(int row) { return row<7 ? 40+row*14 : row==7?140:row==8?160:180; }
+static int rowY(int row) { return row<ENGINE_MOVEMENT_SPEED ? 40+row*12 : row==ENGINE_MOVEMENT_SPEED?140:row==ENGINE_ANIMATION_SPEED?160:180; }
 static bool s_gameplay;
 void ENGINE_DrawSettings(int selected)
 {

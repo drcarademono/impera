@@ -55,6 +55,7 @@ static bool confirmAimOnPoll;
 static bool checkAnimation;
 static bool checkWater;
 static bool checkDarkness;
+static bool checkDither;
 static bool checkEdges;
 static bool edgeBright=true;
 static int lightX,lightY,darkX;
@@ -91,6 +92,18 @@ bool __wrap_SDL_RenderPresent(SDL_Renderer* renderer)
         Uint8 r,g,b,a;
         assert(SDL_ReadSurfacePixel(image,waterMap.x+1,waterMap.y+1,&r,&g,&b,&a));
         assert(r==0 && g==0 && b==(edgeBright?170:0)); /* completed map retained during UI-only flush */
+        SDL_DestroySurface(image);
+    }
+    if(checkDither) {
+        SDL_Surface* image=SDL_RenderReadPixels(renderer,NULL);assert(image);
+        int dark=0,lit=0;
+        for(int y=4;y<8;y++) for(int x=4;x<8;x++) {
+            Uint8 r,g,b,a;
+            assert(SDL_ReadSurfacePixel(image,lightX-2+x*3,lightY-8*3+y*3,&r,&g,&b,&a));
+            assert(r==0 && g==0 && (b==0 || b==170));
+            dark+=b==0;lit+=b==170;
+        }
+        assert(dark>0 && lit>0);
         SDL_DestroySurface(image);
     }
     if(checkDarkness) {
@@ -134,7 +147,7 @@ bool __wrap_SDL_RenderPresent(SDL_Renderer* renderer)
     bool result=__real_SDL_RenderPresent(renderer);
     /* Present invalidates the SDL backbuffer. Simulate a renderer that discards
      * it, so a second present without a full redraw cannot pass by accident. */
-    if(checkAnimation || checkActor || checkWater || checkDarkness) {
+    if(checkAnimation || checkActor || checkWater || checkDarkness || checkDither) {
         SDL_SetRenderDrawColor(renderer,255,0,255,255);
         SDL_RenderClear(renderer);
         SDL_SetRenderDrawColor(renderer,0,0,0,255);
@@ -687,6 +700,12 @@ int main(int argc, char** argv)
         GRAP_SDL_MapDrawn();GRAP_SDL_FlushFrame();
         checkDarkness=false;assert(presented==9);
     }
+    D_58a5=2;
+    WIDE_SetDitheredDarkness(true);
+    checkDither=true;GRAP_SDL_MapDrawn();GRAP_SDL_FlushFrame();
+    D_5896_map_x++;D_5897_map_y++;
+    GRAP_SDL_MapDrawn();GRAP_SDL_FlushFrame();checkDither=false;
+    WIDE_SetDitheredDarkness(false);
     D_58a5=50;
     D_5893_map_id=1;D_5896_map_x=16;D_5897_map_y=16;
     memset(D_6608_map.town,1,sizeof(D_6608_map.town));
