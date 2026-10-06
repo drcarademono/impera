@@ -54,6 +54,8 @@ static int presented;
 static bool confirmAimOnPoll;
 static bool checkAnimation;
 static bool checkWater;
+static bool checkDarkness;
+static int lightX,lightY,darkX;
 static SDL_Rect waterMap;
 static int animationRow, playerScreenX, previousMarkerX;
 static bool checkActor;
@@ -80,6 +82,15 @@ bool __wrap_SDL_RenderPresent(SDL_Renderer* renderer)
         assert(SDL_ReadSurfacePixel(image,marker+8*3,actorRow-3*3,&r,&g,&b,&a));
         if(D_5893_map_id<128) assert(r==0 && g==0 && b==(transparentSprites?170:0));
         actorMarker=marker;
+        SDL_DestroySurface(image);
+    }
+    if(checkDarkness) {
+        SDL_Surface* image=SDL_RenderReadPixels(renderer,NULL);assert(image);
+        Uint8 r,g,b,a;
+        assert(SDL_ReadSurfacePixel(image,lightX,lightY,&r,&g,&b,&a));
+        assert(r==0 && g==0 && b==170); /* light stays centered on player */
+        assert(SDL_ReadSurfacePixel(image,darkX,lightY,&r,&g,&b,&a));
+        assert(r==0 && g==0 && b==0); /* hidden ground never slides into view */
         SDL_DestroySurface(image);
     }
     if(checkWater) {
@@ -114,7 +125,7 @@ bool __wrap_SDL_RenderPresent(SDL_Renderer* renderer)
     bool result=__real_SDL_RenderPresent(renderer);
     /* Present invalidates the SDL backbuffer. Simulate a renderer that discards
      * it, so a second present without a full redraw cannot pass by accident. */
-    if(checkAnimation || checkActor || checkWater) {
+    if(checkAnimation || checkActor || checkWater || checkDarkness) {
         SDL_SetRenderDrawColor(renderer,255,0,255,255);
         SDL_RenderClear(renderer);
         SDL_SetRenderDrawColor(renderer,0,0,0,255);
@@ -628,6 +639,30 @@ int main(int argc, char** argv)
         GRAP_SDL_MapDrawn();GRAP_SDL_FlushFrame();
         checkWater=false;assert(presented==9);
     }
+    /* Darkness is a stationary visibility mask, not part of scrolling terrain. */
+    D_58a5=2;memset(tiles+128,0x11,128);
+    for(int yy=0;yy<11;yy++) for(int xx=0;xx<11;xx++) {
+        bool visible=(xx-5)*(xx-5)+(yy-5)*(yy-5)<=2;
+        GetMapViewport(xx,yy)=visible?1:255;
+        for(int py=0;py<16;py++) memset(g_linearEgaBuffer0+(8+yy*16+py)*320+8+xx*16,visible?1:0,16);
+    }
+    lightX=waterMap.x+(l.columns/2-1)*16*l.scale+2;
+    lightY=waterMap.y+(l.rows/2)*16*l.scale+8*l.scale;
+    darkX=waterMap.x+(l.columns/2-2)*16*l.scale+8*l.scale;
+    /* Also test daylight with an occluded central mask: the engine's LOS
+     * result must win over the expanded view's independent visibility test. */
+    for(int lighting=0;lighting<2;lighting++)
+    for(int sy=-1;sy<=1;sy++) for(int sx=-1;sx<=1;sx++) {
+        if(!sx && !sy) continue;
+        D_58a5=lighting?50:2;
+        D_5896_map_x=100;D_5897_map_y=100;GRAP_SDL_SetSmoothMovement(true);
+        GRAP_SDL_MapDrawn();GRAP_SDL_FlushFrame();
+        D_5896_map_x+=sx;D_5897_map_y+=sy;
+        checkDarkness=true;presented=0;
+        GRAP_SDL_MapDrawn();GRAP_SDL_FlushFrame();
+        checkDarkness=false;assert(presented==9);
+    }
+    D_58a5=50;
     D_5893_map_id=1;D_5896_map_x=16;D_5897_map_y=16;
     memset(D_6608_map.town,1,sizeof(D_6608_map.town));
     D_b11e[1]=1;

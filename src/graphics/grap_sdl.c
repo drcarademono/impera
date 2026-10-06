@@ -365,15 +365,18 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
         /* One padded current map covers all exposed edges, including diagonal
          * corner gaps. Never splice old/new water animation phases together. */
         int paddedWidth=(columns+2)*16,paddedHeight=(rows+2)*16;
-        SDL_Surface* padded=SDL_CreateSurface(paddedWidth,paddedHeight,SDL_PIXELFORMAT_ARGB8888);
+        bool* hidden=calloc((size_t)columns*rows,sizeof(bool));
+        SDL_Surface* padded=hidden?SDL_CreateSurface(paddedWidth,paddedHeight,SDL_PIXELFORMAT_ARGB8888):NULL;
         if(padded) for(int row=-1;row<=rows;row++) for(int col=-1;col<=columns;col++) {
             bool interior=col>=0 && col<columns && row>=0 && row<rows;
             int tx=col-columns/2,ty=row-rows/2;
-            bool visible=interior || (!combat && WIDE_Visible(tx,ty) && WIDE_MapTile(tx,ty)!=255);
+            bool lit=combat || (abs(tx)<=5 && abs(ty)<=5 ? GetMapViewport(tx+5,ty+5)!=255 : WIDE_Visible(tx,ty));
+            if(interior) hidden[row*columns+col]=!lit;
+            bool valid=WIDE_MapTile(tx,ty)!=255;
             for(int y=0;y<16;y++) {
                 Uint32* dest=(Uint32*)((byte*)padded->pixels+((row+1)*16+y)*padded->pitch)+(col+1)*16;
-                if(interior) memcpy(dest,(byte*)clean->pixels+(mapY+row*16+y)*clean->pitch+(mapX+col*16)*4,16*4);
-                else for(int x=0;x<16;x++) dest[x]=s_egaPalette[visible?WIDE_TerrainPixel(tx,ty,x,y)&15:0];
+                if(interior && (combat || lit)) memcpy(dest,(byte*)clean->pixels+(mapY+row*16+y)*clean->pitch+(mapX+col*16)*4,16*4);
+                else for(int x=0;x<16;x++) dest[x]=s_egaPalette[valid?WIDE_TerrainPixel(tx,ty,x,y)&15:0];
             }
         }
         SDL_Texture* next=padded?SDL_CreateTextureFromSurface(s_sdlRenderer,padded):NULL;
@@ -433,6 +436,13 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
                     }
                 }
                 if (playerTexture) SDL_RenderTexture(s_sdlRenderer,playerTexture,NULL,&playerDst);
+                /* Visibility belongs to the player/camera, not to the scrolling
+                 * texture. Use the authoritative central mask and the expanded
+                 * LOS mask, covering sprites as well as ground. */
+                if(!combat) for(int row=0;row<rows;row++) for(int col=0;col<columns;col++) if(hidden[row*columns+col]) {
+                    SDL_FRect shadow={mapDst.x+col*16*sx,mapDst.y+row*16*sy,16*sx,16*sy};
+                    SDL_RenderFillRect(s_sdlRenderer,&shadow);
+                }
                 SDL_SetRenderClipRect(s_sdlRenderer,NULL);
                 SDL_RenderPresent(s_sdlRenderer);
                 SDL_PumpEvents();
@@ -443,6 +453,7 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
             for (int i=0;i<32;i++) SDL_DestroyTexture(actorTextures[i]);
         }
         SDL_DestroyTexture(next);
+        free(hidden);
         /* The caller still presents the completed frame (and may capture it).
          * Rebuild that backbuffer after the last interpolation presentation. */
         SDL_RenderClear(s_sdlRenderer);
