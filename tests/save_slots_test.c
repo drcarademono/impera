@@ -29,6 +29,20 @@ static SDL_EnumerationResult cleanup(void* unused,const char* directory,const ch
     for(int i=0;i<4;i++) { SDL_snprintf(file,sizeof(file),"%s/%s",dir,parts[i]);SDL_RemovePath(file); }
     SDL_RemovePath(dir);return SDL_ENUM_CONTINUE;
 }
+static char initialIds[4][41];static int initialCount;
+static SDL_EnumerationResult initialSlots(void* unused,const char* dir,const char* id)
+{
+    (void)unused;
+    if(id[0]=='.') return SDL_ENUM_CONTINUE;
+    char file[512],name[40];SDL_snprintf(file,sizeof(file),"%s/%s/meta.txt",dir,id);
+    FILE* f=FILE_Open(file,"r");assert(f);assert(fgets(name,sizeof(name),f));
+    unsigned long long ms;assert(fscanf(f,"%llu",&ms)==1);
+    unsigned int map,level,x,y;assert(fscanf(f," location %u %u %u %u",&map,&level,&x,&y)==4);
+    assert((map==13 || map==2) && level==0);fclose(f);
+    assert(!strcmp(name,"New Hero\n") && ms==0);
+    assert(initialCount<4);SDL_strlcpy(initialIds[initialCount++],id,41);
+    return SDL_ENUM_CONTINUE;
+}
 static int step;
 static bool reloadCalled;
 static void reload(void) { reloadCalled=true; }
@@ -54,12 +68,18 @@ static Uint32 deleteInput(void* unused,SDL_TimerID id,Uint32 interval)
     assert(SDL_PushEvent(&e));return deleteStep==4?0:50;
 }
 static bool captureBrowser;
+static int expectedLocation=-1;
 static bool checkDrag, sawDrag;
 static bool checkNoLegacy, sawNoLegacy;
 bool __real_SDL_RenderPresent(SDL_Renderer* renderer);
 bool __wrap_SDL_RenderPresent(SDL_Renderer* renderer)
 {
     bool presented=__real_SDL_RenderPresent(renderer);
+    if(expectedLocation>=0) {
+        for(int y=0;y<8;y++) for(int x=0;x<8;x++)
+            assert(g_linearEgaBuffer0[(49+y)*320+20+x]==((D_539c[0][expectedLocation*8+y]&(0x80>>x))?0:15));
+        expectedLocation=-1;
+    }
     if(checkDrag && g_linearEgaBuffer0[173*320+300]==15) {
         assert(g_linearEgaBuffer0[56*320+300]==7);
         sawDrag=true;
@@ -203,6 +223,36 @@ int main(void)
     assert(SDL_AddTimer(50,deleteInput,NULL));assert(!SLOTS_ShowLoad());
     assert(!SLOTS_Load("900"));
     assert(!SLOTS_Delete("900"));
+    /* New-character state becomes an ordinary named slot, with fresh worlds. */
+    char location[64];
+    SLOTS_LocationName(2,0,location,sizeof(location));assert(!strcmp(location,"Britain"));
+    SLOTS_LocationName(0,0,location,sizeof(location));assert(!strcmp(location,"Britannia"));
+    SLOTS_LocationName(0,255,location,sizeof(location));assert(!strcmp(location,"Underworld"));
+    SLOTS_LocationName(33,3,location,sizeof(location));assert(!strcmp(location,"Dungeon Deceit"));
+    SLOTS_LocationName(17,0,location,sizeof(location));assert(!strcmp(location,"Lord British's Castle"));
+    SLOTS_LocationName(255,0,location,sizeof(location));assert(!strcmp(location,"Unknown Location"));
+    SDL_EnumerateDirectory("SAVEGAME/slots",cleanup,NULL);
+    strcpy(D_55a8_party[0].name,"New Hero");D_57a8=678;D_5893_map_id=13;D_5895_map_level=0;
+    memset(D_b21e,0,256);memset(D_b31e,0xab,256);
+    writeWorld("SAVEGAME/BRIT.OOL",0x12,256);writeWorld("SAVEGAME/UNDER.OOL",0x34,256);
+    assert(SLOTS_CreateInitial());
+    D_57a8=789;D_5893_map_id=2;D_5896_map_x=15;D_5897_map_y=30;
+    assert(SLOTS_CreateInitial());
+    SDL_EnumerateDirectory("SAVEGAME/slots",initialSlots,NULL);assert(initialCount==2);
+    /* Journey Onward's ordinary menu selects the newest game with legacy off. */
+    SLOTS_SetLegacyEnabled(false);D_57a8=0;
+    expectedLocation='B';
+    assert(SDL_AddTimer(50,accept,NULL));assert(SLOTS_ShowLoad());assert(expectedLocation==-1);
+    assert(FILE_ReadSavegameFile("SAVED.GAM")==0);assert(D_57a8==789);
+    assert(!strcmp(D_55a8_party[0].name,"New Hero"));assert(D_5893_map_id==2);
+    f=FILE_Open("SAVEGAME/SAVED.OOL","rb");assert(f);
+    for(int i=0;i<512;i++) assert(fgetc(f)==(i<256?0:0xab));fclose(f);
+    /* Older two-line metadata remains loadable. */
+    const char* latest=strcmp(initialIds[0],initialIds[1])>0?initialIds[0]:initialIds[1];
+    char meta[512];SDL_snprintf(meta,sizeof(meta),"SAVEGAME/slots/%s/meta.txt",latest);
+    f=FILE_Open(meta,"w");assert(f);assert(fputs("Old Format\n123\n",f)>=0);fclose(f);
+    assert(SLOTS_Load(latest));expectedLocation='U';
+    assert(SDL_AddTimer(50,cancel,NULL));assert(!SLOTS_ShowLoad());assert(expectedLocation==-1);
     D_539c[0]=NULL;GRAP_Cleanup();SDL_Quit();
     puts("90+ named slots, party/world round trip, play time, failed overwrite, corrupt load and browser input passed");
     return 0;

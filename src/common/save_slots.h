@@ -3,6 +3,8 @@
 #include "common.h"
 #if defined(TARGET_SDL)
 void SLOTS_SetLegacyEnabled(bool enabled);
+bool SLOTS_CreateInitial(void);
+void SLOTS_LocationName(unsigned int map,unsigned int level,char* out,size_t capacity);
 void SLOTS_ResetTime(void);
 void SLOTS_StartTime(void);
 bool SLOTS_ShowSave(void);

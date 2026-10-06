@@ -80,15 +80,37 @@ bool SLOTS_Delete(const char* id)
     }
     return SDL_RemovePath(dir);
 }
-static bool metadata(const char* dir,char* name,uint64_t* ms)
+void SLOTS_LocationName(unsigned int map,unsigned int level,char* out,size_t capacity)
+{
+    const char* raw="Unknown Location";
+    if(map==0) raw=level==0?"Britannia":"Underworld";
+    else if(map==0x11) raw="Lord British's Castle";
+    else if(map==0x12) raw="Blackthorn's Palace";
+    else if(map>=1 && map<=40 && D_1e3a[map-1]) raw=D_1e3a[map-1];
+    char name[64];SDL_strlcpy(name,raw,sizeof(name));
+    bool word=true;
+    for(char* p=name;*p;p++) {
+        if(*p>='A' && *p<='Z' && !word) *p+=32;
+        word=*p==' ' || *p=='-';
+    }
+    SDL_snprintf(out,capacity,map>=33 && map<=40?"Dungeon %s":"%s",name);
+}
+static bool metadata(const char* dir,char* name,uint64_t* ms,char* location,size_t locationSize)
 {
     char p[512];path(p,sizeof(p),dir,"meta.txt");FILE* f=FILE_Open(p,"r");if(!f) return false;
     unsigned long long value;bool ok=fgets(name,NAME_LENGTH+2,f)!=NULL;
     if(ok) name[strcspn(name,"\r\n")]=0;
-    ok=ok && *name && fscanf(f,"%llu",&value)==1;fclose(f);
+    ok=ok && *name && fscanf(f,"%llu",&value)==1;
+    if(location) {
+        unsigned int map,level,x,y;
+        SDL_strlcpy(location,"Unknown Location",locationSize);
+        if(ok && fscanf(f," location %u %u %u %u",&map,&level,&x,&y)==4 && map<=255 && level<=255 && x<=255 && y<=255)
+            SLOTS_LocationName(map,level,location,locationSize);
+    }
+    fclose(f);
     if(ok) *ms=value;return ok;
 }
-bool SLOTS_Write(const char* id,const char* name,const char* thumbnail)
+static bool writeSlot(const char* id,const char* name,const char* thumbnail,const byte* initialWorlds)
 {
     if(!name || !*name || strlen(name)>NAME_LENGTH) return false;
     for(const char* p=name;*p;p++) if((unsigned char)*p<32 || (unsigned char)*p>126) return false;
@@ -115,17 +137,21 @@ bool SLOTS_Write(const char* id,const char* name,const char* thumbnail)
     else {
         const char* worlds[]={"SAVEGAME/BRIT.OOL","SAVEGAME/UNDER.OOL"};
         for(int i=0;i<2;i++) {
-            byte data[256];FILE* f=FILE_Open(worlds[i],"rb");
-            if(!f) { ok=false;break; }
-            bool read=fread(data,1,256,f)==256;fclose(f);
-            if(!read || fwrite(data,1,256,objects)!=256) { ok=false;break; }
+            byte data[256];
+            if(initialWorlds) memcpy(data,initialWorlds+i*256,256);
+            else {
+                FILE* f=FILE_Open(worlds[i],"rb");if(!f) { ok=false;break; }
+                bool read=fread(data,1,256,f)==256;fclose(f);
+                if(!read) { ok=false;break; }
+            }
+            if(fwrite(data,1,256,objects)!=256) { ok=false;break; }
         }
         if(fclose(objects)!=0) ok=false;
     }
     uint64_t ms=SLOTS_PlayMilliseconds();
     path(p,sizeof(p),stage,"meta.txt");FILE* f=FILE_Open(p,"w");
     if(!f) ok=false;
-    else { if(fprintf(f,"%s\n%llu\n",name,(unsigned long long)ms)<0) ok=false;if(fclose(f)!=0) ok=false; }
+    else { if(fprintf(f,"%s\n%llu\nlocation %u %u %u %u\n",name,(unsigned long long)ms,(unsigned int)D_5893_map_id,(unsigned int)D_5895_map_level,(unsigned int)D_5896_map_x,(unsigned int)D_5897_map_y)<0) ok=false;if(fclose(f)!=0) ok=false; }
     path(p,sizeof(p),stage,"thumbnail.bmp");
     if(thumbnail && !copy(thumbnail,p,0)) ok=false;
     if(!ok) { removeDir(stage);return false; }
@@ -138,12 +164,23 @@ bool SLOTS_Write(const char* id,const char* name,const char* thumbnail)
     if(exists) removeDir(backup);
     return true;
 }
+bool SLOTS_Write(const char* id,const char* name,const char* thumbnail)
+{ return writeSlot(id,name,thumbnail,NULL); }
+bool SLOTS_CreateInitial(void)
+{
+    /* Character creation has initialized the complete pair of world lists. */
+    if(!storage()) return false;
+    SLOTS_ResetTime();
+    char name[sizeof(D_55a8_party[0].name)+1];
+    memcpy(name,D_55a8_party[0].name,sizeof(D_55a8_party[0].name));name[sizeof(name)-1]=0;
+    return writeSlot(NULL,*name?name:"Avatar",NULL,D_b21e);
+}
 bool SLOTS_Load(const char* id)
 {
     if(!validId(id) || !storage()) return false;
     char dir[512],p[512],name[NAME_LENGTH+2];uint64_t ms;
     SDL_snprintf(dir,sizeof(dir),"%s/%s",ROOT,id);
-    if(!metadata(dir,name,&ms)) return false;
+    if(!metadata(dir,name,&ms,NULL,0)) return false;
     /* Validate both files before replacing the working save. */
     for(int i=0;i<2;i++) {
         path(p,sizeof(p),dir,files[i]);FILE* f=FILE_Open(p,"rb");if(!f) return false;
@@ -188,14 +225,14 @@ bool SLOTS_Load(const char* id)
     return true;
 }
 
-typedef struct { char id[41],name[NAME_LENGTH+2];uint64_t ms; } Slot;
+typedef struct { char id[41],name[NAME_LENGTH+2],location[40];uint64_t ms; } Slot;
 static Slot* s_slots;static int s_count;static bool s_scanFailed;
 static SDL_EnumerationResult enumerate(void* unused,const char* dir,const char* filename)
 {
     (void)unused;
     if(!validId(filename)) return SDL_ENUM_CONTINUE;
     char full[512];path(full,sizeof(full),dir,filename);Slot slot={0};
-    if(!metadata(full,slot.name,&slot.ms)) return SDL_ENUM_CONTINUE;
+    if(!metadata(full,slot.name,&slot.ms,slot.location,sizeof(slot.location))) return SDL_ENUM_CONTINUE;
     SDL_strlcpy(slot.id,filename,sizeof(slot.id));
     Slot* next=realloc(s_slots,(size_t)(s_count+1)*sizeof(Slot));
     if(!next) { s_scanFailed=true;return SDL_ENUM_FAILURE; }
@@ -221,9 +258,10 @@ static void draw(bool saving,int selected,int top,const char* status)
         int index=top+row,y=listY()+row*30;Slot* slot=&s_slots[index];
         bool active=selected==index+1;
         if(active) ENGINE_UIRect(16,y,280,28,15);
-        ENGINE_UIText(20,y+3,slot->name,active?0:15);
+        ENGINE_UIText(20,y+1,slot->name,active?0:15);
+        ENGINE_UIText(20,y+10,slot->location,active?0:7);
         char duration[40];timeText(duration,sizeof(duration),slot->ms);
-        ENGINE_UIText(20,y+15,duration,active?0:7);
+        ENGINE_UIText(20,y+19,duration,active?0:7);
         char image[512];SDL_snprintf(image,sizeof(image),"%s/%s/thumbnail.bmp",ROOT,slot->id);
         GRAP_SDL_UIThumbnail(row,image,248,y+2,44,24);
     }
