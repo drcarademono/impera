@@ -450,7 +450,9 @@ int main(void)
     assert(MOUSE_PollCommand()==0);
     MOUSE_Button(cursorX,cursorY,SDL_BUTTON_LEFT,true,1);
     ticks+=301;
-    assert(MOUSE_PollCommand()==0); /* combat enables movement, not contextual clicks */
+    assert(MOUSE_PollCommand()==MOUSE_KEY_AIM);
+    MOUSE_CombatAim();
+    assert(D_5898==1 && D_5899==1 && D_589a==2);
     memset(D_5c5a,0,sizeof(D_5c5a));
     memset(D_ba14,0,sizeof(D_ba14));
     for (int cy=0;cy<11;cy++) for (int cx=0;cx<11;cx++) GetCombatMap(cx,cy)=TILE_MAP_GRASS;
@@ -481,6 +483,42 @@ int main(void)
     MOVEMENT_SetDiagonal(false);
     assert(COMSUBS_0822(0,7,5,1,0)==-1);
 
+    /* Real mouse targeting preserves cardinal range rules and auto-confirms only the clicked attack. */
+    D_589e=0; D_ba14[0].flags=COMBAT_FLAGS_PLAYER;
+    D_ba14[0].entityIdx=0; D_5896_map_x=6; D_5897_map_y=4;
+    D_55a8_party[0].equips[0]=D_55a8_party[0].equips[2]=D_55a8_party[0].equips[3]=0xff;
+    D_ba14[1].flags=COMBAT_FLAGS_MONSTER; D_ba14[1].x=7; D_ba14[1].y=4;
+    D_5c5a[2]._0_tile=D_5c5a[2]._1_animTile=0x44;
+    assert(MOUSE_Action(2,-1,true)=='A'); /* tile 7,4, one east of active fighter */
+    D_ba14[1].x=8;
+    assert(MOUSE_Action(3,-1,true)==0); /* bare hands cannot reach two tiles */
+    D_ba14[1].x=7; D_ba14[1].y=5;
+    assert(MOUSE_Action(2,0,true)==0); /* classic diagonal attack */
+    MOVEMENT_SetDiagonal(true);
+    assert(MOUSE_Action(2,0,true)=='A');
+    D_ba14[1].flags|=COMBAT_FLAGS_INVISIBLE;
+    assert(MOUSE_Action(2,0,true)==0);
+    D_ba14[1].flags=COMBAT_FLAGS_PLAYER;
+    assert(MOUSE_Action(2,0,true)==0); /* friendly target */
+    D_ba14[1].flags=COMBAT_FLAGS_MONSTER;
+    cursorX=centerX+2*16*l.scale; cursorY=centerY;
+    MOUSE_SetCommandInput(true);
+    MOUSE_Button(cursorX,cursorY,SDL_BUTTON_LEFT,true,1);
+    MOUSE_Button(cursorX,cursorY,SDL_BUTTON_LEFT,true,2);
+    assert(MOUSE_PollCommand()=='A');
+    MOUSE_SetCommandInput(false);
+    assert(COMSUBS_0504(0,1)==1); /* native Aim bypasses its prompt for this double-click */
+    assert(D_5899==7 && D_589a==5);
+    assert(COMSUBS_0504(0,0)==0); /* second weapon must satisfy its own range */
+    MOUSE_ClearCombatAttack();
+    int unusedDistance;
+    assert(!MOUSE_CombatAttackTarget(0,1,&unusedDistance));
+    MOUSE_SetCommandInput(true);
+    MOUSE_Button(cursorX,cursorY,SDL_BUTTON_LEFT,true,1);
+    D_589e=1;
+    ticks+=301;
+    assert(MOUSE_PollCommand()==0); /* queued clicks cannot transfer to another fighter */
+    D_589e=0;
     /* Exercise real AI movement for both enemy and friendly entities. */
     for (int friendly=0;friendly<2;friendly++) {
         memset(D_ba14,0,sizeof(D_ba14));

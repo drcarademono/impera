@@ -4,6 +4,7 @@
 #include "funcs.h"
 #include "macros.h"
 #include "tiles.h"
+#include "comsubs.h"
 #include "mouse.h"
 #include "graphics/grap_sdl.h"
 #include <SDL3/SDL.h>
@@ -144,7 +145,39 @@ void MOUSE_SetEnabled(bool enabled)
     MOUSE_Cancel();
 }
 static int s_dx, s_dy, s_command, s_direction;
-static int s_map, s_level, s_x, s_y;
+static int s_map, s_level, s_x, s_y, s_combatEntity;
+static bool s_combatAttack;
+static int s_attackX, s_attackY, s_attackEntity;
+void MOUSE_ClearCombatAttack(void) { s_combatAttack=false; }
+static int CombatRange(int entity)
+{
+    if (!(D_ba14[entity].flags & COMBAT_FLAGS_PLAYER)) return D_159c[D_ba14[entity].entityIdx];
+    int range=1, party=D_ba14[entity].entityIdx;
+    const int slots[3]={0,2,3};
+    for (int i=0;i<3;i++) {
+        int weapon=D_55a8_party[party].equips[slots[i]];
+        if (weapon!=0xff && D_15fc[weapon] && D_1664[weapon]>range) range=D_1664[weapon];
+    }
+    return range;
+}
+void MOUSE_CombatAim(void)
+{
+    D_5899=s_dx+5; D_589a=s_dy+5; D_5898=1;
+    int target=COMSUBS_0748(D_5899,D_589a);
+    D_5c5a[D_ba14[D_589e].actorIdx]._7=target<0 ? 0xff : target;
+}
+bool MOUSE_CombatAttackTarget(int entity, int range, int* distance)
+{
+    if (!s_combatAttack || entity!=s_attackEntity) return false;
+    int target=COMSUBS_0748(s_attackX,s_attackY);
+    *distance=COMSUBS_048a(D_ba14[entity].x,D_ba14[entity].y,s_attackX,s_attackY);
+    if (target<0 || ULTIMA_5646(target)==ULTIMA_5646(entity) ||
+        (D_ba14[target].flags & (COMBAT_FLAGS_DEAD|COMBAT_FLAGS_INVISIBLE|COMBAT_FLAGS_4)) ||
+        !MOVEMENT_AttackAllowed(s_attackX-D_ba14[entity].x,s_attackY-D_ba14[entity].y) ||
+        *distance>range) *distance=0;
+    D_5899=s_attackX; D_589a=s_attackY;
+    return true;
+}
 static Uint64 s_singleTime, s_moveTime;
 
 void MOUSE_Initialize(void)
@@ -156,6 +189,7 @@ void MOUSE_Initialize(void)
 }
 void MOUSE_Cancel(void)
 {
+    MOUSE_ClearCombatAttack();
     s_menuTarget = -1; s_menuClick = false;
     SDL_GetMouseState(&s_hoverX,&s_hoverY);
     s_right = s_single = false;
@@ -188,6 +222,18 @@ static int AdjacentDirection(int dx, int dy)
 }
 int MOUSE_Action(int dx, int dy, bool mainAction)
 {
+    if (D_5893_map_id >= 128) {
+        if (D_589e >= 32) return 0;
+        int x=dx+5, y=dy+5;
+        if (x<0 || y<0 || x>10 || y>10) return 0;
+        if (!mainAction) return MOUSE_KEY_AIM;
+        int target=COMSUBS_0748(x,y);
+        if (target<0 || target==D_589e || ULTIMA_5646(target)==ULTIMA_5646(D_589e) ||
+            (D_ba14[target].flags & (COMBAT_FLAGS_DEAD|COMBAT_FLAGS_INVISIBLE|COMBAT_FLAGS_4)) ||
+            !MOVEMENT_AttackAllowed(x-D_ba14[D_589e].x,y-D_ba14[D_589e].y) ||
+            COMSUBS_048a(D_ba14[D_589e].x,D_ba14[D_589e].y,x,y)>CombatRange(D_589e)) return 0;
+        return 'A';
+    }
     if (D_5893_map_id > 32) return 0;
     if (D_5893_map_id && (D_5896_map_x + dx < 0 || D_5896_map_x + dx >= 32 ||
         D_5897_map_y + dy < 0 || D_5897_map_y + dy >= 32)) return 0;
@@ -227,12 +273,14 @@ int MOUSE_Action(int dx, int dy, bool mainAction)
 }
 static void Snapshot(void)
 {
+    s_combatEntity=D_589e;
     s_map = D_5893_map_id; s_level = D_5895_map_level;
     s_x = D_5896_map_x; s_y = D_5897_map_y;
 }
 static bool SamePosition(void)
 {
-    return s_map == D_5893_map_id && s_level == D_5895_map_level &&
+    return (D_5893_map_id<128 || s_combatEntity==D_589e) &&
+           s_map == D_5893_map_id && s_level == D_5895_map_level &&
            s_x == D_5896_map_x && s_y == D_5897_map_y;
 }
 void MOUSE_Button(float x, float y, int button, bool down, int clicks)
@@ -251,7 +299,7 @@ void MOUSE_Button(float x, float y, int button, bool down, int clicks)
         if (down) s_moveTime = 0;
         return;
     }
-    if (!s_input || D_5893_map_id >= 128 || !down || button != SDL_BUTTON_LEFT) return;
+    if (!s_input || !down || button != SDL_BUTTON_LEFT) return;
     int dx, dy;
     float rx, ry;
     if (!GRAP_SDL_MouseMapPoint(x, y, &dx, &dy, &rx, &ry)) { s_single = false; return; }
@@ -277,6 +325,14 @@ int MOUSE_PollCommand(void)
         int command = s_command;
         s_command = 0;
         s_right = false;
+        if (D_5893_map_id>=128) {
+            s_direction=0;
+            if (command=='A') {
+                s_combatAttack=true; s_attackEntity=D_589e;
+                s_attackX=s_dx+5; s_attackY=s_dy+5;
+            }
+            return command;
+        }
         s_direction = MOUSE_Direction((float)s_dx, (float)s_dy);
         if (!s_direction && command == 'L') s_direction = U5_KEY_SPACE;
         debug("Mouse action: %c target_offset=%d,%d\n", command, s_dx, s_dy);
