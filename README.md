@@ -143,6 +143,16 @@ with camera scrolling; the combat camera stays fixed. This works with keyboard
 or mouse movement; collisions and actions still use the original tile and turn
 rules. Teleports, spawns, map changes, and dungeon perspective views snap to
 their new state without interpolation.
+Use `--movement-speed N` to set the held mouse and keyboard movement speed,
+and `--animation-speed N` to set animated sprite playback independently,
+including NPC poses, fountains, flames, and water effects.
+Both accept multipliers from `0.1` to `10` and default to `1`: `2` doubles the
+speed and `0.5` halves it. Sprite animation speed works with or without
+`--smooth-movement` and does not change camera transition timing or game turns.
+For example, double both speeds with
+`--smooth-movement --movement-speed 2 --animation-speed 2`.
+Explicit movement speed uses timed keyboard repeats; without that option,
+keyboard repeat retains the operating system's behavior.
 Both options default to off. For example:
 
 ```sh

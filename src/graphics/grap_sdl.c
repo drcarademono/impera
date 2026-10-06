@@ -25,6 +25,8 @@ static SDL_Surface* s_wideSurface;
 static byte* s_widePixels;
 static bool s_expandedFrame;
 static bool s_smoothMovement, s_mapDrawn, s_previousValid;
+static float s_movementSpeed = 1.0f;
+static bool s_customMovementSpeed;
 static Uint32* s_previousPixels;
 static int s_previousWidth, s_previousHeight, s_previousX, s_previousY, s_previousMap, s_previousLevel;
 typedef struct ActorVisual {
@@ -88,6 +90,12 @@ static void CaptureActors(ActorVisual* actors, const byte* indices, int w,
 
 void GRAP_SDL_SetSmoothMovement(bool enabled) { s_smoothMovement = enabled; s_previousValid = false; }
 bool GRAP_SDL_SmoothMovementEnabled(void) { return s_smoothMovement; }
+void GRAP_SDL_SetMovementSpeed(float speed) { s_movementSpeed = speed; s_customMovementSpeed = true; }
+bool GRAP_SDL_CustomMovementSpeed(void) { return s_customMovementSpeed; }
+unsigned int GRAP_SDL_MovementInterval(void)
+{
+    return (unsigned int)SDL_roundf((s_smoothMovement ? 112.0f : 160.0f) / s_movementSpeed);
+}
 void GRAP_SDL_MapDrawn(void) { s_mapDrawn = true; }
 
 

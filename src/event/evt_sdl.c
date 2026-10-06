@@ -19,6 +19,7 @@ void EVT_Cleanup(void)
 
 // TODO
 void KEY_SDL_ProcessKeyDown(SDL_KeyboardEvent ev);
+void KEY_SDL_ReleaseKey(SDL_Keycode key);
 
 void EVT_PollMessages(void)
 {
@@ -35,6 +36,9 @@ void EVT_PollMessages(void)
 			MOUSE_Cancel();
 			KEY_SDL_ProcessKeyDown(ev.key);
 			break;
+        case SDL_EVENT_KEY_UP:
+            KEY_SDL_ReleaseKey(ev.key.key);
+            break;
 
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
         case SDL_EVENT_MOUSE_BUTTON_UP:
@@ -43,6 +47,7 @@ void EVT_PollMessages(void)
             break;
         case SDL_EVENT_WINDOW_FOCUS_LOST:
             MOUSE_Cancel();
+            KEY_SDL_ReleaseKey(0);
             break;
 		}
 	}
