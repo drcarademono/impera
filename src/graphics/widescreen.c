@@ -309,10 +309,11 @@ void WIDE_SetDitheredDarkness(bool enabled) { s_ditheredDarkness=enabled; }
 bool WIDE_DitheredDarkness(void) { return s_ditheredDarkness; }
 
 /* These variants carry masonry in their artwork too. Do not classify only
- * the plain wall: windows and wall torches would otherwise dissolve. */
+ * the plain wall: doorways, windows and wall torches would otherwise dissolve. */
 static bool SolidMasonry(byte tile)
 {
     return tile==TILE_MAP_WALL || tile==TILE_MAP_HIDDEN_DOOR ||
+        tile==TILE_MAP_4A || tile==TILE_MAP_4B /* open masonry doorways */ ||
         tile==TILE_MAP_97 /* window */ ||
         tile==0xc0 || tile==0xc1; /* animated wall torch */
 }

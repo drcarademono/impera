@@ -341,7 +341,7 @@ int main(void)
         assert(mask[(5*16+y)*176+7*16+x]==0);
         assert(mask[(5*16+y)*176+8*16+x]==16);
     }
-    const byte masonryVariants[]={TILE_MAP_HIDDEN_DOOR,TILE_MAP_97,0xc0,0xc1};
+    const byte masonryVariants[]={TILE_MAP_HIDDEN_DOOR,TILE_MAP_4A,TILE_MAP_4B,TILE_MAP_97,0xc0,0xc1};
     for(unsigned i=0;i<sizeof(masonryVariants);i++) {
         GetMap(18,16)=masonryVariants[i];
         GetMap(19,16)=masonryVariants[i];
@@ -351,6 +351,15 @@ int main(void)
             assert(mask[(5*16+y)*176+8*16+x]==16);
         }
     }
+    /* Empath Abbey's entry: the corridor has two open doorway tiles (4a)
+     * between solid walls. The unseen rooms beside them must not erode them. */
+    GetMap(18,15)=TILE_MAP_WALL;
+    GetMap(18,16)=GetMap(18,17)=TILE_MAP_4A;
+    GetMap(18,18)=TILE_MAP_WALL;
+    for(int row=4;row<=8;row++) GetMapViewport(8,row)=255;
+    assert(WIDE_DarknessMask(mask,11,11));
+    for(int row=4;row<=7;row++) for(int y=0;y<16;y++) for(int x=0;x<16;x++)
+        assert(mask[(row*16+y)*176+7*16+x]==0);
     GetMap(18,16)=1; /* natural scenery still fades */
     assert(WIDE_DarknessMask(mask,11,11));
     assert(mask[(5*16+8)*176+7*16+14]>0);
