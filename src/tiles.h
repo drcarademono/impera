@@ -253,6 +253,10 @@
 // animated (2 frames)
 #define TILE_MAP_CLOCK 0xfa
 
+/* Static bellows animation frames (LOOK2.DAT). */
+#define TILE_MAP_BELLOWS_FC 0xfc
+#define TILE_MAP_BELLOWS_FD 0xfd
+
 #define TILE_MAP_FE 0xfe
 
 #endif

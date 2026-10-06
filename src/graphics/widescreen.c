@@ -92,6 +92,7 @@ static bool HasObjectBackground(byte tile)
 {
     return tile == TILE_MAP_WELL || (tile & 0xfc) == TILE_MAP_FOUNTAIN ||
         tile == TILE_MAP_BRAZIER || tile == TILE_MAP_59 ||
+        tile == TILE_MAP_BELLOWS_FC || tile == TILE_MAP_BELLOWS_FD ||
         (tile >= 0x80 && tile <= 0x83) /* animated pendulum */ ||
         tile == TILE_MAP_84 /* stocks */ ||
         tile == TILE_MAP_86 /* metal grate */ || tile == 0x8b /* torture rack */ ||
