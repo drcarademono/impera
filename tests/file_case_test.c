@@ -50,6 +50,21 @@ int main(void)
     assert(FILE_Open("mixed/missing/data.bin", "wb") == NULL);
     assert(FILE_Open("mixed/subdir/absent.bin", "rb") == NULL);
 
+    /* Resource reads request buffer capacity, not necessarily file size. */
+    unsigned char resource[3000];memset(resource,0xa5,sizeof(resource));
+    FILE* resourceFile=fopen("BRITISH.PTH","wb");assert(resourceFile);
+    for(int i=0;i<2783;i++) assert(fputc(i%256,resourceFile)!=EOF);
+    assert(fclose(resourceFile)==0);
+    errno=EAGAIN; /* A stale error must not turn ordinary EOF into failure. */
+    assert(FILE_ReadFile("BRITISH.PTH",resource,sizeof(resource),0)==0);
+    for(int i=0;i<2783;i++) assert(resource[i]==(unsigned char)(i%256));
+    for(int i=2783;i<3000;i++) assert(resource[i]==0xa5);
+    memset(resource,0xa5,sizeof(resource));
+    assert(FILE_ReadFile("BRITISH.PTH",resource,3000,2780)==0);
+    assert(resource[0]==(unsigned char)(2780%256) && resource[3]==0xa5);
+    assert(FILE_ReadFile("BRITISH.PTH",resource,3000,-1)==-1);
+    assert(errno==EINVAL);
+
     put("SaVeGaMe/SaVeD.GaM", "save");
     assert(FILE_ReadFile("saved.gam", value, 4, 0) == 0);
     assert(memcmp(value, "save", 4) == 0);

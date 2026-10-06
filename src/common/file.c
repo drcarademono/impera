@@ -264,11 +264,21 @@ int FILE_ReadFile(char* fileName, void* buffer, uint size, int offset)
 		return -1;
 	}
 
+    errno=0;
     bool ok=fseek(stream,offset,SEEK_SET)==0;
     size_t got=ok?fread(buffer,1,size,stream):0;
-    if(got!=size) DEBUG_Error("Short/failed read %s expected=%u actual=%lu offset=%d",fileName,size,(unsigned long)got,offset);
+    /* Original callers often request the capacity of a resource buffer, not
+     * its file length (for example .PTH and conversation data). EOF is valid;
+     * preserve unread bytes exactly as the original loader did. */
+    bool failed=!ok || ferror(stream);
+    int failure=failed?(errno?errno:EIO):0;
     fclose(stream);
-    return got==size?0:-1;
+    if(failed) {
+        DEBUG_Error("Failed read %s requested=%u actual=%lu offset=%d: %s",fileName,size,(unsigned long)got,offset,strerror(failure));
+        errno=failure;return -1;
+    }
+    if(got!=size) debug("Resource read reached EOF file=%s requested=%u actual=%lu offset=%d",fileName,size,(unsigned long)got,offset);
+    return 0;
 }
 
 int FILE_WriteFile(char* fileName, void* buffer, uint size, int offset)
