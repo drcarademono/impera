@@ -369,6 +369,21 @@ int main(void)
     GetMap(18,16)=1; /* natural scenery still fades */
     assert(WIDE_DarknessMask(mask,11,11));
     assert(mask[(5*16+8)*176+7*16+14]>0);
+    /* A continuous wall separates visible ground from unseen ground. The
+     * fade must not reach through the wall onto its inside edge. */
+    for(int row=0;row<11;row++) {
+        GetMap(18,11+row)=TILE_MAP_WALL;
+        GetMap(19,11+row)=1;
+        GetMapViewport(8,row)=255;
+    }
+    GetMap(18,16)=TILE_MAP_DOOR_B8;
+    assert(WIDE_DarknessMask(mask,11,11));
+    for(int y=0;y<16;y++) for(int x=0;x<16;x++)
+        assert(mask[(5*16+y)*176+6*16+x]==0);
+    /* Removing the barrier restores the ordinary outdoor fade. */
+    for(int row=0;row<11;row++) GetMap(18,11+row)=1;
+    assert(WIDE_DarknessMask(mask,11,11));
+    assert(mask[(5*16+8)*176+6*16+15]>0);
     WIDE_SetDitheredDarkness(false);
     memcpy(D_6608_map.town,savedTown,sizeof(savedTown));memcpy(D_ab02,savedView,sizeof(savedView));
     D_58a5 = 50;

@@ -406,13 +406,13 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
         /* One padded current map covers all exposed edges, including diagonal
          * corner gaps. Never splice old/new water animation phases together. */
         int paddedWidth=(columns+2)*16,paddedHeight=(rows+2)*16;
-        bool* hidden=calloc((size_t)columns*rows,sizeof(bool));
+        bool* hidden=calloc((size_t)(columns+2)*(rows+2),sizeof(bool));
         SDL_Surface* padded=hidden?SDL_CreateSurface(paddedWidth,paddedHeight,SDL_PIXELFORMAT_ARGB8888):NULL;
         if(padded) for(int row=-1;row<=rows;row++) for(int col=-1;col<=columns;col++) {
             bool interior=col>=0 && col<columns && row>=0 && row<rows;
             int tx=col-columns/2,ty=row-rows/2;
             bool lit=combat || (abs(tx)<=5 && abs(ty)<=5 ? GetMapViewport(tx+5,ty+5)!=255 : WIDE_Visible(tx,ty));
-            if(interior) hidden[row*columns+col]=!lit;
+            hidden[(row+1)*(columns+2)+col+1]=!lit;
             bool valid=WIDE_MapTile(tx,ty)!=255;
             for(int y=0;y<16;y++) {
                 Uint32* dest=(Uint32*)((byte*)padded->pixels+((row+1)*16+y)*padded->pitch)+(col+1)*16;
@@ -484,8 +484,8 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
                      * their terrain throughout the same interpolated movement. */
                     SDL_RenderTexture(s_sdlRenderer,s_darknessTexture,NULL,&b);
                 }
-                else if(!combat) for(int row=0;row<rows;row++) for(int col=0;col<columns;col++) if(hidden[row*columns+col]) {
-                    SDL_FRect shadow={mapDst.x+col*16*sx,mapDst.y+row*16*sy,16*sx,16*sy};
+                else if(!combat) for(int row=-1;row<=rows;row++) for(int col=-1;col<=columns;col++) if(hidden[(row+1)*(columns+2)+col+1]) {
+                    SDL_FRect shadow={b.x+(col+1)*16*sx,b.y+(row+1)*16*sy,16*sx,16*sy};
                     SDL_RenderFillRect(s_sdlRenderer,&shadow);
                 }
                 SDL_SetRenderClipRect(s_sdlRenderer,NULL);

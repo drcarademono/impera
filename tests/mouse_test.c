@@ -117,10 +117,10 @@ bool __wrap_SDL_RenderPresent(SDL_Renderer* renderer)
     if(checkDarkness) {
         SDL_Surface* image=SDL_RenderReadPixels(renderer,NULL);assert(image);
         Uint8 r,g,b,a;
-        assert(SDL_ReadSurfacePixel(image,lightX,lightY,&r,&g,&b,&a));
-        assert(r==0 && g==0 && b==170); /* light stays centered on player */
-        assert(SDL_ReadSurfacePixel(image,darkX,lightY,&r,&g,&b,&a));
-        assert(r==0 && g==0 && b==0); /* hidden ground never slides into view */
+        assert(SDL_ReadSurfacePixel(image,lightX+(presented<=8?ditherDx*(8-presented)*6:0),lightY+(presented<=8?ditherDy*(8-presented)*6:0),&r,&g,&b,&a));
+        assert(r==0 && g==0 && b==170); /* visible ground follows the map */
+        assert(SDL_ReadSurfacePixel(image,darkX+(presented<=8?ditherDx*(8-presented)*6:0),lightY+(presented<=8?ditherDy*(8-presented)*6:0),&r,&g,&b,&a));
+        assert(r==0 && g==0 && b==0); /* hidden ground stays covered as it scrolls */
         SDL_DestroySurface(image);
     }
     if(checkWater) {
@@ -685,7 +685,9 @@ int main(int argc, char** argv)
         GRAP_SDL_MapDrawn();GRAP_SDL_FlushFrame();
         checkEdges=false;
     }
-    /* Darkness is a stationary visibility mask, not part of scrolling terrain. */
+    /* Both visibility modes follow scrolling terrain in all eight directions. */
+    GRAP_BUF_SetTransparentSprites(false);
+    memset(tiles+(256+GetActorMap(5,5))*128,0x11,128);
     D_58a5=2;memset(tiles+128,0x11,128);
     for(int yy=0;yy<11;yy++) for(int xx=0;xx<11;xx++) {
         bool visible=(xx-5)*(xx-5)+(yy-5)*(yy-5)<=2;
@@ -704,7 +706,7 @@ int main(int argc, char** argv)
         D_5896_map_x=100;D_5897_map_y=100;GRAP_SDL_SetSmoothMovement(true);
         GRAP_SDL_MapDrawn();GRAP_SDL_FlushFrame();
         D_5896_map_x+=sx;D_5897_map_y+=sy;
-        checkDarkness=true;presented=0;
+        checkDarkness=true;presented=0;ditherDx=sx;ditherDy=sy;
         GRAP_SDL_MapDrawn();GRAP_SDL_FlushFrame();
         checkDarkness=false;assert(presented==9);
     }
