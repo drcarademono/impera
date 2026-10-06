@@ -110,7 +110,7 @@ if(U5D_BUILD_TESTS)
         file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/settings-runtime")
         configure_file("${CMAKE_SOURCE_DIR}/Ultima 5/IBM.CH" "${CMAKE_BINARY_DIR}/settings-runtime/IBM.CH" COPYONLY)
         add_test(NAME engine_settings COMMAND u5d_engine_settings_test)
-        foreach(exit_context settings menu cutscene)
+        foreach(exit_context settings menu cutscene gameplay)
             add_test(NAME ctrl_e_${exit_context} COMMAND u5d_engine_settings_test ${exit_context})
             set_tests_properties(ctrl_e_${exit_context} PROPERTIES
                 WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/settings-runtime"

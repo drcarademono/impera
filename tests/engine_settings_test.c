@@ -7,6 +7,7 @@
 #include "graphics/grap_buf.h"
 #include "graphics/grap_sdl.h"
 #include "vars.h"
+#include "macros.h"
 #include "event/event.h"
 #include "key/key.h"
 #include "time/time.h"
@@ -27,6 +28,18 @@ int main(int argc, char** argv)
         SDL_Event exitKey={0};exitKey.type=SDL_EVENT_KEY_DOWN;
         exitKey.key.key=SDLK_E;exitKey.key.mod=SDL_KMOD_CTRL;
         assert(SDL_PushEvent(&exitKey));
+        if(!strcmp(argv[1],"gameplay")) {
+            /* Default and restored gameplay modes deliver Ctrl+E to the vanilla prompt. */
+            assert(KEY_PollKey()==U5_KEY_CTRL_E);
+            int previous=EVT_SetImmediateExit(1);
+            assert(previous==0);
+            assert(EVT_SetImmediateExit(previous)==1);
+            assert(SDL_PushEvent(&exitKey));
+            TIME_SleepMs(1);
+            assert(KEY_PollKey()==U5_KEY_CTRL_E);
+            return 0;
+        }
+        if(strcmp(argv[1],"settings")) EVT_SetImmediateExit(1);
         if(!strcmp(argv[1],"settings")) ENGINE_ShowSettings();
         else if(!strcmp(argv[1],"cutscene")) TIME_SleepMs(100);
         else KEY_PollKey(); /* Main-menu keyboard path. */

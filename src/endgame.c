@@ -8,6 +8,7 @@
 #include "audio/aud_mus.h"
 
 #include "endgame.h"
+#include "event/event.h"
 #include "font.h"
 #include "tiles.h"
 
@@ -410,7 +411,7 @@ static void ENDGAME_05a2(int param_1)
 }
 
 // CHECKED
-void ENDGAME_0648_EndgameMain(void)
+static void ENDGAME_RunMain(void)
 {
     int local_e;
     int local_c;
@@ -640,4 +641,15 @@ void ENDGAME_0648_EndgameMain(void)
         ENDGAME_05a2(4);
         ENDGAME_05a2(5);
     } while (1);
+}
+
+void ENDGAME_0648_EndgameMain(void)
+{
+#if defined(TARGET_SDL)
+    int previous = EVT_SetImmediateExit(1);
+#endif
+    ENDGAME_RunMain();
+#if defined(TARGET_SDL)
+    EVT_SetImmediateExit(previous);
+#endif
 }

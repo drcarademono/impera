@@ -3,6 +3,11 @@
 
 typedef void EVT_Callback(void);
 
+#if defined(TARGET_SDL)
+/* Returns the previous mode so presentation screens can restore it. */
+extern int EVT_SetImmediateExit(int enabled);
+#endif
+
 extern void EVT_Initialize(void);
 extern void EVT_Cleanup(void);
 extern void EVT_Yield(void);

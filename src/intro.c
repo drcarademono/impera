@@ -11,6 +11,7 @@
 
 #include "font.h"
 #include "intro.h"
+#include "event/event.h"
 #if defined(TARGET_SDL)
 #include "common/engine_settings.h"
 #include "graphics/grap_buf.h"
@@ -510,7 +511,7 @@ static int INTRO_094e_Pause(int param_1)
 }
 
 // CHECKED
-void INTRO_0986_Main(void) // intro_main (initialize video) (8b46)
+static void INTRO_RunMain(void) // intro_main (initialize video) (8b46)
 {
     int local_4;
     char* local_6;
@@ -1735,4 +1736,16 @@ void INTRO_2090_AnimateWD(void)
 static void INTRO_20ae_ShowWD(byte* ptr)
 {
     DRV_69(ptr, 1); // ax: a, cf: 1
+}
+
+/* Immediate Ctrl+E is limited to title, menu, and introductory screens. */
+void INTRO_0986_Main(void)
+{
+#if defined(TARGET_SDL)
+    int previous = EVT_SetImmediateExit(1);
+#endif
+    INTRO_RunMain();
+#if defined(TARGET_SDL)
+    EVT_SetImmediateExit(previous);
+#endif
 }
