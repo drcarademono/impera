@@ -61,6 +61,7 @@ static int PollMenu(void)
 
 static SDL_Cursor* s_cursors[9];
 static SDL_Cursor* s_currentCursor;
+static int s_lastCursorDirection = U5_KEY_UP;
 static const int s_cursorDirections[9] = {0, U5_KEY_UP, U5_KEY_PGUP, U5_KEY_RIGHT, U5_KEY_PGDN, U5_KEY_DOWN, U5_KEY_END, U5_KEY_LEFT, U5_KEY_HOME};
 static const char* s_cursorNames[9] = {"pointer", "direction-n", "diag-ne", "direction-e", "diag-se", "direction-s", "diag-sw", "direction-w", "diag-nw"};
 
@@ -71,7 +72,9 @@ int MOUSE_CursorDirection(float x, float y)
         !GRAP_SDL_MouseMapPoint(x, y, &dx, &dy, &rx, &ry)) return 0;
     /* Combat sprites occupy fixed coordinates in the original 11x11 map. */
     if (D_5893_map_id >= 128) { rx -= D_5896_map_x - 5; ry -= D_5897_map_y - 5; }
-    return MOUSE_Direction(rx, ry);
+    int direction = MOUSE_Direction(rx, ry);
+    if (direction) s_lastCursorDirection = direction;
+    return s_lastCursorDirection;
 }
 
 void MOUSE_UpdateCursor(void)

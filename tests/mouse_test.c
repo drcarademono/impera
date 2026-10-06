@@ -165,7 +165,12 @@ int main(void)
     assert(MOUSE_CursorDirection(448,384) == U5_KEY_PGUP);
     assert(MOUSE_CursorDirection(320,537.6f) == U5_KEY_END);
     assert(MOUSE_CursorDirection(448,537.6f) == U5_KEY_PGDN);
+    assert(MOUSE_CursorDirection(384,460.8f) == U5_KEY_PGDN);
+    assert(MOUSE_CursorDirection(448,460.8f) == U5_KEY_RIGHT);
+    assert(MOUSE_CursorDirection(384,460.8f) == U5_KEY_RIGHT);
+    assert(MOUSE_Direction(0,0)==0); /* retaining the cursor must not cause movement */
     assert(MOUSE_CursorDirection(1000,450) == 0);
+    assert(MOUSE_CursorDirection(384,460.8f) == U5_KEY_RIGHT);
     D_58a4 = 0;
     assert(MOUSE_CursorDirection(448,460.8f) == 0);
     D_58a4 = 1;
