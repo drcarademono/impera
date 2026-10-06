@@ -264,6 +264,8 @@ bool WIDE_Compose(byte* pixels, WideLayout l)
     for(int row=0;row<l.rows;row++) for(int col=0;col<l.columns;col++) {
         int dx=col-cx,dy=row-cy;
         if(abs(dx)<=5 && abs(dy)<=5 || !WIDE_Visible(dx,dy)) continue;
+        int actorSprite=sprites[row*l.columns+col];
+        if(actorSprite>=0 && !GRAP_BUF_SpriteIsTransparent(actorSprite)) continue;
         byte tile=WIDE_MapTile(dx,dy);
         if(WIDE_GroundTile(dx,dy)!=tile)
             GRAP_BUF_DrawSprite(pixels,l.width,l.mapX+col*16,l.mapY+row*16,

@@ -340,7 +340,10 @@ void ULTIMA_56ac_DrawMap(void)
     for(local_8=0;local_8<11;local_8++) for(local_6=0;local_6<11;local_6++) {
         byte tile=GetMapViewport(local_6,local_8);
         int dx=local_6-(D_5893_map_id>=128?D_5896_map_x:5),dy=local_8-(D_5893_map_id>=128?D_5897_map_y:5);
-        if(tile==0 && GetActorMap(local_6,local_8)!=0x16) tile=WIDE_MapTile(dx,dy);
+        if(tile==0 && GetActorMap(local_6,local_8)!=0x16) {
+            if(!GRAP_BUF_SpriteIsTransparent(256+GetActorMap(local_6,local_8))) continue;
+            tile=WIDE_MapTile(dx,dy);
+        }
         if(tile!=255 && tile==WIDE_MapTile(dx,dy) && WIDE_GroundTile(dx,dy)!=tile)
             GRAP_BUF_PutMapSprite(local_6,local_8,D_b11e[tile]);
     }

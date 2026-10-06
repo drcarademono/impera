@@ -186,6 +186,14 @@ int main(void)
     D_5c5a[1]._2_x=23;D_5c5a[1]._3_y=16;
     assert(WIDE_Compose(pixels,broad));
     assert(pixels[(objectY+8)*broad.width+objectX+2]==0);
+    assert(pixels[(objectY+8)*broad.width+objectX-1]==3); /* no static underlay outline */
+    D_5896_map_x=23;
+    memset(D_ab02,1,sizeof(D_ab02));
+    GetMapViewport(5,5)=0;GetActorMap(5,5)=0x64;
+    GetMapViewport(4,5)=0x44;
+    ULTIMA_56ac_DrawMap();
+    assert(g_linearEgaBuffer0[96*320+87]==3);
+    D_5896_map_x=16;
     memset(D_5c5a,0,sizeof(D_5c5a));
     const byte opaqueObjects[]={TILE_MAP_CHAIR_90,TILE_MAP_TABLE_94,TILE_MAP_BARREL,
         TILE_MAP_BED,TILE_MAP_DRESSER,TILE_MAP_DOOR_B8,TILE_MAP_FIREPLACE,0xbd};

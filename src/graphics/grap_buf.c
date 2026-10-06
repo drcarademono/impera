@@ -390,11 +390,16 @@ byte GRAP_BUF_TilePixel(int tile, int x, int y)
 
 /* -1 is transparent. A one-pixel, eight-connected dilation supplies the
  * black outline, including the one-pixel margin outside the source tile. */
-int GRAP_BUF_SpritePixel(int tile, int x, int y)
+bool GRAP_BUF_SpriteIsTransparent(int tile)
 {
     /* These poses include their scenery: preserve the complete original art. */
-    if (!s_transparentSprites || tile == 256 + TILE_ACTOR_SLEEPING_IN_BED ||
-        (tile >= 256 + 0x64 && tile <= 256 + 0x67)) /* occupied manacles */
+    return s_transparentSprites && tile != 256 + TILE_ACTOR_SLEEPING_IN_BED &&
+        !(tile >= 256 + 0x64 && tile <= 256 + 0x67); /* occupied manacles */
+}
+
+int GRAP_BUF_SpritePixel(int tile, int x, int y)
+{
+    if (!GRAP_BUF_SpriteIsTransparent(tile))
         return x < 0 || y < 0 || x >= 16 || y >= 16 ? -1 : GRAP_BUF_TilePixel(tile, x, y);
     byte color = GRAP_BUF_TilePixel(tile, x, y);
     if (color) return color;
