@@ -48,6 +48,7 @@ static bool confirmAimOnPoll;
 static bool checkAnimation;
 static int animationRow, playerScreenX, previousMarkerX;
 static bool checkActor;
+static bool transparentSprites;
 static int actorRow, actorStart, actorEnd, actorMarker;
 bool __real_SDL_RenderPresent(SDL_Renderer* renderer);
 bool __wrap_SDL_RenderPresent(SDL_Renderer* renderer)
@@ -68,7 +69,7 @@ bool __wrap_SDL_RenderPresent(SDL_Renderer* renderer)
         /* Top-half hole: its inner pixels show blue terrain during movement. */
         Uint8 r,g,b,a;
         assert(SDL_ReadSurfacePixel(image,marker+8*3,actorRow-3*3,&r,&g,&b,&a));
-        if(D_5893_map_id<128) assert(r==0 && g==0 && b==170);
+        if(D_5893_map_id<128) assert(r==0 && g==0 && b==(transparentSprites?170:0));
         actorMarker=marker;
         SDL_DestroySurface(image);
     }
@@ -127,8 +128,10 @@ static void paintActor(int index,int x,int y)
     GetActorMap(col,row)=0x44;
     GRAP_BUF_PutMapSprite(col,row,256+0x44);
 }
-int main(void)
+int main(int argc, char** argv)
 {
+    transparentSprites = !(argc > 1 && strcmp(argv[1], "--opaque") == 0);
+    GRAP_BUF_SetTransparentSprites(transparentSprites);
     assert(!MOVEMENT_Diagonal());
     assert(MOUSE_Direction(1,1)==U5_KEY_RIGHT);
     assert(MOUSE_Direction(-1,-2)==U5_KEY_UP);

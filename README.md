@@ -107,12 +107,13 @@ Map commands are disabled during menus, dialogues, dungeon
 perspective views, and other input prompts. Menu lists support mouse selection;
 use the keyboard for other prompts. Clicking the status column does not issue map commands.
 
-The Linux renderer draws player, NPC, and monster sprites over their ground
+Enable `--transparent-sprites` to draw player, NPC, and monster sprites over their ground
 instead of replacing the entire tile. Black sprite pixels are transparent,
 except for a one-pixel black outline around colored pixels (including diagonal
 neighbors). The outline can extend one pixel into adjacent map tiles and is
 clipped at the map frame. This also applies to expanded fullscreen maps and
-smooth movement. Terrain tiles remain opaque; the original tile data is unchanged.
+smooth movement. Sprites default to opaque when the flag is omitted. Terrain tiles remain opaque;
+the original tile data is unchanged.
 
 Enable smooth movement independently with `--smooth-movement`. Each successful
 tile step animates a scrolling camera over roughly 120 ms, keeping the player

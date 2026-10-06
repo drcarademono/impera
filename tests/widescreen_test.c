@@ -34,6 +34,14 @@ int main(void)
     memset(tiles + 300 * 128, 0, 128);
     tiles[300 * 128 + 8 * 8] = 0x20;
     assert(GRAP_BUF_SpritePixel(300, 0, 8) == 2);
+    assert(GRAP_BUF_SpritePixel(300, 2, 8) == 0); /* opaque by default */
+    assert(GRAP_BUF_SpritePixel(300, -1, 7) == -1); /* no outline spill */
+    memset(g_linearEgaBuffer0, 5, 320 * 200);
+    GRAP_BUF_PutMapSprite(1, 1, 300);
+    assert(g_linearEgaBuffer0[32 * 320 + 26] == 0);
+    assert(g_linearEgaBuffer0[31 * 320 + 23] == 5);
+    GRAP_BUF_SetTransparentSprites(true);
+    assert(GRAP_BUF_SpritePixel(300, 0, 8) == 2);
     assert(GRAP_BUF_SpritePixel(300, -1, 7) == 0);
     assert(GRAP_BUF_SpritePixel(300, 2, 8) == -1);
     assert(GRAP_BUF_SpritePixel(300, 15, 8) == -1);

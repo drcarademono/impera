@@ -25,6 +25,7 @@ extern int g_enableDebugOverlay;
 #if defined(TARGET_SDL)
 #include <SDL3/SDL_main.h>
 #include "graphics/grap_sdl.h"
+#include "graphics/grap_buf.h"
 #include "key/mouse.h"
 #endif
 
@@ -49,13 +50,16 @@ int CDECL main(int argc, char** argv/*, char** envp*/)
             MOUSE_SetEnabled(true);
         else if (strcmp(argv[arg], "--smooth-movement") == 0)
             GRAP_SDL_SetSmoothMovement(true);
+        else if (strcmp(argv[arg], "--transparent-sprites") == 0)
+            GRAP_BUF_SetTransparentSprites(true);
         else if (strcmp(argv[arg], "--help") == 0)
         {
-            puts("Usage: ultima5 [--fullscreen] [--mouse] [--smooth-movement] [--diagonal-movement] [C|H|T|E]\n"
+            puts("Usage: ultima5 [--fullscreen] [--mouse] [--smooth-movement] [--diagonal-movement] [--transparent-sprites] [C|H|T|E]\n"
                  "  --fullscreen       Expand the overhead map with uniform integer pixel scaling.\n"
                  "  --mouse            Enable mouse movement and contextual actions.\n"
                  "  --diagonal-movement Enable diagonal movement, actions, cursors and combat.\n"
-                 "  --smooth-movement  Animate overhead movement with a scrolling camera.");
+                 "  --smooth-movement  Animate overhead movement with a scrolling camera.\n"
+                 "  --transparent-sprites Show ground through black sprite backgrounds with a one-pixel outline.");
             return EXIT_SUCCESS;
         }
         else if (argv[arg][0] == '-')

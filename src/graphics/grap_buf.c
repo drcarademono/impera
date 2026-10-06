@@ -39,6 +39,9 @@ static u8 s_bitMask[8] = {0x80, 0x40, 0x20, 0x10, 0x8, 0x4, 0x2, 0x1};
 static u8 s_colorTable[16] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 };
 
 static byte* s_tileset;
+static bool s_transparentSprites;
+
+void GRAP_BUF_SetTransparentSprites(bool enabled) { s_transparentSprites = enabled; }
 
 static pfGrapFlushFrame* s_pfFlushFrame;
 
@@ -385,6 +388,8 @@ byte GRAP_BUF_TilePixel(int tile, int x, int y)
  * black outline, including the one-pixel margin outside the source tile. */
 int GRAP_BUF_SpritePixel(int tile, int x, int y)
 {
+    if (!s_transparentSprites)
+        return x < 0 || y < 0 || x >= 16 || y >= 16 ? -1 : GRAP_BUF_TilePixel(tile, x, y);
     byte color = GRAP_BUF_TilePixel(tile, x, y);
     if (color) return color;
     for (int dy = -1; dy <= 1; dy++)
