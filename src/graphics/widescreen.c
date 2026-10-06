@@ -317,15 +317,19 @@ static bool s_ditheredDarkness;
 void WIDE_SetDitheredDarkness(bool enabled) { s_ditheredDarkness=enabled; }
 bool WIDE_DitheredDarkness(void) { return s_ditheredDarkness; }
 
-/* These variants carry masonry in their artwork too. Do not classify only
- * the plain wall: doorways, windows and wall torches would otherwise dissolve. */
+/* Structural wall artwork audited against TILES.16 and LOOK2.DAT.
+ * This is a fade barrier, not the gameplay collision/LOS classification.
+ * See docs/masonry-tiles.md for inclusions and intentionally excluded tiles. */
 static bool SolidMasonry(byte tile)
 {
-    return tile==TILE_MAP_WALL || tile==TILE_MAP_HIDDEN_DOOR ||
-        tile==TILE_MAP_4A || tile==TILE_MAP_4B /* open masonry doorways */ ||
-        tile==TILE_MAP_97 /* window */ ||
-        tile==TILE_MAP_DOOR_B8 || tile==TILE_MAP_DOOR_B9 /* closed doors */ ||
-        tile==0xc0 || tile==0xc1; /* animated wall torch */
+    return tile==TILE_MAP_4A || tile==TILE_MAP_4B /* arrow slit / window */ ||
+        (tile>=0x4d && tile<=0x57) /* stone walls and crenellations */ ||
+        tile==TILE_MAP_SHELF /* window shelf */ ||
+        (tile>=0x70 && tile<=0x7f) /* strange walls */ ||
+        tile==TILE_MAP_87 /* archway */ ||
+        tile==TILE_MAP_97 || tile==TILE_MAP_98 /* odd doors */ ||
+        (tile>=TILE_MAP_DOOR_B8 && tile<=TILE_MAP_FIREPLACE) ||
+        tile==0xfe; /* wall */
 }
 
 /* Darkness coverage, 0..16, at original game-pixel resolution. Visible tiles

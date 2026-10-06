@@ -368,15 +368,21 @@ int main(void)
         assert(mask[(5*16+y)*176+7*16+x]==0);
         assert(mask[(5*16+y)*176+8*16+x]==16);
     }
-    const byte masonryVariants[]={TILE_MAP_HIDDEN_DOOR,TILE_MAP_4A,TILE_MAP_4B,TILE_MAP_97,TILE_MAP_DOOR_B8,TILE_MAP_DOOR_B9,0xc0,0xc1};
+    const byte masonryVariants[]={
+        0x4a,0x4b,0x4d,0x4e,0x4f,0x50,0x51,0x52,0x53,0x54,0x55,0x56,0x57,
+        0x5a,0x70,0x71,0x72,0x73,0x74,0x75,0x76,0x77,0x78,0x79,0x7a,0x7b,0x7c,0x7d,0x7e,0x7f,
+        0x87,0x97,0x98,0xb8,0xb9,0xba,0xbb,0xbc,0xfe};
     for(unsigned i=0;i<sizeof(masonryVariants);i++) {
         GetMap(18,16)=masonryVariants[i];
-        GetMap(19,16)=masonryVariants[i];
+        GetMap(19,16)=1; /* hidden ground must still fade up to the barrier */
         assert(WIDE_DarknessMask(mask,11,11));
         for(int y=0;y<16;y++) for(int x=0;x<16;x++) {
             assert(mask[(5*16+y)*176+7*16+x]==0);
             assert(mask[(5*16+y)*176+8*16+x]==16);
         }
+        GetMap(19,16)=masonryVariants[i];
+        assert(WIDE_DarknessMask(mask,11,11));
+        assert(mask[(5*16+8)*176+8*16+8]==16);
     }
     /* Both locked and unlocked closed doors stop expanded-view sightlines. */
     GetMap(17,16)=TILE_MAP_DOOR_B8;
@@ -384,7 +390,7 @@ int main(void)
     GetMap(17,16)=TILE_MAP_DOOR_B9;
     assert(WIDE_Visible(1,0));assert(!WIDE_Visible(2,0));
     GetMap(17,16)=1;
-    /* Empath Abbey's entry: the corridor has two open doorway tiles (4a)
+    /* Empath Abbey's entry: the corridor has two arrow slit tiles (4a)
      * between solid walls. The unseen rooms beside them must not erode them. */
     GetMap(18,15)=TILE_MAP_WALL;
     GetMap(18,16)=GetMap(18,17)=TILE_MAP_4A;
@@ -393,9 +399,13 @@ int main(void)
     assert(WIDE_DarknessMask(mask,11,11));
     for(int row=4;row<=7;row++) for(int y=0;y<16;y++) for(int x=0;x<16;x++)
         assert(mask[(row*16+y)*176+7*16+x]==0);
-    GetMap(18,16)=1; /* natural scenery still fades */
-    assert(WIDE_DarknessMask(mask,11,11));
-    assert(mask[(5*16+8)*176+7*16+14]>0);
+    GetMap(19,16)=1;
+    const byte nonMasonry[]={1,0x09,0x2e,0x4c,0x8c,0x99,0xb0,0xb1,0xc0,0xc1,0xc4,0xc5,0xca,0xcb};
+    for(unsigned i=0;i<sizeof(nonMasonry);i++) {
+        GetMap(18,16)=nonMasonry[i];
+        assert(WIDE_DarknessMask(mask,11,11));
+        assert(mask[(5*16+8)*176+7*16+14]>0);
+    }
     /* A continuous wall separates visible ground from unseen ground. The
      * fade must not reach through the wall onto its inside edge. */
     for(int row=0;row<11;row++) {
