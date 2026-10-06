@@ -162,12 +162,21 @@ bool WIDE_Visible(int dx, int dy)
     /* Daylight illuminates the larger viewport; torch/night light keeps the
      * original squared-distance limit. Opaque intervening tiles block sight. */
     if (D_58a5 < 50 && dx * dx + dy * dy > D_58a5) return false;
+    bool expanded=abs(dx)>5 || abs(dy)>5;
     int x = 0, y = 0, ax = abs(dx), ay = abs(dy);
     int sx = dx < 0 ? -1 : 1, sy = dy < 0 ? -1 : 1, error = ax - ay;
     while (x != dx || y != dy) {
+        int previousX=x,previousY=y;
         int twice = error * 2;
         if (twice > -ay) { error -= ay; x += sx; }
         if (twice < ax) { error += ax; y += sy; }
+        /* A ray cannot squeeze diagonally between two opaque corner tiles. */
+        if(x!=previousX && y!=previousY &&
+            !Transparent(WIDE_MapTile(x,previousY),x*x+previousY*previousY) &&
+            !Transparent(WIDE_MapTile(previousX,y),previousX*previousX+y*y)) return false;
+        /* The original view is authoritative. Expanded sightlines must not
+         * emerge on the far side of a room it classified as unseen. */
+        if(expanded && abs(x)<=5 && abs(y)<=5 && GetMapViewport(x+5,y+5)==255) return false;
         if (x == dx && y == dy) break;
         if (!Transparent(WIDE_MapTile(x, y), x * x + y * y)) return false;
     }
@@ -302,4 +311,77 @@ bool WIDE_Compose(byte* pixels, WideLayout l)
                 }
         }
     return true;
+}
+
+static bool s_ditheredDarkness;
+void WIDE_SetDitheredDarkness(bool enabled) { s_ditheredDarkness=enabled; }
+bool WIDE_DitheredDarkness(void) { return s_ditheredDarkness; }
+
+/* Structural wall artwork audited against TILES.16 and LOOK2.DAT.
+ * This is a fade barrier, not the gameplay collision/LOS classification.
+ * See docs/masonry-tiles.md for inclusions and intentionally excluded tiles. */
+static bool SolidMasonry(byte tile)
+{
+    return tile==TILE_MAP_4A || tile==TILE_MAP_4B /* arrow slit / window */ ||
+        (tile>=0x4d && tile<=0x57) /* stone walls and crenellations */ ||
+        tile==TILE_MAP_SHELF /* window shelf */ ||
+        (tile>=0x70 && tile<=0x7f) /* strange walls */ ||
+        tile==TILE_MAP_87 /* archway */ ||
+        tile==TILE_MAP_97 || tile==TILE_MAP_98 /* odd doors */ ||
+        (tile>=TILE_MAP_DOOR_B8 && tile<=TILE_MAP_FIREPLACE) ||
+        tile==TILE_MAP_SIGN_F8 /* wall-mounted inscription */ ||
+        tile==0xfe; /* wall */
+}
+
+/* Darkness coverage, 0..16, at original game-pixel resolution. Visible tiles
+ * fade inward over 24 pixels; unseen terrain stays completely hidden.
+ * Visible masonry (including concealed doors) keeps its solid silhouette. */
+bool WIDE_DarknessMask(byte* mask,int columns,int rows)
+{
+    int stride=columns+4;
+    bool* lit=malloc((size_t)stride*(rows+4)*sizeof(bool));
+    bool* solid=malloc((size_t)stride*(rows+4)*sizeof(bool));
+    if(!lit || !solid) { free(lit);free(solid);return false; }
+    for(int row=-2;row<rows+2;row++) for(int col=-2;col<columns+2;col++) {
+        int dx=col-columns/2,dy=row-rows/2;
+        solid[(row+2)*stride+col+2]=SolidMasonry(WIDE_MapTile(dx,dy));
+        lit[(row+2)*stride+col+2]=abs(dx)<=5 && abs(dy)<=5 ? GetMapViewport(dx+5,dy+5)!=255 : WIDE_Visible(dx,dy) && WIDE_MapTile(dx,dy)!=255;
+    }
+    for(int row=0;row<rows;row++) for(int col=0;col<columns;col++) {
+        bool visible=lit[(row+2)*stride+col+2];
+        byte tile=visible ? WIDE_MapTile(col-columns/2,row-rows/2) : 255;
+        bool masonry=SolidMasonry(tile);
+        for(int py=0;py<16;py++) for(int px=0;px<16;px++) {
+            int shade=0;
+            if(!visible) shade=16;
+            else if(!masonry && (col!=columns/2 || row!=rows/2)) {
+                int nearest=24*24;
+                for(int oy=-2;oy<=2;oy++) for(int ox=-2;ox<=2;ox++) {
+                    if(lit[(row+oy+2)*stride+col+ox+2] || solid[(row+oy+2)*stride+col+ox+2]) continue;
+                    int x=px-ox*16,y=py-oy*16;
+                    int dx=x<0?-x:x>15?x-15:0,dy=y<0?-y:y>15?y-15:0;
+                    int distance=dx*dx+dy*dy;
+                    if(distance>=nearest) continue;
+                    /* Darkness beyond masonry cannot fade through it onto the
+                     * lit side. Trace the short pixel segment to this boundary. */
+                    int endX=ox*16+(x<0?0:x>15?15:x);
+                    int endY=oy*16+(y<0?0:y>15?15:y);
+                    int steps=abs(endX-px)>abs(endY-py)?abs(endX-px):abs(endY-py);
+                    bool blocked=false;
+                    for(int step=1;step<steps;step++) {
+                        int rx=px+(endX-px)*step/steps;
+                        int ry=py+(endY-py)*step/steps;
+                        int cx=rx>=0?rx/16:(rx-15)/16;
+                        int cy=ry>=0?ry/16:(ry-15)/16;
+                        if(solid[(row+cy+2)*stride+col+cx+2]) { blocked=true;break; }
+                    }
+                    if(!blocked) nearest=distance;
+                }
+                int distance=0;while(distance<24 && (distance+1)*(distance+1)<=nearest) distance++;
+                shade=(24-distance)*16/24;if(shade>15) shade=15;
+            }
+            mask[(row*16+py)*columns*16+col*16+px]=(byte)shade;
+        }
+    }
+    free(solid);free(lit);return true;
 }

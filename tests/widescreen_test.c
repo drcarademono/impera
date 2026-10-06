@@ -318,6 +318,111 @@ int main(void)
     D_58a5 = 2;
     assert(WIDE_Compose(pixels, broad));
     assert(pixel(pixels, broad, 7, 0) == 0);
+    /* Expanded rays must not relight rooms hidden by the original view,
+     * even when their terrain-only ray passes through a distant window. */
+    byte seamTown[sizeof(D_6608_map.town)],seamView[sizeof(D_ab02)];
+    memcpy(seamTown,D_6608_map.town,sizeof(seamTown));
+    memcpy(seamView,D_ab02,sizeof(seamView));
+    memset(D_6608_map.town,1,sizeof(D_6608_map.town));
+    memset(D_ab02,1,sizeof(D_ab02));
+    D_58a5=50;D_5896_map_x=D_5897_map_y=16;
+    assert(WIDE_Visible(7,0));assert(WIDE_Visible(-7,0));
+    GetMap(18,16)=TILE_MAP_4A;
+    GetMap(14,16)=TILE_MAP_4B;
+    GetMapViewport(8,5)=GetMapViewport(2,5)=255;
+    assert(!WIDE_Visible(7,0));assert(!WIDE_Visible(-7,0));
+    assert(WIDE_Compose(pixels,broad));
+    assert(pixel(pixels,broad,7,0)==0 && pixel(pixels,broad,-7,0)==0);
+    byte* edgeMask=malloc((size_t)broad.columns*broad.rows*256);assert(edgeMask);
+    assert(WIDE_DarknessMask(edgeMask,broad.columns,broad.rows));
+    int edgeStride=broad.columns*16,edgeRow=(broad.rows/2*16+8)*edgeStride;
+    assert(edgeMask[edgeRow+(broad.columns/2+7)*16+8]==16);
+    assert(edgeMask[edgeRow+(broad.columns/2-7)*16+8]==16);
+    free(edgeMask);
+    GetMapViewport(8,5)=GetMapViewport(2,5)=1;
+    assert(WIDE_Visible(7,0));assert(WIDE_Visible(-7,0));
+    GetMap(17,16)=GetMap(16,17)=TILE_MAP_WALL;
+    assert(!WIDE_Visible(7,7)); /* no diagonal corner leak */
+    memcpy(D_6608_map.town,seamTown,sizeof(seamTown));
+    memcpy(D_ab02,seamView,sizeof(seamView));
+    /* Dither coverage preserves unseen cells and fades only visible edges. */
+    byte savedTown[sizeof(D_6608_map.town)],savedView[sizeof(D_ab02)];
+    memcpy(savedTown,D_6608_map.town,sizeof(savedTown));memcpy(savedView,D_ab02,sizeof(savedView));
+    memset(D_6608_map.town,1,sizeof(D_6608_map.town));memset(D_ab02,1,sizeof(D_ab02));
+    D_58a5=50;D_5896_map_x=D_5897_map_y=16;
+    byte mask[176*176],again[176*176];
+    assert(!WIDE_DitheredDarkness());WIDE_SetDitheredDarkness(true);assert(WIDE_DitheredDarkness());
+    assert(WIDE_DarknessMask(mask,11,11));
+    for(int i=0;i<176*176;i++) assert(mask[i]==0); /* clear daylight stays clear */
+    GetMapViewport(8,5)=255;
+    assert(WIDE_DarknessMask(mask,11,11));assert(WIDE_DarknessMask(again,11,11));
+    assert(!memcmp(mask,again,sizeof(mask))); /* stable pattern input */
+    assert(mask[(5*16+8)*176+8*16+8]==16); /* cannot reveal hidden terrain */
+    assert(mask[(5*16+8)*176+7*16+14]>mask[(5*16+8)*176+7*16+1]);
+    assert(mask[(5*16+8)*176+5*16+8]==0); /* player remains clear */
+    /* Visible walls stay solid beside unseen rooms; hidden walls stay hidden. */
+    GetMap(18,16)=TILE_MAP_WALL;
+    GetMap(19,16)=TILE_MAP_WALL;
+    assert(WIDE_DarknessMask(mask,11,11));
+    for(int y=0;y<16;y++) for(int x=0;x<16;x++) {
+        assert(mask[(5*16+y)*176+7*16+x]==0);
+        assert(mask[(5*16+y)*176+8*16+x]==16);
+    }
+    const byte masonryVariants[]={
+        0x4a,0x4b,0x4d,0x4e,0x4f,0x50,0x51,0x52,0x53,0x54,0x55,0x56,0x57,
+        0x5a,0x70,0x71,0x72,0x73,0x74,0x75,0x76,0x77,0x78,0x79,0x7a,0x7b,0x7c,0x7d,0x7e,0x7f,
+        0x87,0x97,0x98,0xb8,0xb9,0xba,0xbb,0xbc,0xf8,0xfe};
+    for(unsigned i=0;i<sizeof(masonryVariants);i++) {
+        GetMap(18,16)=masonryVariants[i];
+        GetMap(19,16)=1; /* hidden ground must still fade up to the barrier */
+        assert(WIDE_DarknessMask(mask,11,11));
+        for(int y=0;y<16;y++) for(int x=0;x<16;x++) {
+            assert(mask[(5*16+y)*176+7*16+x]==0);
+            assert(mask[(5*16+y)*176+8*16+x]==16);
+        }
+        GetMap(19,16)=masonryVariants[i];
+        assert(WIDE_DarknessMask(mask,11,11));
+        assert(mask[(5*16+8)*176+8*16+8]==16);
+    }
+    /* Both locked and unlocked closed doors stop expanded-view sightlines. */
+    GetMap(17,16)=TILE_MAP_DOOR_B8;
+    assert(WIDE_Visible(1,0));assert(!WIDE_Visible(2,0));
+    GetMap(17,16)=TILE_MAP_DOOR_B9;
+    assert(WIDE_Visible(1,0));assert(!WIDE_Visible(2,0));
+    GetMap(17,16)=1;
+    /* Empath Abbey's entry: the corridor has two arrow slit tiles (4a)
+     * between solid walls. The unseen rooms beside them must not erode them. */
+    GetMap(18,15)=TILE_MAP_WALL;
+    GetMap(18,16)=GetMap(18,17)=TILE_MAP_4A;
+    GetMap(18,18)=TILE_MAP_WALL;
+    for(int row=4;row<=8;row++) GetMapViewport(8,row)=255;
+    assert(WIDE_DarknessMask(mask,11,11));
+    for(int row=4;row<=7;row++) for(int y=0;y<16;y++) for(int x=0;x<16;x++)
+        assert(mask[(row*16+y)*176+7*16+x]==0);
+    GetMap(19,16)=1;
+    const byte nonMasonry[]={1,0x09,0x2e,0x4c,0x8c,0x99,0xb0,0xb1,0xc0,0xc1,0xc4,0xc5,0xca,0xcb,0xf0,0xf1,0xf2,0xf3,0xf4,0xf5,0xf6,0xf7,0xf9};
+    for(unsigned i=0;i<sizeof(nonMasonry);i++) {
+        GetMap(18,16)=nonMasonry[i];
+        assert(WIDE_DarknessMask(mask,11,11));
+        assert(mask[(5*16+8)*176+7*16+14]>0);
+    }
+    /* A continuous wall separates visible ground from unseen ground. The
+     * fade must not reach through the wall onto its inside edge. */
+    for(int row=0;row<11;row++) {
+        GetMap(18,11+row)=TILE_MAP_WALL;
+        GetMap(19,11+row)=1;
+        GetMapViewport(8,row)=255;
+    }
+    GetMap(18,16)=TILE_MAP_DOOR_B8;
+    assert(WIDE_DarknessMask(mask,11,11));
+    for(int y=0;y<16;y++) for(int x=0;x<16;x++)
+        assert(mask[(5*16+y)*176+6*16+x]==0);
+    /* Removing the barrier restores the ordinary outdoor fade. */
+    for(int row=0;row<11;row++) GetMap(18,11+row)=1;
+    assert(WIDE_DarknessMask(mask,11,11));
+    assert(mask[(5*16+8)*176+6*16+15]>0);
+    WIDE_SetDitheredDarkness(false);
+    memcpy(D_6608_map.town,savedTown,sizeof(savedTown));memcpy(D_ab02,savedView,sizeof(savedView));
     D_58a5 = 50;
     D_5896_map_x = 31;
     assert(WIDE_Compose(pixels, broad));

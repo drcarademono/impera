@@ -55,6 +55,9 @@ static bool confirmAimOnPoll;
 static bool checkAnimation;
 static bool checkWater;
 static bool checkDarkness;
+static bool checkDither;
+static int ditherDx,ditherDy;
+static unsigned ditherPattern;
 static bool checkEdges;
 static bool edgeBright=true;
 static int lightX,lightY,darkX;
@@ -93,13 +96,31 @@ bool __wrap_SDL_RenderPresent(SDL_Renderer* renderer)
         assert(r==0 && g==0 && b==(edgeBright?170:0)); /* completed map retained during UI-only flush */
         SDL_DestroySurface(image);
     }
+    if(checkDither) {
+        SDL_Surface* image=SDL_RenderReadPixels(renderer,NULL);assert(image);
+        int dark=0,lit=0;
+        unsigned pattern=0;
+        int scrollX=presented<=8 ? ditherDx*(8-presented)*6 : 0;
+        int scrollY=presented<=8 ? ditherDy*(8-presented)*6 : 0;
+        for(int y=4;y<8;y++) for(int x=4;x<8;x++) {
+            Uint8 r,g,b,a;
+            assert(SDL_ReadSurfacePixel(image,lightX-2+x*3+scrollX,lightY-8*3+y*3+scrollY,&r,&g,&b,&a));
+            assert(r==0 && g==0 && (b==0 || b==170));
+            dark+=b==0;lit+=b==170;
+            if(b==0) pattern|=1u<<((y-4)*4+x-4);
+        }
+        assert(dark>0 && lit>0);
+        if(!ditherDx && !ditherDy) ditherPattern=pattern;
+        else assert(pattern==ditherPattern); /* every pixel follows the terrain */
+        SDL_DestroySurface(image);
+    }
     if(checkDarkness) {
         SDL_Surface* image=SDL_RenderReadPixels(renderer,NULL);assert(image);
         Uint8 r,g,b,a;
-        assert(SDL_ReadSurfacePixel(image,lightX,lightY,&r,&g,&b,&a));
-        assert(r==0 && g==0 && b==170); /* light stays centered on player */
-        assert(SDL_ReadSurfacePixel(image,darkX,lightY,&r,&g,&b,&a));
-        assert(r==0 && g==0 && b==0); /* hidden ground never slides into view */
+        assert(SDL_ReadSurfacePixel(image,lightX+(presented<=8?ditherDx*(8-presented)*6:0),lightY+(presented<=8?ditherDy*(8-presented)*6:0),&r,&g,&b,&a));
+        assert(r==0 && g==0 && b==170); /* visible ground follows the map */
+        assert(SDL_ReadSurfacePixel(image,darkX+(presented<=8?ditherDx*(8-presented)*6:0),lightY+(presented<=8?ditherDy*(8-presented)*6:0),&r,&g,&b,&a));
+        assert(r==0 && g==0 && b==0); /* hidden ground stays covered as it scrolls */
         SDL_DestroySurface(image);
     }
     if(checkWater) {
@@ -134,7 +155,7 @@ bool __wrap_SDL_RenderPresent(SDL_Renderer* renderer)
     bool result=__real_SDL_RenderPresent(renderer);
     /* Present invalidates the SDL backbuffer. Simulate a renderer that discards
      * it, so a second present without a full redraw cannot pass by accident. */
-    if(checkAnimation || checkActor || checkWater || checkDarkness) {
+    if(checkAnimation || checkActor || checkWater || checkDarkness || checkDither) {
         SDL_SetRenderDrawColor(renderer,255,0,255,255);
         SDL_RenderClear(renderer);
         SDL_SetRenderDrawColor(renderer,0,0,0,255);
@@ -664,7 +685,9 @@ int main(int argc, char** argv)
         GRAP_SDL_MapDrawn();GRAP_SDL_FlushFrame();
         checkEdges=false;
     }
-    /* Darkness is a stationary visibility mask, not part of scrolling terrain. */
+    /* Both visibility modes follow scrolling terrain in all eight directions. */
+    GRAP_BUF_SetTransparentSprites(false);
+    memset(tiles+(256+GetActorMap(5,5))*128,0x11,128);
     D_58a5=2;memset(tiles+128,0x11,128);
     for(int yy=0;yy<11;yy++) for(int xx=0;xx<11;xx++) {
         bool visible=(xx-5)*(xx-5)+(yy-5)*(yy-5)<=2;
@@ -683,10 +706,25 @@ int main(int argc, char** argv)
         D_5896_map_x=100;D_5897_map_y=100;GRAP_SDL_SetSmoothMovement(true);
         GRAP_SDL_MapDrawn();GRAP_SDL_FlushFrame();
         D_5896_map_x+=sx;D_5897_map_y+=sy;
-        checkDarkness=true;presented=0;
+        checkDarkness=true;presented=0;ditherDx=sx;ditherDy=sy;
         GRAP_SDL_MapDrawn();GRAP_SDL_FlushFrame();
         checkDarkness=false;assert(presented==9);
     }
+    D_58a5=2;
+    WIDE_SetDitheredDarkness(true);
+    /* Isolate the mask from the stationary player's outline at the probe. */
+    GRAP_BUF_SetTransparentSprites(false);
+    memset(tiles+(256+GetActorMap(5,5))*128,0x11,128);
+    checkDither=true;ditherDx=ditherDy=0;GRAP_SDL_MapDrawn();GRAP_SDL_FlushFrame();
+    for(int sy=-1;sy<=1;sy++) for(int sx=-1;sx<=1;sx++) {
+        if(!sx && !sy) continue;
+        ditherDx=sx;ditherDy=sy;presented=0;
+        D_5896_map_x+=sx;D_5897_map_y+=sy;
+        GRAP_SDL_MapDrawn();GRAP_SDL_FlushFrame();assert(presented==9);
+    }
+    checkDither=false;
+    GRAP_BUF_SetTransparentSprites(transparentSprites);
+    WIDE_SetDitheredDarkness(false);
     D_58a5=50;
     D_5893_map_id=1;D_5896_map_x=16;D_5897_map_y=16;
     memset(D_6608_map.town,1,sizeof(D_6608_map.town));

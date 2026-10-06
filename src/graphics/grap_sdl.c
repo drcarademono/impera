@@ -23,6 +23,7 @@ static bool s_fullscreen;
 static bool s_pixelUI;
 static int s_windowedWidth=1280, s_windowedHeight=960;
 static SDL_Texture* s_wideTexture;
+static SDL_Texture* s_darknessTexture;
 static SDL_Surface* s_wideSurface;
 static byte* s_widePixels;
 static byte* s_completedWidePixels;
@@ -260,6 +261,7 @@ void GRAP_SDL_Cleanup(void)
     s_previousPixels = NULL;
     s_previousValid = s_mapDrawn = false;
 
+    SDL_DestroyTexture(s_darknessTexture);s_darknessTexture=NULL;
     SDL_DestroyTexture(s_wideTexture);
     SDL_DestroySurface(s_wideSurface);
     free(s_widePixels);
@@ -310,6 +312,41 @@ static void LinearToRGB(void)
         }
     }
 #endif
+}
+
+static int s_darknessColumns,s_darknessRows,s_darknessMap,s_darknessLevel;
+static void PrepareDarkness(int columns,int rows,bool completed)
+{
+    if(!WIDE_DitheredDarkness() || s_pixelUI || !D_58a4 || D_5893_map_id>32) {
+        SDL_DestroyTexture(s_darknessTexture);s_darknessTexture=NULL;return;
+    }
+    if(!completed && s_darknessTexture && columns==s_darknessColumns && rows==s_darknessRows && s_darknessMap==D_5893_map_id && s_darknessLevel==D_5895_map_level) return;
+    /* One tile of padding keeps the mask over every exposed scrolling edge. */
+    int width=(columns+2)*16,height=(rows+2)*16;
+    byte* mask=malloc((size_t)width*height);
+    SDL_Surface* surface=SDL_CreateSurface(width,height,SDL_PIXELFORMAT_ARGB8888);
+    if(mask && surface && WIDE_DarknessMask(mask,columns+2,rows+2)) {
+        static const byte pattern[16]={0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5};
+        for(int y=0;y<height;y++) {
+            Uint32* pixels=(Uint32*)((byte*)surface->pixels+y*surface->pitch);
+            for(int x=0;x<width;x++) pixels[x]=pattern[(y&3)*4+(x&3)]<mask[y*width+x]?0xff000000:0;
+        }
+        SDL_Texture* next=SDL_CreateTextureFromSurface(s_sdlRenderer,surface);
+        if(next) {
+            SDL_SetTextureBlendMode(next,SDL_BLENDMODE_BLEND);
+            SDL_SetTextureScaleMode(next,SDL_SCALEMODE_NEAREST);
+            SDL_DestroyTexture(s_darknessTexture);s_darknessTexture=next;
+            s_darknessColumns=columns;s_darknessRows=rows;s_darknessMap=D_5893_map_id;s_darknessLevel=D_5895_map_level;
+        } else DEBUG_Error("Cannot create dithered darkness texture: %s",SDL_GetError());
+    } else DEBUG_Error("Cannot allocate dithered darkness mask");
+    free(mask);SDL_DestroySurface(surface);
+}
+static void DrawDarkness(SDL_FRect dst,int width,int height,int mapX,int mapY,int columns,int rows)
+{
+    if(!s_darknessTexture) return;
+    SDL_FRect map={dst.x+mapX*dst.w/width,dst.y+mapY*dst.h/height,columns*16*dst.w/width,rows*16*dst.h/height};
+    SDL_FRect source={16,16,columns*16,rows*16};
+    SDL_RenderTexture(s_sdlRenderer,s_darknessTexture,&source,&map);
 }
 
 /* Snapshot only completed map redraws, never intermediate text updates. The
@@ -369,13 +406,13 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
         /* One padded current map covers all exposed edges, including diagonal
          * corner gaps. Never splice old/new water animation phases together. */
         int paddedWidth=(columns+2)*16,paddedHeight=(rows+2)*16;
-        bool* hidden=calloc((size_t)columns*rows,sizeof(bool));
+        bool* hidden=calloc((size_t)(columns+2)*(rows+2),sizeof(bool));
         SDL_Surface* padded=hidden?SDL_CreateSurface(paddedWidth,paddedHeight,SDL_PIXELFORMAT_ARGB8888):NULL;
         if(padded) for(int row=-1;row<=rows;row++) for(int col=-1;col<=columns;col++) {
             bool interior=col>=0 && col<columns && row>=0 && row<rows;
             int tx=col-columns/2,ty=row-rows/2;
             bool lit=combat || (abs(tx)<=5 && abs(ty)<=5 ? GetMapViewport(tx+5,ty+5)!=255 : WIDE_Visible(tx,ty));
-            if(interior) hidden[row*columns+col]=!lit;
+            hidden[(row+1)*(columns+2)+col+1]=!lit;
             bool valid=WIDE_MapTile(tx,ty)!=255;
             for(int y=0;y<16;y++) {
                 Uint32* dest=(Uint32*)((byte*)padded->pixels+((row+1)*16+y)*padded->pitch)+(col+1)*16;
@@ -440,11 +477,15 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
                     }
                 }
                 if (playerTexture) SDL_RenderTexture(s_sdlRenderer,playerTexture,NULL,&playerDst);
-                /* Visibility belongs to the player/camera, not to the scrolling
-                 * texture. Use the authoritative central mask and the expanded
-                 * LOS mask, covering sprites as well as ground. */
-                if(!combat) for(int row=0;row<rows;row++) for(int col=0;col<columns;col++) if(hidden[row*columns+col]) {
-                    SDL_FRect shadow={mapDst.x+col*16*sx,mapDst.y+row*16*sy,16*sx,16*sy};
+                /* Cover sprites as well as ground with the authoritative
+                 * central visibility and expanded LOS result. */
+                if(!combat && s_darknessTexture) {
+                    /* Keep wall/door cutouts and the ordered pattern attached to
+                     * their terrain throughout the same interpolated movement. */
+                    SDL_RenderTexture(s_sdlRenderer,s_darknessTexture,NULL,&b);
+                }
+                else if(!combat) for(int row=-1;row<=rows;row++) for(int col=-1;col<=columns;col++) if(hidden[(row+1)*(columns+2)+col+1]) {
+                    SDL_FRect shadow={b.x+(col+1)*16*sx,b.y+(row+1)*16*sy,16*sx,16*sy};
                     SDL_RenderFillRect(s_sdlRenderer,&shadow);
                 }
                 SDL_SetRenderClipRect(s_sdlRenderer,NULL);
@@ -583,8 +624,10 @@ void GRAP_SDL_FlushFrame(void)
                              (height - layout.height * layout.scale) / 2,
                              layout.width * layout.scale, layout.height * layout.scale};
             SDL_RenderTexture(s_sdlRenderer, s_wideTexture, NULL, &dst);
+            PrepareDarkness(layout.columns,layout.rows,completedMap);
             SmoothFrame(s_widePixels,layout.width,layout.height,layout.mapX,layout.mapY,
                         layout.columns,layout.rows,s_wideTexture,1,dst);
+            DrawDarkness(dst,layout.width,layout.height,layout.mapX,layout.mapY,layout.columns,layout.rows);
         }
         else
         {
@@ -593,7 +636,9 @@ void GRAP_SDL_FlushFrame(void)
                              (height - 200 * layout.scale) / 2,
                              320 * layout.scale, 200 * layout.scale};
             SDL_RenderTexture(s_sdlRenderer, s_sdlTexture, &srcRect, &dst);
+            PrepareDarkness(11,11,completedMap);
             SmoothFrame(g_linearEgaBuffer0,320,200,8,8,11,11,s_sdlTexture,2,dst);
+            DrawDarkness(dst,320,200,8,8,11,11);
         }
     }
     else {
@@ -601,7 +646,9 @@ void GRAP_SDL_FlushFrame(void)
         int w,h;
         if (SDL_GetRenderOutputSize(s_sdlRenderer,&w,&h)) {
             SDL_FRect dst = {0,0,w,h};
+            PrepareDarkness(11,11,completedMap);
             SmoothFrame(g_linearEgaBuffer0,320,200,8,8,11,11,s_sdlTexture,2,dst);
+            DrawDarkness(dst,320,200,8,8,11,11);
         }
     }
     if(s_pixelUI) {

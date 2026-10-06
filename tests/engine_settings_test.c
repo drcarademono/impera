@@ -21,7 +21,7 @@ static void key(SDL_Keycode code)
 static Uint32 closeGameplayOptions(void* userdata, SDL_TimerID timer, Uint32 interval)
 {
     (void)userdata;(void)timer;(void)interval;
-    for(int i=0;i<5;i++) key(SDLK_DOWN);
+    for(int i=0;i<ENGINE_MUSIC;i++) key(SDLK_DOWN);
     key(SDLK_RETURN); /* Toggle music to prove the shortcut opened the screen. */
     key(SDLK_ESCAPE);
     return 0;
@@ -75,14 +75,17 @@ int main(int argc, char** argv)
     ENGINE_Set(ENGINE_MOVEMENT_SPEED,0.5f);ENGINE_Set(ENGINE_ANIMATION_SPEED,0.75f);
     ENGINE_Set(ENGINE_MOUSE,1);assert(ENGINE_Get(ENGINE_MOUSE)==1);
     ENGINE_Set(ENGINE_MOUSE,0);
-    assert(ENGINE_Save());ENGINE_Set(ENGINE_MOVEMENT_SPEED,1);ENGINE_Load();
+    ENGINE_Set(ENGINE_DITHERED_DARKNESS,1);
+    assert(ENGINE_Save());ENGINE_Set(ENGINE_DITHERED_DARKNESS,0);ENGINE_Set(ENGINE_MOVEMENT_SPEED,1);ENGINE_Load();
+    assert(ENGINE_Get(ENGINE_DITHERED_DARKNESS)==1);
+    ENGINE_Set(ENGINE_DITHERED_DARKNESS,0);
     assert(ENGINE_Get(ENGINE_MOVEMENT_SPEED)==0.5f);
     f=fopen("ENGINE.CFG","w");assert(f);fputs("movement_speed nan\nanimation_speed 99\nfullscreen 3\n",f);fclose(f);
     ENGINE_Load();assert(ENGINE_Get(ENGINE_MOVEMENT_SPEED)==0.5f && ENGINE_Get(ENGINE_ANIMATION_SPEED)==0.75f);
     ENGINE_Set(ENGINE_MOVEMENT_SPEED,1);ENGINE_Set(ENGINE_ANIMATION_SPEED,1);
     ENGINE_Set(ENGINE_FULLSCREEN,1);assert(ENGINE_Get(ENGINE_FULLSCREEN)==1);
     ENGINE_Set(ENGINE_FULLSCREEN,0);assert(ENGINE_Get(ENGINE_FULLSCREEN)==0);
-    GRAP_SDL_SetPixelUI(true);ENGINE_DrawSettings(7);
+    GRAP_SDL_SetPixelUI(true);ENGINE_DrawSettings(ENGINE_MOVEMENT_SPEED);
     for(int y=0;y<8;y++) for(int x=0;x<8;x++)
         assert(g_linearEgaBuffer0[(12+y)*320+104+x]==((font['E'*8+y]&(0x80>>x))?15:0));
     /* Both ends of the settings content have four pixels of inset. */
@@ -107,14 +110,14 @@ int main(int argc, char** argv)
     D_5893_map_id=13;D_58a4=1;
     ENGINE_Set(ENGINE_SMOOTH,1);
     GRAP_SDL_MapDrawn();
-    ENGINE_DrawSettings(7);
+    ENGINE_DrawSettings(ENGINE_MOVEMENT_SPEED);
     SDL_Surface* gameplayShot=SDL_RenderReadPixels(renderer,NULL);assert(gameplayShot);
     assert(gameplayShot->w==shot->w && gameplayShot->h==shot->h);
     SDL_Surface* reference=SDL_ConvertSurface(shot,SDL_PIXELFORMAT_ARGB8888);
     SDL_Surface* actual=SDL_ConvertSurface(gameplayShot,SDL_PIXELFORMAT_ARGB8888);
     assert(reference && actual);
     /* Smooth toggle was changed, so redraw the reference with the same values. */
-    D_5893_map_id=0x40;D_58a4=0;ENGINE_DrawSettings(7);
+    D_5893_map_id=0x40;D_58a4=0;ENGINE_DrawSettings(ENGINE_MOVEMENT_SPEED);
     SDL_DestroySurface(shot);shot=SDL_RenderReadPixels(renderer,NULL);assert(shot);
     SDL_DestroySurface(reference);reference=SDL_ConvertSurface(shot,SDL_PIXELFORMAT_ARGB8888);assert(reference);
     for(int y=0;y<actual->h;y++)
@@ -129,7 +132,7 @@ int main(int argc, char** argv)
     D_5893_map_id=0x40;D_58a4=0;
     GRAP_SDL_SetPixelUI(false);
     memset(g_linearEgaBuffer0,3,320*200);
-    for(int i=0;i<5;i++) key(SDLK_DOWN);
+    for(int i=0;i<ENGINE_MUSIC;i++) key(SDLK_DOWN);
     key(SDLK_RETURN); /* music off */
     key(SDLK_DOWN);key(SDLK_RETURN); /* effects off */
     key(SDLK_DOWN);key(SDLK_LEFT); /* movement 0.75 */
