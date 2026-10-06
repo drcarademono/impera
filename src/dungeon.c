@@ -10,6 +10,7 @@
 #include "combat.h"
 #include "dnglook.h"
 #include "dungeon.h"
+#include "key/key.h"
 #include "endgame.h"
 #include "audio/aud_mus.h"
 
@@ -249,7 +250,13 @@ static int DUNGEON_03d6(void)
     local_4 = 1;
     do
     {
+#if defined(TARGET_SDL)
+        KEY_SDL_SetGameplayInput(1);
+#endif
         local_6 = ULTIMA_2032_ToUpper(ULTIMA_1b38_PollKeyWithCursor());
+#if defined(TARGET_SDL)
+        KEY_SDL_SetGameplayInput(0);
+#endif
         if (local_6 != 0 && local_6 < 5 && D_538a == 0)
         {
             local_6 += 0xfa;

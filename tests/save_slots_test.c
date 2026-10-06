@@ -7,8 +7,12 @@
 #include "common/file.h"
 #include "graphics/grap_sdl.h"
 #include "graphics/grap_buf.h"
+#include "graphics/grap.h"
+#include "funcs.h"
 #include "savegame.h"
 #include "vars.h"
+#include "key/key.h"
+#include "event/event.h"
 void GRAP_SDL_Initialize(void);
 void GRAP_SDL_Cleanup(void);
 static void writeWorld(const char* file,byte value,int bytes)
@@ -26,11 +30,25 @@ static SDL_EnumerationResult cleanup(void* unused,const char* directory,const ch
     SDL_RemovePath(dir);return SDL_ENUM_CONTINUE;
 }
 static int step;
-static bool captureBrowser;
-void __real_SDL_RenderPresent(SDL_Renderer* renderer);
-void __wrap_SDL_RenderPresent(SDL_Renderer* renderer)
+static bool reloadCalled;
+static void reload(void) { reloadCalled=true; }
+static Uint32 cancel(void* unused,SDL_TimerID id,Uint32 interval)
 {
-    __real_SDL_RenderPresent(renderer);
+    (void)unused;(void)id;(void)interval;
+    SDL_Event e={0};e.type=SDL_EVENT_KEY_DOWN;e.key.key=SDLK_ESCAPE;
+    assert(SDL_PushEvent(&e));return 0;
+}
+static Uint32 accept(void* unused,SDL_TimerID id,Uint32 interval)
+{
+    (void)unused;(void)id;(void)interval;
+    SDL_Event e={0};e.type=SDL_EVENT_KEY_DOWN;e.key.key=SDLK_RETURN;
+    assert(SDL_PushEvent(&e));return 0;
+}
+static bool captureBrowser;
+bool __real_SDL_RenderPresent(SDL_Renderer* renderer);
+bool __wrap_SDL_RenderPresent(SDL_Renderer* renderer)
+{
+    bool presented=__real_SDL_RenderPresent(renderer);
     if(captureBrowser && D_539c[0]) {
         bool title=true;
         for(int y=0;y<8;y++) for(int x=0;x<8;x++)
@@ -44,6 +62,7 @@ void __wrap_SDL_RenderPresent(SDL_Renderer* renderer)
             captureBrowser=false;
         }
     }
+    return presented;
 }
 static Uint32 input(void* unused,SDL_TimerID id,Uint32 interval)
 {
@@ -55,7 +74,7 @@ static Uint32 input(void* unused,SDL_TimerID id,Uint32 interval)
 }
 int main(void)
 {
-    assert(SDL_Init(SDL_INIT_VIDEO|SDL_INIT_AUDIO));GRAP_SDL_Initialize();
+    assert(SDL_Init(SDL_INIT_VIDEO|SDL_INIT_AUDIO));GRAP_Initialize();ULTIMA_1158_InitTimer();
     assert(SDL_CreateDirectory("SAVEGAME"));
     SDL_EnumerateDirectory("SAVEGAME/slots",cleanup,NULL);
     writeWorld("SAVEGAME/BRIT.OOL",0x12,256);
@@ -106,13 +125,36 @@ int main(void)
     event.button.x=24*4;event.button.y=80+184*4;assert(SDL_PushEvent(&event));
     assert(!SLOTS_ShowLoad());
     for(int i=0;i<320*200;i++) assert(g_linearEgaBuffer0[i]==3);
+    /* Shortcuts are inert outside gameplay, including title/cutscene mode. */
+    SDL_Event shortcut={0};shortcut.type=SDL_EVENT_KEY_DOWN;shortcut.key.mod=SDL_KMOD_CTRL;
+    KEY_SDL_SetGameplayInput(0);
+    shortcut.key.key=SDLK_W;assert(SDL_PushEvent(&shortcut));assert(KEY_PollKey()==0x1a);
+    shortcut.key.key=SDLK_L;assert(SDL_PushEvent(&shortcut));assert(KEY_PollKey()==0x1a);
+    KEY_SDL_SetGameplayInput(1);EVT_SetImmediateExit(1);
+    assert(SDL_PushEvent(&shortcut));assert(KEY_PollKey()==0x1a);
+    EVT_SetImmediateExit(0);
+    /* Both gameplay shortcuts open a browser; cancellation does not reload. */
+    SLOTS_SetReloadCallback(reload);
+    shortcut.key.key=SDLK_W;assert(SDL_PushEvent(&shortcut));
+    assert(SDL_AddTimer(50,cancel,NULL));assert(KEY_PollKey()==0);assert(!reloadCalled);
+    shortcut.key.key=SDLK_L;assert(SDL_PushEvent(&shortcut));
+    assert(SDL_AddTimer(50,cancel,NULL));assert(KEY_PollKey()==0);assert(!reloadCalled);
+    /* Selecting a load invokes the top-level restart hook. */
+    assert(SDL_PushEvent(&shortcut));assert(SDL_AddTimer(50,accept,NULL));
+    assert(KEY_PollKey()==0);assert(reloadCalled);
+    SLOTS_SetReloadCallback(NULL);KEY_SDL_SetGameplayInput(0);
     /* Legacy directory spelling remains supported. */
     assert(SDL_RenamePath("SAVEGAME","savegame"));
     assert(SLOTS_Write("900","Lowercase directory",NULL));
     assert(SLOTS_Load("900"));
     assert(SDL_RenamePath("savegame","SAVEGAME"));
+    /* A reload abandons the cursor poll while character advancement is disabled. */
+    assert(SLOTS_Load("1"));D_538e=0;
+    SLOTS_ReloadActiveGame();
+    assert(D_538e==1 && D_57a8==123);
+    assert(D_535e_textWindows[1].left==24 && D_535e_textWindows[1].right==39);
     SLOTS_ResetTime();SLOTS_StartTime();assert(SLOTS_PlayMilliseconds()<10);
-    D_539c[0]=NULL;GRAP_SDL_Cleanup();SDL_Quit();
+    D_539c[0]=NULL;GRAP_Cleanup();SDL_Quit();
     puts("90+ named slots, party/world round trip, play time, failed overwrite, corrupt load and browser input passed");
     return 0;
 }

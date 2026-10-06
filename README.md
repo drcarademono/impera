@@ -73,7 +73,7 @@ display command line speed values outside their tick range without changing
 them until adjusted. Mouse input remains available on the settings screen
 even when Mouse Control is off, so it can be turned back on.
 
-Press `Q`, then answer **Y** to **Save game?** to open the **Save Game** browser.
+Press `Ctrl+W`, or press `Q`, then answer **Y** to **Save game?** to open the **Save Game** browser.
 Choose **New Save**, type a name (up to 26 characters in the game font), and
 press Enter. Existing slots can be selected and overwritten after confirmation.
 Names may repeat: each slot has its own identifier. Slots have no fixed limit;
@@ -82,7 +82,9 @@ and a draggable scrollbar. Escape or **Return to Game** cancels.
 
 Each slot includes the complete party save, both world-object lists, cumulative
 play time, and a small screenshot thumbnail. **Journey Onward** opens the matching
-**Load Game** browser. **Current / Legacy Save** preserves access to the original
+**Load Game** browser. `Ctrl+L` opens it during gameplay and resumes the selected
+save immediately. Both `Ctrl+W` and `Ctrl+L` work at world, town, and dungeon
+command prompts; they are inactive inside other menus. **Current / Legacy Save** preserves access to the original
 single-slot save. Slot data lives under `SAVEGAME/slots` in the runtime directory;
 back up that directory along with `SAVEGAME` when moving your saves.
 

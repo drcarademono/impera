@@ -4,6 +4,7 @@
 #include "macros.h"
 #include "mouse.h"
 #include "common/engine_settings.h"
+#include "common/save_slots.h"
 #include "event/event.h"
 #include "graphics/grap_sdl.h"
 
@@ -24,6 +25,8 @@ void KEY_Initialize(void)
 void KEY_Cleanup(void)
 { MOUSE_Cleanup(); }
 
+static int s_gameplayInput;
+void KEY_SDL_SetGameplayInput(int enabled) { s_gameplayInput=enabled; }
 static u16 s_lastDownKeycode = 0;
 static u16 s_heldMovementKey;
 static SDL_Keycode s_heldSDLKey;
@@ -52,6 +55,8 @@ static u16 KeyboardEventToUltimaKeycode(SDL_KeyboardEvent ev)
         case SDLK_B: return 2;
         case SDLK_E: return U5_KEY_CTRL_E;
         case SDLK_K: return U5_KEY_CTRL_K;
+        case SDLK_L: return s_gameplayInput && !EVT_ImmediateExitEnabled()?U5_KEY_CTRL_L:0x1a;
+        case SDLK_W: return s_gameplayInput && !EVT_ImmediateExitEnabled()?U5_KEY_CTRL_W:0x1a;
         case SDLK_O: return U5_KEY_CTRL_O;
         case SDLK_M: return U5_KEY_CTRL_M; // same as CR
         case SDLK_S: return U5_KEY_CTRL_S;
@@ -123,7 +128,7 @@ static u16 KeyboardEventToUltimaKeycode(SDL_KeyboardEvent ev)
 void KEY_SDL_ProcessKeyDown(SDL_KeyboardEvent ev)
 {
     u16 key = KeyboardEventToUltimaKeycode(ev);
-    if (key == U5_KEY_CTRL_O && ev.repeat) return;
+    if ((key == U5_KEY_CTRL_O || key == U5_KEY_CTRL_W || key == U5_KEY_CTRL_L) && ev.repeat) return;
     bool direction = (key >= (0x100 | U5_KEY_LEFT) && key <= (0x100 | U5_KEY_DOWN)) ||
                      (key >= (0x100 | U5_KEY_HOME) && key <= (0x100 | U5_KEY_PGDN));
     if ((GRAP_SDL_CustomMovementSpeed() || GRAP_SDL_SmoothMovementEnabled()) && direction) {
@@ -157,6 +162,18 @@ int KEY_PollKey(void)
         D_538a = 1;
     }
 
+    if(s_gameplayInput && !EVT_ImmediateExitEnabled() &&
+       (s_lastDownKeycode==U5_KEY_CTRL_W || s_lastDownKeycode==U5_KEY_CTRL_L)) {
+        bool loading=s_lastDownKeycode==U5_KEY_CTRL_L;
+        KEY_SDL_ClearInput();
+        /* Disable the shortcuts while the browser owns keyboard input. */
+        s_gameplayInput=0;
+        if(loading) {
+            if(SLOTS_ShowLoadInGame()) SLOTS_RequestReload();
+        } else SLOTS_ShowSave();
+        s_gameplayInput=1;
+        return 0;
+    }
     if (s_lastDownKeycode == U5_KEY_CTRL_O) {
         /* Open at an input boundary, preserving the suspended game screen. */
         ENGINE_ShowOptions(!EVT_ImmediateExitEnabled());

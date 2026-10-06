@@ -111,6 +111,7 @@ if(U5D_BUILD_TESTS)
         target_link_options(u5d_save_slots_test PRIVATE "-Wl,--wrap=SDL_RenderPresent")
         file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/slots-runtime")
         configure_file("${CMAKE_SOURCE_DIR}/Ultima 5/IBM.CH" "${CMAKE_BINARY_DIR}/slots-runtime/IBM.CH" COPYONLY)
+        configure_file("${CMAKE_SOURCE_DIR}/Ultima 5/TILES.16" "${CMAKE_BINARY_DIR}/slots-runtime/TILES.16" COPYONLY)
         add_test(NAME save_slots COMMAND u5d_save_slots_test)
         set_tests_properties(save_slots PROPERTIES
             WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/slots-runtime"

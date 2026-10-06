@@ -7,6 +7,8 @@
 #include "graphics/grap_buf.h"
 #include "key/mouse.h"
 #include "vars.h"
+#include "funcs.h"
+#include "audio/audio.h"
 #include <SDL3/SDL.h>
 #include <stdio.h>
 #include <string.h>
@@ -191,6 +193,7 @@ static int compare(const void* a,const void* b)
 { return strcmp(((const Slot*)b)->id,((const Slot*)a)->id); }
 static void timeText(char* out,size_t n,uint64_t ms)
 { SDL_snprintf(out,n,"%lluh %02llum %02llus",(unsigned long long)(ms/3600000),(unsigned long long)(ms/60000%60),(unsigned long long)(ms/1000%60)); }
+static bool s_inGame;
 static void draw(bool saving,int selected,int top,const char* status)
 {
     memset(g_linearEgaBuffer0,0,320*200);ENGINE_UIFrame();
@@ -215,7 +218,7 @@ static void draw(bool saving,int selected,int top,const char* status)
         ENGINE_UIRect(299,y,6,height,15);
     }
     if(selected==s_count+1) ENGINE_UIRect(16,179,280,10,15);
-    ENGINE_UIText(24,180,saving?"Return to Game":"Return to Menu",selected==s_count+1?0:15);
+    ENGINE_UIText(24,180,s_inGame?"Return to Game":"Return to Menu",selected==s_count+1?0:15);
     GRAP_BUF_MarkDirty();GRAP_BUF_Present();
 }
 static bool prompt(char* name,bool overwrite)
@@ -249,8 +252,19 @@ static bool prompt(char* name,bool overwrite)
     }
     if(window) SDL_StopTextInput(window);return accepted;
 }
-static bool show(bool saving)
+static bool validLegacy(void)
 {
+    for(int i=0;i<2;i++) {
+        char filename[FILE_PATH_SIZE];path(filename,sizeof(filename),s_saveDir,files[i]);
+        FILE* f=FILE_Open(filename,"rb");if(!f) return false;
+        bool ok=fseek(f,0,SEEK_END)==0 && ftell(f)==(i?512:0x1060);
+        fclose(f);if(!ok) return false;
+    }
+    return true;
+}
+static bool show(bool saving,bool inGame)
+{
+    s_inGame=inGame;
     extern void KEY_SDL_ClearInput(void);
     free(s_slots);s_slots=NULL;s_count=0;s_scanFailed=false;
     if(!storage()) return false;
@@ -317,7 +331,7 @@ static bool show(bool saving)
                         if(result) done=true;else status="Save failed. Try again.";
                     }
                 } else {
-                    result=selected?SLOTS_Load(s_slots[selected-1].id):true;
+                    result=selected?SLOTS_Load(s_slots[selected-1].id):validLegacy();
                     if(result) done=true;else status="Load failed. Save unchanged.";
                 }
             }
@@ -331,6 +345,46 @@ static bool show(bool saving)
     if(captured) SDL_RemovePath(capture);
     free(s_slots);s_slots=NULL;s_count=0;return result;
 }
-bool SLOTS_ShowSave(void) { return show(true); }
-bool SLOTS_ShowLoad(void) { return show(false); }
+bool SLOTS_ShowSave(void) { return show(true,true); }
+bool SLOTS_ShowLoad(void) { return show(false,false); }
+bool SLOTS_ShowLoadInGame(void) { return show(false,true); }
+static void (*s_reloadCallback)(void);
+void SLOTS_SetReloadCallback(void (*callback)(void)) { s_reloadCallback=callback; }
+void SLOTS_RequestReload(void) { if(s_reloadCallback) s_reloadCallback(); }
+void SLOTS_ReloadActiveGame(void)
+{
+    /* Mirror Journey Onward's initialization, then reenter the top-level map loop. */
+    AUDIO_StopBgm();
+    /* The abandoned cursor poll temporarily disables character advancement. */
+    D_538e=1;
+    ULTIMA_1c22_SetTextWindowSize(0,0,0,39,24);
+    ULTIMA_1c22_SetTextWindowSize(1,24,1,39,9);
+    ULTIMA_1c22_SetTextWindowSize(2,24,11,39,23);
+    ULTIMA_1b94_SelectTextWindow(0);
+    ULTIMA_1c9e_SelectCharset(0);
+    ULTIMA_102e_UnloadTileset();
+    while(!ULTIMA_0ff4_LoadTileset(D_25f0[0])) {}
+    ULTIMA_0c22_GRAP_0f_SelectPage(0);
+    ULTIMA_637e_DrawFrame();
+    ULTIMA_2e96_SetWindDirection(0);
+    ULTIMA_1b94_SelectTextWindow(2);
+    ULTIMA_1bf2_SetTextPosition(0,12);
+    ULTIMA_251e_SwitchDisks(3);
+    if(FILE_ReadSavegameFile("SAVED.GAM")!=0) {
+        fprintf(stderr,"Cannot restore selected save\n");exit(1);
+    }
+    debug("Restoring saved world objects");
+    ULTIMA_256e_ReadFileFromDisk("SAVED.OOL",D_b21e,512,0);
+    ULTIMA_25d8_WriteFileToDisk("BRIT.OOL",D_b21e,256);
+    ULTIMA_25d8_WriteFileToDisk("UNDER.OOL",D_b21e+256,256);
+    ULTIMA_251e_SwitchDisks(1);
+    D_b11c=D_b21e;D_a9cb=0xff;D_a9fa=1;
+    D_52ba_vdp._52be_tileYOffset=8;
+    debug("Restoring saved wind display");
+    ULTIMA_2e96_SetWindDirection(-1);
+    debug("Restoring saved vitals display");
+    ULTIMA_2900_UpdateVitalsDisplay();
+    debug("Save restored; restarting map loop");
+    SLOTS_StartTime();
+}
 #endif

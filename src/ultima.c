@@ -19,6 +19,14 @@
 #include "mainout.h"
 #include "outsubs.h"
 #include "town.h"
+#if defined(TARGET_SDL)
+#include <setjmp.h>
+#include "common/save_slots.h"
+#include "key/key.h"
+#include "key/mouse.h"
+static jmp_buf s_reloadPoint;
+static void ReloadFromSlot(void) { longjmp(s_reloadPoint,1); }
+#endif
 
 #if !defined(TARGET_DOS16)
 extern int g_enableDebugOverlay;
@@ -144,6 +152,16 @@ int CDECL main(int argc, char** argv/*, char** envp*/)
 #endif
 
     local_8 = 0;
+#if defined(TARGET_SDL)
+    if(setjmp(s_reloadPoint)) {
+        KEY_SDL_SetGameplayInput(0);
+        MOUSE_SetCommandInput(false);
+        MOUSE_Cancel();
+        SLOTS_ReloadActiveGame();
+        local_8=0;
+    }
+    SLOTS_SetReloadCallback(ReloadFromSlot);
+#endif
 
     // 00b8
     // main game loop
@@ -196,5 +214,8 @@ int CDECL main(int argc, char** argv/*, char** envp*/)
         // 016e
     } while (local_2 == 0);
 
+#if defined(TARGET_SDL)
+    SLOTS_SetReloadCallback(NULL);
+#endif
     ULTIMA_0878_RestoreVideoMode();
 }
