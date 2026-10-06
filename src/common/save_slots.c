@@ -211,7 +211,7 @@ static void draw(bool saving,int selected,int top,const char* status)
 {
     memset(g_linearEgaBuffer0,0,320*200);ENGINE_UIFrame();
     ENGINE_UIText(124,12,saving?"Save Game":"Load Game",15);
-    ENGINE_UIText(16,26,status?status:"Arrows/Enter Esc: Back Del: Delete",7);
+    ENGINE_UIText(16,26,status?status:"Esc: Back    Del: Delete",7);
     if(s_hasFirstRow) {
         ENGINE_UIRect(16,39,280,12,selected==0?15:0);
         ENGINE_UIText(24,41,saving?"New Save":"Legacy Save",selected==0?0:15);
