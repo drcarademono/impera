@@ -162,12 +162,21 @@ bool WIDE_Visible(int dx, int dy)
     /* Daylight illuminates the larger viewport; torch/night light keeps the
      * original squared-distance limit. Opaque intervening tiles block sight. */
     if (D_58a5 < 50 && dx * dx + dy * dy > D_58a5) return false;
+    bool expanded=abs(dx)>5 || abs(dy)>5;
     int x = 0, y = 0, ax = abs(dx), ay = abs(dy);
     int sx = dx < 0 ? -1 : 1, sy = dy < 0 ? -1 : 1, error = ax - ay;
     while (x != dx || y != dy) {
+        int previousX=x,previousY=y;
         int twice = error * 2;
         if (twice > -ay) { error -= ay; x += sx; }
         if (twice < ax) { error += ax; y += sy; }
+        /* A ray cannot squeeze diagonally between two opaque corner tiles. */
+        if(x!=previousX && y!=previousY &&
+            !Transparent(WIDE_MapTile(x,previousY),x*x+previousY*previousY) &&
+            !Transparent(WIDE_MapTile(previousX,y),previousX*previousX+y*y)) return false;
+        /* The original view is authoritative. Expanded sightlines must not
+         * emerge on the far side of a room it classified as unseen. */
+        if(expanded && abs(x)<=5 && abs(y)<=5 && GetMapViewport(x+5,y+5)==255) return false;
         if (x == dx && y == dy) break;
         if (!Transparent(WIDE_MapTile(x, y), x * x + y * y)) return false;
     }

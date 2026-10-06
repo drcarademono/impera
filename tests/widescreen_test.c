@@ -318,6 +318,33 @@ int main(void)
     D_58a5 = 2;
     assert(WIDE_Compose(pixels, broad));
     assert(pixel(pixels, broad, 7, 0) == 0);
+    /* Expanded rays must not relight rooms hidden by the original view,
+     * even when their terrain-only ray passes through a distant window. */
+    byte seamTown[sizeof(D_6608_map.town)],seamView[sizeof(D_ab02)];
+    memcpy(seamTown,D_6608_map.town,sizeof(seamTown));
+    memcpy(seamView,D_ab02,sizeof(seamView));
+    memset(D_6608_map.town,1,sizeof(D_6608_map.town));
+    memset(D_ab02,1,sizeof(D_ab02));
+    D_58a5=50;D_5896_map_x=D_5897_map_y=16;
+    assert(WIDE_Visible(7,0));assert(WIDE_Visible(-7,0));
+    GetMap(18,16)=TILE_MAP_4A;
+    GetMap(14,16)=TILE_MAP_4B;
+    GetMapViewport(8,5)=GetMapViewport(2,5)=255;
+    assert(!WIDE_Visible(7,0));assert(!WIDE_Visible(-7,0));
+    assert(WIDE_Compose(pixels,broad));
+    assert(pixel(pixels,broad,7,0)==0 && pixel(pixels,broad,-7,0)==0);
+    byte* edgeMask=malloc((size_t)broad.columns*broad.rows*256);assert(edgeMask);
+    assert(WIDE_DarknessMask(edgeMask,broad.columns,broad.rows));
+    int edgeStride=broad.columns*16,edgeRow=(broad.rows/2*16+8)*edgeStride;
+    assert(edgeMask[edgeRow+(broad.columns/2+7)*16+8]==16);
+    assert(edgeMask[edgeRow+(broad.columns/2-7)*16+8]==16);
+    free(edgeMask);
+    GetMapViewport(8,5)=GetMapViewport(2,5)=1;
+    assert(WIDE_Visible(7,0));assert(WIDE_Visible(-7,0));
+    GetMap(17,16)=GetMap(16,17)=TILE_MAP_WALL;
+    assert(!WIDE_Visible(7,7)); /* no diagonal corner leak */
+    memcpy(D_6608_map.town,seamTown,sizeof(seamTown));
+    memcpy(D_ab02,seamView,sizeof(seamView));
     /* Dither coverage preserves unseen cells and fades only visible edges. */
     byte savedTown[sizeof(D_6608_map.town)],savedView[sizeof(D_ab02)];
     memcpy(savedTown,D_6608_map.town,sizeof(savedTown));memcpy(savedView,D_ab02,sizeof(savedView));
