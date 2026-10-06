@@ -1,5 +1,7 @@
 #undef NDEBUG
 #include <assert.h>
+#include <string.h>
+#include <stdlib.h>
 #include <SDL3/SDL.h>
 #include "graphics/crt.h"
 static void white(SDL_Renderer* r)
@@ -16,13 +18,23 @@ int main(void)
     assert(!CRT_Enabled());CRT_BeginFrame(r);white(r);finish(r);
     assert(red(output,480,400)==255); /* disabled filter is an exact bypass */
     CRT_SetEnabled(true);CRT_BeginFrame(r);white(r);finish(r);
-    assert(red(output,480,400)>red(output,480,401)+30); /* resolvable scanlines */
+    assert(red(output,480,400)>red(output,480,401)+10); /* resolvable scanlines */
     assert(red(output,480,400)>red(output,480,0)); /* restrained edge shading */
     Uint8 a,b,c,d,e,f,g,h;
     assert(SDL_ReadSurfacePixel(output,480,400,&a,&b,&c,&d));
     assert(SDL_ReadSurfacePixel(output,481,400,&e,&f,&g,&h));
-    assert(a>b && f>e); /* RGB phosphor stripes */
+    assert(a==b && b==c && e==f && f==g); /* neutral, aligned phosphors */
+    assert((red(output,480,400)+red(output,480,401))/2>=240); /* brightness retained */
+    assert(red(output,0,0)==0); /* nearly flat curved corners */
+    size_t bytes=(size_t)output->pitch*output->h;
+    void* previous=malloc(bytes);assert(previous);memcpy(previous,output->pixels,bytes);
+    CRT_ResumeFrame(r);finish(r);
+    assert(memcmp(previous,output->pixels,bytes)==0);free(previous); /* no temporal flicker */
     CRT_ResumeFrame(r);assert(SDL_GetRenderTarget(r));
+    assert(SDL_SetRenderDrawColor(r,128,128,128,255));assert(SDL_RenderClear(r));finish(r);
+    int midtone=(red(output,480,400)+red(output,480,401))/2;
+    assert(midtone>=120 && midtone<=140); /* no material darkening or washout */
+    CRT_ResumeFrame(r);
     assert(SDL_SetRenderDrawColor(r,0,0,0,255));assert(SDL_RenderClear(r));
     SDL_FRect box={350,300,260,200};
     assert(SDL_SetRenderDrawColor(r,255,255,255,255));assert(SDL_RenderFillRect(r,&box));

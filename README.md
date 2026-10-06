@@ -123,7 +123,7 @@ even when Mouse Control is off, so it can be turned back on.
 | Mouse Control | Enable map movement and contextual actions; options menus remain clickable when off. |
 | Smooth Movement | Animate camera scrolling and visible actor steps. |
 | Diagonal Movement | Enable eight-way movement, neighboring actions, and combat. |
-| CRT Filter | VGA-era scanlines, phosphor stripes, subtle glow and edge shading. |
+| CRT Filter | Subtle DOS monitor scanlines, phosphor softness, glow and nearly flat curvature. |
 | Dithered Darkness | Fade visibility edges with an Ultima 6-style ordered pixel pattern. |
 | Transparent Sprites | Reveal ground around character and supported object sprites. |
 | Music | Enable or mute external music playback. |
@@ -280,8 +280,14 @@ boundaries; otherwise keyboard repeat retains the operating system's behavior.
 ### CRT filter
 
 Enable **CRT Filter** in Engine Options or launch with `--crt-filter` for a
-late-1980s color VGA monitor appearance: approximately 400 beam lines, subtle
-RGB phosphor stripes, soft glow and restrained edge shading. It applies to
+**DOS Monitor** preset, inspired by a good late-1980s MS-DOS color CRT:
+subtle scanlines, slight horizontal phosphor softness, mild bloom and halation,
+a gentle vignette and nearly flat curvature. Brightness compensation keeps
+the image close to the original. RGB masks are disabled; there is no chromatic
+aberration, noise or flicker. The filter uses lightweight SDL render passes
+with the same effect on OpenGL and software renderers. Original pixels are
+scaled before CRT processing, using the existing integer scaling in fullscreen
+and menu layouts. It applies to
 gameplay, menus and cutscenes, including smooth movement and fullscreen.
 It is off by default and saved in `ENGINE.CFG`. At small window sizes the
 scanlines are averaged to keep text readable.

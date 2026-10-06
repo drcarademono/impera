@@ -561,6 +561,9 @@ extern void DisplayDebugMessages(void);
 void GRAP_SDL_FlushFrame(void)
 {
     CRT_BeginFrame(s_sdlRenderer);
+    /* Reconstruct the original pixels first; CRT owns the gentle softness. */
+    SDL_SetTextureScaleMode(s_sdlTexture,
+        s_fullscreen || s_pixelUI || CRT_Enabled() ? SDL_SCALEMODE_NEAREST : SDL_SCALEMODE_LINEAR);
     bool completedMap=s_mapDrawn;
     s_expandedFrame = false;
     if(!s_fullscreen || s_pixelUI || !D_58a4) s_completedWideValid=false;
