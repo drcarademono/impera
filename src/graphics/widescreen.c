@@ -308,6 +308,15 @@ static bool s_ditheredDarkness;
 void WIDE_SetDitheredDarkness(bool enabled) { s_ditheredDarkness=enabled; }
 bool WIDE_DitheredDarkness(void) { return s_ditheredDarkness; }
 
+/* These variants carry masonry in their artwork too. Do not classify only
+ * the plain wall: windows and wall torches would otherwise dissolve. */
+static bool SolidMasonry(byte tile)
+{
+    return tile==TILE_MAP_WALL || tile==TILE_MAP_HIDDEN_DOOR ||
+        tile==TILE_MAP_97 /* window */ ||
+        tile==0xc0 || tile==0xc1; /* animated wall torch */
+}
+
 /* Darkness coverage, 0..16, at original game-pixel resolution. Visible tiles
  * fade inward over 24 pixels; unseen terrain stays completely hidden.
  * Visible masonry (including concealed doors) keeps its solid silhouette. */
@@ -323,7 +332,7 @@ bool WIDE_DarknessMask(byte* mask,int columns,int rows)
     for(int row=0;row<rows;row++) for(int col=0;col<columns;col++) {
         bool visible=lit[(row+2)*stride+col+2];
         byte tile=visible ? WIDE_MapTile(col-columns/2,row-rows/2) : 255;
-        bool masonry=tile==TILE_MAP_WALL || tile==TILE_MAP_HIDDEN_DOOR;
+        bool masonry=SolidMasonry(tile);
         for(int py=0;py<16;py++) for(int px=0;px<16;px++) {
             int shade=0;
             if(!visible) shade=16;

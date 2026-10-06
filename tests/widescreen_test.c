@@ -341,9 +341,16 @@ int main(void)
         assert(mask[(5*16+y)*176+7*16+x]==0);
         assert(mask[(5*16+y)*176+8*16+x]==16);
     }
-    GetMap(18,16)=TILE_MAP_HIDDEN_DOOR;
-    assert(WIDE_DarknessMask(mask,11,11));
-    assert(mask[(5*16+8)*176+7*16+14]==0);
+    const byte masonryVariants[]={TILE_MAP_HIDDEN_DOOR,TILE_MAP_97,0xc0,0xc1};
+    for(unsigned i=0;i<sizeof(masonryVariants);i++) {
+        GetMap(18,16)=masonryVariants[i];
+        GetMap(19,16)=masonryVariants[i];
+        assert(WIDE_DarknessMask(mask,11,11));
+        for(int y=0;y<16;y++) for(int x=0;x<16;x++) {
+            assert(mask[(5*16+y)*176+7*16+x]==0);
+            assert(mask[(5*16+y)*176+8*16+x]==16);
+        }
+    }
     GetMap(18,16)=1; /* natural scenery still fades */
     assert(WIDE_DarknessMask(mask,11,11));
     assert(mask[(5*16+8)*176+7*16+14]>0);
