@@ -160,12 +160,15 @@ static int CombatRange(int entity)
     }
     return range;
 }
-void MOUSE_CombatAim(void)
+static bool s_aimInput;
+static int s_aimEntity, s_aimRange, s_aimKey;
+void MOUSE_SetCombatAimInput(int entity, int range)
 {
-    D_5899=s_dx+5; D_589a=s_dy+5; D_5898=1;
-    int target=COMSUBS_0748(D_5899,D_589a);
-    D_5c5a[D_ba14[D_589e].actorIdx]._7=target<0 ? 0xff : target;
+    s_aimInput=s_enabled;
+    s_aimEntity=entity; s_aimRange=range; s_aimKey=0;
+    s_single=s_right=false;
 }
+void MOUSE_EndCombatAimInput(void) { s_aimInput=false; s_aimKey=0; }
 bool MOUSE_CombatAttackTarget(int entity, int range, int* distance)
 {
     if (!s_combatAttack || entity!=s_attackEntity) return false;
@@ -189,6 +192,7 @@ void MOUSE_Initialize(void)
 }
 void MOUSE_Cancel(void)
 {
+    s_aimKey=0;
     MOUSE_ClearCombatAttack();
     s_menuTarget = -1; s_menuClick = false;
     SDL_GetMouseState(&s_hoverX,&s_hoverY);
@@ -226,7 +230,7 @@ int MOUSE_Action(int dx, int dy, bool mainAction)
         if (D_589e >= 32) return 0;
         int x=dx+5, y=dy+5;
         if (x<0 || y<0 || x>10 || y>10) return 0;
-        if (!mainAction) return MOUSE_KEY_AIM;
+        if (!mainAction) return 0;
         int target=COMSUBS_0748(x,y);
         if (target<0 || target==D_589e || ULTIMA_5646(target)==ULTIMA_5646(D_589e) ||
             (D_ba14[target].flags & (COMBAT_FLAGS_DEAD|COMBAT_FLAGS_INVISIBLE|COMBAT_FLAGS_4)) ||
@@ -293,6 +297,19 @@ void MOUSE_Button(float x, float y, int button, bool down, int clicks)
         }
         return;
     }
+    if (s_aimInput) {
+        int dx,dy; float rx,ry;
+        if (down && button==SDL_BUTTON_LEFT && s_aimEntity==D_589e && D_5893_map_id>=128 &&
+            GRAP_SDL_MouseMapPoint(x,y,&dx,&dy,&rx,&ry)) {
+            int tx=dx+5, ty=dy+5;
+            int distance=COMSUBS_048a(D_ba14[s_aimEntity].x,D_ba14[s_aimEntity].y,tx,ty);
+            if (tx>=0 && tx<11 && ty>=0 && ty<11 && distance>0 && distance<=s_aimRange &&
+                MOVEMENT_AttackAllowed(tx-D_ba14[s_aimEntity].x,ty-D_ba14[s_aimEntity].y)) {
+                D_5899=tx; D_589a=ty; s_aimKey=U5_KEY_ENTER;
+            }
+        }
+        return;
+    }
     if (button == SDL_BUTTON_RIGHT) {
         s_right = down && s_input;
         debug("Mouse right button: down=%d command_input=%d\n", down, s_input);
@@ -314,6 +331,11 @@ void MOUSE_Button(float x, float y, int button, bool down, int clicks)
 }
 int MOUSE_PollCommand(void)
 {
+    if (s_enabled && s_aimInput) {
+        int key=s_aimKey; s_aimKey=0;
+        if (s_aimEntity!=D_589e || D_5893_map_id<128) return 0;
+        return key;
+    }
     if (s_enabled && s_menu) return PollMenu();
     if (!s_enabled || !s_input || (D_5893_map_id > 32 && D_5893_map_id < 128)) return 0;
     if (s_single && SDL_GetTicks() - s_singleTime >= 300) {

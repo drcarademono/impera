@@ -473,7 +473,7 @@ static void COMBAT_063e_ProcessCommand(void)
                         local_8 = ULTIMA_266c_GetChar();
 #if defined(TARGET_SDL)
                         MOUSE_SetCommandInput(false);
-                        if (local_8!=MOUSE_KEY_AIM) D_5898=0;
+                        D_5898=0;
 #endif
                         local_6 = 1;
                         local_4 = 0;
@@ -513,13 +513,6 @@ static void COMBAT_063e_ProcessCommand(void)
                             local_6 = 0;
                             break;
 
-#if defined(TARGET_SDL)
-                        case MOUSE_KEY_AIM:
-                            MOUSE_CombatAim();
-                            ULTIMA_5910_UpdateFrame();
-                            local_6=0; /* Aim changes selection without spending a turn. */
-                            break;
-#endif
                         case 0x41:
                             /* 'A' Attack */
                             // ab70

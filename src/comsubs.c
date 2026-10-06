@@ -302,12 +302,6 @@ int COMSUBS_0504(int param_1, int param_2)
     int local_4;
     ActorFmt* local_8;
 
-#if defined(TARGET_SDL)
-    if (MOUSE_CombatAttackTarget(param_1,param_2,&local_14)) {
-        D_5898=0;
-        return local_14;
-    }
-#endif
     D_5898 = 1;
     local_c = D_5c5a[D_ba14[param_1].actorIdx]._7;
     if (local_c>31) local_c=param_1;
@@ -324,6 +318,13 @@ int COMSUBS_0504(int param_1, int param_2)
     D_5899 = D_ba14[local_c].x;
     D_589a = D_ba14[local_c].y;
 
+#if defined(TARGET_SDL)
+    if (MOUSE_CombatAttackTarget(param_1,param_2,&local_14) && local_14==0) {
+        D_5898=0;
+        return 0;
+    }
+    MOUSE_SetCombatAimInput(param_1,param_2);
+#endif
     local_a = local_e = 0;
 
     while (!local_a && !local_e)
@@ -420,6 +421,9 @@ int COMSUBS_0504(int param_1, int param_2)
     }
 
     D_5898 = 0;
+#if defined(TARGET_SDL)
+    MOUSE_EndCombatAimInput();
+#endif
     if (local_e)
     {
         ULTIMA_16ba_PrintChar('\n');

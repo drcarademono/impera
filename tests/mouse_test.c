@@ -44,6 +44,7 @@ static Uint64 ticks = 2000;
 static float cursorX, cursorY;
 static bool sawSleepingNpc, sawFountain, sawDrinkPrompt, sawWell, sawCoinPrompt;
 static int presented;
+static bool confirmAimOnPoll;
 static bool checkAnimation;
 static int animationRow, playerScreenX, previousMarkerX;
 static bool checkActor;
@@ -97,7 +98,15 @@ void __wrap_ULTIMA_1850_PrintString(char* text)
 }
 void __wrap_ULTIMA_16ba_PrintChar(uint ch) { (void)ch; }
 Uint64 __wrap_SDL_GetTicks(void) { return ticks; }
-SDL_MouseButtonFlags __wrap_SDL_GetMouseState(float* x, float* y) { *x=cursorX; *y=cursorY; return SDL_BUTTON_RMASK; }
+SDL_MouseButtonFlags __wrap_SDL_GetMouseState(float* x, float* y)
+{
+    *x=cursorX; *y=cursorY;
+    if (confirmAimOnPoll && D_5898) {
+        confirmAimOnPoll=false;
+        MOUSE_Button(cursorX,cursorY,SDL_BUTTON_LEFT,true,1);
+    }
+    return SDL_BUTTON_RMASK;
+}
 extern void GRAP_SDL_Initialize(void);
 extern void GRAP_SDL_Cleanup(void);
 extern void GRAP_SDL_FlushFrame(void);
@@ -450,9 +459,7 @@ int main(void)
     assert(MOUSE_PollCommand()==0);
     MOUSE_Button(cursorX,cursorY,SDL_BUTTON_LEFT,true,1);
     ticks+=301;
-    assert(MOUSE_PollCommand()==MOUSE_KEY_AIM);
-    MOUSE_CombatAim();
-    assert(D_5898==1 && D_5899==1 && D_589a==2);
+    assert(MOUSE_PollCommand()==0); /* single clicks wait for Attack/Aim mode */
     memset(D_5c5a,0,sizeof(D_5c5a));
     memset(D_ba14,0,sizeof(D_ba14));
     for (int cy=0;cy<11;cy++) for (int cx=0;cx<11;cx++) GetCombatMap(cx,cy)=TILE_MAP_GRASS;
@@ -483,7 +490,7 @@ int main(void)
     MOVEMENT_SetDiagonal(false);
     assert(COMSUBS_0822(0,7,5,1,0)==-1);
 
-    /* Real mouse targeting preserves cardinal range rules and auto-confirms only the clicked attack. */
+    /* Real mouse targeting preserves cardinal range rules and requires a separate confirmation. */
     D_589e=0; D_ba14[0].flags=COMBAT_FLAGS_PLAYER;
     D_ba14[0].entityIdx=0; D_5896_map_x=6; D_5897_map_y=4;
     D_55a8_party[0].equips[0]=D_55a8_party[0].equips[2]=D_55a8_party[0].equips[3]=0xff;
@@ -507,9 +514,29 @@ int main(void)
     MOUSE_Button(cursorX,cursorY,SDL_BUTTON_LEFT,true,2);
     assert(MOUSE_PollCommand()=='A');
     MOUSE_SetCommandInput(false);
-    assert(COMSUBS_0504(0,1)==1); /* native Aim bypasses its prompt for this double-click */
+    int seededDistance;
+    assert(MOUSE_CombatAttackTarget(0,1,&seededDistance) && seededDistance==1);
+    MOUSE_SetCombatAimInput(0,1);
+    assert(MOUSE_PollCommand()==0); /* double-click only seeds Aim, never confirms it */
+    MOUSE_Button(1020,cursorY,SDL_BUTTON_LEFT,true,1);
+    assert(MOUSE_PollCommand()==0); /* sidebar cannot confirm */
+    MOUSE_Button(cursorX+48,cursorY,SDL_BUTTON_LEFT,true,1);
+    assert(MOUSE_PollCommand()==0); /* out-of-range click keeps Aim open */
+    MOUSE_Button(cursorX,cursorY,SDL_BUTTON_LEFT,true,1);
+    assert(MOUSE_PollCommand()==U5_KEY_ENTER);
+    assert(MOUSE_PollCommand()==0);
+    MOUSE_EndCombatAimInput();
+    /* Run the real Aim loop: inject a distinct click when the Aim loop polls events. */
+    confirmAimOnPoll=true;
+    assert(COMSUBS_0504(0,1)==1);
+    assert(!confirmAimOnPoll);
     assert(D_5899==7 && D_589a==5);
     assert(COMSUBS_0504(0,0)==0); /* second weapon must satisfy its own range */
+    SDL_KeyboardEvent cancelAim={0}; cancelAim.key=SDLK_ESCAPE;
+    KEY_SDL_ProcessKeyDown(cancelAim);
+    assert(COMSUBS_0504(0,1)==0); /* Escape exits the native Aim prompt */
+    MOUSE_Button(cursorX,cursorY,SDL_BUTTON_LEFT,true,1);
+    assert(MOUSE_PollCommand()==0); /* no Aim confirmation leaks into command entry */
     MOUSE_ClearCombatAttack();
     int unusedDistance;
     assert(!MOUSE_CombatAttackTarget(0,1,&unusedDistance));

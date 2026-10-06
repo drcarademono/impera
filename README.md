@@ -99,8 +99,9 @@ offering actions such as drinking or dropping coins; those require adjacency,
 including a diagonal neighbor. Single clicks wait 300 ms to distinguish double
 clicks. Right-button movement also works during combat command entry, relative to the
 active fighter, including diagonals when enabled. Combat uses its usual turn and collision
-rules. In combat, single-left-click a tile to Aim without spending a turn,
-or double-left-click an enemy within weapon range to Attack. Attacks respect
+rules. In combat, double-left-click an enemy within weapon range to start Attack
+and position the Aim cursor on it. A separate single-left-click confirms the
+attack during Aim; keyboard aiming and confirmation remain available. Attacks respect
 the cardinal/diagonal option and the normal weapon, obstruction, and turn rules.
 Map commands are disabled during menus, dialogues, dungeon
 perspective views, and other input prompts. Menu lists support mouse selection;

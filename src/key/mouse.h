@@ -10,8 +10,8 @@ int MOUSE_MenuRead(int x, int y, int width, int count, int selected);
 #define MOUSE_MenuEnd() ((void)0)
 #define MOUSE_MenuRead(x,y,w,n,s) ULTIMA_266c_GetChar()
 #endif
-#define MOUSE_KEY_AIM 0xe0
-void MOUSE_CombatAim(void);
+void MOUSE_SetCombatAimInput(int entity, int range);
+void MOUSE_EndCombatAimInput(void);
 void MOUSE_ClearCombatAttack(void);
 bool MOUSE_CombatAttackTarget(int entity, int range, int* distance);
 void MOUSE_Initialize(void);
