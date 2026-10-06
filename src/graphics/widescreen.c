@@ -85,18 +85,29 @@ byte WIDE_MapTile(int dx, int dy)
     return *ULTIMA_4402_GetTileAddr(x, y);
 }
 
+/* Audited against TILES.16 and LOOK2.DAT: freestanding objects with plain
+ * black backgrounds. Furniture with baked brick/grass and structural tiles
+ * must not be treated as cutout sprites. */
+static bool HasObjectBackground(byte tile)
+{
+    return tile == TILE_MAP_WELL || (tile & 0xfc) == TILE_MAP_FOUNTAIN ||
+        tile == TILE_MAP_BRAZIER || tile == TILE_MAP_59 ||
+        tile == 0x88 /* cannonballs */ || tile == 0xa3 /* stack of logs */ ||
+        (tile >= TILE_MAP_CANNON_B4 && tile <= TILE_MAP_CANNON_B7);
+}
+
 byte WIDE_GroundTile(int dx, int dy)
 {
     byte object = WIDE_MapTile(dx,dy);
     if (!GRAP_BUF_TransparentSprites() ||
-        (object != TILE_MAP_WELL && (object & 0xfc) != TILE_MAP_FOUNTAIN)) return object;
+        !HasObjectBackground(object)) return object;
     /* Maps have no lower terrain layer. Infer only recognized ground from
      * immediate cardinal neighbors; keep isolated objects opaque. */
-    const byte floors[] = {TILE_MAP_44, TILE_MAP_GRASS, TILE_MAP_45};
+    const byte floors[] = {TILE_MAP_44, TILE_MAP_GRASS, TILE_MAP_45, 0x40 /* wooden floor */};
     const int offsets[4][2] = {{0,1},{0,-1},{1,0},{-1,0}};
     int best=0;
     byte ground=object;
-    for (int i=0;i<3;i++) {
+    for (size_t i=0;i<sizeof(floors);i++) {
         int count=0;
         for (int j=0;j<4;j++)
             count += WIDE_MapTile(dx+offsets[j][0],dy+offsets[j][1]) == floors[i];

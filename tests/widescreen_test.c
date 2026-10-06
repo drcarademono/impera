@@ -114,6 +114,40 @@ int main(void)
         GetMap(23,16)=TILE_MAP_FOUNTAIN+frame;
         assert(WIDE_GroundTile(7,0)==0x44);
     }
+    /* The audited object list shares the same inference and opt-in behavior. */
+    const byte cutouts[]={TILE_MAP_BRAZIER,TILE_MAP_59,0x88,0xa3,
+        TILE_MAP_CANNON_B4,TILE_MAP_CANNON_B5,TILE_MAP_CANNON_B6,TILE_MAP_CANNON_B7};
+    for(size_t i=0;i<sizeof(cutouts);i++) {
+        byte tile=cutouts[i];
+        GetMap(23,16)=tile;
+        D_b11e[tile]=tile;
+        memset(tiles+tile*128,0,128);
+        tiles[tile*128+8*8]=0x20;
+        assert(WIDE_GroundTile(7,0)==0x44);
+        assert(WIDE_Compose(pixels,broad));
+        assert(pixels[(objectY+8)*broad.width+objectX]==2);
+        assert(pixels[(objectY+8)*broad.width+objectX+1]==0); /* outline */
+        assert(pixels[(objectY+8)*broad.width+objectX+2]==3); /* floor */
+        GRAP_BUF_SetTransparentSprites(false);
+        assert(WIDE_GroundTile(7,0)==tile);
+        assert(WIDE_Compose(pixels,broad));
+        assert(pixels[(objectY+8)*broad.width+objectX+2]==0);
+        GRAP_BUF_SetTransparentSprites(true);
+    }
+    const byte opaqueObjects[]={TILE_MAP_CHAIR_90,TILE_MAP_TABLE_94,TILE_MAP_BARREL,
+        TILE_MAP_BED,TILE_MAP_DRESSER,TILE_MAP_DOOR_B8,TILE_MAP_FIREPLACE,0xbd};
+    for(size_t i=0;i<sizeof(opaqueObjects);i++) {
+        GetMap(23,16)=opaqueObjects[i];
+        assert(WIDE_GroundTile(7,0)==opaqueObjects[i]);
+    }
+    GetMap(23,16)=TILE_MAP_BRAZIER;
+    D_5896_map_x=18;
+    memset(D_ab02,1,sizeof(D_ab02));
+    GetMapViewport(10,5)=TILE_MAP_BRAZIER;
+    ULTIMA_56ac_DrawMap();
+    assert(g_linearEgaBuffer0[96*320+170]==3);
+    assert(GetMap(23,16)==TILE_MAP_BRAZIER);
+    D_5896_map_x=16;
     GetMap(23,16)=TILE_MAP_WELL;
     D_5896_map_x=18;
     memset(D_ab02,1,sizeof(D_ab02));
@@ -125,6 +159,10 @@ int main(void)
     assert(WIDE_GroundTile(5,0)==TILE_MAP_WELL); /* no ground: opaque fallback */
     GetMap(22,16)=GetMap(24,16)=GetMap(23,17)=GetMap(23,15)=1;
     D_5896_map_x=16;
+    GetMap(23,16)=TILE_MAP_BRAZIER;
+    GetMap(22,16)=GetMap(24,16)=GetMap(23,17)=GetMap(23,15)=0x40;
+    assert(WIDE_GroundTile(7,0)==0x40); /* wooden floors on ship maps */
+    GetMap(22,16)=GetMap(24,16)=GetMap(23,17)=GetMap(23,15)=1;
     /* A southern wall stays in front of a sprite's bottom outline. Open
      * ground still receives it, and opaque mode has no outline margin. */
     tiles[300*128+15*8+4]=0x20;

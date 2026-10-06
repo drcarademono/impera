@@ -113,11 +113,18 @@ except for a one-pixel black outline around colored pixels (including diagonal
 neighbors). The outline can extend one pixel into adjacent map tiles and is
 clipped at the map frame. Blocking scenery to the south is drawn in front
 of overlapping sprite outlines. This also applies to expanded fullscreen maps and
-smooth movement. Fountains (all animation frames) and wells also use this flag. Their map cells
+smooth movement. Fountains (all animation frames), wells, braziers, cannonballs, cannons,
+telescopes, and stacks of logs also use this flag. Their map cells
 have no separate ground layer, so their background uses the most common
-immediately adjacent brick floor, other floor, or grass tile (ties prefer brick
-floor, then grass). With no adjacent recognized ground, they stay opaque. This
+immediately adjacent brick floor, grass, stone floor, or wooden floor tile
+(ties prefer that order). With no adjacent recognized ground, they stay opaque. This
 inference affects rendering only and leaves map data and interactions unchanged.
+The static-object audit checked all 256 map tiles against the tile art, object
+names, and town/castle map usage. It includes only freestanding objects with
+plain black backgrounds. Furniture such as barrels, beds, drawers, chairs,
+tables, and street lamps already includes colored floor or grass pixels;
+these keep their original artwork. Walls, doors, stairs, fences, wall fixtures,
+terrain, and effects also retain their original rendering.
 Sprites default to opaque when the flag is omitted. Terrain tiles remain opaque;
 the original tile data is unchanged.
 
