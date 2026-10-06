@@ -114,7 +114,7 @@ neighbors). The outline can extend one pixel into adjacent map tiles and is
 clipped at the map frame. Blocking scenery to the south is drawn in front
 of overlapping sprite outlines. This also applies to expanded fullscreen maps and
 smooth movement. Fountains (all animation frames), wells, braziers, cannonballs, cannons,
-telescopes, stacks of logs, stocks (empty or occupied), guillotines, manacles,
+telescopes, stacks of logs, stocks (empty or occupied), guillotines,
 torture racks, pendulums (all animation frames), metal grates, portcullises,
 carpets, and ladders also use this flag. Their map cells
 have no separate ground layer, so their background uses the most common
@@ -127,9 +127,9 @@ black backgrounds around their artwork. Furniture such as barrels, beds, drawers
 tables, and street lamps already includes colored floor or grass pixels;
 these keep their original artwork. Solid walls, doors, stairs, fences, other wall fixtures,
 terrain, and effects also retain their original rendering.
-The sleeping-in-bed NPC and all four occupied-manacles NPC frames retain
-their complete opaque artwork with no added outline, even with
-`--transparent-sprites`. Empty manacles still support transparency.
+The sleeping-in-bed NPC, empty manacles, and all four occupied-manacles NPC
+frames retain their complete opaque artwork with no added outline, even with
+`--transparent-sprites`.
 Sprites default to opaque when the flag is omitted. Terrain tiles remain opaque;
 the original tile data is unchanged.
 

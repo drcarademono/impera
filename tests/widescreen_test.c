@@ -116,7 +116,7 @@ int main(void)
     }
     /* The audited object list shares the same inference and opt-in behavior. */
     const byte cutouts[]={TILE_MAP_BRAZIER,TILE_MAP_59,0x88,0xa3,TILE_MAP_84,0x8e,
-        0x80,0x81,0x82,0x83,TILE_MAP_85,TILE_MAP_86,0x8b,0x99,0xaa,
+        0x80,0x81,0x82,0x83,TILE_MAP_86,0x8b,0x99,0xaa,
         TILE_MAP_LADDER_UP,TILE_MAP_LADDER_DOWN,
         TILE_MAP_CANNON_B4,TILE_MAP_CANNON_B5,TILE_MAP_CANNON_B6,TILE_MAP_CANNON_B7};
     for(size_t i=0;i<sizeof(cutouts);i++) {
@@ -167,11 +167,18 @@ int main(void)
     assert(pixels[(objectY+8)*broad.width+objectX+2]==5);
     memset(D_5c5a,0,sizeof(D_5c5a));
     GetMap(22,16)=GetMap(24,16)=GetMap(23,17)=0x44;
-    /* All occupied-manacles animation frames are opaque exceptions. Empty
-     * manacles still use inferred ground under the static-object rule. */
+    /* Empty manacles and all occupied animation frames stay opaque. */
     GetMap(23,16)=TILE_MAP_85;
     GetMap(22,16)=GetMap(24,16)=GetMap(23,17)=0x44;
-    assert(WIDE_GroundTile(7,0)==0x44);
+    assert(WIDE_GroundTile(7,0)==TILE_MAP_85);
+    D_b11e[TILE_MAP_85]=TILE_MAP_85;
+    memset(tiles+TILE_MAP_85*128,0,128);
+    tiles[TILE_MAP_85*128+8*8]=0x20;
+    assert(GRAP_BUF_SpritePixel(TILE_MAP_85,2,8)==0);
+    assert(GRAP_BUF_SpritePixel(TILE_MAP_85,-1,8)==-1);
+    assert(WIDE_Compose(pixels,broad));
+    assert(pixels[(objectY+8)*broad.width+objectX+2]==0);
+    assert(pixels[(objectY+8)*broad.width+objectX-1]==3);
     for(int frame=0x64;frame<=0x67;frame++) {
         int sprite=256+frame;
         memset(tiles+sprite*128,0,128);
@@ -195,7 +202,7 @@ int main(void)
     assert(g_linearEgaBuffer0[96*320+87]==3);
     D_5896_map_x=16;
     memset(D_5c5a,0,sizeof(D_5c5a));
-    const byte opaqueObjects[]={TILE_MAP_CHAIR_90,TILE_MAP_TABLE_94,TILE_MAP_BARREL,
+    const byte opaqueObjects[]={TILE_MAP_85,TILE_MAP_CHAIR_90,TILE_MAP_TABLE_94,TILE_MAP_BARREL,
         TILE_MAP_BED,TILE_MAP_DRESSER,TILE_MAP_DOOR_B8,TILE_MAP_FIREPLACE,0xbd};
     for(size_t i=0;i<sizeof(opaqueObjects);i++) {
         GetMap(23,16)=opaqueObjects[i];
