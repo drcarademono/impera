@@ -8,6 +8,9 @@
 
 #include "outsubs.h"
 #include "town.h"
+#if defined(TARGET_SDL)
+#include "graphics/grap_sdl.h"
+#endif
 
 void MAINOUT_0000(void);
 
@@ -187,6 +190,11 @@ void ULTIMA_4102_AudioPlayAmbientSfx(void)
 void ULTIMA_433e_AudioFootstep(void)
 {
 	ULTIMA_223c_AudioWhiteNoise(1, 0x19, 1000);
+#if defined(TARGET_SDL)
+    /* Smooth animation already paces movement; an extra footstep wait would
+     * leave the map stationary between successive steps. */
+    if (!GRAP_SDL_SmoothMovementEnabled())
+#endif
 	ULTIMA_20c8_SomeDelay(1, 0x14);
 	ULTIMA_223c_AudioWhiteNoise(1, 0x19, 1500);
 }

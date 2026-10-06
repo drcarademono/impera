@@ -360,7 +360,10 @@ int MOUSE_PollCommand(void)
         debug("Mouse action: %c target_offset=%d,%d\n", command, s_dx, s_dy);
         return command;
     }
-    if (s_right && SDL_GetTicks() - s_moveTime >= 160) {
+    /* Eight animation frames have seven 16 ms waits. Allow the next command
+     * immediately after that animation instead of pausing at the tile edge. */
+    Uint64 moveInterval = GRAP_SDL_SmoothMovementEnabled() ? 112 : 160;
+    if (s_right && SDL_GetTicks() - s_moveTime >= moveInterval) {
         float x, y, rx, ry;
         int dx, dy;
         SDL_GetMouseState(&x, &y);

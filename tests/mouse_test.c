@@ -87,7 +87,7 @@ bool __wrap_SDL_RenderPresent(SDL_Renderer* renderer)
             if (r==255 && g==85 && b==85) { marker=x; break; }
         }
         assert(marker>=0 && marker<=previousMarkerX);
-        if (presented==1) assert(marker<previousMarkerX && marker>previousMarkerX-48);
+        if (presented<=8) assert(marker==previousMarkerX-6); /* constant speed: 48 pixels / 8 frames */
         previousMarkerX=marker;
         SDL_DestroySurface(image);
     }
@@ -336,6 +336,14 @@ int main(int argc, char** argv)
     assert(MOUSE_PollCommand()==0);
     ticks+=160;
     assert(MOUSE_PollCommand()==U5_KEY_PGDN);
+    GRAP_SDL_SetSmoothMovement(true);
+    ticks+=111;
+    assert(MOUSE_PollCommand()==0);
+    ticks++;
+    assert(MOUSE_PollCommand()==U5_KEY_PGDN);
+    GRAP_SDL_SetSmoothMovement(false);
+    ticks+=112;
+    assert(MOUSE_PollCommand()==0); /* original cadence without smooth movement */
     cursorX=385; cursorY=460.8f; /* inside the player sprite, east of center */
     ticks+=160;
     assert(MOUSE_PollCommand()==U5_KEY_RIGHT);
