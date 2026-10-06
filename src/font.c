@@ -1,5 +1,6 @@
 #include "common/common.h"
 #include "savegame.h"
+#include "common/save_slots.h"
 #include "funcs.h"
 #include "vars.h"
 #include "macros.h"
@@ -747,6 +748,9 @@ void FONT_0b0a(void)
         ULTIMA_25d8_WriteFileToDisk(/*0xa0cc*/ "SAVED.OOL", D_b21e, 0x200);
 #if !defined(TARGET_DOS16)
         FILE_WriteSavegameFile(/*0xa0d6*/ "SAVED.GAM");
+#if defined(TARGET_SDL)
+        SLOTS_ResetTime();
+#endif
 #else
         ULTIMA_25d8_WriteFileToDisk(/*0xa0d6*/ "SAVED.GAM", &D_55a6, (int)&D_6606 - (int)&D_55a6);
 #endif

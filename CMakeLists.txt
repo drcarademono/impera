@@ -10,6 +10,7 @@ pkg_check_modules(SDL3 REQUIRED sdl3)
 pkg_check_modules(SDL3_MIXER REQUIRED sdl3-mixer)
 
 set(SOURCES
+    src/common/save_slots.c
     src/common/engine_settings.c
     src/audio/pcspeaker.c
 	src/town.c
@@ -105,6 +106,15 @@ if(U5D_BUILD_TESTS)
              -DTEST_DIR=${CMAKE_BINARY_DIR}/test-runtime
              -P ${CMAKE_SOURCE_DIR}/tests/check_missing_file.cmake)
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        add_executable(u5d_save_slots_test tests/save_slots_test.c ${TEST_SOURCES})
+        list(APPEND U5D_TARGETS u5d_save_slots_test)
+        target_link_options(u5d_save_slots_test PRIVATE "-Wl,--wrap=SDL_RenderPresent")
+        file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/slots-runtime")
+        configure_file("${CMAKE_SOURCE_DIR}/Ultima 5/IBM.CH" "${CMAKE_BINARY_DIR}/slots-runtime/IBM.CH" COPYONLY)
+        add_test(NAME save_slots COMMAND u5d_save_slots_test)
+        set_tests_properties(save_slots PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/slots-runtime"
+            ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software" TIMEOUT 20)
         add_executable(u5d_engine_settings_test tests/engine_settings_test.c ${TEST_SOURCES})
         list(APPEND U5D_TARGETS u5d_engine_settings_test)
         file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/settings-runtime")

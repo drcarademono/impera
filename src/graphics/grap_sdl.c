@@ -443,6 +443,30 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
     SDL_DestroySurface(clean);
 }
 
+/* Thumbnails are rendered at display resolution over the pixel UI. */
+static SDL_Texture* s_uiThumbnails[4];
+static SDL_FRect s_uiThumbnailRects[4];
+void GRAP_SDL_ClearUIThumbnails(void)
+{
+    for(int i=0;i<4;i++) { SDL_DestroyTexture(s_uiThumbnails[i]);s_uiThumbnails[i]=NULL; }
+}
+SDL_Surface* GRAP_SDL_CaptureFrame(void)
+{
+    GRAP_BUF_FlushPendingPresent();
+    return SDL_RenderReadPixels(s_sdlRenderer,NULL);
+}
+void GRAP_SDL_UIThumbnail(int i,const char* path,int x,int y,int w,int h)
+{
+    if(i<0 || i>=4) return;
+    SDL_DestroyTexture(s_uiThumbnails[i]);s_uiThumbnails[i]=NULL;
+    SDL_Surface* image=SDL_LoadBMP(path);
+    if(image) {
+        s_uiThumbnails[i]=SDL_CreateTextureFromSurface(s_sdlRenderer,image);
+        SDL_DestroySurface(image);
+        if(s_uiThumbnails[i]) SDL_SetTextureScaleMode(s_uiThumbnails[i],SDL_SCALEMODE_LINEAR);
+    }
+    s_uiThumbnailRects[i]=(SDL_FRect){x,y,w,h};
+}
 extern void DisplayDebugMessages(void);
 
 void GRAP_SDL_FlushFrame(void)
@@ -515,6 +539,19 @@ void GRAP_SDL_FlushFrame(void)
         if (SDL_GetRenderOutputSize(s_sdlRenderer,&w,&h)) {
             SDL_FRect dst = {0,0,w,h};
             SmoothFrame(g_linearEgaBuffer0,320,200,8,8,11,11,s_sdlTexture,2,dst);
+        }
+    }
+    if(s_pixelUI) {
+        int w,h;
+        if(SDL_GetRenderOutputSize(s_sdlRenderer,&w,&h)) {
+            WideLayout l=WIDE_Layout(w,h);
+            for(int i=0;i<4;i++) if(s_uiThumbnails[i]) {
+                SDL_FRect r=s_uiThumbnailRects[i];
+                r.x=(w-320*l.scale)/2+r.x*l.scale;
+                r.y=(h-200*l.scale)/2+r.y*l.scale;
+                r.w*=l.scale;r.h*=l.scale;
+                SDL_RenderTexture(s_sdlRenderer,s_uiThumbnails[i],NULL,&r);
+            }
         }
     }
     SDL_RenderPresent(s_sdlRenderer);

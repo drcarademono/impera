@@ -30,3 +30,10 @@ Ultima 5/Music/13 - Dream of Lady Nan.mp3
 Ultima 5/Music/14 - Joyous Reunion.mp3
 Ultima 5/Music/15 - Rule Britannia.mp3
 Ultima 5/Music/16 - Amiga Theme.mp3
+
+# Runtime save-slot data
+SAVEGAME/slots/
+SAVEGAME/PLAYTIME
+SAVEGAME/*.pending
+SAVEGAME/*.previous
+SAVEGAME/.slot-thumbnail.bmp

@@ -74,11 +74,11 @@ bool ENGINE_Save(void)
     if(FILE_ResolvePath("ENGINE.CFG.tmp",temporary,sizeof(temporary),0)!=0) return false;
     return SDL_RenamePath(temporary,path);
 }
-static void rect(int x,int y,int w,int h,byte color)
+void ENGINE_UIRect(int x,int y,int w,int h,byte color)
 {
     for(int j=y;j<y+h;j++) memset(g_linearEgaBuffer0+j*320+x,color,(size_t)w);
 }
-static void text(int x,int y,const char* s,byte color)
+void ENGINE_UIText(int x,int y,const char* s,byte color)
 {
     const byte* font=D_539c[0] ? D_539c[0] : D_5398_currentCharset;
     if(!font) return;
@@ -87,47 +87,47 @@ static void text(int x,int y,const char* s,byte color)
             if(font[(unsigned char)*s*8+j] & (0x80>>i)) g_linearEgaBuffer0[(y+j)*320+x+i]=color;
 }
 /* Reuse the original IBM.CH border glyphs from the title menu. */
-static void frame(void)
+void ENGINE_UIFrame(void)
 {
     for(int x=8;x<312;x+=8) {
-        text(x,0,"\x7f",1);text(x,192,"\x7f",1);
+        ENGINE_UIText(x,0,"\x7f",1);ENGINE_UIText(x,192,"\x7f",1);
     }
     for(int y=8;y<192;y+=8) {
-        text(0,y,"\x7f",1);text(312,y,"\x7f",1);
+        ENGINE_UIText(0,y,"\x7f",1);ENGINE_UIText(312,y,"\x7f",1);
     }
-    text(0,0,"\x7b",1);text(312,0,"\x7c",1);
-    text(0,192,"\x7d",1);text(312,192,"\x7e",1);
-    rect(7,7,306,1,15);rect(7,7,1,186,15);
-    rect(312,7,1,186,15);rect(7,192,306,1,15);
+    ENGINE_UIText(0,0,"\x7b",1);ENGINE_UIText(312,0,"\x7c",1);
+    ENGINE_UIText(0,192,"\x7d",1);ENGINE_UIText(312,192,"\x7e",1);
+    ENGINE_UIRect(7,7,306,1,15);ENGINE_UIRect(7,7,1,186,15);
+    ENGINE_UIRect(312,7,1,186,15);ENGINE_UIRect(7,192,306,1,15);
 }
 static int rowY(int row) { return row<7 ? 40+row*14 : row==7?140:row==8?160:180; }
 static bool s_gameplay;
 void ENGINE_DrawSettings(int selected)
 {
     memset(g_linearEgaBuffer0,0,320*200);
-    frame();
-    text(104,12,"Engine Options",15);
-    text(32,26,"Arrows / Enter   Esc: Back",7);
+    ENGINE_UIFrame();
+    ENGINE_UIText(104,12,"Engine Options",15);
+    ENGINE_UIText(32,26,"Arrows / Enter   Esc: Back",7);
     for(int row=0;row<=ENGINE_SETTING_COUNT;row++) {
         int y=rowY(row);
         bool highlighted=row==selected;
         byte foreground=highlighted?0:15;
-        if(highlighted) rect(16,y-1,288,10,15);
-        text(24,y,row==ENGINE_SETTING_COUNT?(s_gameplay?"Return to Game":"Return to Menu"):labels[row],foreground);
+        if(highlighted) ENGINE_UIRect(16,y-1,288,10,15);
+        ENGINE_UIText(24,y,row==ENGINE_SETTING_COUNT?(s_gameplay?"Return to Game":"Return to Menu"):labels[row],foreground);
         if(row==ENGINE_SETTING_COUNT) continue;
         float value=ENGINE_Get(row);
         if(row<ENGINE_MOVEMENT_SPEED) {
-            rect(232,y+1,7,7,7);
-            rect(233,y+2,5,5,value?10:0);
-            text(248,y,value?"On":"Off",highlighted?0:(value?10:7));
+            ENGINE_UIRect(232,y+1,7,7,7);
+            ENGINE_UIRect(233,y+2,5,5,value?10:0);
+            ENGINE_UIText(248,y,value?"On":"Off",highlighted?0:(value?10:7));
         } else {
-            rect(184,y+4,64,1,highlighted?0:7);
-            for(int i=0;i<3;i++) rect(184+i*32,y+1,1,7,foreground);
+            ENGINE_UIRect(184,y+4,64,1,highlighted?0:7);
+            for(int i=0;i<3;i++) ENGINE_UIRect(184+i*32,y+1,1,7,foreground);
             int knob=184+(int)SDL_roundf(SDL_clamp((value-0.5f)*128,0,64));
-            rect(knob-2,y+1,5,7,highlighted?0:14);
+            ENGINE_UIRect(knob-2,y+1,5,7,highlighted?0:14);
             char number[12];SDL_snprintf(number,sizeof(number),"%.2f",(double)value);
-            text(264,y,number,highlighted?0:14);
-            text(172,y+9,"0.5",7);text(200,y+9,"0.75",7);text(244,y+9,"1",7);
+            ENGINE_UIText(264,y,number,highlighted?0:14);
+            ENGINE_UIText(172,y+9,"0.5",7);ENGINE_UIText(200,y+9,"0.75",7);ENGINE_UIText(244,y+9,"1",7);
         }
     }
     GRAP_BUF_MarkDirty();GRAP_BUF_Present();
