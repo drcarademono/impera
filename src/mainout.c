@@ -256,6 +256,12 @@ void MAINOUT_0354(int param_1, int param_2)
 
     if (local_4 < 5 || local_4 > 0x1a || local_6 < 5 || local_6 > 0x1a)
     {
+#if !defined(MATCHING_BUILD)
+        /* Diagonal steps can cross just one axis of the resident map window.
+         * Shift each axis only when its own boundary has been crossed. */
+        param_1 = local_4 < 5 ? -1 : local_4 > 0x1a ? 1 : 0;
+        param_2 = local_6 < 5 ? -1 : local_6 > 0x1a ? 1 : 0;
+#endif
         OUTSUBS_02c8(param_1, param_2); // 7bd2
         D_589b = (char)param_1 * 16 + D_589b & 0xf0; // wrap x?
         D_589c = (char)param_2 * 16 + D_589c & 0xf0; // wrap y?
