@@ -69,6 +69,17 @@ static void removeDir(const char* dir)
     char p[512];for(int i=0;i<4;i++) { path(p,sizeof(p),dir,files[i]);SDL_RemovePath(p); }
     SDL_RemovePath(dir);
 }
+bool SLOTS_Delete(const char* id)
+{
+    if(!validId(id) || !storage()) return false;
+    char dir[512],p[512];SDL_snprintf(dir,sizeof(dir),"%s/%s",ROOT,id);
+    SDL_PathInfo info;if(!SDL_GetPathInfo(dir,&info)) return false;
+    for(int i=0;i<4;i++) {
+        path(p,sizeof(p),dir,files[i]);
+        if(SDL_GetPathInfo(p,&info) && !SDL_RemovePath(p)) return false;
+    }
+    return SDL_RemovePath(dir);
+}
 static bool metadata(const char* dir,char* name,uint64_t* ms)
 {
     char p[512];path(p,sizeof(p),dir,"meta.txt");FILE* f=FILE_Open(p,"r");if(!f) return false;
@@ -200,7 +211,7 @@ static void draw(bool saving,int selected,int top,const char* status)
 {
     memset(g_linearEgaBuffer0,0,320*200);ENGINE_UIFrame();
     ENGINE_UIText(124,12,saving?"Save Game":"Load Game",15);
-    ENGINE_UIText(16,26,status?status:"Arrows/Enter  Esc: Back",7);
+    ENGINE_UIText(16,26,status?status:"Arrows/Enter Esc: Back Del: Delete",7);
     if(s_hasFirstRow) {
         ENGINE_UIRect(16,39,280,12,selected==0?15:0);
         ENGINE_UIText(24,41,saving?"New Save":"Legacy Save",selected==0?0:15);
@@ -260,6 +271,35 @@ static bool prompt(char* name,bool overwrite)
     }
     if(window) SDL_StopTextInput(window);return accepted;
 }
+static bool confirmDelete(const char* name)
+{
+    GRAP_SDL_ClearUIThumbnails();
+    while(true) {
+        ENGINE_UIRect(16,39,290,137,0);
+        ENGINE_UIRect(16,68,288,68,1);ENGINE_UIRect(19,71,282,62,15);
+        ENGINE_UIRect(20,72,280,60,0);
+        ENGINE_UIText(24,76,"Are you sure?",15);
+        ENGINE_UIText(24,92,name,15);
+        ENGINE_UIText(24,116,"Y: Delete    N/Esc: Cancel",7);
+        GRAP_BUF_MarkDirty();GRAP_BUF_Present();
+        SDL_Event e;
+        while(SDL_PollEvent(&e)) {
+            if(e.type==SDL_EVENT_QUIT || (e.type==SDL_EVENT_KEY_DOWN && e.key.key==SDLK_E && (e.key.mod&SDL_KMOD_CTRL))) exit(0);
+            if(e.type==SDL_EVENT_KEY_DOWN && !e.key.repeat) {
+                if(e.key.key==SDLK_Y) return true;
+                if(e.key.key==SDLK_N || e.key.key==SDLK_ESCAPE) return false;
+            }
+            if(e.type==SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button==SDL_BUTTON_LEFT) {
+                float x,y;
+                if(GRAP_SDL_MouseUIPoint(e.button.x,e.button.y,&x,&y) && y>=112 && y<128) {
+                    if(x>=24 && x<96) return true;
+                    if(x>=128 && x<224) return false;
+                }
+            }
+        }
+        MOUSE_UpdateCursor();SDL_Delay(16);
+    }
+}
 static bool validLegacy(void)
 {
     for(int i=0;i<2;i++) {
@@ -297,6 +337,18 @@ static bool show(bool saving,bool inGame)
             if(e.type==SDL_EVENT_QUIT || (e.type==SDL_EVENT_KEY_DOWN && e.key.key==SDLK_E && (e.key.mod&SDL_KMOD_CTRL))) exit(0);
             if(e.type==SDL_EVENT_KEY_DOWN) {
                 switch(e.key.key) {
+                case SDLK_DELETE:
+                    if(!e.key.repeat && selected>0 && selected<=s_count) {
+                        drag=false;SDL_CaptureMouse(false);
+                        if(confirmDelete(s_slots[selected-1].name)) {
+                            if(SLOTS_Delete(s_slots[selected-1].id)) {
+                                memmove(&s_slots[selected-1],&s_slots[selected],(size_t)(s_count-selected)*sizeof(Slot));
+                                s_count--;selected=SDL_min(selected,s_count+1);
+                                top=SDL_min(top,SDL_max(0,s_count-4));status=NULL;
+                            } else status="Could not delete save.";
+                        }
+                    }
+                    break;
                 case SDLK_ESCAPE:done=true;break;
                 case SDLK_UP:selected=SDL_max(first,selected-1);break;
                 case SDLK_DOWN:selected=SDL_min(s_count+1,selected+1);break;

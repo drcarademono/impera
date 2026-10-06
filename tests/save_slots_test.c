@@ -44,6 +44,15 @@ static Uint32 accept(void* unused,SDL_TimerID id,Uint32 interval)
     SDL_Event e={0};e.type=SDL_EVENT_KEY_DOWN;e.key.key=SDLK_RETURN;
     assert(SDL_PushEvent(&e));return 0;
 }
+static int deleteStep;
+static bool deleteConfirm;
+static Uint32 deleteInput(void* unused,SDL_TimerID id,Uint32 interval)
+{
+    (void)unused;(void)id;(void)interval;
+    SDL_Keycode keys[]={SDLK_DOWN,SDLK_DELETE,deleteConfirm?SDLK_Y:SDLK_N,SDLK_ESCAPE};
+    SDL_Event e={0};e.type=SDL_EVENT_KEY_DOWN;e.key.key=keys[deleteStep++];
+    assert(SDL_PushEvent(&e));return deleteStep==4?0:50;
+}
 static bool captureBrowser;
 static bool checkDrag, sawDrag;
 static bool checkNoLegacy, sawNoLegacy;
@@ -186,6 +195,14 @@ int main(void)
     assert(D_538e==1 && D_57a8==123);
     assert(D_535e_textWindows[1].left==24 && D_535e_textWindows[1].right==39);
     SLOTS_ResetTime();SLOTS_StartTime();assert(SLOTS_PlayMilliseconds()<10);
+    assert(!SLOTS_Delete("../1"));
+    deleteStep=0;deleteConfirm=false;
+    assert(SDL_AddTimer(50,deleteInput,NULL));assert(!SLOTS_ShowLoad());
+    assert(SLOTS_Load("900"));
+    deleteStep=0;deleteConfirm=true;
+    assert(SDL_AddTimer(50,deleteInput,NULL));assert(!SLOTS_ShowLoad());
+    assert(!SLOTS_Load("900"));
+    assert(!SLOTS_Delete("900"));
     D_539c[0]=NULL;GRAP_Cleanup();SDL_Quit();
     puts("90+ named slots, party/world round trip, play time, failed overwrite, corrupt load and browser input passed");
     return 0;

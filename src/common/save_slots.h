@@ -15,5 +15,6 @@ void SLOTS_ReloadActiveGame(void);
 uint64_t SLOTS_PlayMilliseconds(void);
 bool SLOTS_Write(const char* id,const char* name,const char* thumbnail);
 bool SLOTS_Load(const char* id);
+bool SLOTS_Delete(const char* id);
 #endif
 #endif

@@ -78,7 +78,8 @@ Choose **New Save**, type a name (up to 26 characters in the game font), and
 press Enter. Existing slots can be selected and overwritten after confirmation.
 Names may repeat: each slot has its own identifier. Slots have no fixed limit;
 the list shows four at a time with Up/Down, Page Up/Down, mouse wheel scrolling,
-and a draggable scrollbar. Escape or **Return to Game** cancels.
+and a draggable scrollbar. Press Delete on a named slot, then Y to confirm deletion
+or N/Escape to cancel. Escape or **Return to Game** cancels.
 
 Each slot includes the complete party save, both world-object lists, cumulative
 play time, and a small screenshot thumbnail. **Journey Onward** opens the matching
