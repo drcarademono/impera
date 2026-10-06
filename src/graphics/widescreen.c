@@ -92,6 +92,7 @@ static bool HasObjectBackground(byte tile)
 {
     return tile == TILE_MAP_WELL || (tile & 0xfc) == TILE_MAP_FOUNTAIN ||
         tile == TILE_MAP_BRAZIER || tile == TILE_MAP_59 ||
+        tile == TILE_MAP_84 /* stocks */ || tile == 0x8e /* guillotine */ ||
         tile == 0x88 /* cannonballs */ || tile == 0xa3 /* stack of logs */ ||
         (tile >= TILE_MAP_CANNON_B4 && tile <= TILE_MAP_CANNON_B7);
 }

@@ -115,7 +115,7 @@ int main(void)
         assert(WIDE_GroundTile(7,0)==0x44);
     }
     /* The audited object list shares the same inference and opt-in behavior. */
-    const byte cutouts[]={TILE_MAP_BRAZIER,TILE_MAP_59,0x88,0xa3,
+    const byte cutouts[]={TILE_MAP_BRAZIER,TILE_MAP_59,0x88,0xa3,TILE_MAP_84,0x8e,
         TILE_MAP_CANNON_B4,TILE_MAP_CANNON_B5,TILE_MAP_CANNON_B6,TILE_MAP_CANNON_B7};
     for(size_t i=0;i<sizeof(cutouts);i++) {
         byte tile=cutouts[i];
@@ -134,6 +134,31 @@ int main(void)
         assert(pixels[(objectY+8)*broad.width+objectX+2]==0);
         GRAP_BUF_SetTransparentSprites(true);
     }
+    /* Empty and occupied stocks use the same grass backdrop; all occupied
+     * poses remain transparent through the existing actor sprite path. */
+    GetMap(22,16)=GetMap(24,16)=GetMap(23,17)=GetMap(23,15)=TILE_MAP_GRASS;
+    D_b11e[TILE_MAP_GRASS]=TILE_MAP_GRASS;
+    memset(tiles+TILE_MAP_GRASS*128,0x55,128);
+    for(int object=0;object<2;object++) {
+        GetMap(23,16)=object?0x8e:TILE_MAP_84;
+        assert(WIDE_GroundTile(7,0)==TILE_MAP_GRASS);
+        assert(WIDE_Compose(pixels,broad));
+        assert(pixels[(objectY+8)*broad.width+objectX+2]==5);
+    }
+    GetMap(23,16)=TILE_MAP_84;
+    D_5c5a[1]._0_tile=D_5c5a[1]._1_animTile=0x44;
+    D_5c5a[1]._2_x=23; D_5c5a[1]._3_y=16;
+    for(int frame=0;frame<4;frame++) {
+        memset(tiles+(256+0x60+frame)*128,0,128);
+        tiles[(256+0x60+frame)*128+8*8]=0x20;
+    }
+    bool stocksReflection;
+    int pose=ULTIMA_ResolveActorTile(0x44,TILE_MAP_84,5,5,&stocksReflection);
+    assert(pose>=0x60 && pose<=0x63);
+    assert(WIDE_Compose(pixels,broad));
+    assert(pixels[(objectY+8)*broad.width+objectX+2]==5);
+    memset(D_5c5a,0,sizeof(D_5c5a));
+    GetMap(22,16)=GetMap(24,16)=GetMap(23,17)=0x44;
     const byte opaqueObjects[]={TILE_MAP_CHAIR_90,TILE_MAP_TABLE_94,TILE_MAP_BARREL,
         TILE_MAP_BED,TILE_MAP_DRESSER,TILE_MAP_DOOR_B8,TILE_MAP_FIREPLACE,0xbd};
     for(size_t i=0;i<sizeof(opaqueObjects);i++) {

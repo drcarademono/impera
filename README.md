@@ -114,7 +114,8 @@ neighbors). The outline can extend one pixel into adjacent map tiles and is
 clipped at the map frame. Blocking scenery to the south is drawn in front
 of overlapping sprite outlines. This also applies to expanded fullscreen maps and
 smooth movement. Fountains (all animation frames), wells, braziers, cannonballs, cannons,
-telescopes, and stacks of logs also use this flag. Their map cells
+telescopes, stacks of logs, stocks (empty or occupied), and guillotines also
+use this flag. Their map cells
 have no separate ground layer, so their background uses the most common
 immediately adjacent brick floor, grass, stone floor, or wooden floor tile
 (ties prefer that order). With no adjacent recognized ground, they stay opaque. This
