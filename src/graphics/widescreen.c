@@ -309,7 +309,8 @@ void WIDE_SetDitheredDarkness(bool enabled) { s_ditheredDarkness=enabled; }
 bool WIDE_DitheredDarkness(void) { return s_ditheredDarkness; }
 
 /* Darkness coverage, 0..16, at original game-pixel resolution. Visible tiles
- * fade inward over 24 pixels; unseen terrain stays completely hidden. */
+ * fade inward over 24 pixels; unseen terrain stays completely hidden.
+ * Visible masonry (including concealed doors) keeps its solid silhouette. */
 bool WIDE_DarknessMask(byte* mask,int columns,int rows)
 {
     int stride=columns+4;
@@ -319,11 +320,14 @@ bool WIDE_DarknessMask(byte* mask,int columns,int rows)
         int dx=col-columns/2,dy=row-rows/2;
         lit[(row+2)*stride+col+2]=abs(dx)<=5 && abs(dy)<=5 ? GetMapViewport(dx+5,dy+5)!=255 : WIDE_Visible(dx,dy) && WIDE_MapTile(dx,dy)!=255;
     }
-    for(int row=0;row<rows;row++) for(int col=0;col<columns;col++)
+    for(int row=0;row<rows;row++) for(int col=0;col<columns;col++) {
+        bool visible=lit[(row+2)*stride+col+2];
+        byte tile=visible ? WIDE_MapTile(col-columns/2,row-rows/2) : 255;
+        bool masonry=tile==TILE_MAP_WALL || tile==TILE_MAP_HIDDEN_DOOR;
         for(int py=0;py<16;py++) for(int px=0;px<16;px++) {
             int shade=0;
-            if(!lit[(row+2)*stride+col+2]) shade=16;
-            else if(col!=columns/2 || row!=rows/2) {
+            if(!visible) shade=16;
+            else if(!masonry && (col!=columns/2 || row!=rows/2)) {
                 int nearest=24*24;
                 for(int oy=-2;oy<=2;oy++) for(int ox=-2;ox<=2;ox++) {
                     if(lit[(row+oy+2)*stride+col+ox+2]) continue;
@@ -336,5 +340,6 @@ bool WIDE_DarknessMask(byte* mask,int columns,int rows)
             }
             mask[(row*16+py)*columns*16+col*16+px]=(byte)shade;
         }
+    }
     free(lit);return true;
 }
