@@ -27,6 +27,7 @@ extern void GRAP_BUF_MarkDirty(void);
 
 extern void GRAP_BUF_SetPenColor(byte color);
 extern void GRAP_BUF_SetPage(int page);
+extern void GRAP_BUF_SetTextPixelOffset(int y);
 extern void GRAP_BUF_PrintChar(byte* ptr, int offset, byte fgColor, byte bgColor, int penX, int penY);
 extern void GRAP_BUF_ScrollWindow(int left, int top, int right, int bottom, int amount);
 extern void GRAP_BUF_Line(int x1, int y1, int x2, int y2);

@@ -33,6 +33,9 @@ void EVT_PollMessages(void)
 			break;
 
 		case SDL_EVENT_KEY_DOWN:
+            /* Handle exit before menus or cutscenes can consume the key. */
+            if (ev.key.key == SDLK_E && (ev.key.mod & SDL_KMOD_CTRL))
+                exit(0);
 			MOUSE_Cancel();
 			KEY_SDL_ProcessKeyDown(ev.key);
 			break;

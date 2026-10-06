@@ -86,13 +86,13 @@ static void text(int x,int y,const char* s,byte color)
         for(int j=0;j<8;j++) for(int i=0;i<8;i++)
             if(font[(unsigned char)*s*8+j] & (0x80>>i)) g_linearEgaBuffer0[(y+j)*320+x+i]=color;
 }
-static int rowY(int row) { return row<7 ? 44+row*14 : row==7?144:row==8?164:184; }
+static int rowY(int row) { return row<7 ? 40+row*14 : row==7?140:row==8?160:180; }
 void ENGINE_DrawSettings(int selected)
 {
     memset(g_linearEgaBuffer0,0,320*200);
     rect(8,8,304,1,15);rect(8,8,1,184,15);rect(311,8,1,184,15);rect(8,191,304,1,15);
-    text(96,16,"Engine Settings",15);
-    text(32,30,"Arrows / Enter   Esc: Back",7);
+    text(96,12,"Engine Settings",15);
+    text(32,26,"Arrows / Enter   Esc: Back",7);
     for(int row=0;row<=ENGINE_SETTING_COUNT;row++) {
         int y=rowY(row);
         if(row==selected) rect(16,y-1,288,10,1);
@@ -136,7 +136,9 @@ void ENGINE_ShowSettings(void)
     while(!done) {
         SDL_Event event;
         while(SDL_PollEvent(&event)) {
-            if(event.type==SDL_EVENT_QUIT) { if(changed) ENGINE_Save();exit(0); }
+            if(event.type==SDL_EVENT_QUIT ||
+               (event.type==SDL_EVENT_KEY_DOWN && event.key.key==SDLK_E &&
+                (event.key.mod & SDL_KMOD_CTRL))) { if(changed) ENGINE_Save();exit(0); }
             if(event.type==SDL_EVENT_KEY_DOWN) {
                 switch(event.key.key) {
                 case SDLK_ESCAPE:done=true;break;

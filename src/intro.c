@@ -13,6 +13,7 @@
 #include "intro.h"
 #if defined(TARGET_SDL)
 #include "common/engine_settings.h"
+#include "graphics/grap_buf.h"
 #define INTRO_MENU_COUNT 7
 #else
 #define INTRO_MENU_COUNT 6
@@ -394,6 +395,10 @@ static void INTRO_0676_WriteMenuOption(int param_4, int param_3, int param_2, ch
 
 static void INTRO_06bc_BuildMainMenu(int param_1)
 {
+#if defined(TARGET_SDL)
+    /* Seven 8-pixel rows centered between the borders at y=127 and y=192. */
+    GRAP_BUF_SetTextPixelOffset(-4);
+#endif
     INTRO_0676_WriteMenuOption(param_1, 0, 0xc, _TEXT(0x310c, "Journey Onward"));
     INTRO_0676_WriteMenuOption(param_1, 1, 9, _TEXT(0x311b, "Create New Character"));
     INTRO_0676_WriteMenuOption(param_1, 2, 8, _TEXT(0x3130, "Transfer from Ultima IV"));
@@ -402,6 +407,7 @@ static void INTRO_06bc_BuildMainMenu(int param_1)
     INTRO_0676_WriteMenuOption(param_1, 5, 10, _TEXT(0x316f, "Return to the View"));
 #if defined(TARGET_SDL)
     INTRO_0676_WriteMenuOption(param_1, 6, 11, "Engine Settings");
+    GRAP_BUF_SetTextPixelOffset(0);
 #endif
 }
 
@@ -750,7 +756,7 @@ void INTRO_0986_Main(void) // intro_main (initialize video) (8b46)
                 do
                 {
                     // 0d75
-                    MOUSE_MenuSet(64, 136, 192, INTRO_MENU_COUNT, local_c);
+                    MOUSE_MenuSet(64, 132, 192, INTRO_MENU_COUNT, local_c);
                     local_10 = ULTIMA_2032_ToUpper(ULTIMA_1b38_PollKeyWithCursor());
                     MOUSE_MenuEnd();
                     if (local_10 == 0)

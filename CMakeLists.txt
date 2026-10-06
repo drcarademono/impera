@@ -110,6 +110,13 @@ if(U5D_BUILD_TESTS)
         file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/settings-runtime")
         configure_file("${CMAKE_SOURCE_DIR}/Ultima 5/IBM.CH" "${CMAKE_BINARY_DIR}/settings-runtime/IBM.CH" COPYONLY)
         add_test(NAME engine_settings COMMAND u5d_engine_settings_test)
+        foreach(exit_context settings menu cutscene)
+            add_test(NAME ctrl_e_${exit_context} COMMAND u5d_engine_settings_test ${exit_context})
+            set_tests_properties(ctrl_e_${exit_context} PROPERTIES
+                WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/settings-runtime"
+                ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software"
+                TIMEOUT 10 RUN_SERIAL TRUE)
+        endforeach()
         set_tests_properties(engine_settings PROPERTIES WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/settings-runtime"
             ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software" TIMEOUT 10)
         add_executable(u5d_audio_test tests/audio_test.c ${TEST_SOURCES})

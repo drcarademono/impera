@@ -293,6 +293,12 @@ void GRAP_BUF_MarkDirty(void)
     s_dirty = true;
 }
 
+static int s_textPixelOffset;
+void GRAP_BUF_SetTextPixelOffset(int y)
+{
+    s_textPixelOffset = y;
+}
+
 void GRAP_BUF_PrintChar(byte* ptr, int offset, byte fgColor, byte bgColor, int penX, int penY)
 {
     byte* p = &ptr[offset];
@@ -303,7 +309,7 @@ void GRAP_BUF_PrintChar(byte* ptr, int offset, byte fgColor, byte bgColor, int p
         {
             byte col = b & s_bitMask[x] ? s_colorTable[fgColor] : s_colorTable[bgColor];
 
-            GrPutPixel(D_52ba_vdp._52d8_page, penX * 8 + x, penY * 8 + y, col);
+            GrPutPixel(D_52ba_vdp._52d8_page, penX * 8 + x, penY * 8 + y + s_textPixelOffset, col);
         }
     }
 
