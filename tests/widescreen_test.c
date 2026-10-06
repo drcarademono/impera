@@ -115,7 +115,7 @@ int main(void)
         assert(WIDE_GroundTile(7,0)==0x44);
     }
     /* The audited object list shares the same inference and opt-in behavior. */
-    const byte cutouts[]={TILE_MAP_BRAZIER,TILE_MAP_59,0x88,0xa3,TILE_MAP_84,0x8e,
+    const byte cutouts[]={TILE_MAP_BELLOWS_FC,TILE_MAP_BELLOWS_FD,TILE_MAP_BRAZIER,TILE_MAP_59,0x88,0xa3,TILE_MAP_84,0x8e,
         0x80,0x81,0x82,0x83,TILE_MAP_86,0x8b,0x99,0xaa,
         TILE_MAP_LADDER_UP,TILE_MAP_LADDER_DOWN,
         TILE_MAP_CANNON_B4,TILE_MAP_CANNON_B5,TILE_MAP_CANNON_B6,TILE_MAP_CANNON_B7};
