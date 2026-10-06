@@ -450,7 +450,24 @@ int main(int argc, char** argv)
     assert(GetMap(16,17)==TILE_MAP_TABLE_95 && D_57a8==food+1);D_57a8=food;
     D_5893_map_id=0;
     byte* palace=ULTIMA_4402_GetTileAddr(D_5896_map_x,D_5897_map_y);byte previous=*palace;
-    *palace=TILE_MAP_PALACEBT;assert(MOUSE_Action(0,0,true)=='E');*palace=previous;D_5893_map_id=13;
+    /* Every tile accepted by the keyboard Enter command also double-clicks
+     * to Enter while standing on it, including the Brittany village tile. */
+    const byte entrances[]={TILE_MAP_HUT,TILE_MAP_CODEX,TILE_MAP_KEEP,TILE_MAP_VILLAGE,
+        TILE_MAP_TOWNE,TILE_MAP_CASTLE,TILE_MAP_CAVE,TILE_MAP_MINE,TILE_MAP_DUNGEON,
+        TILE_MAP_SHRINE,TILE_MAP_RUINS,TILE_MAP_LIGHTHOUSE,TILE_MAP_PALACEBT,TILE_MAP_CASTLELB};
+    for(unsigned i=0;i<sizeof(entrances);i++) {
+        *palace=entrances[i];assert(MOUSE_Action(0,0,true)=='E');
+        MOUSE_SetCommandInput(true);MOUSE_Cancel();
+        MOUSE_Button(384,460.8f,SDL_BUTTON_LEFT,true,1);
+        MOUSE_Button(384,460.8f,SDL_BUTTON_LEFT,true,2);
+        assert(MOUSE_PollCommand()=='E');
+        assert(MOUSE_PollCommand()==0);
+    }
+    *palace=TILE_MAP_GRASS;assert(MOUSE_Action(0,0,true)==0);
+    *palace=previous;D_5893_map_id=13;
+    GetMap(16,16)=TILE_MAP_VILLAGE;
+    assert(MOUSE_Action(0,0,true)==0); /* only overworld settlements enter */
+    GetMap(16,16)=1;MOUSE_SetCommandInput(false);
     /* Far Look describes the exact target, without entering any action prompt. */
     GetMap(19,16)=TILE_MAP_FOUNTAIN;
     MOUSE_SetCommandInput(true);
