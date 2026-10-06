@@ -24,6 +24,24 @@
 static bool s_diagonalMovement;
 void MOVEMENT_SetDiagonal(bool enabled) { s_diagonalMovement = enabled; }
 bool MOVEMENT_Diagonal(void) { return s_diagonalMovement; }
+int MOVEMENT_SlideDirection(int direction, bool horizontalOpen, bool verticalOpen)
+{
+    if (!s_diagonalMovement || direction < U5_KEY_HOME || direction > U5_KEY_PGDN ||
+        horizontalOpen == verticalOpen) return direction;
+    if (horizontalOpen)
+        return direction == U5_KEY_HOME || direction == U5_KEY_END ? DIR_LEFT : DIR_RIGHT;
+    return direction == U5_KEY_HOME || direction == U5_KEY_PGUP ? DIR_UP : DIR_DOWN;
+}
+
+int MOVEMENT_MapSlideDirection(int direction)
+{
+    if (!s_diagonalMovement || direction < U5_KEY_HOME || direction > U5_KEY_PGDN) return direction;
+    int dx = direction == U5_KEY_HOME || direction == U5_KEY_END ? -1 : 1;
+    int dy = direction == U5_KEY_HOME || direction == U5_KEY_PGUP ? -1 : 1;
+    return MOVEMENT_SlideDirection(direction,
+        ULTIMA_2c4c_IsWalkableTile(D_587c_partyTile, GetMapViewport(5+dx,5)) != 0,
+        ULTIMA_2c4c_IsWalkableTile(D_587c_partyTile, GetMapViewport(5,5+dy)) != 0);
+}
 bool MOVEMENT_AttackAllowed(int dx, int dy) { return s_diagonalMovement || dx == 0 || dy == 0; }
 bool MOVEMENT_Adjacent(int dx, int dy)
 {

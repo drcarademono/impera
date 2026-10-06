@@ -362,6 +362,7 @@ static void TOWN_057c(int param_1)
 // return: exit from the map?
 static bool TOWN_0600(int param_1)
 {
+    param_1 = MOVEMENT_MapSlideDirection(param_1);
     int local_4;
     bool local_6;
     bool local_8; // reached the end of the map?
