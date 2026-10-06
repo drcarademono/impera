@@ -3,10 +3,12 @@
 #include "time/time.h"
 
 #include "vars.h"
+#include "tiles.h"
 
 #include "grap_buf.h"
 #include "animate.h"
 #include "reveal.h"
+#include "widescreen.h"
 
 #if defined(ENABLE_GRAP_OVERLAY_DEBUG)
 #include "common/dbg_font_data.h"
@@ -39,6 +41,11 @@ static u8 s_bitMask[8] = {0x80, 0x40, 0x20, 0x10, 0x8, 0x4, 0x2, 0x1};
 static u8 s_colorTable[16] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 };
 
 static byte* s_tileset;
+static bool s_transparentSprites;
+
+bool GRAP_BUF_TransparentSprites(void) { return s_transparentSprites; }
+
+void GRAP_BUF_SetTransparentSprites(bool enabled) { s_transparentSprites = enabled; }
 
 static pfGrapFlushFrame* s_pfFlushFrame;
 
@@ -376,9 +383,45 @@ bool GRAP_BUF_HasTileset(void) { return s_tileset != NULL; }
 
 byte GRAP_BUF_TilePixel(int tile, int x, int y)
 {
-    if (!s_tileset || tile < 0 || tile >= 512) return 0;
+    if (!s_tileset || tile < 0 || tile >= 512 || x < 0 || y < 0 || x >= 16 || y >= 16) return 0;
     byte packed = s_tileset[tile * 128 + y * 8 + x / 2];
     return x & 1 ? packed & 15 : packed >> 4;
+}
+
+/* -1 is transparent. A one-pixel, eight-connected dilation supplies the
+ * black outline, including the one-pixel margin outside the source tile. */
+int GRAP_BUF_SpritePixel(int tile, int x, int y)
+{
+    /* The sleeping NPC includes the bed: preserve its complete original art. */
+    if (!s_transparentSprites || tile == 256 + TILE_ACTOR_SLEEPING_IN_BED)
+        return x < 0 || y < 0 || x >= 16 || y >= 16 ? -1 : GRAP_BUF_TilePixel(tile, x, y);
+    byte color = GRAP_BUF_TilePixel(tile, x, y);
+    if (color) return color;
+    for (int dy = -1; dy <= 1; dy++)
+        for (int dx = -1; dx <= 1; dx++)
+            if (GRAP_BUF_TilePixel(tile, x + dx, y + dy)) return 0;
+    return -1;
+}
+
+void GRAP_BUF_DrawSprite(byte* pixels, int stride, int x, int y, int tile,
+                         int left, int top, int right, int bottom, int dx, int dy)
+{
+    for (int sy = -1; sy <= 16; sy++)
+        for (int sx = -1; sx <= 16; sx++) {
+            int px = x + sx, py = y + sy;
+            if (px < left || py < top || px >= right || py >= bottom) continue;
+            int color = WIDE_SpritePixel(tile, dx, dy, sx, sy);
+            if (color >= 0) pixels[py * stride + px] = (byte)color;
+        }
+}
+
+void GRAP_BUF_PutMapSprite(int x, int y, int tile)
+{
+    byte* pixels = D_52ba_vdp._52d8_page ? g_linearEgaBuffer1 : g_linearEgaBuffer0;
+    GRAP_BUF_DrawSprite(pixels, 320, 8 + x * 16, 8 + y * 16, tile, 8, 8, 184, 184,
+        x-(D_5893_map_id>=128?D_5896_map_x:5),
+        y-(D_5893_map_id>=128?D_5897_map_y:5));
+    s_dirty = true;
 }
 
 void GRAP_BUF_UnloadTileset(void)

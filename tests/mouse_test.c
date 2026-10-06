@@ -48,6 +48,7 @@ static bool confirmAimOnPoll;
 static bool checkAnimation;
 static int animationRow, playerScreenX, previousMarkerX;
 static bool checkActor;
+static bool transparentSprites;
 static int actorRow, actorStart, actorEnd, actorMarker;
 bool __real_SDL_RenderPresent(SDL_Renderer* renderer);
 bool __wrap_SDL_RenderPresent(SDL_Renderer* renderer)
@@ -65,6 +66,10 @@ bool __wrap_SDL_RenderPresent(SDL_Renderer* renderer)
         assert(count==48); /* exactly one sprite, with no stale copy or trail */
         assert(marker>=actorMarker && marker<=actorEnd);
         if (presented==1 && actorStart!=actorEnd) assert(marker>actorStart && marker<actorEnd);
+        /* Top-half hole: its inner pixels show blue terrain during movement. */
+        Uint8 r,g,b,a;
+        assert(SDL_ReadSurfacePixel(image,marker+8*3,actorRow-3*3,&r,&g,&b,&a));
+        if(D_5893_map_id<128) assert(r==0 && g==0 && b==(transparentSprites?170:0));
         actorMarker=marker;
         SDL_DestroySurface(image);
     }
@@ -112,7 +117,7 @@ extern void GRAP_SDL_Cleanup(void);
 extern void GRAP_SDL_FlushFrame(void);
 static void paintActor(int index,int x,int y)
 {
-    memset(g_linearEgaBuffer0,0,320*200);
+    memset(g_linearEgaBuffer0,1,320*200);
     memset(D_ab02,1,sizeof(D_ab02));
     memset(D_5c5a,0,sizeof(D_5c5a));
     D_5c5a[index]._0_tile=D_5c5a[index]._1_animTile=0x44;
@@ -121,10 +126,12 @@ static void paintActor(int index,int x,int y)
     int col=combat?x:x-D_5896_map_x+5, row=combat?y:y-D_5897_map_y+5;
     GetMapViewport(col,row)=0;
     GetActorMap(col,row)=0x44;
-    for(int py=0;py<16;py++) memset(g_linearEgaBuffer0+(8+row*16+py)*320+8+col*16,10,16);
+    GRAP_BUF_PutMapSprite(col,row,256+0x44);
 }
-int main(void)
+int main(int argc, char** argv)
 {
+    transparentSprites = !(argc > 1 && strcmp(argv[1], "--opaque") == 0);
+    GRAP_BUF_SetTransparentSprites(transparentSprites);
     assert(!MOVEMENT_Diagonal());
     assert(MOUSE_Direction(1,1)==U5_KEY_RIGHT);
     assert(MOUSE_Direction(-1,-2)==U5_KEY_UP);
@@ -349,6 +356,11 @@ int main(void)
     GRAP_SDL_Initialize();
     byte* tiles=calloc(512,128);
     GRAP_BUF_LoadTileset(tiles);
+    /* Smooth rendering now samples actor art with an alpha mask, rather than
+     * copying a square from the already-composited framebuffer. */
+    memset(tiles + (256 + 0x44) * 128, 0xaa, 128);
+    memset(tiles + (256 + 0x12) * 128, 0xee, 128);
+    GetActorMap(5,5)=0x12;
     D_58a4=1; D_58a5=0;
     GRAP_SDL_FlushFrame();
     WideLayout l=WIDE_Layout(1024,768); /* dummy driver's desktop */
@@ -399,6 +411,14 @@ int main(void)
     D_5896_map_x++;
     GRAP_SDL_MapDrawn(); GRAP_SDL_FlushFrame();
     assert(presented==1);
+    memset(D_6608_map.town,1,sizeof(D_6608_map.town));
+    D_b11e[1]=1;
+    memset(tiles+128,0x11,128);
+    /* A transparent hole must reveal scrolling ground, surrounded by black. */
+    for(int y=3;y<=6;y++) for(int x=6;x<=9;x++) {
+        byte* packed=&tiles[(256+0x44)*128+y*8+x/2];
+        *packed &= x&1?0xf0:0x0f;
+    }
     /* Moving NPC, then an NPC moving together with the scrolling camera. */
     GRAP_SDL_SetSmoothMovement(true);
     D_5896_map_x=16;

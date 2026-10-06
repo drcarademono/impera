@@ -8,6 +8,9 @@
 #include "widescreen.h"
 #include <string.h>
 
+static int s_actorTiles[32];
+int WIDE_ActorTile(int actor) { return s_actorTiles[actor]; }
+
 WideLayout WIDE_Layout(int width, int height)
 {
     WideLayout l;
@@ -73,9 +76,70 @@ static byte WorldTile(int x, int y)
 byte WIDE_MapTile(int dx, int dy)
 {
     int x = D_5896_map_x + dx, y = D_5897_map_y + dy;
+    if (D_5893_map_id >= 128) {
+        if (x < 0 || y < 0 || x >= 11 || y >= 11) return 255;
+        return *ULTIMA_4402_GetTileAddr(x,y);
+    }
     if (D_5893_map_id == 0) return WorldTile(x, y);
     if (x < 0 || y < 0 || x >= 32 || y >= 32) return 255;
     return *ULTIMA_4402_GetTileAddr(x, y);
+}
+
+/* Audited against TILES.16 and LOOK2.DAT: freestanding objects with plain
+ * black backgrounds. Furniture with baked brick/grass and structural tiles
+ * must not be treated as cutout sprites. */
+static bool HasObjectBackground(byte tile)
+{
+    return tile == TILE_MAP_WELL || (tile & 0xfc) == TILE_MAP_FOUNTAIN ||
+        tile == TILE_MAP_BRAZIER || tile == TILE_MAP_59 ||
+        tile == 0x88 /* cannonballs */ || tile == 0xa3 /* stack of logs */ ||
+        (tile >= TILE_MAP_CANNON_B4 && tile <= TILE_MAP_CANNON_B7);
+}
+
+byte WIDE_GroundTile(int dx, int dy)
+{
+    byte object = WIDE_MapTile(dx,dy);
+    if (!GRAP_BUF_TransparentSprites() ||
+        !HasObjectBackground(object)) return object;
+    /* Maps have no lower terrain layer. Infer only recognized ground from
+     * immediate cardinal neighbors; keep isolated objects opaque. */
+    const byte floors[] = {TILE_MAP_44, TILE_MAP_GRASS, TILE_MAP_45, 0x40 /* wooden floor */};
+    const int offsets[4][2] = {{0,1},{0,-1},{1,0},{-1,0}};
+    int best=0;
+    byte ground=object;
+    for (size_t i=0;i<sizeof(floors);i++) {
+        int count=0;
+        for (int j=0;j<4;j++)
+            count += WIDE_MapTile(dx+offsets[j][0],dy+offsets[j][1]) == floors[i];
+        if(count>best) {best=count;ground=floors[i];}
+    }
+    return ground;
+}
+
+int WIDE_SpritePixel(int tile, int dx, int dy, int x, int y)
+{
+    /* Southern foreground scenery owns its pixels. Sprite art is 16x16;
+     * only the outline margin can cross into the following map row. */
+    if (GRAP_BUF_TransparentSprites() && y >= 16) {
+        int neighbor = x < 0 ? -1 : x >= 16 ? 1 : 0;
+        byte south = WIDE_MapTile(dx + neighbor, dy + 1);
+        if (memchr(D_6a86, south, sizeof(D_6a86))) return -1;
+    }
+    return GRAP_BUF_SpritePixel(tile,x,y);
+}
+
+byte WIDE_TerrainPixel(int dx, int dy, int x, int y)
+{
+    byte color=GRAP_BUF_TilePixel(D_b11e[WIDE_GroundTile(dx,dy)],x,y);
+    if(!GRAP_BUF_TransparentSprites()) return color;
+    /* Include outlines from adjacent static objects in restored terrain. */
+    for(int oy=-1;oy<=1;oy++) for(int ox=-1;ox<=1;ox++) {
+        byte tile=WIDE_MapTile(dx+ox,dy+oy);
+        if(WIDE_GroundTile(dx+ox,dy+oy)==tile) continue;
+        int pixel=WIDE_SpritePixel(D_b11e[tile],dx+ox,dy+oy,x-ox*16,y-oy*16);
+        if(pixel>=0) color=(byte)pixel;
+    }
+    return color;
 }
 
 static bool Transparent(byte tile, int distance)
@@ -137,7 +201,11 @@ bool WIDE_Compose(byte* pixels, WideLayout l)
     Copy(pixels, l.width, l.sidebarX - 8, l.height - 8, 184, 184, 8, 8);
     Copy(pixels, l.width, l.sidebarX / 2 - 56, l.height - 8, 40, 184, 112, 8);
 
+    for (int i = 0; i < 32; i++) s_actorTiles[i] = -1;
     int cx = l.columns / 2, cy = l.rows / 2;
+    int* sprites = malloc((size_t)l.columns * l.rows * sizeof(int));
+    if (!sprites) return false;
+    for (int i = 0; i < l.columns * l.rows; i++) sprites[i] = -1;
     if (D_5893_map_id < 33) {
         for (int row = 0; row < l.rows; row++) {
             for (int col = 0; col < l.columns; col++) {
@@ -146,7 +214,7 @@ bool WIDE_Compose(byte* pixels, WideLayout l)
                 if (!WIDE_Visible(dx, dy)) continue;
                 byte tile = WIDE_MapTile(dx, dy);
                 if (tile == 255) continue;
-                int idx = D_b11e[tile];
+                int idx = D_b11e[WIDE_GroundTile(dx,dy)];
                 for (int actor = 31; actor >= 0; actor--) {
                     ActorFmt* a = &D_5c5a[actor];
                     int ax = a->_2_x - D_5896_map_x, ay = a->_3_y - D_5897_map_y;
@@ -167,7 +235,8 @@ bool WIDE_Compose(byte* pixels, WideLayout l)
                                 WIDE_MapTile(dx, dy - 1), WIDE_MapTile(dx, dy + 1), &reflection);
                         }
                         if (sprite == -1) continue;
-                        idx = sprite == -2 ? D_b11e[TILE_MAP_38] : 256 + sprite;
+                        if (sprite == -2) idx = D_b11e[TILE_MAP_38];
+                        else sprites[row * l.columns + col] = s_actorTiles[actor] = 256 + sprite;
                         if (reflection && row > 0 && WIDE_Visible(dx, dy - 1)) {
                             for (int y = 0; y < 16; y++)
                                 for (int x = 0; x < 16; x++)
@@ -186,5 +255,42 @@ bool WIDE_Compose(byte* pixels, WideLayout l)
     /* Keep the engine's central tiles, effects, targeting and modal overlays. */
     Copy(pixels, l.width, l.mapX + (cx - 5) * 16, l.mapY + (cy - 5) * 16,
          8, 8, 176, 176);
+    for(int row=0;row<l.rows;row++) for(int col=0;col<l.columns;col++) {
+        int dx=col-cx,dy=row-cy;
+        if(abs(dx)<=5 && abs(dy)<=5 || !WIDE_Visible(dx,dy)) continue;
+        byte tile=WIDE_MapTile(dx,dy);
+        if(WIDE_GroundTile(dx,dy)!=tile)
+            GRAP_BUF_DrawSprite(pixels,l.width,l.mapX+col*16,l.mapY+row*16,
+                D_b11e[tile],l.mapX,l.mapY,l.mapX+l.columns*16,l.mapY+l.rows*16,dx,dy);
+    }
+    for (int row = 0; row < l.rows; row++)
+        for (int col = 0; col < l.columns; col++) {
+            int sprite = sprites[row * l.columns + col];
+            if (sprite >= 0)
+                GRAP_BUF_DrawSprite(pixels, l.width, l.mapX + col * 16, l.mapY + row * 16,
+                    sprite, l.mapX, l.mapY, l.mapX + l.columns * 16, l.mapY + l.rows * 16,col-cx,row-cy);
+        }
+    free(sprites);
+    /* Restore outline margins at the seam after copying central effects. */
+    for (int row = 0; row < l.rows; row++)
+        for (int col = 0; col < l.columns; col++) {
+            int dx = col - cx, dy = row - cy;
+            if (abs(dx) > 5 || abs(dy) > 5 || (abs(dx) != 5 && abs(dy) != 5)) continue;
+            int tile;
+            if (GetMapViewport(dx+5,dy+5)==0 && GetActorMap(dx+5,dy+5)!=0x16)
+                tile=256+GetActorMap(dx+5,dy+5);
+            else if(GetMapViewport(dx+5,dy+5)!=255 && WIDE_GroundTile(dx,dy)!=WIDE_MapTile(dx,dy))
+                tile=D_b11e[WIDE_MapTile(dx,dy)];
+            else continue;
+            for (int sy = -1; sy <= 16; sy++)
+                for (int sx = -1; sx <= 16; sx++) {
+                    int px = col * 16 + sx, py = row * 16 + sy;
+                    if (px < 0 || py < 0 || px >= l.columns * 16 || py >= l.rows * 16) continue;
+                    if (px >= (cx - 5) * 16 && px < (cx + 6) * 16 &&
+                        py >= (cy - 5) * 16 && py < (cy + 6) * 16) continue;
+                    if (WIDE_SpritePixel(tile, dx, dy, sx, sy) == 0)
+                        pixels[(l.mapY + py) * l.width + l.mapX + px] = 0;
+                }
+        }
     return true;
 }

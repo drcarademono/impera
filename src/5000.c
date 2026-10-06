@@ -1,6 +1,8 @@
 #include "common/common.h"
 #if defined(TARGET_SDL)
 #include "graphics/grap_sdl.h"
+#include "graphics/grap_buf.h"
+#include "graphics/widescreen.h"
 #endif
 #include "vars.h"
 #include "funcs.h"
@@ -89,7 +91,7 @@ int ULTIMA_ResolveActorTile(int param_5, int terrain, int above, int below, bool
 
                 case TILE_MAP_BED: // 171
                     // 529a
-                    param_5 = 0x1a;
+                    param_5 = TILE_ACTOR_SLEEPING_IN_BED;
                     break;
 
                 // 93..9e
@@ -301,8 +303,14 @@ void ULTIMA_56ac_DrawMap(void)
             {
                 if (GetActorMap(local_6, local_8) != 0x16)
                 {
-                    // draw actor
+                    // Draw the ground before the sprite overlay on modern platforms.
+#if defined(TARGET_SDL)
+                    int dx = local_6 - (D_5893_map_id >= 128 ? D_5896_map_x : 5);
+                    int dy = local_8 - (D_5893_map_id >= 128 ? D_5897_map_y : 5);
+                    ULTIMA_10e0_GRAP_51_PutTile(D_b11e[WIDE_GroundTile(dx,dy)], local_6, local_8);
+#else
                     ULTIMA_10e0_GRAP_51_PutTile(0x100 + GetActorMap(local_6, local_8), local_6, local_8);
+#endif
                 }
             }
             else
@@ -315,11 +323,33 @@ void ULTIMA_56ac_DrawMap(void)
                 else
                 {
                     // draw map tile
+#if defined(TARGET_SDL)
+                    byte tile=GetMapViewport(local_6,local_8);
+                    int dx=local_6-(D_5893_map_id>=128?D_5896_map_x:5),dy=local_8-(D_5893_map_id>=128?D_5897_map_y:5);
+                    if(tile!=255 && tile==WIDE_MapTile(dx,dy)) tile=WIDE_GroundTile(dx,dy);
+                    ULTIMA_10e0_GRAP_51_PutTile(D_b11e[tile],local_6,local_8);
+#else
                     ULTIMA_10e0_GRAP_51_PutTile(D_b11e[GetMapViewport(local_6, local_8)], local_6, local_8);
+#endif
                 }
             }
         }
     }
+
+#if defined(TARGET_SDL)
+    for(local_8=0;local_8<11;local_8++) for(local_6=0;local_6<11;local_6++) {
+        byte tile=GetMapViewport(local_6,local_8);
+        int dx=local_6-(D_5893_map_id>=128?D_5896_map_x:5),dy=local_8-(D_5893_map_id>=128?D_5897_map_y:5);
+        if(tile==0 && GetActorMap(local_6,local_8)!=0x16) tile=WIDE_MapTile(dx,dy);
+        if(tile!=255 && tile==WIDE_MapTile(dx,dy) && WIDE_GroundTile(dx,dy)!=tile)
+            GRAP_BUF_PutMapSprite(local_6,local_8,D_b11e[tile]);
+    }
+    /* All terrain must be complete before outlines spill across cell edges. */
+    for (local_8 = 0; local_8 < 11; local_8++)
+        for (local_6 = 0; local_6 < 11; local_6++)
+            if (GetMapViewport(local_6, local_8) == 0 && GetActorMap(local_6, local_8) != 0x16)
+                GRAP_BUF_PutMapSprite(local_6, local_8, 256 + GetActorMap(local_6, local_8));
+#endif
 
     if (0x7f < D_5893_map_id && (D_589f = !D_589f) != 0 && D_589e != 0xff && ULTIMA_5646(D_589e) == 0)
     {

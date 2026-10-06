@@ -6,6 +6,10 @@ typedef struct WideLayout {
 } WideLayout;
 WideLayout WIDE_Layout(int width, int height);
 byte WIDE_MapTile(int dx, int dy);
+byte WIDE_GroundTile(int dx, int dy);
+int WIDE_SpritePixel(int tile, int dx, int dy, int x, int y);
+byte WIDE_TerrainPixel(int dx, int dy, int x, int y);
 bool WIDE_Visible(int dx, int dy);
+int WIDE_ActorTile(int actor);
 bool WIDE_Compose(byte* pixels, WideLayout layout);
 #endif
