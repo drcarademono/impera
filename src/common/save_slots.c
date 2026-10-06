@@ -232,7 +232,11 @@ static bool prompt(char* name,bool overwrite)
     if(window) SDL_StartTextInput(window);
     bool done=false,accepted=false;
     while(!done) {
-        ENGINE_UIRect(16,72,288,56,0);
+        /* Replace the whole list area, including partial rows and scrollbar. */
+        ENGINE_UIRect(16,39,290,137,0);
+        ENGINE_UIRect(16,68,288,60,1);
+        ENGINE_UIRect(19,71,282,54,15);
+        ENGINE_UIRect(20,72,280,52,0);
         ENGINE_UIText(24,76,overwrite?"Overwrite this save?":"Name your save:",15);
         ENGINE_UIText(24,92,name,15);ENGINE_UIText(24,112,"Enter: Save   Esc: Cancel",7);
         GRAP_BUF_MarkDirty();GRAP_BUF_Present();
