@@ -159,6 +159,11 @@ views, in both windowed and fullscreen mode:
 - Double-click your own tile to Enter a town, Klimb a ladder, rest in a bed,
   or Board a vehicle when the usual keyboard conditions allow it.
 
+After typing an action such as Talk, Search, Open, Get, Push, or Klimb, select
+its direction with a single left-click on an eligible neighboring tile. Talk
+also accepts NPCs across supported furniture. Keyboard directions remain available;
+Escape or Space cancels the direction prompt.
+
 Mouse actions work on the four or eight neighboring tiles, depending on the option.
 Talk can reach an NPC two tiles away across supported furniture; other distant
 targets do not trigger contextual actions. Look describes distant objects without

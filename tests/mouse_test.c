@@ -345,6 +345,32 @@ int main(int argc, char** argv)
     SDL_KeyboardEvent up={0};up.key=SDLK_UP;KEY_SDL_ProcessKeyDown(up);sawSleepingNpc=false;
     assert(TALK_041c_TalkCmd()==0);assert(sawSleepingNpc && D_5876==1 && D_5878==-1);
     KEY_SDL_ClearInput();D_5c5a[1]._0_tile=0;
+    /* A typed action accepts one click at its direction prompt, with no delay. */
+    SDL_Event directionClick={0};directionClick.type=SDL_EVENT_MOUSE_BUTTON_DOWN;
+    directionClick.button.button=SDL_BUTTON_LEFT;directionClick.button.clicks=1;
+    directionClick.button.x=384;directionClick.button.y=307.2f;
+    D_5c5a[1]._0_tile=0x44;sawSleepingNpc=false;
+    assert(SDL_PushEvent(&directionClick));assert(TALK_041c_TalkCmd()==0);
+    assert(sawSleepingNpc && D_5876==1 && D_5878==-1);
+    assert(MOUSE_PollCommand()==0);
+    /* General direction prompts accept neighbors, but not Talk's extended reach. */
+    MOUSE_BeginDirectionInput(false);
+    MOUSE_Button(384,307.2f,SDL_BUTTON_LEFT,true,1);assert(MOUSE_PollCommand()==0);
+    MOUSE_Button(448,384,SDL_BUTTON_LEFT,true,1);assert(MOUSE_PollCommand()==U5_KEY_PGUP);
+    MOUSE_EndDirectionInput();MOVEMENT_SetDiagonal(false);
+    MOUSE_BeginDirectionInput(false);
+    MOUSE_Button(448,384,SDL_BUTTON_LEFT,true,1);assert(MOUSE_PollCommand()==0);
+    MOUSE_Button(384,384,SDL_BUTTON_LEFT,true,1);assert(MOUSE_PollCommand()==U5_KEY_UP);
+    MOUSE_EndDirectionInput();MOVEMENT_SetDiagonal(true);
+    directionClick.button.x=448;directionClick.button.y=460.8f;
+    assert(SDL_PushEvent(&directionClick));assert(ULTIMA_35ec_SelectDirection()==1);
+    assert(D_5876==1 && D_5878==0 && MOUSE_PollCommand()==0);
+    KEY_SDL_ProcessKeyDown(up);assert(ULTIMA_35ec_SelectDirection()==1);
+    assert(D_5876==0 && D_5878==-1);KEY_SDL_ClearInput();
+    SDL_KeyboardEvent cancelDirection={0};cancelDirection.key=SDLK_ESCAPE;
+    KEY_SDL_ProcessKeyDown(cancelDirection);assert(ULTIMA_35ec_SelectDirection()==0);KEY_SDL_ClearInput();
+    MOUSE_Button(448,460.8f,SDL_BUTTON_LEFT,true,1);assert(MOUSE_PollCommand()==0);
+    D_5c5a[1]._0_tile=0;
     /* Food plates obey the same direction-dependent reach as Get. */
     GetMap(16,15)=TILE_MAP_TABLE_9B;assert(MOUSE_Action(0,-1,true)=='G');
     GetMap(16,15)=TILE_MAP_TABLE_9A;assert(MOUSE_Action(0,-1,true)=='L');

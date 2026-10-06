@@ -350,7 +350,7 @@ int TALK_041c_TalkCmd(void)
     int local_4;
     int local_6;
 
-    if (ULTIMA_35ec_SelectDirection() == 0)
+    if (ULTIMA_SelectTalkDirection() == 0)
     {
         return 0;
     }

@@ -445,7 +445,7 @@ void ULTIMA_3564(int param_1)
     ULTIMA_5910_UpdateFrame();
 }
 
-int ULTIMA_35ec_SelectDirection(void)
+static int SelectDirection(bool talk)
 {
     u8 local_4;
 
@@ -467,14 +467,20 @@ int ULTIMA_35ec_SelectDirection(void)
         }
     }
 #endif
+#if defined(TARGET_SDL)
+    MOUSE_BeginDirectionInput(talk);
+#endif
     while (local_4 == 0 && (local_4 = ULTIMA_266c_GetChar()) != U5_KEY_SPACE &&
-           local_4 != U5_KEY_UP && local_4 != U5_KEY_DOWN &&
+           local_4 != U5_KEY_ESC && local_4 != U5_KEY_UP && local_4 != U5_KEY_DOWN &&
            local_4 != U5_KEY_LEFT && local_4 != U5_KEY_RIGHT &&
            (!MOVEMENT_Diagonal() || local_4 < U5_KEY_HOME || local_4 > U5_KEY_PGDN))
     {
         local_4 = 0;
     }
 
+#if defined(TARGET_SDL)
+    MOUSE_EndDirectionInput();
+#endif
     switch (local_4)
     {
     case U5_KEY_ESC:
@@ -507,6 +513,9 @@ int ULTIMA_35ec_SelectDirection(void)
     return local_4;
 #endif
 }
+
+int ULTIMA_35ec_SelectDirection(void) { return SelectDirection(false); }
+int ULTIMA_SelectTalkDirection(void) { return SelectDirection(true); }
 
 // CHECKED
 int ULTIMA_368e_FindActorTileAtPos(int param_1_x, int param_2_y, int param_3_level)

@@ -157,6 +157,8 @@ void MOUSE_SetEnabled(bool enabled)
 }
 bool MOUSE_Enabled(void) { return s_enabled; }
 static int s_dx, s_dy, s_command, s_direction, s_targetDx, s_targetDy;
+static bool s_directionInput,s_talkInput;
+static int s_directionKey;
 static int s_map, s_level, s_x, s_y, s_combatEntity;
 static bool s_combatAttack;
 static int s_attackX, s_attackY, s_attackEntity;
@@ -209,7 +211,7 @@ void MOUSE_Cancel(void)
     s_menuTarget = -1; s_menuClick = false;
     SDL_GetMouseState(&s_hoverX,&s_hoverY);
     s_right = s_single = false;
-    s_command = s_direction = 0;
+    s_command = s_direction = s_directionKey = 0;
 }
 void MOUSE_SetCommandInput(bool enabled)
 {
@@ -318,6 +320,14 @@ static bool SamePosition(void)
            s_map == D_5893_map_id && s_level == D_5895_map_level &&
            s_x == D_5896_map_x && s_y == D_5897_map_y;
 }
+void MOUSE_BeginDirectionInput(bool talk)
+{
+    MOUSE_Cancel();Snapshot();s_directionInput=true;s_talkInput=talk;s_directionKey=0;
+}
+void MOUSE_EndDirectionInput(void)
+{
+    s_directionInput=false;s_directionKey=0;MOUSE_Cancel();
+}
 void MOUSE_Button(float x, float y, int button, bool down, int clicks)
 {
     if (!s_enabled) return;
@@ -325,6 +335,17 @@ void MOUSE_Button(float x, float y, int button, bool down, int clicks)
         if (down && button == SDL_BUTTON_LEFT) {
             s_menuTarget = MenuItem(x,y);
             s_menuClick = s_menuTarget >= 0;
+        }
+        return;
+    }
+    if(s_directionInput) {
+        int dx,dy;float rx,ry;
+        if(down && button==SDL_BUTTON_LEFT && SamePosition() &&
+            GRAP_SDL_MouseMapPoint(x,y,&dx,&dy,&rx,&ry)) {
+            if(D_5893_map_id && D_5893_map_id<=32 &&
+                (D_5896_map_x+dx<0 || D_5896_map_x+dx>=32 || D_5897_map_y+dy<0 || D_5897_map_y+dy>=32)) return;
+            if(AdjacentDirection(dx,dy)) s_directionKey=MOUSE_Direction(dx,dy);
+            else if(s_talkInput && MOUSE_Action(dx,dy,true)=='T') s_directionKey=MOUSE_Direction(dx,dy);
         }
         return;
     }
@@ -362,6 +383,9 @@ void MOUSE_Button(float x, float y, int button, bool down, int clicks)
 }
 int MOUSE_PollCommand(void)
 {
+    if(s_enabled && s_directionInput) {
+        int key=SamePosition()?s_directionKey:0;s_directionKey=0;return key;
+    }
     if (s_enabled && s_aimInput) {
         int key=s_aimKey; s_aimKey=0;
         if (s_aimEntity!=D_589e || D_5893_map_id<128) return 0;
