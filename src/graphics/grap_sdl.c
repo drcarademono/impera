@@ -402,6 +402,9 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
                 float t = frame / 8.0f;
                 /* Constant speed avoids braking and restarting at every tile. */
                 float progress = t;
+                /* SDL invalidates the backbuffer after every present. Clear
+                 * letterbox areas as well as redrawing the game each time. */
+                SDL_RenderClear(s_sdlRenderer);
                 SDL_RenderTexture(s_sdlRenderer,native,NULL,&dst);
                 SDL_SetRenderClipRect(s_sdlRenderer,&clip);
                 SDL_FRect a = mapDst, b = mapDst;
@@ -430,6 +433,10 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
             for (int i=0;i<32;i++) SDL_DestroyTexture(actorTextures[i]);
         }
         SDL_DestroyTexture(old); SDL_DestroyTexture(next);
+        /* The caller still presents the completed frame (and may capture it).
+         * Rebuild that backbuffer after the last interpolation presentation. */
+        SDL_RenderClear(s_sdlRenderer);
+        SDL_RenderTexture(s_sdlRenderer,native,NULL,&dst);
     }
     for (int i=0;i<32;i++) if (moving[i] && actors[i].visible) PatchActor(clean,&actors[i],actors[i].sprite,mapX,mapY,mapX+columns*16,mapY+rows*16);
     memcpy(s_previousActors,actors,sizeof(actors));

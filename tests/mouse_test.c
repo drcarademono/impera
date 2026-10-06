@@ -98,7 +98,15 @@ bool __wrap_SDL_RenderPresent(SDL_Renderer* renderer)
         previousMarkerX=marker;
         SDL_DestroySurface(image);
     }
-    return __real_SDL_RenderPresent(renderer);
+    bool result=__real_SDL_RenderPresent(renderer);
+    /* Present invalidates the SDL backbuffer. Simulate a renderer that discards
+     * it, so a second present without a full redraw cannot pass by accident. */
+    if(checkAnimation || checkActor) {
+        SDL_SetRenderDrawColor(renderer,255,0,255,255);
+        SDL_RenderClear(renderer);
+        SDL_SetRenderDrawColor(renderer,0,0,0,255);
+    }
+    return result;
 }
 void __wrap_ULTIMA_1850_PrintString(char* text)
 {
