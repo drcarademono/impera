@@ -691,6 +691,30 @@ int main(int argc, char** argv)
     MOVEMENT_SetDiagonal(false);
     assert(COMSUBS_0822(0,7,5,1,0)==-1);
 
+    /* Direction prompts and cursor orientation follow the active combatant,
+     * even before the legacy map-position globals catch up with a turn change. */
+    D_589e=0; D_ba14[0].x=2; D_ba14[0].y=8;
+    D_5896_map_x=5; D_5897_map_y=5;
+    MOVEMENT_SetDiagonal(true);
+    float fighterX=centerX-3*16*l.scale,fighterY=centerY+3*16*l.scale;
+    assert(MOUSE_CursorDirection(fighterX+16*l.scale,fighterY)==U5_KEY_RIGHT);
+    assert(MOUSE_CursorDirection(fighterX,fighterY-16*l.scale)==U5_KEY_UP);
+    MOUSE_BeginDirectionInput(false);
+    MOUSE_Button(fighterX+16*l.scale,fighterY,SDL_BUTTON_LEFT,true,1);
+    assert(MOUSE_PollCommand()==U5_KEY_RIGHT);
+    MOUSE_Button(centerX,centerY-16*l.scale,SDL_BUTTON_LEFT,true,1);
+    assert(MOUSE_PollCommand()==0); /* adjacent to map center, far from fighter */
+    MOUSE_EndDirectionInput();
+    D_589e=1; D_ba14[1].x=8; D_ba14[1].y=2;
+    fighterX=centerX+3*16*l.scale;fighterY=centerY-3*16*l.scale;
+    assert(MOUSE_CursorDirection(fighterX-16*l.scale,fighterY)==U5_KEY_LEFT);
+    MOUSE_BeginDirectionInput(false);
+    MOUSE_Button(fighterX-16*l.scale,fighterY+16*l.scale,SDL_BUTTON_LEFT,true,1);
+    assert(MOUSE_PollCommand()==U5_KEY_END);
+    MOUSE_EndDirectionInput();
+    D_ba14[0].x=6;D_ba14[0].y=4;
+    MOVEMENT_SetDiagonal(false);
+
     /* Real mouse targeting preserves cardinal range rules and requires a separate confirmation. */
     D_589e=0; D_ba14[0].flags=COMBAT_FLAGS_PLAYER;
     D_ba14[0].entityIdx=0; D_5896_map_x=6; D_5897_map_y=4;

@@ -81,7 +81,10 @@ int MOUSE_CursorDirection(float x, float y)
     if (s_pointerMode || !D_58a4 || (D_5893_map_id > 32 && D_5893_map_id < 128) ||
         !GRAP_SDL_MouseMapPoint(x, y, &dx, &dy, &rx, &ry)) return 0;
     /* Combat sprites occupy fixed coordinates in the original 11x11 map. */
-    if (D_5893_map_id >= 128) { rx -= D_5896_map_x - 5; ry -= D_5897_map_y - 5; }
+    if (D_5893_map_id >= 128) {
+        if (D_589e >= 32) return 0;
+        rx -= D_ba14[D_589e].x - 5; ry -= D_ba14[D_589e].y - 5;
+    }
     /* Only the exact origin has no direction; every other point belongs
      * to an octant, including points within the player sprite. */
     int direction = (rx == 0 && ry == 0) ? 0 : DirectionOctant(rx, ry);
@@ -350,6 +353,12 @@ void MOUSE_Button(float x, float y, int button, bool down, int clicks)
             GRAP_SDL_MouseMapPoint(x,y,&dx,&dy,&rx,&ry)) {
             if(D_5893_map_id && D_5893_map_id<=32 &&
                 (D_5896_map_x+dx<0 || D_5896_map_x+dx>=32 || D_5897_map_y+dy<0 || D_5897_map_y+dy>=32)) return;
+            if(D_5893_map_id>=128) {
+                if(D_589e>=32) return;
+                int tx=dx+5,ty=dy+5;
+                if(tx<0 || tx>=11 || ty<0 || ty>=11) return;
+                dx=tx-D_ba14[D_589e].x;dy=ty-D_ba14[D_589e].y;
+            }
             if(AdjacentDirection(dx,dy)) s_directionKey=MOUSE_Direction(dx,dy);
             else if(s_talkInput && MOUSE_Action(dx,dy,true)=='T') s_directionKey=MOUSE_Direction(dx,dy);
         }
