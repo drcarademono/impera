@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include <SDL3/SDL.h>
 #include "common/engine_settings.h"
 #include "graphics/grap_buf.h"
@@ -10,6 +11,7 @@
 #include "macros.h"
 #include "event/event.h"
 #include "key/key.h"
+#include "key/mouse.h"
 #include "time/time.h"
 void GRAP_SDL_Initialize(void);
 void GRAP_SDL_Cleanup(void);
@@ -91,7 +93,33 @@ int main(int argc, char** argv)
     int count;SDL_Window** windows=SDL_GetWindows(&count);assert(count==1);
     SDL_Renderer* renderer=SDL_GetRenderer(windows[0]);SDL_free(windows);
     SDL_Surface* shot=SDL_RenderReadPixels(renderer,NULL);assert(shot);
-    assert(SDL_SaveBMP(shot,"settings.bmp"));SDL_DestroySurface(shot);
+    assert(SDL_SaveBMP(shot,"settings.bmp"));
+    /* Real gameplay state must not split options into a map and sidebar. */
+    byte* tiles=malloc(512*128);assert(tiles);memset(tiles,0x11,512*128);
+    GRAP_BUF_LoadTileset(tiles);
+    D_5893_map_id=13;D_58a4=1;
+    ENGINE_Set(ENGINE_SMOOTH,1);
+    GRAP_SDL_MapDrawn();
+    ENGINE_DrawSettings(7);
+    SDL_Surface* gameplayShot=SDL_RenderReadPixels(renderer,NULL);assert(gameplayShot);
+    assert(gameplayShot->w==shot->w && gameplayShot->h==shot->h);
+    SDL_Surface* reference=SDL_ConvertSurface(shot,SDL_PIXELFORMAT_ARGB8888);
+    SDL_Surface* actual=SDL_ConvertSurface(gameplayShot,SDL_PIXELFORMAT_ARGB8888);
+    assert(reference && actual);
+    /* Smooth toggle was changed, so redraw the reference with the same values. */
+    D_5893_map_id=0x40;D_58a4=0;ENGINE_DrawSettings(7);
+    SDL_DestroySurface(shot);shot=SDL_RenderReadPixels(renderer,NULL);assert(shot);
+    SDL_DestroySurface(reference);reference=SDL_ConvertSurface(shot,SDL_PIXELFORMAT_ARGB8888);assert(reference);
+    for(int y=0;y<actual->h;y++)
+        assert(!memcmp((byte*)reference->pixels+y*reference->pitch,
+                       (byte*)actual->pixels+y*actual->pitch,actual->w*4));
+    assert(SDL_SaveBMP(gameplayShot,"gameplay-settings.bmp"));
+    SDL_DestroySurface(reference);SDL_DestroySurface(actual);
+    SDL_DestroySurface(shot);SDL_DestroySurface(gameplayShot);
+    D_5893_map_id=13;D_58a4=1;
+    MOUSE_SetPointerMode(true);assert(MOUSE_CursorDirection(100,200)==0);
+    MOUSE_SetPointerMode(false);
+    D_5893_map_id=0x40;D_58a4=0;
     GRAP_SDL_SetPixelUI(false);
     memset(g_linearEgaBuffer0,3,320*200);
     for(int i=0;i<5;i++) key(SDLK_DOWN);
@@ -110,6 +138,15 @@ int main(int argc, char** argv)
     for(int i=0;i<320*200;i++) assert(g_linearEgaBuffer0[i]==3); /* restores title art */
     ENGINE_Set(ENGINE_ANIMATION_SPEED,1);ENGINE_Load();
     assert(ENGINE_Get(ENGINE_ANIMATION_SPEED)==0.75f);
+    /* Hovering either return row selects it: Enter closes without toggling fullscreen. */
+    for(int gameplay=0;gameplay<2;gameplay++) {
+        bool fullscreen=GRAP_SDL_Fullscreen();
+        SDL_Event hover={0};hover.type=SDL_EVENT_MOUSE_MOTION;
+        hover.motion.x=24*4;hover.motion.y=80+184*4;
+        assert(SDL_PushEvent(&hover));key(SDLK_RETURN);key(SDLK_ESCAPE);
+        ENGINE_ShowOptions(gameplay!=0);
+        assert(GRAP_SDL_Fullscreen()==fullscreen);
+    }
     remove("ENGINE.CFG");D_539c[0]=NULL;GRAP_SDL_Cleanup();SDL_Quit();
     puts("Engine settings persistence, live options, keyboard, and slider dragging passed");
     return 0;

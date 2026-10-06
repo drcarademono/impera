@@ -133,6 +133,7 @@ void ENGINE_ShowOptions(bool gameplay)
     extern void KEY_SDL_ClearInput(void);
     KEY_SDL_ClearInput();MOUSE_Cancel();
     GRAP_SDL_SetPixelUI(true);
+    MOUSE_SetPointerMode(true);
     int selected=0,drag=-1;bool done=false,changed=false;
     ENGINE_DrawSettings(selected);
     while(!done) {
@@ -167,6 +168,12 @@ void ENGINE_ShowOptions(bool gameplay)
             }
             if(event.type==SDL_EVENT_MOUSE_BUTTON_UP) drag=-1;
             if(event.type==SDL_EVENT_WINDOW_FOCUS_LOST) drag=-1;
+            if(event.type==SDL_EVENT_MOUSE_MOTION && drag<0) {
+                float x,y;
+                if(GRAP_SDL_MouseUIPoint(event.motion.x,event.motion.y,&x,&y) && x>=16 && x<304)
+                    for(int row=0;row<=ENGINE_SETTING_COUNT;row++)
+                        if(y>=rowY(row)-1 && y<rowY(row)+9) selected=row;
+            }
             if(event.type==SDL_EVENT_MOUSE_MOTION && drag>=0) {
                 float x,y;
                 if(GRAP_SDL_MouseUIPoint(event.motion.x,event.motion.y,&x,&y)) {
@@ -175,12 +182,14 @@ void ENGINE_ShowOptions(bool gameplay)
                 }
             }
             if(event.type==SDL_EVENT_KEY_DOWN || event.type==SDL_EVENT_MOUSE_BUTTON_DOWN ||
-               event.type==SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED || drag>=0) ENGINE_DrawSettings(selected);
+               event.type==SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED || event.type==SDL_EVENT_MOUSE_MOTION || drag>=0) ENGINE_DrawSettings(selected);
         }
+        MOUSE_UpdateCursor();
         SDL_Delay(16);
     }
     if(changed && !ENGINE_Save()) fprintf(stderr,"Unable to save engine settings\n");
     KEY_SDL_ClearInput();MOUSE_Cancel();
     GRAP_SDL_SetPixelUI(false);
+    MOUSE_SetPointerMode(false);
     memcpy(g_linearEgaBuffer0,backup,sizeof(backup));GRAP_BUF_MarkDirty();GRAP_BUF_Present();
 }
