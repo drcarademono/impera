@@ -58,7 +58,18 @@ may remain when the display dimensions are not divisible by the pixel scale.
 Without the option, the game uses the existing window size settings.
 `--help` lists launch options.
 
-Enable mouse controls with `--mouse`. The supplied PNG cursors show the eight
+Enable `--diagonal-movement` to use eight directions for movement, neighboring
+interactions, mouse cursors, and combat movement and attacks. This applies to
+keyboard and mouse controls and to AI-controlled combatants, including NPCs,
+monsters, and party members. Diagonal steps cannot cut blocked corners.
+
+Without this option, movement, actions, and combat attacks use cardinal
+directions. The map has four mouse cursor zones (north, south, east, west).
+Distant Look descriptions remain available in either mode, but Look actions
+require a cardinal neighbor by default or any of the eight neighbors when
+`--diagonal-movement` is enabled.
+
+Enable mouse controls with `--mouse`. The supplied PNG cursors show the four or eight
 movement directions over the overhead map and a pointer over menus, cutscenes,
 and the status/text column. Cursor pixels scale with the displayed game pixels
 using nearest-neighbor scaling, including when the window size changes. Hover
@@ -74,20 +85,20 @@ Enable mouse controls with `--mouse`. They work in the overhead town and outdoor
 views, in both windowed and fullscreen mode:
 
 - Hold the right button over the map to walk toward the cursor in eight
-  directions. Release it to stop. Diagonal steps cannot cut through blocked
+  directions when `--diagonal-movement` is enabled, or four otherwise. Release it to stop. Diagonal steps cannot cut through blocked
   corners; sailing retains the game's four-way headings.
 - Single-left-click a tile at any distance to Look. Double-left-click an adjacent
-  or diagonal NPC to Talk, a door or chest to Open, or a loose object to Get. Other nearby
+  or (with `--diagonal-movement`) diagonal NPC to Talk, a door or chest to Open, or a loose object to Get. Other nearby
   targets fall back to Look.
 - Double-click your own tile to Enter a town, Klimb a ladder, rest in a bed,
   or Board a vehicle when the usual keyboard conditions allow it.
 
-Mouse actions work on the eight neighboring tiles. Distant targets do not
+Mouse actions work on the four or eight neighboring tiles, depending on the option. Distant targets do not
 trigger actions. Look describes distant objects without
 offering actions such as drinking or dropping coins; those require adjacency,
 including a diagonal neighbor. Single clicks wait 300 ms to distinguish double
 clicks. Right-button movement also works during combat command entry, relative to the
-active fighter, including diagonals. Combat uses its usual turn and collision
+active fighter, including diagonals when enabled. Combat uses its usual turn and collision
 rules; left-click map actions remain disabled in combat.
 Map commands are disabled during menus, dialogues, dungeon
 perspective views, and other input prompts. Menu lists support mouse selection;
@@ -104,7 +115,7 @@ their new state without interpolation.
 Both options default to off. For example:
 
 ```sh
-bash scripts/run-linux.sh --fullscreen --mouse --smooth-movement
+bash scripts/run-linux.sh --fullscreen --mouse --smooth-movement --diagonal-movement
 ```
 
 For libraries installed under a custom prefix, add its `lib/pkgconfig` (or

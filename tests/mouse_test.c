@@ -10,6 +10,9 @@
 #include "talk.h"
 #include "lookobj.h"
 #include "sjog.h"
+#include "combat.h"
+#include "comsubs.h"
+#include "common/movement.h"
 #include "key/mouse.h"
 #include "graphics/grap_sdl.h"
 #include "graphics/grap_buf.h"
@@ -113,6 +116,13 @@ static void paintActor(int index,int x,int y)
 }
 int main(void)
 {
+    assert(!MOVEMENT_Diagonal());
+    assert(MOUSE_Direction(1,1)==U5_KEY_RIGHT);
+    assert(MOUSE_Direction(-1,-2)==U5_KEY_UP);
+    assert(!MOVEMENT_Adjacent(1,1));
+    assert(!MOVEMENT_AttackAllowed(1,1));
+    assert(MOVEMENT_AttackAllowed(0,3));
+    MOVEMENT_SetDiagonal(true);
     assert(MOUSE_Direction(-2,0)==U5_KEY_LEFT);
     assert(MOUSE_Direction(2,0)==U5_KEY_RIGHT);
     assert(MOUSE_Direction(0,-2)==U5_KEY_UP);
@@ -157,6 +167,13 @@ int main(void)
     MOUSE_SetEnabled(true);
     MOUSE_Initialize();
     assert(loadedCursors == 9);
+    D_58a4=1;
+    MOVEMENT_SetDiagonal(false);
+    assert(MOUSE_CursorDirection(448,350)==U5_KEY_UP);
+    assert(MOUSE_CursorDirection(320,570)==U5_KEY_DOWN);
+    assert(MOUSE_Action(1,1,true)==0);
+    assert(MOUSE_Action(1,1,false)=='L');
+    MOVEMENT_SetDiagonal(true);
     MOUSE_SetCommandInput(true);
     D_58a4 = 1;
     assert(MOUSE_CursorDirection(448,460.8f) == U5_KEY_RIGHT);
@@ -446,6 +463,47 @@ int main(void)
     GetCombatMap(7,4)=0xff;
     assert(SJOG_1c56_CombatMovePlayer(0,U5_KEY_PGDN)==0);
     assert(D_ba14[0].x==6 && D_ba14[0].y==4); /* cannot cut a blocked corner */
+    MOVEMENT_SetDiagonal(false);
+    GetCombatMap(7,4)=TILE_MAP_GRASS;
+    assert(SJOG_1c56_CombatMovePlayer(0,U5_KEY_PGDN)==0);
+    assert(D_ba14[0].x==6 && D_ba14[0].y==4);
+    assert(COMSUBS_0822(0,7,5,1,0)==-1); /* no diagonal projectile or its effects */
+    int hpBefore=D_ba14[1].hp;
+    D_ba14[1].x=7; D_ba14[1].y=5;
+    COMSUBS_0bf8(0,1,0);
+    assert(D_ba14[1].hp==hpBefore); /* no diagonal melee */
+    D_ba14[1].flags=COMBAT_FLAGS_MONSTER;
+    D_ba14[1].actorIdx=2;
+    D_5c5a[2]._1_animTile=0x44;
+    D_589e=0; D_589d=25; D_588f=0;
+    MOVEMENT_SetDiagonal(true);
+    assert(COMSUBS_0822(0,7,5,1,0)==1); /* diagonal attack reaches its target */
+    MOVEMENT_SetDiagonal(false);
+    assert(COMSUBS_0822(0,7,5,1,0)==-1);
+
+    /* Exercise real AI movement for both enemy and friendly entities. */
+    for (int friendly=0;friendly<2;friendly++) {
+        memset(D_ba14,0,sizeof(D_ba14));
+        memset(D_5c5a,0,sizeof(D_5c5a));
+        D_ba14[0].flags=friendly ? COMBAT_FLAGS_MONSTER : COMBAT_FLAGS_PLAYER;
+        D_ba14[0].actorIdx=1; D_ba14[0].x=8; D_ba14[0].y=8;
+        D_ba14[1].flags=friendly ? COMBAT_FLAGS_PLAYER : COMBAT_FLAGS_MONSTER;
+        D_ba14[1].actorIdx=2; D_ba14[1].x=5; D_ba14[1].y=5;
+        D_ba14[1].entityIdx=8;
+        D_5c5a[1]._0_tile=D_5c5a[1]._1_animTile=0x44;
+        D_5c5a[1]._2_x=8; D_5c5a[1]._3_y=8;
+        D_5c5a[2]._0_tile=D_5c5a[2]._1_animTile=0x44;
+        D_5c5a[2]._2_x=5; D_5c5a[2]._3_y=5;
+        D_587a='N';
+        MOVEMENT_SetDiagonal(true);
+        assert(COMBAT_0ee4(1)==1);
+        assert(D_ba14[1].x==6 && D_ba14[1].y==6);
+        D_ba14[1].x=D_5c5a[2]._2_x=5;
+        D_ba14[1].y=D_5c5a[2]._3_y=5;
+        MOVEMENT_SetDiagonal(false);
+        assert(COMBAT_0ee4(1)==1);
+        assert(abs(D_ba14[1].x-5)+abs(D_ba14[1].y-5)==1);
+    }
     MOUSE_SetCommandInput(false);
     MOUSE_Cleanup();
     GRAP_SDL_Cleanup(); SDL_Quit();

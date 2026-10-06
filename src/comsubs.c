@@ -1,4 +1,5 @@
 #include "common/common.h"
+#include "common/movement.h"
 #include "funcs.h"
 #include "vars.h"
 #include "macros.h"
@@ -325,21 +326,25 @@ int COMSUBS_0504(int param_1, int param_2)
         switch (ULTIMA_266c_GetChar())
         {
         case U5_KEY_HOME: // 05c2
+            if (!MOVEMENT_Diagonal()) break;
             local_10 = -1;
             local_12 = -1;
             break;
 
         case U5_KEY_PGDN: // 066c
+            if (!MOVEMENT_Diagonal()) break;
             local_10 = 1;
             local_12 = 1;
             break;
 
         case U5_KEY_PGUP: // 0676
+            if (!MOVEMENT_Diagonal()) break;
             local_12 = -1;
             local_10 = 1;
             break;
 
         case U5_KEY_END: // 0680
+            if (!MOVEMENT_Diagonal()) break;
             local_12 = 1;
             local_10 = -1;
             break;
@@ -371,6 +376,10 @@ int COMSUBS_0504(int param_1, int param_2)
         case 0x41: // 06a3
             if (D_ba14[param_1].x != D_5899 || D_ba14[param_1].y != D_589a)
             {
+                if (!MOVEMENT_AttackAllowed(D_5899-D_ba14[param_1].x,D_589a-D_ba14[param_1].y)) {
+                    ULTIMA_1850_PrintString("Cardinal directions only!\n");
+                    break;
+                }
                 ULTIMA_16ba_PrintChar('\n');
                 if (D_588f != 0)
                 {
@@ -465,6 +474,7 @@ int COMSUBS_0822(int param_1, int param_2, int param_3, int param_4, int param_5
     int local_6;
     int local_8;
 
+    if (!MOVEMENT_AttackAllowed(param_2-D_ba14[param_1].x,param_3-D_ba14[param_1].y)) return -1;
     local_6 = param_2;
     local_c = param_3;
     local_4 = D_ba14[param_1].x;
@@ -589,7 +599,8 @@ int COMSUBS_09fc(int param_1)
 
     uVar1 = D_58a8[param_1];
     if (uVar1 != 0xff && D_ba14[uVar1].flags != 0 && ULTIMA_5646(uVar1) != 0 && (D_ba14[uVar1].flags & (COMBAT_FLAGS_ASLEEP | COMBAT_FLAGS_4)) == 0 &&
-        D_587a != 'T' && COMSUBS_04d4(param_1, uVar1) == 1)
+        D_587a != 'T' && COMSUBS_04d4(param_1, uVar1) == 1 &&
+        MOVEMENT_AttackAllowed(D_ba14[uVar1].x-D_ba14[param_1].x,D_ba14[uVar1].y-D_ba14[param_1].y))
     {
         ULTIMA_16ba_PrintChar('\n');
         COMSUBS_0094_PrintName(uVar1);
@@ -671,6 +682,8 @@ static void COMSUBS_0a68(int param_1, int param_2, int param_3)
 
 void COMSUBS_0bf8(int param_1, int param_2, int param_3)
 {
+    if (!MOVEMENT_AttackAllowed(D_ba14[param_2].x-D_ba14[param_1].x,
+                                D_ba14[param_2].y-D_ba14[param_1].y)) return;
     ULTIMA_43ae_AudioSweepTone(400, 0x2ee, 5, 0x96);
     ULTIMA_16ba_PrintChar('\n');
     if (COMBAT_14d6(param_2, param_1, -D_588f, param_3) != 0)

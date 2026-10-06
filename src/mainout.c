@@ -1,4 +1,5 @@
 #include "common/common.h"
+#include "common/movement.h"
 #if defined(TARGET_SDL)
 #include "key/mouse.h"
 #endif
@@ -336,6 +337,7 @@ static int MAINOUT_0490(int param_1, int param_2)
     int local_6;
     int local_4;
 
+    if (!MOVEMENT_Diagonal() && param_1 >= U5_KEY_HOME && param_1 <= U5_KEY_PGDN) return 0;
     if ((D_587c_partyTile & 0xfc) == TILE_ACTOR_FRIGATE_20 &&
         param_1 >= U5_KEY_HOME && param_1 <= U5_KEY_PGDN)
         param_1 = (param_1 == U5_KEY_HOME || param_1 == U5_KEY_END) ? DIR_LEFT : DIR_RIGHT;
@@ -365,6 +367,7 @@ static int MAINOUT_0490(int param_1, int param_2)
     case U5_KEY_END:
     case U5_KEY_PGUP:
     case U5_KEY_PGDN:
+        if (!MOVEMENT_Diagonal()) return 0;
         local_6 = (param_1 == U5_KEY_HOME || param_1 == U5_KEY_END) ? -1 : 1;
         local_8 = (param_1 == U5_KEY_HOME || param_1 == U5_KEY_PGUP) ? -1 : 1;
         if (!ULTIMA_2c4c_IsWalkableTile(D_587c_partyTile, GetMapViewport(5 + local_6, 5)) ||

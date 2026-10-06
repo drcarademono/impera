@@ -1,4 +1,5 @@
 #include "common/common.h"
+#include "common/movement.h"
 #include "vars.h"
 #include "funcs.h"
 #include "macros.h"
@@ -77,6 +78,8 @@ int MOUSE_CursorDirection(float x, float y)
      * to an octant, including points within the player sprite. */
     int direction = (rx == 0 && ry == 0) ? 0 : DirectionOctant(rx, ry);
     if (direction) s_lastCursorDirection = direction;
+    if (!MOVEMENT_Diagonal() && s_lastCursorDirection >= U5_KEY_HOME)
+        s_lastCursorDirection = (s_lastCursorDirection == U5_KEY_HOME || s_lastCursorDirection == U5_KEY_END) ? U5_KEY_LEFT : U5_KEY_RIGHT;
     return s_lastCursorDirection;
 }
 
@@ -166,6 +169,8 @@ void MOUSE_SetCommandInput(bool enabled)
 static int DirectionOctant(float dx, float dy)
 {
     float ax = SDL_fabsf(dx), ay = SDL_fabsf(dy);
+    if (!MOVEMENT_Diagonal())
+        return ax >= ay ? (dx < 0 ? U5_KEY_LEFT : U5_KEY_RIGHT) : (dy < 0 ? U5_KEY_UP : U5_KEY_DOWN);
     if (ay < ax * 0.41421356f) return dx < 0 ? U5_KEY_LEFT : U5_KEY_RIGHT;
     if (ax < ay * 0.41421356f) return dy < 0 ? U5_KEY_UP : U5_KEY_DOWN;
     if (dy < 0) return dx < 0 ? U5_KEY_HOME : U5_KEY_PGUP;
@@ -178,7 +183,7 @@ int MOUSE_Direction(float dx, float dy)
 }
 static int AdjacentDirection(int dx, int dy)
 {
-    if (abs(dx) > 1 || abs(dy) > 1 || (!dx && !dy)) return 0;
+    if (!MOVEMENT_Adjacent(dx,dy) || (!dx && !dy)) return 0;
     return MOUSE_Direction((float)dx, (float)dy);
 }
 int MOUSE_Action(int dx, int dy, bool mainAction)

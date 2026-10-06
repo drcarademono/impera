@@ -1,4 +1,5 @@
 #include "common/common.h"
+#include "common/movement.h"
 #if defined(TARGET_SDL)
 #include "key/mouse.h"
 #endif
@@ -382,6 +383,7 @@ static bool TOWN_0600(int param_1)
     case U5_KEY_END:
     case U5_KEY_PGUP:
     case U5_KEY_PGDN:
+        if (!MOVEMENT_Diagonal()) return false;
         local_c = (param_1 == U5_KEY_HOME || param_1 == U5_KEY_END) ? -1 : 1;
         local_e = (param_1 == U5_KEY_HOME || param_1 == U5_KEY_PGUP) ? -1 : 1;
         /* Diagonal steps cannot cut through blocked corners. */

@@ -1,4 +1,5 @@
 #include "common/common.h"
+#include "common/movement.h"
 #include "funcs.h"
 #include "vars.h"
 #include "macros.h"
@@ -1815,6 +1816,7 @@ int SJOG_1c56_CombatMovePlayer(int param_1, int param_2)
     case U5_KEY_END:
     case U5_KEY_PGUP:
     case U5_KEY_PGDN:
+        if (!MOVEMENT_Diagonal()) return 0;
         local_a = (param_2 == U5_KEY_HOME || param_2 == U5_KEY_END) ? -1 : 1;
         local_c = (param_2 == U5_KEY_HOME || param_2 == U5_KEY_PGUP) ? -1 : 1;
         ULTIMA_1850_PrintString(local_c < 0 ? (local_a < 0 ? "Northwest\n" : "Northeast\n") :

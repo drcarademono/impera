@@ -1,4 +1,5 @@
 #include "common/common.h"
+#include "common/movement.h"
 #if defined(TARGET_SDL)
 #include "key/mouse.h"
 #endif
@@ -20,7 +21,7 @@
 
 static void COMBAT_063e_ProcessCommand(void);
 static int COMBAT_0d30(int a);
-static int COMBAT_0ee4(int param_1);
+int COMBAT_0ee4(int param_1);
 static void COMBAT_1b1e(int param_1);
 static void COMBAT_1c66(int param_1);
 
@@ -153,6 +154,8 @@ static int COMBAT_0226(int param_1)
         return 0;
     }
 
+    if (!MOVEMENT_AttackAllowed(D_ba14[local_4].x-D_ba14[param_1].x,
+                                D_ba14[local_4].y-D_ba14[param_1].y)) return 0;
     // 025c
     local_6 = D_ba14[local_4].entityIdx;
 
@@ -1040,7 +1043,7 @@ static int COMBAT_0d30(int param_1)
 }
 
 // CHECKED
-static int COMBAT_0ee4(int param_1)
+int COMBAT_0ee4(int param_1)
 {
     int local_a;
     int local_8;
@@ -1073,7 +1076,13 @@ static int COMBAT_0ee4(int param_1)
         {
             // 0fc1
             local_a = COMBAT_0d30(param_1);
-            if (ULTIMA_3aae_Random(0xff) > 0x7f && SJOG_20d8(local_4->x + D_5876, local_4->y, param_1) == 0)
+            if (MOVEMENT_Diagonal() && D_5876 && D_5878 &&
+                COMBAT_0000(D_5c5a[local_4->actorIdx]._0_tile,local_4->x+D_5876,local_4->y) &&
+                COMBAT_0000(D_5c5a[local_4->actorIdx]._0_tile,local_4->x,local_4->y+D_5878) &&
+                SJOG_20d8(local_4->x+D_5876,local_4->y+D_5878,param_1)==0) {
+                local_6=997;
+            }
+            else if (ULTIMA_3aae_Random(0xff) > 0x7f && SJOG_20d8(local_4->x + D_5876, local_4->y, param_1) == 0)
             {
                 D_5878 = 0;
                 local_6 = 999;

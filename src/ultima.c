@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "common/common.h"
+#include "common/movement.h"
 #include "backend/backend.h"
 #include "vars.h"
 #include "funcs.h"
@@ -42,15 +43,18 @@ int CDECL main(int argc, char** argv/*, char** envp*/)
     {
         if (strcmp(argv[arg], "--fullscreen") == 0)
             GRAP_SDL_SetFullscreen(true);
+        else if (strcmp(argv[arg], "--diagonal-movement") == 0)
+            MOVEMENT_SetDiagonal(true);
         else if (strcmp(argv[arg], "--mouse") == 0)
             MOUSE_SetEnabled(true);
         else if (strcmp(argv[arg], "--smooth-movement") == 0)
             GRAP_SDL_SetSmoothMovement(true);
         else if (strcmp(argv[arg], "--help") == 0)
         {
-            puts("Usage: ultima5 [--fullscreen] [--mouse] [--smooth-movement] [C|H|T|E]\n"
+            puts("Usage: ultima5 [--fullscreen] [--mouse] [--smooth-movement] [--diagonal-movement] [C|H|T|E]\n"
                  "  --fullscreen       Expand the overhead map with uniform integer pixel scaling.\n"
                  "  --mouse            Enable mouse movement and contextual actions.\n"
+                 "  --diagonal-movement Enable diagonal movement, actions, cursors and combat.\n"
                  "  --smooth-movement  Animate overhead movement with a scrolling camera.");
             return EXIT_SUCCESS;
         }

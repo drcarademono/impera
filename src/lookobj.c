@@ -1,4 +1,5 @@
 #include "common/common.h"
+#include "common/movement.h"
 #include "funcs.h"
 #include "vars.h"
 #include "macros.h"
@@ -596,7 +597,7 @@ void LOOKOBJ_099c_LookCmd(void)
         return;
     }
 
-    allowAction = abs(D_5876) <= 1 && abs(D_5878) <= 1;
+    allowAction = MOVEMENT_Adjacent(D_5876,D_5878);
     local_8 = D_5896_map_x + D_5876;
     local_a = D_5897_map_y + D_5878;
     local_4 = *ULTIMA_4402_GetTileAddr(local_8, local_a);
