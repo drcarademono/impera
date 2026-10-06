@@ -200,10 +200,22 @@ external and is not bundled into the executable. Legacy `BGM/01.ogg` through
 
 Optional WAV sound overrides belong in `Sound`, using the filenames listed in
 `src/audio/sfx_map.h` (for example `step0.wav`, `step1.wav`, and `fountain.wav`).
-Each missing or unreadable effect falls back to synthesized PC-speaker-style
-square-wave, pulse, noise, or sweep audio. Synthesized pitches use the original
-PIT divisors; timings approximate the DOS CPU-calibrated loops, so playback is
-not a bit-exact emulation. Legacy `SFX` files also remain supported.
+Each missing or unreadable effect falls back to the original PC-speaker tone,
+noise, pulse, or sweep algorithm. Frequencies are Hz and become integer PIT
+divisors via `1193182 / frequency`. Noise uses the original 16-bit PRNG;
+pulses gate the divisor-60 carrier using wrapping 16-bit accumulators and
+thresholds. Sweeps retain DOS signed 16-bit arithmetic and integer division.
+`sfx_map.h` remains the authoritative effect parameter table. Title effects
+without parameter tuples require their WAV recordings.
+
+SDL converts each calibrated delay unit to **50 microseconds**, consistently
+across all effects: tone duration is `dur` units, noise holds each frequency
+for `rate` units until elapsed reaches `dur`, PWM performs `dur` iterations
+of `delay` units, and sweeps hold each step for `tickStep` units. This is an
+explicit timing conversion, not an emulation of DOS CPU calibration via
+`D_5356`/`D_5426`; it does not alter the sound algorithms. PCM is sampled at
+48 kHz without frequency/duty clamps or click envelopes. Legacy `SFX` files
+also remain supported.
 The Linux launcher refreshes supplied audio folders in the runtime on each
 launch; players can also place them directly in `build/runtime`.
 No audio assets are needed for synthesized effects. Do not set

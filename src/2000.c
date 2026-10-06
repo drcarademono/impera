@@ -36,6 +36,7 @@ void ULTIMA_207e_srand(uint param_1)
 {
 #if !defined(TARGET_DOS16)
     srand(param_1);
+    D_5420 = (u16)param_1; /* Original 16-bit state used by speaker noise. */
 #else
     D_5420 = param_1;
 #endif

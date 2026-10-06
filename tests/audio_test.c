@@ -8,6 +8,7 @@
 #include "audio/audio.h"
 #include "audio/aud_sfx.h"
 #include "audio/pcspeaker.h"
+#include "vars.h"
 
 static int queued, assigned;
 const char* __wrap_SDL_GetBasePath(void) { return "Alongside/"; }
@@ -43,13 +44,15 @@ static void wave(const char* path)
 int main(void)
 {
     size_t frames;
-    float* tone=PCSPK_Render(PCSPK_TONE,1193,100,0,0,0,&frames);
-    assert(tone && frames==3840); /* 80 ms at 48 kHz; PIT divisor ~1 kHz */
+    uint16_t state=0;
+    float* tone=PCSPK_Render(PCSPK_TONE,1000,100,0,0,0,&state,&frames);
+    assert(tone && frames==240); /* 100 delay units * 50 us, frequency in Hz */
     int transitions=0;
-    for(size_t i=100;i<frames-100;i++) if ((tone[i]>0)!=(tone[i-1]>0)) transitions++;
-    assert(transitions>=150 && transitions<=153);
+    for(size_t i=1;i<frames;i++) if ((tone[i]>0)!=(tone[i-1]>0)) transitions++;
+    assert(transitions==9);
     SDL_free(tone);
-    assert(!PCSPK_Render(PCSPK_TONE,0,0,0,0,0,&frames) && frames==0);
+    assert(!PCSPK_Render(PCSPK_TONE,0,0,0,0,0,&state,&frames) && frames==0);
+    D_a9ce=1;
     assert(SDL_Init(SDL_INIT_AUDIO));
     assert(SDL_CreateDirectory("Music")); assert(SDL_CreateDirectory("Sound"));
     wave("Music/02 - Britannic Lands.mp3");
@@ -65,7 +68,10 @@ int main(void)
     AUDIO_DispatchPulse(1193,1,100,20000,-4); assert(queued==3);
     AUDIO_DispatchTone(1193,100); assert(queued==4);
     AUDIO_DispatchSweepTone(1193,2386,1,40); assert(queued==5);
-    AUDIO_PlayTitle1Sfx(); AUDIO_PlayTitle2Sfx(); assert(queued==7);
+    AUDIO_PlayTitle1Sfx(); AUDIO_PlayTitle2Sfx(); assert(queued==5); /* No invented title definitions. */
+    D_a9ce=0;
+    AUDIO_DispatchTone(1000,100); assert(queued==5);
+    D_a9ce=1;
     AUDIO_StopSfx(); AUDIO_StopBgm(); AUDIO_Cleanup();
     remove("Music/02 - Britannic Lands.mp3"); remove("Sound/step0.wav");
     assert(SDL_RemovePath("Music")); assert(SDL_RemovePath("Sound"));

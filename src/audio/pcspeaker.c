@@ -1,46 +1,95 @@
 #include "pcspeaker.h"
 #include <SDL3/SDL.h>
-#include <math.h>
-#include <stdint.h>
+#include <limits.h>
 
-float* PCSPK_Render(int kind, int a, int b, int c, int d, int e, size_t* frames)
+static uint16_t divisor(uint16_t freq)
 {
-    /* The DOS pulse/noise loops were CPU calibrated. Use the port's existing
-     * duration approximations; PIT square waves preserve their speaker timbre. */
-    double ms = kind == PCSPK_PULSE ? c / 20.0 :
-                kind == PCSPK_NOISE ? b / 10.0 :
-                kind == PCSPK_TONE ? b * 0.8 : d * 1.5;
-    *frames = 0;
-    if (ms <= 0) return NULL;
-    ms = fmin(ms,10000.0);
-    size_t count = (size_t)ceil(ms * 48.0);
-    float* pcm = SDL_malloc(count * sizeof(float));
-    if (!pcm) return NULL;
-    double phase = 0, divisor = a > 0 ? a : 1;
-    uint32_t noise = 0x6d2b79f5u; /* private RNG: never perturb game randomness */
-    size_t hold = a > 0 ? (size_t)a * 48 : 48;
-    for (size_t i = 0; i < count; ++i) {
-        if (kind == PCSPK_NOISE && i % hold == 0) {
-            noise ^= noise << 13; noise ^= noise >> 17; noise ^= noise << 5;
-            divisor = 1 + noise % (unsigned)(c > 0 ? c : 1);
-        } else if (kind == PCSPK_SWEEP) {
-            double steps = d > 0 && c > 0 ? floor((double)i / count * d / c) : 0;
-            double total = d > 0 && c > 0 ? ceil((double)d / c) : 1;
-            divisor = a + (b-a) * steps / total;
+    /* Zero is an invalid frequency, not an invented replacement pitch. */
+    return freq ? (uint16_t)(1193182u / freq) : 0;
+}
+
+static int signedWord(uint16_t word)
+{ return word<0x8000u ? word : (int)word-0x10000; }
+
+void PCSPK_Sequence(int kind,int a,int b,int c,int d,int e,
+                    uint16_t* state,PCSPK_Emit emit,void* context)
+{
+    uint16_t freq=(uint16_t)a, duration=(uint16_t)b;
+    if (kind==PCSPK_TONE) {
+        emit(context,(PCSPK_Event){divisor(freq),freq!=0,true,duration});
+    } else if (kind==PCSPK_NOISE && freq && state && (uint16_t)c>=100) {
+        for (uint32_t elapsed=0;elapsed<duration;elapsed+=freq) {
+            uint16_t next=(uint16_t)(*state+0x9248u);
+            next=(uint16_t)((next>>3)|(next<<13));
+            next^=0x9248u;
+            *state=(uint16_t)(next+0x11u);
+            uint16_t hz=(uint16_t)(100u+*state%((uint16_t)c-100u+1u));
+            emit(context,(PCSPK_Event){divisor(hz),true,true,freq});
         }
-        divisor = fmax(divisor,1);
-        phase += fmin(1193182.0 / divisor,20000.0) / 48000.0;
-        phase -= floor(phase);
-        double duty = 0.5;
-        if (kind == PCSPK_PULSE) {
-            double width = d + e * ((double)i / 48000.0 * 1193182.0 / divisor) / (b > 0 ? b : 1);
-            duty = fmin(0.95,fmax(0.05,width / 65536.0));
+    } else if (kind==PCSPK_PULSE) {
+        uint16_t threshold=(uint16_t)d,accumulator=0;
+        for(uint32_t i=0;i<(uint16_t)c;i++) {
+            accumulator=(uint16_t)(accumulator+freq);
+            emit(context,(PCSPK_Event){60,accumulator>threshold,i==0,(uint16_t)b});
+            threshold=(uint16_t)(threshold+(uint16_t)e);
         }
-        /* Remove PWM DC offset and soften the start/end to avoid clicks. */
-        double value = phase < duty ? 1-duty : -duty;
-        double envelope = fmin(1.0,fmin((i+1)/48.0,(count-i)/48.0));
-        pcm[i] = (float)(value * envelope);
+    } else if (kind==PCSPK_SWEEP && (uint16_t)c && (uint16_t)d) {
+        /* DOS int arithmetic: signed subtraction/product wrap at 16 bits;
+         * signed division truncates toward zero. Frequency addition wraps. */
+        int delta=signedWord((uint16_t)((uint16_t)b-freq));
+        int product=signedWord((uint16_t)(delta*(int)(uint16_t)c));
+        int step=product/signedWord((uint16_t)d);
+        for(uint32_t elapsed=0;elapsed<(uint16_t)d;elapsed+=(uint16_t)c) {
+            emit(context,(PCSPK_Event){divisor(freq),freq!=0,true,(uint16_t)c});
+            freq=(uint16_t)(freq+step);
+        }
     }
-    *frames = count;
+    emit(context,(PCSPK_Event){0,false,false,0}); /* PcspkOff */
+}
+
+typedef struct {
+    float* pcm;
+    uint64_t ticks,position,frames;
+    double phase;
+} Renderer;
+
+static void renderEvent(void* context,PCSPK_Event event)
+{
+    Renderer* out=context;
+    if (event.reload) out->phase=0;
+    out->ticks+=event.delay;
+    uint64_t end=(out->ticks*48000*PCSPK_DELAY_US+999999)/1000000;
+    uint32_t count=event.divisor ? event.divisor : 65536;
+    double advance=1193182.0/count/48000.0;
+    while(out->position<end && out->position<out->frames) {
+        /* Mode 3: odd counts spend one more PIT clock high than low. No
+         * frequency clamps, envelope, or PWM duty substitution. */
+        double high=(count+1)/2/(double)count;
+        out->pcm[out->position++]=event.gate ? (out->phase<high?0.5f:-0.5f) : 0;
+        out->phase+=advance;
+        out->phase-=(uint32_t)out->phase;
+    }
+}
+
+float* PCSPK_Render(int kind,int a,int b,int c,int d,int e,uint16_t* state,size_t* frames)
+{
+    *frames=0;
+    uint64_t ticks=0;
+    uint16_t rate=(uint16_t)a,duration=(uint16_t)b;
+    if(kind==PCSPK_TONE) ticks=duration;
+    else if(kind==PCSPK_NOISE && rate && (uint16_t)c>=100)
+        ticks=((duration+rate-1u)/rate)*(uint64_t)rate;
+    else if(kind==PCSPK_PULSE) ticks=(uint64_t)(uint16_t)c*(uint16_t)b;
+    else if(kind==PCSPK_SWEEP && (uint16_t)c)
+        ticks=(((uint16_t)d+(uint16_t)c-1u)/(uint16_t)c)*(uint64_t)(uint16_t)c;
+    uint64_t count=(ticks*48000*PCSPK_DELAY_US+999999)/1000000;
+    /* SDL's queued-data API takes an int byte count. Reject oversized buffers
+     * rather than truncating the original sequence or stretching its timing. */
+    if(!count || count>INT_MAX/sizeof(float)) return NULL;
+    float* pcm=SDL_calloc((size_t)count,sizeof(float));
+    if(!pcm) return NULL;
+    Renderer out={pcm,0,0,count,0};
+    PCSPK_Sequence(kind,a,b,c,d,e,state,renderEvent,&out);
+    *frames=(size_t)count;
     return pcm;
 }
