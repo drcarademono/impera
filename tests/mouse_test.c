@@ -53,6 +53,8 @@ static bool sawSleepingNpc, sawFountain, sawDrinkPrompt, sawWell, sawCoinPrompt;
 static int presented;
 static bool confirmAimOnPoll;
 static bool checkAnimation;
+static bool checkWater;
+static SDL_Rect waterMap;
 static int animationRow, playerScreenX, previousMarkerX;
 static bool checkActor;
 static bool transparentSprites;
@@ -80,6 +82,17 @@ bool __wrap_SDL_RenderPresent(SDL_Renderer* renderer)
         actorMarker=marker;
         SDL_DestroySurface(image);
     }
+    if(checkWater) {
+        SDL_Surface* image=SDL_RenderReadPixels(renderer,NULL);assert(image);
+        int xs[]={waterMap.x+1,waterMap.x+waterMap.w/2,waterMap.x+waterMap.w-2};
+        int ys[]={waterMap.y+1,waterMap.y+waterMap.h/2,waterMap.y+waterMap.h-2};
+        for(int y=0;y<3;y++) for(int x=0;x<3;x++) {
+            if(x==1 && y==1) continue; /* player sprite */
+            Uint8 r,g,b,a;assert(SDL_ReadSurfacePixel(image,xs[x],ys[y],&r,&g,&b,&a));
+            assert(r==0 && g==170 && b==170); /* one current water phase, no old/new seams */
+        }
+        SDL_DestroySurface(image);
+    }
     if (checkAnimation) {
         SDL_Surface* image = SDL_RenderReadPixels(renderer,NULL);
         assert(image);
@@ -101,7 +114,7 @@ bool __wrap_SDL_RenderPresent(SDL_Renderer* renderer)
     bool result=__real_SDL_RenderPresent(renderer);
     /* Present invalidates the SDL backbuffer. Simulate a renderer that discards
      * it, so a second present without a full redraw cannot pass by accident. */
-    if(checkAnimation || checkActor) {
+    if(checkAnimation || checkActor || checkWater) {
         SDL_SetRenderDrawColor(renderer,255,0,255,255);
         SDL_RenderClear(renderer);
         SDL_SetRenderDrawColor(renderer,0,0,0,255);
@@ -596,6 +609,26 @@ int main(int argc, char** argv)
     D_5896_map_x++;
     GRAP_SDL_MapDrawn(); GRAP_SDL_FlushFrame();
     assert(presented==1);
+    /* A diagonal transition must cover both corner gaps, and must not splice
+     * together different animation phases from the old and current frames. */
+    D_5893_map_id=0;D_5895_map_level=0;D_5896_map_x=100;D_5897_map_y=100;D_58a5=50;
+    memset(D_6608_map.raw,1,sizeof(D_6608_map.raw));
+    D_589b=90;D_589c=90;memset(D_3876,255,sizeof(D_3876));
+    memset(D_5c5a,0,sizeof(D_5c5a));
+    D_b11e[1]=1;
+    waterMap=(SDL_Rect){(1024-l.width*l.scale)/2+l.mapX*l.scale,(768-l.height*l.scale)/2+l.mapY*l.scale,l.columns*16*l.scale,l.rows*16*l.scale};
+    for(int stepY=-1;stepY<=1;stepY+=2) for(int stepX=-1;stepX<=1;stepX+=2) {
+        D_5896_map_x=100;D_5897_map_y=100;
+        memset(tiles+128,0x11,128);memset(g_linearEgaBuffer0,1,320*200);
+        GRAP_SDL_SetSmoothMovement(true); /* reset interpolation history */
+        GRAP_SDL_MapDrawn();GRAP_SDL_FlushFrame();
+        memset(tiles+128,0x33,128);memset(g_linearEgaBuffer0,3,320*200);
+        D_5896_map_x+=stepX;D_5897_map_y+=stepY;
+        checkWater=true;presented=0;
+        GRAP_SDL_MapDrawn();GRAP_SDL_FlushFrame();
+        checkWater=false;assert(presented==9);
+    }
+    D_5893_map_id=1;D_5896_map_x=16;D_5897_map_y=16;
     memset(D_6608_map.town,1,sizeof(D_6608_map.town));
     D_b11e[1]=1;
     memset(tiles+128,0x11,128);

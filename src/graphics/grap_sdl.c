@@ -362,11 +362,23 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
     }
     if (animate) {
         debug("Smooth movement: offset=%d,%d\n", dx, dy);
-        SDL_Texture* old = SDL_CreateTexture(s_sdlRenderer,SDL_PIXELFORMAT_ARGB8888,SDL_TEXTUREACCESS_STATIC,w,h);
-        SDL_Texture* next = SDL_CreateTextureFromSurface(s_sdlRenderer,clean);
-        if (old && next) {
-            SDL_UpdateTexture(old,NULL,s_previousPixels,w*4);
-            SDL_SetTextureScaleMode(old,SDL_SCALEMODE_NEAREST);
+        /* One padded current map covers all exposed edges, including diagonal
+         * corner gaps. Never splice old/new water animation phases together. */
+        int paddedWidth=(columns+2)*16,paddedHeight=(rows+2)*16;
+        SDL_Surface* padded=SDL_CreateSurface(paddedWidth,paddedHeight,SDL_PIXELFORMAT_ARGB8888);
+        if(padded) for(int row=-1;row<=rows;row++) for(int col=-1;col<=columns;col++) {
+            bool interior=col>=0 && col<columns && row>=0 && row<rows;
+            int tx=col-columns/2,ty=row-rows/2;
+            bool visible=interior || (!combat && WIDE_Visible(tx,ty) && WIDE_MapTile(tx,ty)!=255);
+            for(int y=0;y<16;y++) {
+                Uint32* dest=(Uint32*)((byte*)padded->pixels+((row+1)*16+y)*padded->pitch)+(col+1)*16;
+                if(interior) memcpy(dest,(byte*)clean->pixels+(mapY+row*16+y)*clean->pitch+(mapX+col*16)*4,16*4);
+                else for(int x=0;x<16;x++) dest[x]=s_egaPalette[visible?WIDE_TerrainPixel(tx,ty,x,y)&15:0];
+            }
+        }
+        SDL_Texture* next=padded?SDL_CreateTextureFromSurface(s_sdlRenderer,padded):NULL;
+        SDL_DestroySurface(padded);
+        if (next) {
             SDL_SetTextureScaleMode(next,SDL_SCALEMODE_NEAREST);
             SDL_Texture* actorTextures[32]={NULL};
             for (int i=0;i<32;i++) if (moving[i]) {
@@ -381,7 +393,7 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
             float sx = dst.w / w, sy = dst.h / h;
             SDL_Rect clip = {(int)(dst.x+mapX*sx),(int)(dst.y+mapY*sy),
                              (int)(columns*16*sx),(int)(rows*16*sy)};
-            SDL_FRect mapSrc = {mapX,mapY,columns*16,rows*16};
+            SDL_FRect mapSrc = {0,0,paddedWidth,paddedHeight};
             SDL_FRect mapDst = {dst.x+mapX*sx,dst.y+mapY*sy,columns*16*sx,rows*16*sy};
             SDL_Texture* playerTexture=NULL;
             SDL_FRect playerDst = {dst.x+(playerX-1)*sx,dst.y+(playerY-1)*sy,18*sx,18*sy};
@@ -407,10 +419,8 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
                 SDL_RenderClear(s_sdlRenderer);
                 SDL_RenderTexture(s_sdlRenderer,native,NULL,&dst);
                 SDL_SetRenderClipRect(s_sdlRenderer,&clip);
-                SDL_FRect a = mapDst, b = mapDst;
-                a.x -= SDL_roundf(dx*16*sx*progress); a.y -= SDL_roundf(dy*16*sy*progress);
+                SDL_FRect b = {mapDst.x-16*sx,mapDst.y-16*sy,(columns+2)*16*sx,(rows+2)*16*sy};
                 b.x += SDL_roundf(dx*16*sx*(1-progress)); b.y += SDL_roundf(dy*16*sy*(1-progress));
-                SDL_RenderTexture(s_sdlRenderer,old,&mapSrc,&a);
                 SDL_RenderTexture(s_sdlRenderer,next,&mapSrc,&b);
                 for (int i=31;i>=0;i--) if (moving[i]) {
                     ActorVisual* a=&s_previousActors[i]; ActorVisual* b=&actors[i];
@@ -432,7 +442,7 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
             SDL_DestroyTexture(playerTexture);
             for (int i=0;i<32;i++) SDL_DestroyTexture(actorTextures[i]);
         }
-        SDL_DestroyTexture(old); SDL_DestroyTexture(next);
+        SDL_DestroyTexture(next);
         /* The caller still presents the completed frame (and may capture it).
          * Rebuild that backbuffer after the last interpolation presentation. */
         SDL_RenderClear(s_sdlRenderer);
