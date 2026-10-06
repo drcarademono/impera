@@ -58,12 +58,13 @@ may remain when the display dimensions are not divisible by the pixel scale.
 Without the option, the game uses the existing window size settings.
 `--help` lists launch options.
 
-Choose **Engine Settings** below **Return to the View** in the main menu
-(or press `E`). Fullscreen, Mouse Control, Smooth Movement, Diagonal Movement,
+Choose **Engine Options** below **Return to the View** in the main menu
+(or press `O`). Press `Ctrl+O` during gameplay to open Engine Options
+and return to your game with `Esc`. Fullscreen, Mouse Control, Smooth Movement, Diagonal Movement,
 Transparent Sprites, Music, and Sound Effects can be switched on or off.
 Changes apply immediately. Movement Speed and Animation Speed have sliders
 with ticks at 0.5, 0.75, and 1; use Left/Right or click and drag the slider.
-Up/Down selects a setting, Enter toggles it, and Escape returns to the menu.
+Up/Down selects a setting, Enter toggles it, and Escape returns to the menu or your game.
 The screen uses the original game font and integer-scaled pixels.
 
 Settings are saved in `ENGINE.CFG` in the runtime directory and loaded on the

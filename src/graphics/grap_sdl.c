@@ -108,7 +108,7 @@ void GRAP_SDL_CursorSize(int* width, int* height)
     int w = 320, h = 200, outputW, outputH;
     if (s_sdlWindow) SDL_GetWindowSize(s_sdlWindow, &w, &h);
     float sx = w / 320.0f, sy = h / 200.0f;
-    if (s_fullscreen && SDL_GetRenderOutputSize(s_sdlRenderer, &outputW, &outputH)) {
+    if ((s_fullscreen || s_pixelUI) && SDL_GetRenderOutputSize(s_sdlRenderer, &outputW, &outputH)) {
         WideLayout l = WIDE_Layout(outputW, outputH);
         sx = l.scale * (float)w / outputW;
         sy = l.scale * (float)h / outputH;
@@ -183,6 +183,7 @@ float GRAP_SDL_MovementSpeed(void) { return s_movementSpeed; }
 void GRAP_SDL_SetPixelUI(bool enabled)
 {
     s_pixelUI=enabled;
+    s_previousValid = s_mapDrawn = false;
     if(s_sdlTexture) SDL_SetTextureScaleMode(s_sdlTexture,s_fullscreen || enabled ? SDL_SCALEMODE_NEAREST : SDL_SCALEMODE_LINEAR);
 }
 
@@ -289,7 +290,7 @@ static void LinearToRGB(void)
     }
 
 #if defined(ENABLE_GRAP_OVERLAY)
-    for (int y = 0; y < hiresHeight; y++)
+    if (!s_pixelUI) for (int y = 0; y < hiresHeight; y++)
     {
         for (int x = 0; x < hiresWidth; x++)
         {
@@ -309,7 +310,7 @@ static void LinearToRGB(void)
 static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
                         int columns, int rows, SDL_Texture* native, int sourceScale, SDL_FRect dst)
 {
-    if (!s_smoothMovement || !s_mapDrawn || !D_58a4 || (D_5893_map_id>32 && D_5893_map_id<128)) return;
+    if (s_pixelUI || !s_smoothMovement || !s_mapDrawn || !D_58a4 || (D_5893_map_id>32 && D_5893_map_id<128)) return;
     s_mapDrawn = false;
     SDL_Surface* clean = SDL_CreateSurface(w, h, SDL_PIXELFORMAT_ARGB8888);
     if (!clean) { s_previousValid = false; return; }
@@ -482,7 +483,7 @@ void GRAP_SDL_FlushFrame(void)
             SDL_SetTextureScaleMode(s_wideTexture, SDL_SCALEMODE_NEAREST);
             debug("Expanded layout: %dx%d tiles, pixel scale=%d\n", layout.columns, layout.rows, layout.scale);
         }
-        if (WIDE_Compose(s_widePixels, layout))
+        if (!s_pixelUI && WIDE_Compose(s_widePixels, layout))
         {
             s_expandedFrame = true;
             for (int y = 0; y < layout.height; y++)

@@ -17,6 +17,7 @@ bool MOUSE_CombatAttackTarget(int entity, int range, int* distance);
 void MOUSE_Initialize(void);
 void MOUSE_Cleanup(void);
 void MOUSE_UpdateCursor(void);
+void MOUSE_SetPointerMode(bool enabled);
 int MOUSE_CursorDirection(float x, float y);
 void MOUSE_SetEnabled(bool enabled);
 bool MOUSE_Enabled(void);

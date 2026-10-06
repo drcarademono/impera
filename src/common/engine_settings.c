@@ -86,29 +86,47 @@ static void text(int x,int y,const char* s,byte color)
         for(int j=0;j<8;j++) for(int i=0;i<8;i++)
             if(font[(unsigned char)*s*8+j] & (0x80>>i)) g_linearEgaBuffer0[(y+j)*320+x+i]=color;
 }
+/* Reuse the original IBM.CH border glyphs from the title menu. */
+static void frame(void)
+{
+    for(int x=8;x<312;x+=8) {
+        text(x,0,"\x7f",1);text(x,192,"\x7f",1);
+    }
+    for(int y=8;y<192;y+=8) {
+        text(0,y,"\x7f",1);text(312,y,"\x7f",1);
+    }
+    text(0,0,"\x7b",1);text(312,0,"\x7c",1);
+    text(0,192,"\x7d",1);text(312,192,"\x7e",1);
+    rect(7,7,306,1,15);rect(7,7,1,186,15);
+    rect(312,7,1,186,15);rect(7,192,306,1,15);
+}
 static int rowY(int row) { return row<7 ? 40+row*14 : row==7?140:row==8?160:180; }
+static bool s_gameplay;
 void ENGINE_DrawSettings(int selected)
 {
     memset(g_linearEgaBuffer0,0,320*200);
-    rect(8,8,304,1,15);rect(8,8,1,184,15);rect(311,8,1,184,15);rect(8,191,304,1,15);
-    text(96,12,"Engine Settings",15);
+    frame();
+    text(104,12,"Engine Options",15);
     text(32,26,"Arrows / Enter   Esc: Back",7);
     for(int row=0;row<=ENGINE_SETTING_COUNT;row++) {
         int y=rowY(row);
-        if(row==selected) rect(16,y-1,288,10,1);
-        text(24,y,row==ENGINE_SETTING_COUNT?"Return to Menu":labels[row],15);
+        bool highlighted=row==selected;
+        byte foreground=highlighted?0:15;
+        if(highlighted) rect(16,y-1,288,10,15);
+        text(24,y,row==ENGINE_SETTING_COUNT?(s_gameplay?"Return to Game":"Return to Menu"):labels[row],foreground);
         if(row==ENGINE_SETTING_COUNT) continue;
         float value=ENGINE_Get(row);
         if(row<ENGINE_MOVEMENT_SPEED) {
-            rect(232,y+1,7,7,7);rect(233,y+2,5,5,value?10:0);
-            text(248,y,value?"On":"Off",value?10:7);
+            rect(232,y+1,7,7,7);
+            rect(233,y+2,5,5,value?10:0);
+            text(248,y,value?"On":"Off",highlighted?0:(value?10:7));
         } else {
-            rect(184,y+4,64,1,7);
-            for(int i=0;i<3;i++) rect(184+i*32,y+1,1,7,15);
+            rect(184,y+4,64,1,highlighted?0:7);
+            for(int i=0;i<3;i++) rect(184+i*32,y+1,1,7,foreground);
             int knob=184+(int)SDL_roundf(SDL_clamp((value-0.5f)*128,0,64));
-            rect(knob-2,y+1,5,7,14);
+            rect(knob-2,y+1,5,7,highlighted?0:14);
             char number[12];SDL_snprintf(number,sizeof(number),"%.2f",(double)value);
-            text(264,y,number,14);
+            text(264,y,number,highlighted?0:14);
             text(172,y+9,"0.5",7);text(200,y+9,"0.75",7);text(244,y+9,"1",7);
         }
     }
@@ -125,12 +143,14 @@ static void adjust(int row,int direction)
         ENGINE_Set(row,next);
     }
 }
-void ENGINE_ShowSettings(void)
+void ENGINE_ShowOptions(bool gameplay)
 {
+    s_gameplay=gameplay;
     byte backup[320*200];memcpy(backup,g_linearEgaBuffer0,sizeof(backup));
-    extern void KEY_SDL_ReleaseKey(SDL_Keycode key);
-    KEY_SDL_ReleaseKey(0);MOUSE_Cancel();
+    extern void KEY_SDL_ClearInput(void);
+    KEY_SDL_ClearInput();MOUSE_Cancel();
     GRAP_SDL_SetPixelUI(true);
+    MOUSE_SetPointerMode(true);
     int selected=0,drag=-1;bool done=false,changed=false;
     ENGINE_DrawSettings(selected);
     while(!done) {
@@ -165,6 +185,12 @@ void ENGINE_ShowSettings(void)
             }
             if(event.type==SDL_EVENT_MOUSE_BUTTON_UP) drag=-1;
             if(event.type==SDL_EVENT_WINDOW_FOCUS_LOST) drag=-1;
+            if(event.type==SDL_EVENT_MOUSE_MOTION && drag<0) {
+                float x,y;
+                if(GRAP_SDL_MouseUIPoint(event.motion.x,event.motion.y,&x,&y) && x>=16 && x<304)
+                    for(int row=0;row<=ENGINE_SETTING_COUNT;row++)
+                        if(y>=rowY(row)-1 && y<rowY(row)+9) selected=row;
+            }
             if(event.type==SDL_EVENT_MOUSE_MOTION && drag>=0) {
                 float x,y;
                 if(GRAP_SDL_MouseUIPoint(event.motion.x,event.motion.y,&x,&y)) {
@@ -173,12 +199,14 @@ void ENGINE_ShowSettings(void)
                 }
             }
             if(event.type==SDL_EVENT_KEY_DOWN || event.type==SDL_EVENT_MOUSE_BUTTON_DOWN ||
-               event.type==SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED || drag>=0) ENGINE_DrawSettings(selected);
+               event.type==SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED || event.type==SDL_EVENT_MOUSE_MOTION || drag>=0) ENGINE_DrawSettings(selected);
         }
+        MOUSE_UpdateCursor();
         SDL_Delay(16);
     }
     if(changed && !ENGINE_Save()) fprintf(stderr,"Unable to save engine settings\n");
-    KEY_SDL_ReleaseKey(0);MOUSE_Cancel();
+    KEY_SDL_ClearInput();MOUSE_Cancel();
     GRAP_SDL_SetPixelUI(false);
+    MOUSE_SetPointerMode(false);
     memcpy(g_linearEgaBuffer0,backup,sizeof(backup));GRAP_BUF_MarkDirty();GRAP_BUF_Present();
 }

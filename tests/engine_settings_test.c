@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include <SDL3/SDL.h>
 #include "common/engine_settings.h"
 #include "graphics/grap_buf.h"
@@ -10,12 +11,21 @@
 #include "macros.h"
 #include "event/event.h"
 #include "key/key.h"
+#include "key/mouse.h"
 #include "time/time.h"
 void GRAP_SDL_Initialize(void);
 void GRAP_SDL_Cleanup(void);
 
 static void key(SDL_Keycode code)
 { SDL_Event e={0};e.type=SDL_EVENT_KEY_DOWN;e.key.key=code;assert(SDL_PushEvent(&e)); }
+static Uint32 closeGameplayOptions(void* userdata, SDL_TimerID timer, Uint32 interval)
+{
+    (void)userdata;(void)timer;(void)interval;
+    for(int i=0;i<5;i++) key(SDLK_DOWN);
+    key(SDLK_RETURN); /* Toggle music to prove the shortcut opened the screen. */
+    key(SDLK_ESCAPE);
+    return 0;
+}
 int main(int argc, char** argv)
 {
     remove("ENGINE.CFG");
@@ -24,6 +34,22 @@ int main(int argc, char** argv)
     D_5893_map_id=0x40;D_58a4=0;
     byte font[1024];FILE* f=fopen("IBM.CH","rb");assert(f);
     assert(fread(font,1,sizeof(font),f)==sizeof(font));fclose(f);D_539c[0]=font;
+    if(argc==2 && !strcmp(argv[1],"gameplay_options")) {
+        memset(g_linearEgaBuffer0,3,320*200);
+        ENGINE_Set(ENGINE_MUSIC,1);
+        SDL_Event shortcut={0};shortcut.type=SDL_EVENT_KEY_DOWN;
+        shortcut.key.key=SDLK_O;shortcut.key.mod=SDL_KMOD_CTRL;
+        assert(SDL_PushEvent(&shortcut));
+        assert(SDL_AddTimer(50,closeGameplayOptions,NULL));
+        assert(KEY_PollKey()==0);
+        assert(ENGINE_Get(ENGINE_MUSIC)==0);
+        for(int i=0;i<320*200;i++) assert(g_linearEgaBuffer0[i]==3);
+        ENGINE_Set(ENGINE_MUSIC,1);ENGINE_Load();
+        assert(ENGINE_Get(ENGINE_MUSIC)==0);
+        remove("ENGINE.CFG");
+        GRAP_SDL_Cleanup();SDL_Quit();
+        return 0;
+    }
     if(argc==2) {
         SDL_Event exitKey={0};exitKey.type=SDL_EVENT_KEY_DOWN;
         exitKey.key.key=SDLK_E;exitKey.key.mod=SDL_KMOD_CTRL;
@@ -40,7 +66,7 @@ int main(int argc, char** argv)
             return 0;
         }
         if(strcmp(argv[1],"settings")) EVT_SetImmediateExit(1);
-        if(!strcmp(argv[1],"settings")) ENGINE_ShowSettings();
+        if(!strcmp(argv[1],"settings")) ENGINE_ShowOptions(false);
         else if(!strcmp(argv[1],"cutscene")) TIME_SleepMs(100);
         else KEY_PollKey(); /* Main-menu keyboard path. */
         fputs("Ctrl+E was consumed without exiting\n",stderr);
@@ -58,16 +84,49 @@ int main(int argc, char** argv)
     ENGINE_Set(ENGINE_FULLSCREEN,0);assert(ENGINE_Get(ENGINE_FULLSCREEN)==0);
     GRAP_SDL_SetPixelUI(true);ENGINE_DrawSettings(7);
     for(int y=0;y<8;y++) for(int x=0;x<8;x++)
-        assert(g_linearEgaBuffer0[(12+y)*320+96+x]==((font['E'*8+y]&(0x80>>x))?15:0));
+        assert(g_linearEgaBuffer0[(12+y)*320+104+x]==((font['E'*8+y]&(0x80>>x))?15:0));
     /* Both ends of the settings content have four pixels of inset. */
     for(int x=9;x<311;x++) {
         assert(g_linearEgaBuffer0[11*320+x]==0);
         assert(g_linearEgaBuffer0[188*320+x]==0);
     }
+    /* Title-menu frame glyphs and white selection with black lettering. */
+    assert(g_linearEgaBuffer0[0*320+8]==1);
+    assert(g_linearEgaBuffer0[7*320+7]==15);
+    assert(g_linearEgaBuffer0[80*320+0]==1);
+    assert(g_linearEgaBuffer0[139*320+16]==15);
+    for(int y=0;y<8;y++) for(int x=0;x<8;x++)
+        assert(g_linearEgaBuffer0[(140+y)*320+24+x]==((font['M'*8+y]&(0x80>>x))?0:15));
     int count;SDL_Window** windows=SDL_GetWindows(&count);assert(count==1);
     SDL_Renderer* renderer=SDL_GetRenderer(windows[0]);SDL_free(windows);
     SDL_Surface* shot=SDL_RenderReadPixels(renderer,NULL);assert(shot);
-    assert(SDL_SaveBMP(shot,"settings.bmp"));SDL_DestroySurface(shot);
+    assert(SDL_SaveBMP(shot,"settings.bmp"));
+    /* Real gameplay state must not split options into a map and sidebar. */
+    byte* tiles=malloc(512*128);assert(tiles);memset(tiles,0x11,512*128);
+    GRAP_BUF_LoadTileset(tiles);
+    D_5893_map_id=13;D_58a4=1;
+    ENGINE_Set(ENGINE_SMOOTH,1);
+    GRAP_SDL_MapDrawn();
+    ENGINE_DrawSettings(7);
+    SDL_Surface* gameplayShot=SDL_RenderReadPixels(renderer,NULL);assert(gameplayShot);
+    assert(gameplayShot->w==shot->w && gameplayShot->h==shot->h);
+    SDL_Surface* reference=SDL_ConvertSurface(shot,SDL_PIXELFORMAT_ARGB8888);
+    SDL_Surface* actual=SDL_ConvertSurface(gameplayShot,SDL_PIXELFORMAT_ARGB8888);
+    assert(reference && actual);
+    /* Smooth toggle was changed, so redraw the reference with the same values. */
+    D_5893_map_id=0x40;D_58a4=0;ENGINE_DrawSettings(7);
+    SDL_DestroySurface(shot);shot=SDL_RenderReadPixels(renderer,NULL);assert(shot);
+    SDL_DestroySurface(reference);reference=SDL_ConvertSurface(shot,SDL_PIXELFORMAT_ARGB8888);assert(reference);
+    for(int y=0;y<actual->h;y++)
+        assert(!memcmp((byte*)reference->pixels+y*reference->pitch,
+                       (byte*)actual->pixels+y*actual->pitch,actual->w*4));
+    assert(SDL_SaveBMP(gameplayShot,"gameplay-settings.bmp"));
+    SDL_DestroySurface(reference);SDL_DestroySurface(actual);
+    SDL_DestroySurface(shot);SDL_DestroySurface(gameplayShot);
+    D_5893_map_id=13;D_58a4=1;
+    MOUSE_SetPointerMode(true);assert(MOUSE_CursorDirection(100,200)==0);
+    MOUSE_SetPointerMode(false);
+    D_5893_map_id=0x40;D_58a4=0;
     GRAP_SDL_SetPixelUI(false);
     memset(g_linearEgaBuffer0,3,320*200);
     for(int i=0;i<5;i++) key(SDLK_DOWN);
@@ -80,12 +139,21 @@ int main(int argc, char** argv)
     e.type=SDL_EVENT_MOUSE_MOTION;e.motion.x=248*4;e.motion.y=80+144*4;assert(SDL_PushEvent(&e));
     e.type=SDL_EVENT_MOUSE_BUTTON_UP;assert(SDL_PushEvent(&e));
     key(SDLK_ESCAPE);
-    ENGINE_ShowSettings();
+    ENGINE_ShowOptions(false);
     assert(ENGINE_Get(ENGINE_MUSIC)==0 && ENGINE_Get(ENGINE_SOUND)==0);
     assert(ENGINE_Get(ENGINE_MOVEMENT_SPEED)==1 && ENGINE_Get(ENGINE_ANIMATION_SPEED)==0.75f);
     for(int i=0;i<320*200;i++) assert(g_linearEgaBuffer0[i]==3); /* restores title art */
     ENGINE_Set(ENGINE_ANIMATION_SPEED,1);ENGINE_Load();
     assert(ENGINE_Get(ENGINE_ANIMATION_SPEED)==0.75f);
+    /* Hovering either return row selects it: Enter closes without toggling fullscreen. */
+    for(int gameplay=0;gameplay<2;gameplay++) {
+        bool fullscreen=GRAP_SDL_Fullscreen();
+        SDL_Event hover={0};hover.type=SDL_EVENT_MOUSE_MOTION;
+        hover.motion.x=24*4;hover.motion.y=80+184*4;
+        assert(SDL_PushEvent(&hover));key(SDLK_RETURN);key(SDLK_ESCAPE);
+        ENGINE_ShowOptions(gameplay!=0);
+        assert(GRAP_SDL_Fullscreen()==fullscreen);
+    }
     remove("ENGINE.CFG");D_539c[0]=NULL;GRAP_SDL_Cleanup();SDL_Quit();
     puts("Engine settings persistence, live options, keyboard, and slider dragging passed");
     return 0;

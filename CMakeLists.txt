@@ -119,6 +119,11 @@ if(U5D_BUILD_TESTS)
         endforeach()
         set_tests_properties(engine_settings PROPERTIES WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/settings-runtime"
             ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software" TIMEOUT 10)
+        add_test(NAME gameplay_engine_options COMMAND u5d_engine_settings_test gameplay_options)
+        set_tests_properties(gameplay_engine_options PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/settings-runtime"
+            ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software"
+            TIMEOUT 10 RUN_SERIAL TRUE)
         add_executable(u5d_audio_test tests/audio_test.c ${TEST_SOURCES})
         list(APPEND U5D_TARGETS u5d_audio_test)
         target_link_options(u5d_audio_test PRIVATE "-Wl,--wrap=SDL_PutAudioStreamData" "-Wl,--wrap=MIX_SetTrackAudio" "-Wl,--wrap=SDL_GetBasePath")

@@ -17,6 +17,12 @@
 #include "third_party/stb_image.h"
 
 static bool s_enabled;
+static bool s_pointerMode;
+void MOUSE_SetPointerMode(bool enabled)
+{
+    s_pointerMode = enabled;
+    MOUSE_UpdateCursor();
+}
 static bool s_input, s_right, s_single;
 static int s_cursorWidth, s_cursorHeight;
 static void LoadCursors(void);
@@ -71,7 +77,7 @@ static const char* s_cursorNames[9] = {"pointer", "direction-n", "diag-ne", "dir
 int MOUSE_CursorDirection(float x, float y)
 {
     int dx, dy; float rx, ry;
-    if (!D_58a4 || (D_5893_map_id > 32 && D_5893_map_id < 128) ||
+    if (s_pointerMode || !D_58a4 || (D_5893_map_id > 32 && D_5893_map_id < 128) ||
         !GRAP_SDL_MouseMapPoint(x, y, &dx, &dy, &rx, &ry)) return 0;
     /* Combat sprites occupy fixed coordinates in the original 11x11 map. */
     if (D_5893_map_id >= 128) { rx -= D_5896_map_x - 5; ry -= D_5897_map_y - 5; }
@@ -86,14 +92,14 @@ int MOUSE_CursorDirection(float x, float y)
 
 void MOUSE_UpdateCursor(void)
 {
-    if (!s_enabled) return;
+    if (!s_enabled && !s_pointerMode) return;
     int width,height; GRAP_SDL_CursorSize(&width,&height);
     if (width != s_cursorWidth || height != s_cursorHeight) {
         MOUSE_Cleanup(); LoadCursors();
     }
     float x, y;
     SDL_GetMouseState(&x, &y);
-    int direction = s_menu ? 0 : MOUSE_CursorDirection(x, y), index = 0;
+    int direction = (s_menu || s_pointerMode) ? 0 : MOUSE_CursorDirection(x, y), index = 0;
     for (int i = 1; i < 9; ++i) if (s_cursorDirections[i] == direction) index = i;
     SDL_Cursor* cursor = s_cursors[index] ? s_cursors[index] : s_cursors[0];
     if (!cursor) cursor = SDL_GetDefaultCursor();
