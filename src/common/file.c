@@ -12,6 +12,20 @@
 #include <sys/stat.h>
 #endif
 
+static char s_dataDirectory[FILE_PATH_SIZE];
+void FILE_SetDataDirectory(const char* directory)
+{
+    if(!directory || strlen(directory)>=sizeof(s_dataDirectory)) s_dataDirectory[0]=0;
+    else strcpy(s_dataDirectory,directory);
+}
+int FILE_DataPath(const char* path,char* resolved,size_t capacity)
+{
+    char full[FILE_PATH_SIZE];
+    if(!*s_dataDirectory || !path || !*path || path[0]=='/' || path[0]=='\\' || strchr(path,':')) return -1;
+    if(snprintf(full,sizeof(full),"%s/%s",s_dataDirectory,path)>=(int)sizeof(full)) return -1;
+    return FILE_ResolvePath(full,resolved,capacity,0);
+}
+
 static unsigned char FILE_Fold(unsigned char c)
 {
     return c >= 'A' && c <= 'Z' ? c + ('a' - 'A') : c;
@@ -125,11 +139,23 @@ int FILE_ResolvePath(const char* path, char* resolved, size_t capacity, int allo
 
 FILE* FILE_Open(const char* path, const char* mode)
 {
+    /* Immutable assets come from the selected source; writes stay local. */
+    if(mode[0]=='r' && !strchr(mode,'+') && !strchr(path,'/') && !strchr(path,'\\')) {
+        char asset[FILE_PATH_SIZE];
+        if(FILE_DataPath(path,asset,sizeof(asset))==0) return fopen(asset,mode);
+    }
+
 #if defined(OS_LINUX) || defined(OS_MACOS)
     char resolved[FILE_PATH_SIZE];
-    if (FILE_ResolvePath(path, resolved, sizeof(resolved), mode[0] == 'w' || mode[0] == 'a') != 0)
+    if (FILE_ResolvePath(path, resolved, sizeof(resolved), mode[0] == 'w' || mode[0] == 'a') != 0) {
+        if(mode[0]=='r' && !strchr(mode,'+') && strncmp(path,"U4SAVE/",7)==0 && FILE_DataPath(path,resolved,sizeof(resolved))==0)
+            return fopen(resolved,mode);
         return NULL;
-    return fopen(resolved, mode);
+    }
+    FILE* stream=fopen(resolved,mode);
+    if(!stream && mode[0]=='r' && !strchr(mode,'+') && strncmp(path,"U4SAVE/",7)==0 && FILE_DataPath(path,resolved,sizeof(resolved))==0)
+        stream=fopen(resolved,mode);
+    return stream;
 #else
     return fopen(path, mode);
 #endif
