@@ -282,8 +282,10 @@ int MOUSE_Action(int dx, int dy, bool mainAction)
                  (a->_0_tile & 0xf8) == TILE_ACTOR_FRIGATE_20 || a->_0_tile == TILE_ACTOR_CARPET))
                 return 'B';
         }
-        if (!D_5893_map_id && (tile == TILE_MAP_TOWNE || tile == TILE_MAP_CASTLE ||
-            tile == TILE_MAP_CASTLELB || tile == TILE_MAP_PALACEBT || (tile >= 0x16 && tile <= 0x1a))) return 'E';
+        /* Match MAINOUT_08de_EnterCmd, including villages (the Brittanys),
+         * huts, keeps, the Codex shrine and lighthouses. */
+        if (!D_5893_map_id && ((tile >= TILE_MAP_HUT && tile <= TILE_MAP_LIGHTHOUSE) ||
+            tile == TILE_MAP_CASTLELB || tile == TILE_MAP_PALACEBT)) return 'E';
         if (tile == TILE_MAP_LADDER_UP || tile == TILE_MAP_LADDER_DOWN) return 'K';
         if (tile == TILE_MAP_BED) return 'H';
         return 0;
