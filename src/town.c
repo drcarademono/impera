@@ -1,4 +1,8 @@
 #include "common/common.h"
+#include "common/movement.h"
+#if defined(TARGET_SDL)
+#include "key/mouse.h"
+#endif
 #include "vars.h"
 #include "funcs.h"
 #include "macros.h"
@@ -375,6 +379,27 @@ static bool TOWN_0600(int param_1)
 
     switch (param_1)
     {
+    case U5_KEY_HOME:
+    case U5_KEY_END:
+    case U5_KEY_PGUP:
+    case U5_KEY_PGDN:
+        if (!MOVEMENT_Diagonal()) return false;
+        local_c = (param_1 == U5_KEY_HOME || param_1 == U5_KEY_END) ? -1 : 1;
+        local_e = (param_1 == U5_KEY_HOME || param_1 == U5_KEY_PGUP) ? -1 : 1;
+        /* Diagonal steps cannot cut through blocked corners. */
+        if (!ULTIMA_2c4c_IsWalkableTile(D_587c_partyTile, GetMapViewport(5 + local_c, 5)) ||
+            !ULTIMA_2c4c_IsWalkableTile(D_587c_partyTile, GetMapViewport(5, 5 + local_e))) {
+            ULTIMA_1850_PrintString("Blocked!\n");
+            return false;
+        }
+        local_8 = D_5896_map_x + local_c < 0 || D_5896_map_x + local_c > 31 ||
+                  D_5897_map_y + local_e < 0 || D_5897_map_y + local_e > 31;
+        param_1 = local_c < 0 ? 3 : 1;
+        TOWN_057c(param_1);
+        ULTIMA_1850_PrintString(local_e < 0 ? (local_c < 0 ? "Northwest\n" : "Northeast\n") :
+                                              (local_c < 0 ? "Southwest\n" : "Southeast\n"));
+        break;
+
     case DIR_UP:
         // 0648
         local_e--;
@@ -862,7 +887,13 @@ static uint TOWN_0dc4(int param_1)
         ULTIMA_4c2a();
     }
 
+    #if defined(TARGET_SDL)
+    MOUSE_SetCommandInput(true);
+    #endif
     local_4 = ULTIMA_266c_GetChar();
+    #if defined(TARGET_SDL)
+    MOUSE_SetCommandInput(false);
+    #endif
 
     if (D_5957 != 0)
     {
@@ -1321,7 +1352,7 @@ void TOWN_141e_MainLoop(void)
                 local_8 = TOWN_0dc4(local_4);
                 local_4 = 0;
 
-                if (local_8 < 0x20)
+                if (local_8 < 0x20 || (local_8 >= U5_KEY_HOME && local_8 <= U5_KEY_PGDN))
                 {
                     // 14a5
                     switch (local_8)
@@ -1370,6 +1401,10 @@ void TOWN_141e_MainLoop(void)
                         local_c = 0;
                         break;
 
+                    case U5_KEY_HOME:
+                    case U5_KEY_END:
+                    case U5_KEY_PGUP:
+                    case U5_KEY_PGDN:
                     case U5_KEY_LEFT:
                     case U5_KEY_RIGHT:
                     case U5_KEY_UP:

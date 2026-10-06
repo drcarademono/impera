@@ -1,4 +1,8 @@
 #include "common/common.h"
+#include "common/movement.h"
+#if defined(TARGET_SDL)
+#include "key/mouse.h"
+#endif
 #include "time/time.h"
 
 #include "vars.h"
@@ -16,6 +20,15 @@
 #include "talk.h"
 #include "town.h"
 #include "zstats.h"
+
+static bool s_diagonalMovement;
+void MOVEMENT_SetDiagonal(bool enabled) { s_diagonalMovement = enabled; }
+bool MOVEMENT_Diagonal(void) { return s_diagonalMovement; }
+bool MOVEMENT_AttackAllowed(int dx, int dy) { return s_diagonalMovement || dx == 0 || dy == 0; }
+bool MOVEMENT_Adjacent(int dx, int dy)
+{
+    return abs(dx) <= 1 && abs(dy) <= 1 && (s_diagonalMovement || abs(dx)+abs(dy) <= 1);
+}
 
 int MAINOUT_06ec_AttackCmd(void);
 int MAINOUT_08de_EnterCmd(void);
@@ -421,10 +434,27 @@ int ULTIMA_35ec_SelectDirection(void)
     D_5876 = 0;
     D_5878 = 0;
 
-    while ((local_4 = ULTIMA_266c_GetChar()) != U5_KEY_SPACE &&
-           local_4 != U5_KEY_UP && local_4 != U5_KEY_DOWN &&
-           local_4 != U5_KEY_LEFT && local_4 != U5_KEY_RIGHT)
+    local_4 = 0;
+#if defined(TARGET_SDL)
     {
+        int dx, dy;
+        if (MOUSE_TakeTarget(&dx, &dy)) {
+            D_5876 = dx; D_5878 = dy;
+            if (!dx && !dy) ULTIMA_1850_PrintString("Here\n");
+            else if (!dy) ULTIMA_1850_PrintString(dx < 0 ? "West\n" : "East\n");
+            else if (!dx) ULTIMA_1850_PrintString(dy < 0 ? "North\n" : "South\n");
+            else if (dy < 0) ULTIMA_1850_PrintString(dx < 0 ? "Northwest\n" : "Northeast\n");
+            else ULTIMA_1850_PrintString(dx < 0 ? "Southwest\n" : "Southeast\n");
+            return 1;
+        }
+    }
+#endif
+    while (local_4 == 0 && (local_4 = ULTIMA_266c_GetChar()) != U5_KEY_SPACE &&
+           local_4 != U5_KEY_UP && local_4 != U5_KEY_DOWN &&
+           local_4 != U5_KEY_LEFT && local_4 != U5_KEY_RIGHT &&
+           (!MOVEMENT_Diagonal() || local_4 < U5_KEY_HOME || local_4 > U5_KEY_PGDN))
+    {
+        local_4 = 0;
     }
 
     switch (local_4)
@@ -433,6 +463,10 @@ int ULTIMA_35ec_SelectDirection(void)
     case U5_KEY_SPACE:
         ULTIMA_1850_PrintString(_TEXT(0xa2a0, "Pass\n"));
         return 0;
+    case U5_KEY_HOME: D_5876=-1; D_5878=-1; ULTIMA_1850_PrintString("Northwest\n"); return 1;
+    case U5_KEY_END: D_5876=-1; D_5878=1; ULTIMA_1850_PrintString("Southwest\n"); return 1;
+    case U5_KEY_PGUP: D_5876=1; D_5878=-1; ULTIMA_1850_PrintString("Northeast\n"); return 1;
+    case U5_KEY_PGDN: D_5876=1; D_5878=1; ULTIMA_1850_PrintString("Southeast\n"); return 1;
     case U5_KEY_UP:
         ULTIMA_1850_PrintString(_TEXT(0xa2a6, "North\n"));
         D_5878--;

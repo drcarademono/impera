@@ -58,6 +58,69 @@ may remain when the display dimensions are not divisible by the pixel scale.
 Without the option, the game uses the existing window size settings.
 `--help` lists launch options.
 
+Enable `--diagonal-movement` to use eight directions for movement, neighboring
+interactions, mouse cursors, and combat movement and attacks. This applies to
+keyboard and mouse controls and to AI-controlled combatants, including NPCs,
+monsters, and party members. Diagonal steps cannot cut blocked corners.
+
+Without this option, movement, actions, and combat attacks use cardinal
+directions. The map has four mouse cursor zones (north, south, east, west).
+Distant Look descriptions remain available in either mode, but Look actions
+require a cardinal neighbor by default or any of the eight neighbors when
+`--diagonal-movement` is enabled.
+
+Enable mouse controls with `--mouse`. The supplied PNG cursors show the four or eight
+movement directions over the overhead map and a pointer over menus, cutscenes,
+and the status/text column. Cursor pixels scale with the displayed game pixels
+using nearest-neighbor scaling, including when the window size changes. Hover
+over an item in the main menu, party selector, equipment/scroll selector,
+reagent list, shop inventory, or inn guest register to highlight it; left-click
+to select it. Keyboard selection remains available.
+
+The launcher copies `textures/cursors` into the
+runtime directory; copy that folder alongside the game data when running the
+binary directly.
+
+Enable mouse controls with `--mouse`. They work in the overhead town and outdoor
+views, in both windowed and fullscreen mode:
+
+- Hold the right button over the map to walk toward the cursor in eight
+  directions when `--diagonal-movement` is enabled, or four otherwise. Release it to stop. Diagonal steps cannot cut through blocked
+  corners; sailing retains the game's four-way headings.
+- Single-left-click a tile at any distance to Look. Double-left-click an adjacent
+  or (with `--diagonal-movement`) diagonal NPC to Talk, a door or chest to Open, or a loose object to Get. Other nearby
+  targets fall back to Look.
+- Double-click your own tile to Enter a town, Klimb a ladder, rest in a bed,
+  or Board a vehicle when the usual keyboard conditions allow it.
+
+Mouse actions work on the four or eight neighboring tiles, depending on the option. Distant targets do not
+trigger actions. Look describes distant objects without
+offering actions such as drinking or dropping coins; those require adjacency,
+including a diagonal neighbor. Single clicks wait 300 ms to distinguish double
+clicks. Right-button movement also works during combat command entry, relative to the
+active fighter, including diagonals when enabled. Combat uses its usual turn and collision
+rules. In combat, double-left-click an enemy within weapon range to start Attack
+and position the Aim cursor on it. A separate single-left-click confirms the
+attack during Aim; keyboard aiming and confirmation remain available. Attacks respect
+the cardinal/diagonal option and the normal weapon, obstruction, and turn rules.
+Map commands are disabled during menus, dialogues, dungeon
+perspective views, and other input prompts. Menu lists support mouse selection;
+use the keyboard for other prompts. Clicking the status column does not issue map commands.
+
+Enable smooth movement independently with `--smooth-movement`. Each successful
+tile step animates a scrolling camera over roughly 120 ms, keeping the player
+icon centered and the interface fixed. NPCs and monsters also animate their
+visible tile steps, including combat actors. Their motion stays coordinated
+with camera scrolling; the combat camera stays fixed. This works with keyboard
+or mouse movement; collisions and actions still use the original tile and turn
+rules. Teleports, spawns, map changes, and dungeon perspective views snap to
+their new state without interpolation.
+Both options default to off. For example:
+
+```sh
+bash scripts/run-linux.sh --fullscreen --mouse --smooth-movement --diagonal-movement
+```
+
 For libraries installed under a custom prefix, add its `lib/pkgconfig` (or
 `lib64/pkgconfig`) directory to `PKG_CONFIG_PATH` before configuring.
 

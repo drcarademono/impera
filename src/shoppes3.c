@@ -1,4 +1,5 @@
 #include "common/common.h"
+#include "key/mouse.h"
 #include "funcs.h"
 #include "vars.h"
 #include "macros.h"
@@ -409,7 +410,10 @@ static int SHOPPES3_04e6(int param_1, int param_2)
 
                 do
                 {
-                    local_32 = ULTIMA_266c_GetChar();
+                    int mouseCount = 0, mouseItem;
+                    for (mouseItem = 1; mouseItem < 16; mouseItem++)
+                        if (D_55a8_party[mouseItem].mapId == D_5893_map_id) mouseCount++;
+                    local_32 = MOUSE_MenuRead(198, 40, 106, mouseCount, (local_30 - 40) / 8);
                     switch (local_32)
                     {
                     case U5_KEY_LEFT:

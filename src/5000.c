@@ -1,4 +1,7 @@
 #include "common/common.h"
+#if defined(TARGET_SDL)
+#include "graphics/grap_sdl.h"
+#endif
 #include "vars.h"
 #include "funcs.h"
 #include "macros.h"
@@ -360,6 +363,9 @@ void ULTIMA_56ac_DrawMap(void)
             }
         }
     }
+#if defined(TARGET_SDL)
+    GRAP_SDL_MapDrawn();
+#endif
 }
 
 // Animate / Update

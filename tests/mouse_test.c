@@ -1,0 +1,576 @@
+#undef NDEBUG
+#include <assert.h>
+#include <stdio.h>
+#include <string.h>
+#include "common/common.h"
+#include "vars.h"
+#include "macros.h"
+#include "tiles.h"
+#include "funcs.h"
+#include "talk.h"
+#include "lookobj.h"
+#include "sjog.h"
+#include "combat.h"
+#include "comsubs.h"
+#include "common/movement.h"
+#include "key/mouse.h"
+#include "graphics/grap_sdl.h"
+#include "graphics/grap_buf.h"
+#include "graphics/widescreen.h"
+#include <SDL3/SDL.h>
+static int loadedCursors;
+void __wrap_ULTIMA_433e_AudioFootstep(void) {} /* Audio delay uses a real clock; this test mocks time. */
+SDL_Cursor* __wrap_SDL_CreateColorCursor(SDL_Surface* surface, int x, int y)
+{
+    int width,height; GRAP_SDL_CursorSize(&width,&height);
+    assert(surface->w == width && surface->h == height);
+    /* Pointer, N, NE, E, SE, S, SW, W, NW: test every scaled arrow tip. */
+    const int expectedX[9] = {0, width/2, width-1, width-1, width-1, width/2, 0, 0, 0};
+    const int expectedY[9] = {0, 0, 0, height/2, height-1, height-1, height-1, height/2, 0};
+    assert(x == expectedX[loadedCursors % 9]);
+    assert(y == expectedY[loadedCursors % 9]);
+    bool transparent = false, opaque = false;
+    for (int yy = 0; yy < surface->h; ++yy) for (int xx = 0; xx < surface->w; ++xx) {
+        Uint8 r,g,b,a;
+        assert(SDL_ReadSurfacePixel(surface,xx,yy,&r,&g,&b,&a));
+        assert((r==0 || r==255) && g==r && b==r && (a==0 || a==255));
+        transparent |= a == 0; opaque |= a == 255;
+    }
+    assert(transparent && opaque);
+    ++loadedCursors;
+    return NULL; /* SDL dummy driver has no native cursor support. */
+}
+static Uint64 ticks = 2000;
+static float cursorX, cursorY;
+static bool sawSleepingNpc, sawFountain, sawDrinkPrompt, sawWell, sawCoinPrompt;
+static int presented;
+static bool confirmAimOnPoll;
+static bool checkAnimation;
+static int animationRow, playerScreenX, previousMarkerX;
+static bool checkActor;
+static int actorRow, actorStart, actorEnd, actorMarker;
+bool __real_SDL_RenderPresent(SDL_Renderer* renderer);
+bool __wrap_SDL_RenderPresent(SDL_Renderer* renderer)
+{
+    presented++;
+    if (checkActor) {
+        SDL_Surface* image=SDL_RenderReadPixels(renderer,NULL);
+        assert(image);
+        int marker=-1,count=0;
+        for (int x=0;x<image->w;x++) {
+            Uint8 r,g,b,a;
+            assert(SDL_ReadSurfacePixel(image,x,actorRow,&r,&g,&b,&a));
+            if (r==85 && g==255 && b==85) { if(marker<0) marker=x; count++; }
+        }
+        assert(count==48); /* exactly one sprite, with no stale copy or trail */
+        assert(marker>=actorMarker && marker<=actorEnd);
+        if (presented==1 && actorStart!=actorEnd) assert(marker>actorStart && marker<actorEnd);
+        actorMarker=marker;
+        SDL_DestroySurface(image);
+    }
+    if (checkAnimation) {
+        SDL_Surface* image = SDL_RenderReadPixels(renderer,NULL);
+        assert(image);
+        Uint8 r,g,b,a;
+        assert(SDL_ReadSurfacePixel(image,0,0,&r,&g,&b,&a));
+        assert(r==85 && g==255 && b==85); /* interface pixel stays fixed */
+        assert(SDL_ReadSurfacePixel(image,playerScreenX,animationRow,&r,&g,&b,&a));
+        assert(r==255 && g==255 && b==85); /* centered player never duplicates */
+        int marker = -1;
+        for (int x=0; x<playerScreenX; x++) {
+            assert(SDL_ReadSurfacePixel(image,x,animationRow,&r,&g,&b,&a));
+            if (r==255 && g==85 && b==85) { marker=x; break; }
+        }
+        assert(marker>=0 && marker<=previousMarkerX);
+        if (presented==1) assert(marker<previousMarkerX && marker>previousMarkerX-48);
+        previousMarkerX=marker;
+        SDL_DestroySurface(image);
+    }
+    return __real_SDL_RenderPresent(renderer);
+}
+void __wrap_ULTIMA_1850_PrintString(char* text)
+{
+    if (strstr(text, "Zzzzzz")) sawSleepingNpc = true;
+    if (strstr(text, "gurgling fountain")) sawFountain = true;
+    if (strstr(text, "Who will drink")) sawDrinkPrompt = true;
+    if (strstr(text, "a well")) sawWell = true;
+    if (strstr(text, "Drop a coin")) sawCoinPrompt = true;
+}
+void __wrap_ULTIMA_16ba_PrintChar(uint ch) { (void)ch; }
+Uint64 __wrap_SDL_GetTicks(void) { return ticks; }
+SDL_MouseButtonFlags __wrap_SDL_GetMouseState(float* x, float* y)
+{
+    *x=cursorX; *y=cursorY;
+    if (confirmAimOnPoll && D_5898) {
+        confirmAimOnPoll=false;
+        MOUSE_Button(cursorX,cursorY,SDL_BUTTON_LEFT,true,1);
+    }
+    return SDL_BUTTON_RMASK;
+}
+extern void GRAP_SDL_Initialize(void);
+extern void GRAP_SDL_Cleanup(void);
+extern void GRAP_SDL_FlushFrame(void);
+static void paintActor(int index,int x,int y)
+{
+    memset(g_linearEgaBuffer0,0,320*200);
+    memset(D_ab02,1,sizeof(D_ab02));
+    memset(D_5c5a,0,sizeof(D_5c5a));
+    D_5c5a[index]._0_tile=D_5c5a[index]._1_animTile=0x44;
+    D_5c5a[index]._2_x=x; D_5c5a[index]._3_y=y;
+    bool combat=D_5893_map_id>=128;
+    int col=combat?x:x-D_5896_map_x+5, row=combat?y:y-D_5897_map_y+5;
+    GetMapViewport(col,row)=0;
+    GetActorMap(col,row)=0x44;
+    for(int py=0;py<16;py++) memset(g_linearEgaBuffer0+(8+row*16+py)*320+8+col*16,10,16);
+}
+int main(void)
+{
+    assert(!MOVEMENT_Diagonal());
+    assert(MOUSE_Direction(1,1)==U5_KEY_RIGHT);
+    assert(MOUSE_Direction(-1,-2)==U5_KEY_UP);
+    assert(!MOVEMENT_Adjacent(1,1));
+    assert(!MOVEMENT_AttackAllowed(1,1));
+    assert(MOVEMENT_AttackAllowed(0,3));
+    MOVEMENT_SetDiagonal(true);
+    assert(MOUSE_Direction(-2,0)==U5_KEY_LEFT);
+    assert(MOUSE_Direction(2,0)==U5_KEY_RIGHT);
+    assert(MOUSE_Direction(0,-2)==U5_KEY_UP);
+    assert(MOUSE_Direction(0,2)==U5_KEY_DOWN);
+    assert(MOUSE_Direction(-2,-2)==U5_KEY_HOME);
+    assert(MOUSE_Direction(2,-2)==U5_KEY_PGUP);
+    assert(MOUSE_Direction(-2,2)==U5_KEY_END);
+    assert(MOUSE_Direction(2,2)==U5_KEY_PGDN);
+    assert(MOUSE_Direction(0,0)==0);
+    D_5893_map_id=13; D_5896_map_x=16; D_5897_map_y=16; D_5895_map_level=0;
+    memset(D_6608_map.town,1,32*32);
+    D_5c5a[1]._0_tile=0x44; D_5c5a[1]._2_x=17; D_5c5a[1]._3_y=16;
+    assert(MOUSE_Action(1,0,true)=='T');
+    assert(MOUSE_Action(1,0,false)=='L');
+    D_5c5a[1]._3_y=15;
+    assert(MOUSE_Action(1,-1,true)=='T');
+    D_5c5a[1]._3_y=16;
+    assert(MOUSE_Action(2,0,true)==0);
+    assert(MOUSE_Action(1,1,true)=='L');
+    assert(MOUSE_Action(2,0,false)=='L');
+    D_5c5a[1]._0_tile=TILE_ACTOR_CHEST;
+    assert(MOUSE_Action(1,0,true)=='O');
+    D_5c5a[1]._0_tile=0;
+    GetMap(17,16)=TILE_MAP_DOOR_B8;
+    assert(MOUSE_Action(1,0,true)=='O');
+    assert(SDL_Init(SDL_INIT_VIDEO));
+    GRAP_SDL_Initialize();
+    MOUSE_Initialize();
+    int pixelWidth,pixelHeight;
+    GRAP_SDL_CursorSize(&pixelWidth,&pixelHeight);
+    assert(pixelWidth==64 && pixelHeight==77);
+    int dx,dy; float rx,ry;
+    assert(GRAP_SDL_MouseMapPoint(384,460.8f,&dx,&dy,&rx,&ry));
+    assert(dx==0 && dy==0);
+    assert(GRAP_SDL_MouseMapPoint(448,460.8f,&dx,&dy,&rx,&ry));
+    assert(dx==1 && dy==0);
+    assert(!GRAP_SDL_MouseMapPoint(1000,450,&dx,&dy,&rx,&ry));
+    MOUSE_SetCommandInput(true);
+    MOUSE_Button(448,460.8f,SDL_BUTTON_LEFT,true,1);
+    ticks+=301;
+    assert(MOUSE_PollCommand()==0); /* mouse is opt-in */
+    MOUSE_SetEnabled(true);
+    MOUSE_Initialize();
+    assert(loadedCursors == 9);
+    D_58a4=1;
+    MOVEMENT_SetDiagonal(false);
+    assert(MOUSE_CursorDirection(448,350)==U5_KEY_UP);
+    assert(MOUSE_CursorDirection(320,570)==U5_KEY_DOWN);
+    assert(MOUSE_Action(1,1,true)==0);
+    assert(MOUSE_Action(1,1,false)=='L');
+    MOVEMENT_SetDiagonal(true);
+    MOUSE_SetCommandInput(true);
+    D_58a4 = 1;
+    assert(MOUSE_CursorDirection(448,460.8f) == U5_KEY_RIGHT);
+    assert(MOUSE_CursorDirection(320,460.8f) == U5_KEY_LEFT);
+    assert(MOUSE_CursorDirection(384,384) == U5_KEY_UP);
+    assert(MOUSE_CursorDirection(384,537.6f) == U5_KEY_DOWN);
+    assert(MOUSE_CursorDirection(320,384) == U5_KEY_HOME);
+    assert(MOUSE_CursorDirection(448,384) == U5_KEY_PGUP);
+    assert(MOUSE_CursorDirection(320,537.6f) == U5_KEY_END);
+    assert(MOUSE_CursorDirection(448,537.6f) == U5_KEY_PGDN);
+    assert(MOUSE_CursorDirection(384,460.8f) == U5_KEY_PGDN);
+    assert(MOUSE_CursorDirection(448,460.8f) == U5_KEY_RIGHT);
+    assert(MOUSE_CursorDirection(384,460.8f) == U5_KEY_RIGHT);
+    /* All eight zones meet inside the sprite at its exact center. */
+    assert(MOUSE_CursorDirection(385,460.8f)==U5_KEY_RIGHT);
+    assert(MOUSE_CursorDirection(383,460.8f)==U5_KEY_LEFT);
+    assert(MOUSE_CursorDirection(384,459.6f)==U5_KEY_UP);
+    assert(MOUSE_CursorDirection(384,462.0f)==U5_KEY_DOWN);
+    assert(MOUSE_CursorDirection(383,459.6f)==U5_KEY_HOME);
+    assert(MOUSE_CursorDirection(385,459.6f)==U5_KEY_PGUP);
+    assert(MOUSE_CursorDirection(383,462.0f)==U5_KEY_END);
+    assert(MOUSE_CursorDirection(385,462.0f)==U5_KEY_PGDN);
+    assert(MOUSE_CursorDirection(384,460.8f)==U5_KEY_PGDN);
+    assert(MOUSE_Direction(0,0)==0);
+    assert(MOUSE_Direction(0.1f,0.1f)==U5_KEY_PGDN);
+    assert(MOUSE_CursorDirection(1000,450) == 0);
+    assert(MOUSE_CursorDirection(384,460.8f) == U5_KEY_PGDN);
+    D_58a4 = 0;
+    assert(MOUSE_CursorDirection(448,460.8f) == 0);
+    D_58a4 = 1;
+    D_5893_map_id = 33;
+    assert(MOUSE_CursorDirection(448,460.8f) == 0);
+    D_5893_map_id = 13;
+    /* Hover walks the native selection; a click confirms only its own row. */
+    cursorX = 800; cursorY = 115.2f;
+    MOUSE_MenuSet(192,8,120,3,0);
+    assert(MOUSE_PollCommand()==U5_KEY_DOWN);
+    MOUSE_MenuSet(192,8,120,3,1);
+    assert(MOUSE_PollCommand()==U5_KEY_DOWN);
+    MOUSE_MenuSet(192,8,120,3,2);
+    assert(MOUSE_PollCommand()==0);
+    MOUSE_Button(cursorX,cursorY,SDL_BUTTON_LEFT,true,1);
+    assert(MOUSE_PollCommand()==U5_KEY_ENTER);
+    assert(MOUSE_PollCommand()==0);
+    MOUSE_Button(400,115.2f,SDL_BUTTON_LEFT,true,1);
+    assert(MOUSE_PollCommand()==0); /* map is outside the party list */
+    MOUSE_Cancel();
+    MOUSE_MenuSet(192,8,120,3,0);
+    assert(MOUSE_PollCommand()==0); /* keyboard selection takes priority until mouse moves */
+    MOUSE_MenuEnd();
+    assert(MOUSE_PollCommand()==0);
+    /* Exercise the actual party selector, not only synthetic menu keystrokes. */
+    static byte testFont[2048];
+    D_5398_currentCharset = testFont;
+    for (int i=0;i<4;i++) D_539c[i]=testFont;
+    int savedPartySize = D_585b;
+    D_585b = 3;
+    MOUSE_MenuSet(192,8,120,3,0);
+    MOUSE_Button(800,115.2f,SDL_BUTTON_LEFT,true,1);
+    assert(ULTIMA_2d7a(0)==2);
+    D_585b = savedPartySize;
+    MOUSE_Cancel();
+    MOUSE_Button(448,460.8f,SDL_BUTTON_LEFT,true,1);
+    assert(MOUSE_PollCommand()==0);
+    ticks+=301;
+    assert(MOUSE_PollCommand()=='L');
+    MOUSE_SetCommandInput(false);
+    assert(MOUSE_TakeDirection()==U5_KEY_RIGHT);
+    assert(MOUSE_TakeDirection()==0);
+    MOUSE_SetCommandInput(true);
+    MOUSE_Button(448,460.8f,SDL_BUTTON_LEFT,true,1);
+    ticks+=100;
+    MOUSE_Button(448,460.8f,SDL_BUTTON_LEFT,true,2);
+    assert(MOUSE_PollCommand()=='O');
+    ticks+=400;
+    assert(MOUSE_PollCommand()==0); /* no stray Look after a double click */
+    D_5c5a[1]._0_tile=0x44;
+    GetMap(17,16)=TILE_MAP_BED;
+    MOUSE_Button(448,460.8f,SDL_BUTTON_LEFT,true,1);
+    ticks+=100;
+    MOUSE_Button(448,460.8f,SDL_BUTTON_LEFT,true,2);
+    assert(MOUSE_PollCommand()=='T');
+    MOUSE_SetCommandInput(false);
+    assert(TALK_041c_TalkCmd()==0); /* real keyboard handler, including bed rules */
+    assert(sawSleepingNpc && D_5876==1 && D_5878==0);
+    /* Diagonal Talk travels through the actual keyboard command handler. */
+    MOUSE_SetCommandInput(true);
+    D_5c5a[1]._3_y=15;
+    GetMap(17,15)=TILE_MAP_BED;
+    MOUSE_Button(448,384,SDL_BUTTON_LEFT,true,1);
+    MOUSE_Button(448,384,SDL_BUTTON_LEFT,true,2);
+    assert(MOUSE_PollCommand()=='T');
+    MOUSE_SetCommandInput(false);
+    sawSleepingNpc=false;
+    assert(TALK_041c_TalkCmd()==0);
+    assert(sawSleepingNpc && D_5876==1 && D_5878==-1);
+    D_5c5a[1]._0_tile=0;
+    /* Far Look describes the exact target, without entering any action prompt. */
+    GetMap(19,16)=TILE_MAP_FOUNTAIN;
+    MOUSE_SetCommandInput(true);
+    MOUSE_Button(576,460.8f,SDL_BUTTON_LEFT,true,1);
+    ticks+=301;
+    assert(MOUSE_PollCommand()=='L');
+    MOUSE_SetCommandInput(false);
+    LOOKOBJ_099c_LookCmd();
+    assert(sawFountain && !sawDrinkPrompt);
+    GetMap(19,16)=TILE_MAP_WELL;
+    MOUSE_SetCommandInput(true);
+    MOUSE_Button(576,460.8f,SDL_BUTTON_LEFT,true,1);
+    ticks+=301;
+    assert(MOUSE_PollCommand()=='L');
+    MOUSE_SetCommandInput(false);
+    int goldBefore=D_57aa;
+    LOOKOBJ_099c_LookCmd();
+    assert(sawWell && !sawCoinPrompt && D_57aa==goldBefore);
+    /* A diagonal fountain still offers drinking. Escape dismisses party selection. */
+    GetMap(17,15)=TILE_MAP_FOUNTAIN;
+    MOUSE_SetCommandInput(true);
+    MOUSE_Button(448,384,SDL_BUTTON_LEFT,true,1);
+    ticks+=301;
+    assert(MOUSE_PollCommand()=='L');
+    MOUSE_SetCommandInput(false);
+    extern void KEY_SDL_ProcessKeyDown(SDL_KeyboardEvent ev);
+    SDL_KeyboardEvent escape={0}; escape.key=SDLK_ESCAPE;
+    KEY_SDL_ProcessKeyDown(escape);
+    LOOKOBJ_099c_LookCmd();
+    assert(sawDrinkPrompt);
+
+    MOUSE_SetCommandInput(true);
+    MOUSE_Cancel();
+    MOUSE_SetCommandInput(false);
+    MOUSE_Button(448,460.8f,SDL_BUTTON_LEFT,true,1);
+    ticks+=400;
+    assert(MOUSE_PollCommand()==0);
+    MOUSE_SetCommandInput(true);
+    MOUSE_Button(448,460.8f,SDL_BUTTON_LEFT,true,1);
+    D_5896_map_x++;
+    ticks+=400;
+    assert(MOUSE_PollCommand()==0); /* discard stale click targets */
+    D_5896_map_x--;
+    cursorX=448; cursorY=537.6f;
+    MOUSE_Button(cursorX,cursorY,SDL_BUTTON_RIGHT,true,1);
+    assert(MOUSE_PollCommand()==U5_KEY_PGDN);
+    assert(MOUSE_PollCommand()==0);
+    ticks+=160;
+    assert(MOUSE_PollCommand()==U5_KEY_PGDN);
+    cursorX=385; cursorY=460.8f; /* inside the player sprite, east of center */
+    ticks+=160;
+    assert(MOUSE_PollCommand()==U5_KEY_RIGHT);
+    cursorX=384; /* exact center retains the displayed east cursor */
+    ticks+=160;
+    assert(MOUSE_PollCommand()==U5_KEY_RIGHT);
+    cursorX=383; /* crossing the center immediately changes movement */
+    ticks+=160;
+    assert(MOUSE_PollCommand()==U5_KEY_LEFT);
+    cursorX=1000; /* status column still never issues movement */
+    ticks+=160;
+    assert(MOUSE_PollCommand()==0);
+    MOUSE_Button(cursorX,cursorY,SDL_BUTTON_RIGHT,false,1);
+    ticks+=160;
+    assert(MOUSE_PollCommand()==0);
+    GRAP_SDL_Cleanup();
+    GRAP_SDL_SetFullscreen(true);
+    GRAP_SDL_Initialize();
+    byte* tiles=calloc(512,128);
+    GRAP_BUF_LoadTileset(tiles);
+    D_58a4=1; D_58a5=0;
+    GRAP_SDL_FlushFrame();
+    WideLayout l=WIDE_Layout(1024,768); /* dummy driver's desktop */
+    float centerX=(1024-l.width*l.scale)/2+(l.mapX+(l.columns/2)*16+8)*l.scale;
+    float centerY=(768-l.height*l.scale)/2+(l.mapY+(l.rows/2)*16+8)*l.scale;
+    assert(GRAP_SDL_MouseMapPoint(centerX,centerY,&dx,&dy,&rx,&ry) && dx==0 && dy==0);
+    assert(GRAP_SDL_MouseMapPoint(centerX+16*l.scale,centerY,&dx,&dy,&rx,&ry) && dx==1 && dy==0);
+    assert(!GRAP_SDL_MouseMapPoint(1020,centerY,&dx,&dy,&rx,&ry));
+    int cursorWidth,cursorHeight;
+    GRAP_SDL_CursorSize(&cursorWidth,&cursorHeight);
+    assert(cursorWidth==48 && cursorHeight==48);
+    /* Menu coordinates follow the shifted sidebar in expanded fullscreen. */
+    float uiX,uiY;
+    float sidebarX=(1024-l.width*l.scale)/2+(l.sidebarX+8)*l.scale;
+    assert(GRAP_SDL_MouseUIPoint(sidebarX,24*l.scale,&uiX,&uiY));
+    assert(uiX==200 && uiY==24);
+    cursorX=sidebarX; cursorY=24*l.scale;
+    MOUSE_MenuSet(192,8,120,3,0);
+    assert(MOUSE_PollCommand()==U5_KEY_DOWN);
+    MOUSE_MenuEnd(); MOUSE_Cancel();
+    GRAP_SDL_SetSmoothMovement(true);
+    memset(g_linearEgaBuffer0,0,320*200);
+    g_linearEgaBuffer0[0]=10;
+    for (int y=8;y<184;y++) memset(g_linearEgaBuffer0+y*320+40,12,4);
+    for (int y=88;y<104;y++) memset(g_linearEgaBuffer0+y*320+88,14,16);
+    GRAP_SDL_MapDrawn(); GRAP_SDL_FlushFrame();
+    presented=0;
+    D_5896_map_x++;
+    for (int y=8;y<184;y++) {
+        memset(g_linearEgaBuffer0+y*320+40,0,4);
+        memset(g_linearEgaBuffer0+y*320+24,12,4);
+    }
+    animationRow=(int)centerY;
+    playerScreenX=(int)centerX;
+    previousMarkerX=(l.mapX+(l.columns/2-5)*16+32)*l.scale;
+    int initialMarkerX=previousMarkerX;
+    checkAnimation=true;
+    GRAP_SDL_MapDrawn(); GRAP_SDL_FlushFrame();
+    checkAnimation=false;
+    assert(presented==9); /* eight intermediate frames plus the completed frame */
+    assert(previousMarkerX==initialMarkerX-16*l.scale);
+    presented=0;
+    D_5896_map_x+=5;
+    GRAP_SDL_MapDrawn(); GRAP_SDL_FlushFrame();
+    assert(presented==1); /* teleport snaps rather than sliding across the map */
+    presented=0;
+    GRAP_SDL_SetSmoothMovement(false);
+    D_5896_map_x++;
+    GRAP_SDL_MapDrawn(); GRAP_SDL_FlushFrame();
+    assert(presented==1);
+    /* Moving NPC, then an NPC moving together with the scrolling camera. */
+    GRAP_SDL_SetSmoothMovement(true);
+    D_5896_map_x=16;
+    paintActor(1,13,14);
+    GRAP_SDL_MapDrawn(); GRAP_SDL_FlushFrame();
+    actorStart=(l.mapX+(l.columns/2-3)*16)*l.scale;
+    actorEnd=actorStart+48; actorMarker=actorStart;
+    actorRow=(l.mapY+(l.rows/2-2)*16+8)*l.scale;
+    paintActor(1,14,14);
+    presented=0; checkActor=true;
+    GRAP_SDL_MapDrawn(); GRAP_SDL_FlushFrame();
+    checkActor=false;
+    assert(presented==9 && actorMarker==actorEnd);
+    actorStart=actorEnd; actorMarker=actorStart;
+    D_5896_map_x++;
+    paintActor(1,15,14);
+    presented=0; checkActor=true;
+    GRAP_SDL_MapDrawn(); GRAP_SDL_FlushFrame();
+    checkActor=false;
+    assert(presented==9 && actorMarker==actorEnd);
+    /* Combat does not pan when active-character coordinates change. */
+    D_5893_map_id=255;
+    paintActor(7,2,3);
+    GRAP_SDL_MapDrawn(); GRAP_SDL_FlushFrame();
+    actorStart=(l.mapX+(l.columns/2-3)*16)*l.scale;
+    actorEnd=actorStart+48; actorMarker=actorStart;
+    actorRow=(l.mapY+(l.rows/2-2)*16+8)*l.scale;
+    D_5896_map_x=3;
+    paintActor(7,3,3);
+    presented=0; checkActor=true;
+    GRAP_SDL_MapDrawn(); GRAP_SDL_FlushFrame();
+    checkActor=false;
+    assert(presented==9 && actorMarker==actorEnd);
+    GRAP_SDL_SetSmoothMovement(true);
+    paintActor(0,2,3);
+    GRAP_SDL_MapDrawn(); GRAP_SDL_FlushFrame();
+    paintActor(0,3,3);
+    presented=0;
+    GRAP_SDL_MapDrawn(); GRAP_SDL_FlushFrame();
+    assert(presented==9); /* combat party members animate too */
+    /* Right-button combat commands use the active fighter, not the map center. */
+    GRAP_SDL_SetSmoothMovement(false);
+    D_5896_map_x=2; D_5897_map_y=3;
+    float fighterX=centerX+(2-5)*16*l.scale;
+    float fighterY=centerY+(3-5)*16*l.scale;
+    cursorX=fighterX+1; cursorY=fighterY;
+    MOUSE_SetCommandInput(true);
+    MOUSE_Button(cursorX,cursorY,SDL_BUTTON_RIGHT,true,1);
+    assert(MOUSE_PollCommand()==U5_KEY_RIGHT);
+    MOUSE_SetCommandInput(false);
+    ticks+=160;
+    assert(MOUSE_PollCommand()==0); /* target prompts and enemy turns */
+    MOUSE_SetCommandInput(true);
+    cursorX=fighterX-48; cursorY=fighterY-48;
+    assert(MOUSE_PollCommand()==U5_KEY_HOME);
+    MOUSE_Button(cursorX,cursorY,SDL_BUTTON_RIGHT,false,1);
+    ticks+=160;
+    assert(MOUSE_PollCommand()==0);
+    MOUSE_Button(cursorX,cursorY,SDL_BUTTON_LEFT,true,1);
+    ticks+=301;
+    assert(MOUSE_PollCommand()==0); /* single clicks wait for Attack/Aim mode */
+    memset(D_5c5a,0,sizeof(D_5c5a));
+    memset(D_ba14,0,sizeof(D_ba14));
+    for (int cy=0;cy<11;cy++) for (int cx=0;cx<11;cx++) GetCombatMap(cx,cy)=TILE_MAP_GRASS;
+    D_ba14[0].x=5; D_ba14[0].y=5; D_ba14[0].actorIdx=1;
+    D_5c5a[1]._0_tile=D_5c5a[1]._1_animTile=0x44;
+    D_5c5a[1]._2_x=5; D_5c5a[1]._3_y=5;
+    D_58a1=0;
+    assert(SJOG_1c56_CombatMovePlayer(0,U5_KEY_PGUP)==1);
+    assert(D_ba14[0].x==6 && D_ba14[0].y==4);
+    GetCombatMap(7,4)=0xff;
+    assert(SJOG_1c56_CombatMovePlayer(0,U5_KEY_PGDN)==0);
+    assert(D_ba14[0].x==6 && D_ba14[0].y==4); /* cannot cut a blocked corner */
+    MOVEMENT_SetDiagonal(false);
+    GetCombatMap(7,4)=TILE_MAP_GRASS;
+    assert(SJOG_1c56_CombatMovePlayer(0,U5_KEY_PGDN)==0);
+    assert(D_ba14[0].x==6 && D_ba14[0].y==4);
+    assert(COMSUBS_0822(0,7,5,1,0)==-1); /* no diagonal projectile or its effects */
+    int hpBefore=D_ba14[1].hp;
+    D_ba14[1].x=7; D_ba14[1].y=5;
+    COMSUBS_0bf8(0,1,0);
+    assert(D_ba14[1].hp==hpBefore); /* no diagonal melee */
+    D_ba14[1].flags=COMBAT_FLAGS_MONSTER;
+    D_ba14[1].actorIdx=2;
+    D_5c5a[2]._1_animTile=0x44;
+    D_589e=0; D_589d=25; D_588f=0;
+    MOVEMENT_SetDiagonal(true);
+    assert(COMSUBS_0822(0,7,5,1,0)==1); /* diagonal attack reaches its target */
+    MOVEMENT_SetDiagonal(false);
+    assert(COMSUBS_0822(0,7,5,1,0)==-1);
+
+    /* Real mouse targeting preserves cardinal range rules and requires a separate confirmation. */
+    D_589e=0; D_ba14[0].flags=COMBAT_FLAGS_PLAYER;
+    D_ba14[0].entityIdx=0; D_5896_map_x=6; D_5897_map_y=4;
+    D_55a8_party[0].equips[0]=D_55a8_party[0].equips[2]=D_55a8_party[0].equips[3]=0xff;
+    D_ba14[1].flags=COMBAT_FLAGS_MONSTER; D_ba14[1].x=7; D_ba14[1].y=4;
+    D_5c5a[2]._0_tile=D_5c5a[2]._1_animTile=0x44;
+    assert(MOUSE_Action(2,-1,true)=='A'); /* tile 7,4, one east of active fighter */
+    D_ba14[1].x=8;
+    assert(MOUSE_Action(3,-1,true)==0); /* bare hands cannot reach two tiles */
+    D_ba14[1].x=7; D_ba14[1].y=5;
+    assert(MOUSE_Action(2,0,true)==0); /* classic diagonal attack */
+    MOVEMENT_SetDiagonal(true);
+    assert(MOUSE_Action(2,0,true)=='A');
+    D_ba14[1].flags|=COMBAT_FLAGS_INVISIBLE;
+    assert(MOUSE_Action(2,0,true)==0);
+    D_ba14[1].flags=COMBAT_FLAGS_PLAYER;
+    assert(MOUSE_Action(2,0,true)==0); /* friendly target */
+    D_ba14[1].flags=COMBAT_FLAGS_MONSTER;
+    cursorX=centerX+2*16*l.scale; cursorY=centerY;
+    MOUSE_SetCommandInput(true);
+    MOUSE_Button(cursorX,cursorY,SDL_BUTTON_LEFT,true,1);
+    MOUSE_Button(cursorX,cursorY,SDL_BUTTON_LEFT,true,2);
+    assert(MOUSE_PollCommand()=='A');
+    MOUSE_SetCommandInput(false);
+    int seededDistance;
+    assert(MOUSE_CombatAttackTarget(0,1,&seededDistance) && seededDistance==1);
+    MOUSE_SetCombatAimInput(0,1);
+    assert(MOUSE_PollCommand()==0); /* double-click only seeds Aim, never confirms it */
+    MOUSE_Button(1020,cursorY,SDL_BUTTON_LEFT,true,1);
+    assert(MOUSE_PollCommand()==0); /* sidebar cannot confirm */
+    MOUSE_Button(cursorX+48,cursorY,SDL_BUTTON_LEFT,true,1);
+    assert(MOUSE_PollCommand()==0); /* out-of-range click keeps Aim open */
+    MOUSE_Button(cursorX,cursorY,SDL_BUTTON_LEFT,true,1);
+    assert(MOUSE_PollCommand()==U5_KEY_ENTER);
+    assert(MOUSE_PollCommand()==0);
+    MOUSE_EndCombatAimInput();
+    /* Run the real Aim loop: inject a distinct click when the Aim loop polls events. */
+    confirmAimOnPoll=true;
+    assert(COMSUBS_0504(0,1)==1);
+    assert(!confirmAimOnPoll);
+    assert(D_5899==7 && D_589a==5);
+    assert(COMSUBS_0504(0,0)==0); /* second weapon must satisfy its own range */
+    SDL_KeyboardEvent cancelAim={0}; cancelAim.key=SDLK_ESCAPE;
+    KEY_SDL_ProcessKeyDown(cancelAim);
+    assert(COMSUBS_0504(0,1)==0); /* Escape exits the native Aim prompt */
+    MOUSE_Button(cursorX,cursorY,SDL_BUTTON_LEFT,true,1);
+    assert(MOUSE_PollCommand()==0); /* no Aim confirmation leaks into command entry */
+    MOUSE_ClearCombatAttack();
+    int unusedDistance;
+    assert(!MOUSE_CombatAttackTarget(0,1,&unusedDistance));
+    MOUSE_SetCommandInput(true);
+    MOUSE_Button(cursorX,cursorY,SDL_BUTTON_LEFT,true,1);
+    D_589e=1;
+    ticks+=301;
+    assert(MOUSE_PollCommand()==0); /* queued clicks cannot transfer to another fighter */
+    D_589e=0;
+    /* Exercise real AI movement for both enemy and friendly entities. */
+    for (int friendly=0;friendly<2;friendly++) {
+        memset(D_ba14,0,sizeof(D_ba14));
+        memset(D_5c5a,0,sizeof(D_5c5a));
+        D_ba14[0].flags=friendly ? COMBAT_FLAGS_MONSTER : COMBAT_FLAGS_PLAYER;
+        D_ba14[0].actorIdx=1; D_ba14[0].x=8; D_ba14[0].y=8;
+        D_ba14[1].flags=friendly ? COMBAT_FLAGS_PLAYER : COMBAT_FLAGS_MONSTER;
+        D_ba14[1].actorIdx=2; D_ba14[1].x=5; D_ba14[1].y=5;
+        D_ba14[1].entityIdx=8;
+        D_5c5a[1]._0_tile=D_5c5a[1]._1_animTile=0x44;
+        D_5c5a[1]._2_x=8; D_5c5a[1]._3_y=8;
+        D_5c5a[2]._0_tile=D_5c5a[2]._1_animTile=0x44;
+        D_5c5a[2]._2_x=5; D_5c5a[2]._3_y=5;
+        D_587a='N';
+        MOVEMENT_SetDiagonal(true);
+        assert(COMBAT_0ee4(1)==1);
+        assert(D_ba14[1].x==6 && D_ba14[1].y==6);
+        D_ba14[1].x=D_5c5a[2]._2_x=5;
+        D_ba14[1].y=D_5c5a[2]._3_y=5;
+        MOVEMENT_SetDiagonal(false);
+        assert(COMBAT_0ee4(1)==1);
+        assert(abs(D_ba14[1].x-5)+abs(D_ba14[1].y-5)==1);
+    }
+    MOUSE_SetCommandInput(false);
+    MOUSE_Cleanup();
+    GRAP_SDL_Cleanup(); SDL_Quit();
+    puts("Mouse directions, action ranges, click timing, modal gating, and coordinate mapping passed.");
+}

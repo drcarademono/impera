@@ -2,6 +2,7 @@
 #include "graphics/grap.h"
 
 #include "event.h"
+#include "key/mouse.h"
 
 #include <SDL3/SDL.h>
 
@@ -31,8 +32,18 @@ void EVT_PollMessages(void)
 			break;
 
 		case SDL_EVENT_KEY_DOWN:
+			MOUSE_Cancel();
 			KEY_SDL_ProcessKeyDown(ev.key);
 			break;
+
+        case SDL_EVENT_MOUSE_BUTTON_DOWN:
+        case SDL_EVENT_MOUSE_BUTTON_UP:
+            MOUSE_Button(ev.button.x, ev.button.y, ev.button.button,
+                         ev.type == SDL_EVENT_MOUSE_BUTTON_DOWN, ev.button.clicks);
+            break;
+        case SDL_EVENT_WINDOW_FOCUS_LOST:
+            MOUSE_Cancel();
+            break;
 		}
 	}
 }
@@ -41,6 +52,7 @@ void EVT_Yield(void)
 {
 	GRAP_FlushPendingPresent();
 	EVT_PollMessages();
+    MOUSE_UpdateCursor();
 
 	for (int i = 0; i < s_registeredCallbackCount; i++)
 	{

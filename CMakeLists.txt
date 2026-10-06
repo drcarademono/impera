@@ -66,6 +66,7 @@ set(SOURCES
 	src/common/lzw.c
 	src/common/memory.c
 	src/key/key_sdl.c
+	src/key/mouse.c
 	src/time/time_sdl.c
 )
 
@@ -98,6 +99,18 @@ if(U5D_BUILD_TESTS)
              -DTEST_DIR=${CMAKE_BINARY_DIR}/test-runtime
              -P ${CMAKE_SOURCE_DIR}/tests/check_missing_file.cmake)
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        add_executable(u5d_mouse_test tests/mouse_test.c ${TEST_SOURCES})
+        list(APPEND U5D_TARGETS u5d_mouse_test)
+        target_link_options(u5d_mouse_test PRIVATE
+            "-Wl,--wrap=ULTIMA_433e_AudioFootstep" "-Wl,--wrap=SDL_CreateColorCursor" "-Wl,--wrap=SDL_GetTicks" "-Wl,--wrap=SDL_GetMouseState"
+            "-Wl,--wrap=SDL_RenderPresent"
+            "-Wl,--wrap=ULTIMA_1850_PrintString" "-Wl,--wrap=ULTIMA_16ba_PrintChar")
+        add_test(NAME mouse_controls COMMAND u5d_mouse_test)
+        file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/mouse-runtime")
+        file(COPY textures DESTINATION "${CMAKE_BINARY_DIR}/mouse-runtime")
+        set_tests_properties(mouse_controls PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/mouse-runtime" TIMEOUT 10
+            ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software")
         add_executable(u5d_combat_return_test tests/combat_return_test.c ${TEST_SOURCES})
         list(APPEND U5D_TARGETS u5d_combat_return_test)
         target_link_options(u5d_combat_return_test PRIVATE

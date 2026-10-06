@@ -1,4 +1,5 @@
 #include "common/common.h"
+#include "key/mouse.h"
 #include "funcs.h"
 #include "vars.h"
 #include "macros.h"
@@ -1049,7 +1050,7 @@ int ZSTATS_0f2e(int param_1, int param_2, int param_3)
         // L_1077
         // f257
         ULTIMA_1b94_SelectTextWindow(2);
-        local_16 = ULTIMA_266c_GetChar();
+        local_16 = MOUSE_MenuRead(192, 16, 120, local_4, local_10 - 1);
 
         switch (local_16)
         {

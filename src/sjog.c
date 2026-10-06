@@ -1,4 +1,5 @@
 #include "common/common.h"
+#include "common/movement.h"
 #include "funcs.h"
 #include "vars.h"
 #include "macros.h"
@@ -1811,6 +1812,16 @@ int SJOG_1c56_CombatMovePlayer(int param_1, int param_2)
 
     switch (param_2)
     {
+    case U5_KEY_HOME:
+    case U5_KEY_END:
+    case U5_KEY_PGUP:
+    case U5_KEY_PGDN:
+        if (!MOVEMENT_Diagonal()) return 0;
+        local_a = (param_2 == U5_KEY_HOME || param_2 == U5_KEY_END) ? -1 : 1;
+        local_c = (param_2 == U5_KEY_HOME || param_2 == U5_KEY_PGUP) ? -1 : 1;
+        ULTIMA_1850_PrintString(local_c < 0 ? (local_a < 0 ? "Northwest\n" : "Northeast\n") :
+                                              (local_a < 0 ? "Southwest\n" : "Southeast\n"));
+        break;
     case DIR_UP:
         local_c = -1;
         ULTIMA_1850_PrintString(_TEXT(0x8eb8, "North\n"));
@@ -1833,10 +1844,15 @@ int SJOG_1c56_CombatMovePlayer(int param_1, int param_2)
     local_6 = D_ba14[param_1].y + local_c;
     if (local_4 > 0xa || local_6 > 0xa || local_4 < 0 || local_6 < 0)
     {
+        if (local_a && local_c)
+            param_2 = local_4 < 0 ? DIR_LEFT : local_4 > 10 ? DIR_RIGHT : local_6 < 0 ? DIR_UP : DIR_DOWN;
         return SJOG_1bb2_CombatExit(param_1, param_2);
     }
 
-    if (COMBAT_0000(D_5c5a[local_8]._0_tile, local_4, local_6) != 0)
+    if ((!local_a || !local_c ||
+         (COMBAT_0000(D_5c5a[local_8]._0_tile, D_ba14[param_1].x + local_a, D_ba14[param_1].y) &&
+          COMBAT_0000(D_5c5a[local_8]._0_tile, D_ba14[param_1].x, D_ba14[param_1].y + local_c))) &&
+        COMBAT_0000(D_5c5a[local_8]._0_tile, local_4, local_6) != 0)
     {
         D_5c5a[local_8]._2_x = D_ba14[param_1].x = local_4;
         D_5c5a[local_8]._3_y = D_ba14[param_1].y = local_6;

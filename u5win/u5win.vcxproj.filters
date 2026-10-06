@@ -173,6 +173,9 @@
     <ClCompile Include="..\src\graphics\widescreen.c">
       <Filter>graphics</Filter>
     </ClCompile>
+    <ClCompile Include="..\src\key\mouse.c">
+      <Filter>key</Filter>
+    </ClCompile>
     <ClCompile Include="..\src\graphics\grap_vga.c">
       <Filter>graphics</Filter>
     </ClCompile>
@@ -429,6 +432,9 @@
     </ClInclude>
     <ClInclude Include="..\src\translate.h">
       <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\common\movement.h">
+      <Filter>common</Filter>
     </ClInclude>
     <ClInclude Include="..\src\common\settings.h">
       <Filter>common</Filter>

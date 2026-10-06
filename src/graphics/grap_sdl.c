@@ -7,6 +7,11 @@
 #include "wd.h"
 #include "grap_sdl.h"
 #include "widescreen.h"
+#include "vars.h"
+#include "funcs.h"
+#include "macros.h"
+#include "key/mouse.h"
+#include <string.h>
 
 #include <SDL3/SDL.h>
 
@@ -18,6 +23,119 @@ static bool s_fullscreen;
 static SDL_Texture* s_wideTexture;
 static SDL_Surface* s_wideSurface;
 static byte* s_widePixels;
+static bool s_expandedFrame;
+static bool s_smoothMovement, s_mapDrawn, s_previousValid;
+static Uint32* s_previousPixels;
+static int s_previousWidth, s_previousHeight, s_previousX, s_previousY, s_previousMap, s_previousLevel;
+typedef struct ActorVisual {
+    bool visible, sighted;
+    int x,y,worldX,worldY,kind,level;
+    Uint32 sprite[256], terrain[256];
+} ActorVisual;
+static ActorVisual s_previousActors[32];
+static Uint32 s_egaPalette[16];
+
+static void PatchActor(SDL_Surface* surface, const ActorVisual* actor, const Uint32* pixels)
+{
+    for (int y=0;y<16;y++)
+        memcpy((byte*)surface->pixels+(actor->y+y)*surface->pitch+actor->x*4,pixels+y*16,16*4);
+}
+static void CaptureActors(ActorVisual* actors, const byte* indices, int w,
+                          int mapX,int mapY,int columns,int rows)
+{
+    memset(actors,0,sizeof(ActorVisual)*32);
+    bool combat=D_5893_map_id>=128;
+    for (int i=combat?0:1;i<32;i++) {
+        ActorFmt* a=&D_5c5a[i];
+        if (!a->_0_tile || !a->_1_animTile || (!combat && a->_4_z!=D_5895_map_level)) continue;
+        int dx=a->_2_x-(combat?5:D_5896_map_x), dy=a->_3_y-(combat?5:D_5897_map_y);
+        if (!D_5893_map_id) { dx=((dx+128)&255)-128; dy=((dy+128)&255)-128; }
+        int col=columns/2+dx, row=rows/2+dy;
+        ActorVisual* v=&actors[i];
+        v->x=mapX+col*16; v->y=mapY+row*16;
+        v->worldX=a->_2_x; v->worldY=a->_3_y;
+        v->kind=a->_0_tile<0x30?a->_0_tile:a->_0_tile&0xfc;
+        v->level=a->_4_z;
+        if (!combat && !dx && !dy) continue;
+        if (abs(dx)<=5 && abs(dy)<=5) {
+            if (GetMapViewport(dx+5,dy+5)!=0 || GetActorMap(dx+5,dy+5)==0x16) continue;
+        } else if (combat || !WIDE_Visible(dx,dy)) continue;
+        v->sighted=true;
+        if (col<0 || row<0 || col>=columns || row>=rows) continue;
+        v->visible=true;
+        byte terrain=combat?*ULTIMA_4402_GetTileAddr(a->_2_x,a->_3_y):WIDE_MapTile(dx,dy);
+        for (int y=0;y<16;y++) for (int x=0;x<16;x++) {
+            v->sprite[y*16+x]=s_egaPalette[indices[(v->y+y)*w+v->x+x]&15];
+            v->terrain[y*16+x]=s_egaPalette[GRAP_BUF_TilePixel(D_b11e[terrain],x,y)&15];
+        }
+        if (memcmp(v->sprite,v->terrain,sizeof(v->sprite))==0) v->visible=v->sighted=false;
+    }
+}
+
+void GRAP_SDL_SetSmoothMovement(bool enabled) { s_smoothMovement = enabled; s_previousValid = false; }
+void GRAP_SDL_MapDrawn(void) { s_mapDrawn = true; }
+
+
+void GRAP_SDL_CursorSize(int* width, int* height)
+{
+    int w = 320, h = 200, outputW, outputH;
+    if (s_sdlWindow) SDL_GetWindowSize(s_sdlWindow, &w, &h);
+    float sx = w / 320.0f, sy = h / 200.0f;
+    if (s_fullscreen && SDL_GetRenderOutputSize(s_sdlRenderer, &outputW, &outputH)) {
+        WideLayout l = WIDE_Layout(outputW, outputH);
+        sx = l.scale * (float)w / outputW;
+        sy = l.scale * (float)h / outputH;
+    }
+    *width = SDL_max(16, (int)SDL_roundf(16 * sx));
+    *height = SDL_max(16, (int)SDL_roundf(16 * sy));
+}
+
+bool GRAP_SDL_MouseUIPoint(float x, float y, float* ux, float* uy)
+{
+    int w, h, ow, oh;
+    if (!s_sdlWindow || !SDL_GetWindowSize(s_sdlWindow, &w, &h) || w <= 0 || h <= 0) return false;
+    if (!s_fullscreen) { *ux = x * 320 / w; *uy = y * 200 / h; return true; }
+    if (!SDL_GetRenderOutputSize(s_sdlRenderer, &ow, &oh)) return false;
+    WideLayout l = WIDE_Layout(ow, oh);
+    int cw = s_expandedFrame ? l.width : 320, ch = s_expandedFrame ? l.height : 200;
+    *ux = (x * ow / w - (ow - cw * l.scale) / 2) / l.scale;
+    *uy = (y * oh / h - (oh - ch * l.scale) / 2) / l.scale;
+    if (*ux < 0 || *uy < 0 || *ux >= cw || *uy >= ch) return false;
+    /* The original right-hand 128 pixels move to the far edge in widescreen. */
+    if (s_expandedFrame) {
+        if (*ux < l.sidebarX) return false;
+        *ux -= l.sidebarX - 192;
+    }
+    return true;
+}
+
+bool GRAP_SDL_MouseMapPoint(float x, float y, int* dx, int* dy, float* rx, float* ry)
+{
+    int width, height, windowW, windowH;
+    if (!s_sdlWindow || !s_sdlRenderer || !SDL_GetWindowSize(s_sdlWindow, &windowW, &windowH) ||
+        !SDL_GetRenderOutputSize(s_sdlRenderer, &width, &height) || windowW <= 0 || windowH <= 0)
+        return false;
+    float gx = x * width / windowW, gy = y * height / windowH;
+    int mapX = 8, mapY = 8, columns = 11, rows = 11;
+    if (s_fullscreen) {
+        WideLayout l = WIDE_Layout(width, height);
+        int canvasW = s_expandedFrame ? l.width : 320;
+        int canvasH = s_expandedFrame ? l.height : 200;
+        gx = (gx - (width - canvasW * l.scale) / 2) / l.scale;
+        gy = (gy - (height - canvasH * l.scale) / 2) / l.scale;
+        if (s_expandedFrame) { mapX = l.mapX; mapY = l.mapY; columns = l.columns; rows = l.rows; }
+    } else {
+        gx = gx * 320 / width;
+        gy = gy * 200 / height;
+    }
+    if (gx < mapX || gy < mapY || gx >= mapX + columns * 16 || gy >= mapY + rows * 16)
+        return false;
+    *dx = (int)((gx - mapX) / 16) - columns / 2;
+    *dy = (int)((gy - mapY) / 16) - rows / 2;
+    *rx = (gx - mapX - columns / 2 * 16 - 8) / 16;
+    *ry = (gy - mapY - rows / 2 * 16 - 8) / 16;
+    return true;
+}
 
 void GRAP_SDL_SetFullscreen(bool fullscreen)
 {
@@ -86,6 +204,9 @@ void GRAP_SDL_Initialize(void)
 void GRAP_SDL_Cleanup(void)
 {
     GRAP_BUF_Cleanup();
+    free(s_previousPixels);
+    s_previousPixels = NULL;
+    s_previousValid = s_mapDrawn = false;
 
     SDL_DestroyTexture(s_wideTexture);
     SDL_DestroySurface(s_wideSurface);
@@ -138,10 +259,126 @@ static void LinearToRGB(void)
 #endif
 }
 
+/* Snapshot only completed map redraws, never intermediate text updates. The
+ * camera follows the party: terrain slides while the player stays centered. */
+static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
+                        int columns, int rows, SDL_Texture* native, int sourceScale, SDL_FRect dst)
+{
+    if (!s_smoothMovement || !s_mapDrawn || !D_58a4 || (D_5893_map_id>32 && D_5893_map_id<128)) return;
+    s_mapDrawn = false;
+    SDL_Surface* clean = SDL_CreateSurface(w, h, SDL_PIXELFORMAT_ARGB8888);
+    if (!clean) { s_previousValid = false; return; }
+    for (int y = 0; y < h; y++) {
+        Uint32* row = (Uint32*)((byte*)clean->pixels + y * clean->pitch);
+        for (int x = 0; x < w; x++) row[x] = s_egaPalette[indices[y*w+x] & 15];
+    }
+    int playerX = mapX + columns / 2 * 16, playerY = mapY + rows / 2 * 16;
+    bool combat=D_5893_map_id>=128;
+    byte terrain = combat?0:*ULTIMA_4402_GetTileAddr(D_5896_map_x, D_5897_map_y);
+    for (int y = 0; !combat && y < 16; y++) {
+        Uint32* row = (Uint32*)((byte*)clean->pixels + (playerY+y)*clean->pitch);
+        for (int x = 0; x < 16; x++) row[playerX+x] = s_egaPalette[GRAP_BUF_TilePixel(D_b11e[terrain],x,y) & 15];
+    }
+    int dx = D_5896_map_x - s_previousX, dy = D_5897_map_y - s_previousY;
+    if (!D_5893_map_id) { dx = ((dx+128)&255)-128; dy = ((dy+128)&255)-128; }
+    if (combat) dx=dy=0;
+    ActorVisual actors[32];
+    bool moving[32]={false};
+    CaptureActors(actors,indices,w,mapX,mapY,columns,rows);
+    bool compatible = s_previousValid && s_previousWidth == w && s_previousHeight == h &&
+        s_previousMap == D_5893_map_id && s_previousLevel == D_5895_map_level &&
+        abs(dx) <= 1 && abs(dy) <= 1;
+    bool animate=compatible && (dx || dy);
+    if (compatible) for (int i=0;i<32;i++) {
+        ActorVisual* old=&s_previousActors[i]; ActorVisual* next=&actors[i];
+        int ax=next->worldX-old->worldX, ay=next->worldY-old->worldY;
+        if (!D_5893_map_id) { ax=((ax+128)&255)-128; ay=((ay+128)&255)-128; }
+        moving[i]=(old->visible || next->visible) && old->sighted && next->sighted &&
+                  old->kind==next->kind && old->level==next->level &&
+                  abs(ax)<=1 && abs(ay)<=1 && (ax || ay);
+        if (moving[i]) {
+            animate=true;
+            if (next->visible) PatchActor(clean,next,next->terrain);
+            if (old->visible)
+                for (int y=0;y<16;y++) memcpy(s_previousPixels+(old->y+y)*w+old->x,old->terrain+y*16,16*4);
+        }
+    }
+    if (animate) {
+        debug("Smooth movement: offset=%d,%d\n", dx, dy);
+        SDL_Texture* old = SDL_CreateTexture(s_sdlRenderer,SDL_PIXELFORMAT_ARGB8888,SDL_TEXTUREACCESS_STATIC,w,h);
+        SDL_Texture* next = SDL_CreateTextureFromSurface(s_sdlRenderer,clean);
+        if (old && next) {
+            SDL_UpdateTexture(old,NULL,s_previousPixels,w*4);
+            SDL_SetTextureScaleMode(old,SDL_SCALEMODE_NEAREST);
+            SDL_SetTextureScaleMode(next,SDL_SCALEMODE_NEAREST);
+            SDL_Texture* actorTextures[32]={NULL};
+            for (int i=0;i<32;i++) if (moving[i]) {
+                actorTextures[i]=SDL_CreateTexture(s_sdlRenderer,SDL_PIXELFORMAT_ARGB8888,SDL_TEXTUREACCESS_STATIC,16,16);
+                if (actorTextures[i]) {
+                    SDL_UpdateTexture(actorTextures[i],NULL,
+                        actors[i].visible?actors[i].sprite:s_previousActors[i].sprite,16*4);
+                    SDL_SetTextureScaleMode(actorTextures[i],SDL_SCALEMODE_NEAREST);
+                }
+            }
+            float sx = dst.w / w, sy = dst.h / h;
+            SDL_Rect clip = {(int)(dst.x+mapX*sx),(int)(dst.y+mapY*sy),
+                             (int)(columns*16*sx),(int)(rows*16*sy)};
+            SDL_FRect mapSrc = {mapX,mapY,columns*16,rows*16};
+            SDL_FRect mapDst = {dst.x+mapX*sx,dst.y+mapY*sy,columns*16*sx,rows*16*sy};
+            SDL_FRect playerSrc = {playerX*sourceScale,playerY*sourceScale,16*sourceScale,16*sourceScale};
+            SDL_FRect playerDst = {dst.x+playerX*sx,dst.y+playerY*sy,16*sx,16*sy};
+            for (int frame = 1; frame <= 8; frame++) {
+                float t = frame / 8.0f;
+                float progress = t*t*(3-2*t);
+                SDL_RenderTexture(s_sdlRenderer,native,NULL,&dst);
+                SDL_SetRenderClipRect(s_sdlRenderer,&clip);
+                SDL_FRect a = mapDst, b = mapDst;
+                a.x -= SDL_roundf(dx*16*sx*progress); a.y -= SDL_roundf(dy*16*sy*progress);
+                b.x += SDL_roundf(dx*16*sx*(1-progress)); b.y += SDL_roundf(dy*16*sy*(1-progress));
+                SDL_RenderTexture(s_sdlRenderer,old,&mapSrc,&a);
+                SDL_RenderTexture(s_sdlRenderer,next,&mapSrc,&b);
+                for (int i=31;i>=0;i--) if (moving[i]) {
+                    ActorVisual* a=&s_previousActors[i]; ActorVisual* b=&actors[i];
+                    SDL_FRect rect={dst.x+SDL_roundf((a->x+(b->x-a->x)*progress)*sx),
+                                    dst.y+SDL_roundf((a->y+(b->y-a->y)*progress)*sy),16*sx,16*sy};
+                    if (actorTextures[i]) SDL_RenderTexture(s_sdlRenderer,actorTextures[i],NULL,&rect);
+                    else if (b->visible) {
+                        SDL_FRect src={b->x*sourceScale,b->y*sourceScale,16*sourceScale,16*sourceScale};
+                        SDL_RenderTexture(s_sdlRenderer,native,&src,&rect);
+                    }
+                }
+                if (!combat) SDL_RenderTexture(s_sdlRenderer,native,&playerSrc,&playerDst);
+                SDL_SetRenderClipRect(s_sdlRenderer,NULL);
+                SDL_RenderPresent(s_sdlRenderer);
+                SDL_PumpEvents();
+                MOUSE_UpdateCursor();
+                if (frame < 8) SDL_Delay(16);
+            }
+            for (int i=0;i<32;i++) SDL_DestroyTexture(actorTextures[i]);
+        }
+        SDL_DestroyTexture(old); SDL_DestroyTexture(next);
+    }
+    for (int i=0;i<32;i++) if (moving[i] && actors[i].visible) PatchActor(clean,&actors[i],actors[i].sprite);
+    memcpy(s_previousActors,actors,sizeof(actors));
+    if (s_previousWidth != w || s_previousHeight != h || !s_previousPixels) {
+        free(s_previousPixels);
+        s_previousPixels = malloc((size_t)w*h*4);
+    }
+    s_previousValid = s_previousPixels != NULL;
+    if (s_previousValid) {
+        for (int y = 0; y < h; y++) memcpy(s_previousPixels+y*w,(byte*)clean->pixels+y*clean->pitch,w*4);
+        s_previousWidth=w; s_previousHeight=h; s_previousX=D_5896_map_x; s_previousY=D_5897_map_y;
+        s_previousMap=D_5893_map_id; s_previousLevel=D_5895_map_level;
+    }
+    SDL_DestroySurface(clean);
+}
+
 extern void DisplayDebugMessages(void);
 
 void GRAP_SDL_FlushFrame(void)
 {
+    s_expandedFrame = false;
+    if (!D_58a4 || (D_5893_map_id>32 && D_5893_map_id<128)) s_previousValid = false;
     LinearToRGB();
 
     SDL_UpdateTexture(s_sdlTexture, NULL, s_sdlSurface->pixels, s_sdlSurface->pitch);
@@ -178,6 +415,7 @@ void GRAP_SDL_FlushFrame(void)
         }
         if (WIDE_Compose(s_widePixels, layout))
         {
+            s_expandedFrame = true;
             for (int y = 0; y < layout.height; y++)
             {
                 Uint32* row = (Uint32*)((byte*)s_wideSurface->pixels + y * s_wideSurface->pitch);
@@ -189,6 +427,8 @@ void GRAP_SDL_FlushFrame(void)
                              (height - layout.height * layout.scale) / 2,
                              layout.width * layout.scale, layout.height * layout.scale};
             SDL_RenderTexture(s_sdlRenderer, s_wideTexture, NULL, &dst);
+            SmoothFrame(s_widePixels,layout.width,layout.height,layout.mapX,layout.mapY,
+                        layout.columns,layout.rows,s_wideTexture,1,dst);
         }
         else
         {
@@ -196,10 +436,17 @@ void GRAP_SDL_FlushFrame(void)
                              (height - 200 * layout.scale) / 2,
                              320 * layout.scale, 200 * layout.scale};
             SDL_RenderTexture(s_sdlRenderer, s_sdlTexture, &srcRect, &dst);
+            SmoothFrame(g_linearEgaBuffer0,320,200,8,8,11,11,s_sdlTexture,2,dst);
         }
     }
-    else
+    else {
         SDL_RenderTexture(s_sdlRenderer, s_sdlTexture, &srcRect, NULL);
+        int w,h;
+        if (SDL_GetRenderOutputSize(s_sdlRenderer,&w,&h)) {
+            SDL_FRect dst = {0,0,w,h};
+            SmoothFrame(g_linearEgaBuffer0,320,200,8,8,11,11,s_sdlTexture,2,dst);
+        }
+    }
     SDL_RenderPresent(s_sdlRenderer);
 }
 

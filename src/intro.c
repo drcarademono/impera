@@ -1,5 +1,6 @@
 #include "audio/audio.h"
 #include "common/common.h"
+#include "key/mouse.h"
 #include "funcs.h"
 #include "grap_drv.h"
 #include "savegame.h"
@@ -740,7 +741,9 @@ void INTRO_0986_Main(void) // intro_main (initialize video) (8b46)
                 do
                 {
                     // 0d75
+                    MOUSE_MenuSet(64, 136, 192, 6, local_c);
                     local_10 = ULTIMA_2032_ToUpper(ULTIMA_1b38_PollKeyWithCursor());
+                    MOUSE_MenuEnd();
                     if (local_10 == 0)
                     {
                         INTRO_2090_AnimateWD();

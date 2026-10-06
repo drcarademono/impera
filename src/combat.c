@@ -1,4 +1,8 @@
 #include "common/common.h"
+#include "common/movement.h"
+#if defined(TARGET_SDL)
+#include "key/mouse.h"
+#endif
 #include "vars.h"
 #include "funcs.h"
 #include "macros.h"
@@ -17,7 +21,7 @@
 
 static void COMBAT_063e_ProcessCommand(void);
 static int COMBAT_0d30(int a);
-static int COMBAT_0ee4(int param_1);
+int COMBAT_0ee4(int param_1);
 static void COMBAT_1b1e(int param_1);
 static void COMBAT_1c66(int param_1);
 
@@ -150,6 +154,8 @@ static int COMBAT_0226(int param_1)
         return 0;
     }
 
+    if (!MOVEMENT_AttackAllowed(D_ba14[local_4].x-D_ba14[param_1].x,
+                                D_ba14[local_4].y-D_ba14[param_1].y)) return 0;
     // 025c
     local_6 = D_ba14[local_4].entityIdx;
 
@@ -461,7 +467,14 @@ static void COMBAT_063e_ProcessCommand(void)
                     }
                     else
                     {
+#if defined(TARGET_SDL)
+                        MOUSE_SetCommandInput(true);
+#endif
                         local_8 = ULTIMA_266c_GetChar();
+#if defined(TARGET_SDL)
+                        MOUSE_SetCommandInput(false);
+                        D_5898=0;
+#endif
                         local_6 = 1;
                         local_4 = 0;
 
@@ -504,6 +517,10 @@ static void COMBAT_063e_ProcessCommand(void)
                             /* 'A' Attack */
                             // ab70
                             COMSUBS_0d96(D_589e, local_c);
+#if defined(TARGET_SDL)
+                            MOUSE_ClearCombatAttack();
+#endif
+                            D_5898=0;
                             break;
 
                         case 0x43: // ok
@@ -638,6 +655,10 @@ static void COMBAT_063e_ProcessCommand(void)
                         case U5_KEY_RIGHT:
                         case U5_KEY_UP:
                         case U5_KEY_DOWN:
+                        case U5_KEY_HOME:
+                        case U5_KEY_END:
+                        case U5_KEY_PGUP:
+                        case U5_KEY_PGDN:
                             // aca4
                             if (SJOG_1c56_CombatMovePlayer(D_589e, local_8) == 0)
                             {
@@ -1027,7 +1048,7 @@ static int COMBAT_0d30(int param_1)
 }
 
 // CHECKED
-static int COMBAT_0ee4(int param_1)
+int COMBAT_0ee4(int param_1)
 {
     int local_a;
     int local_8;
@@ -1060,7 +1081,13 @@ static int COMBAT_0ee4(int param_1)
         {
             // 0fc1
             local_a = COMBAT_0d30(param_1);
-            if (ULTIMA_3aae_Random(0xff) > 0x7f && SJOG_20d8(local_4->x + D_5876, local_4->y, param_1) == 0)
+            if (MOVEMENT_Diagonal() && D_5876 && D_5878 &&
+                COMBAT_0000(D_5c5a[local_4->actorIdx]._0_tile,local_4->x+D_5876,local_4->y) &&
+                COMBAT_0000(D_5c5a[local_4->actorIdx]._0_tile,local_4->x,local_4->y+D_5878) &&
+                SJOG_20d8(local_4->x+D_5876,local_4->y+D_5878,param_1)==0) {
+                local_6=997;
+            }
+            else if (ULTIMA_3aae_Random(0xff) > 0x7f && SJOG_20d8(local_4->x + D_5876, local_4->y, param_1) == 0)
             {
                 D_5878 = 0;
                 local_6 = 999;

@@ -1,6 +1,8 @@
 #ifndef _COMBAT_H
 #define _COMBAT_H
 
+/* Move an AI-controlled combat entity toward its chosen target. */
+int COMBAT_0ee4(int param_1);
 int COMBAT_0000(int param_1, int param_2, int param_3);
 int COMBAT_0b94_MainLoop(void);
 int COMBAT_111a(int param_1, int param_2);
