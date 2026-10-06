@@ -198,13 +198,23 @@ int main(void)
     D_5c5a[1]._0_tile = D_5c5a[1]._1_animTile = 0x44;
     GetMap(23, 16) = TILE_MAP_BED;
     memset(tiles + (256 + 0x1a) * 128, 0x77, 128);
+    for(int y=6;y<=10;y++) for(int x=6;x<=10;x++) {
+        byte* packed=&tiles[(256+TILE_ACTOR_SLEEPING_IN_BED)*128+y*8+x/2];
+        *packed &= x&1?0xf0:0x0f;
+    }
+    assert(GRAP_BUF_SpritePixel(256+TILE_ACTOR_SLEEPING_IN_BED,8,8)==0);
+    assert(GRAP_BUF_SpritePixel(256+TILE_ACTOR_SLEEPING_IN_BED,-1,8)==-1);
+    assert(GRAP_BUF_SpritePixel(256+TILE_ACTOR_SLEEPING_IN_BED,8,16)==-1);
     D_5896_map_x = 18;
     memset(D_ab02, 1, sizeof(D_ab02));
     ULTIMA_5394();
-    assert(GetActorMap(10, 5) == 0x1a);
+    assert(GetActorMap(10, 5) == TILE_ACTOR_SLEEPING_IN_BED);
+    ULTIMA_56ac_DrawMap();
+    assert(g_linearEgaBuffer0[96*320+176]==0); /* original opaque bed pixels */
     D_5896_map_x = 16;
     assert(WIDE_Compose(pixels, broad));
     assert(pixel(pixels, broad, 7, 0) == 7);
+    assert(pixels[(objectY+8)*broad.width+objectX+8]==0);
     bool reflection;
     assert(ULTIMA_ResolveActorTile(0x44, TILE_MAP_CHAIR_91, 1, 1, &reflection) == 0x31);
     assert(ULTIMA_ResolveActorTile(0x44, TILE_MAP_LADDER_UP, 1, 1, &reflection) == 0x17);

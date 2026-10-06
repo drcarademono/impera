@@ -3,6 +3,7 @@
 #include "time/time.h"
 
 #include "vars.h"
+#include "tiles.h"
 
 #include "grap_buf.h"
 #include "animate.h"
@@ -391,7 +392,8 @@ byte GRAP_BUF_TilePixel(int tile, int x, int y)
  * black outline, including the one-pixel margin outside the source tile. */
 int GRAP_BUF_SpritePixel(int tile, int x, int y)
 {
-    if (!s_transparentSprites)
+    /* The sleeping NPC includes the bed: preserve its complete original art. */
+    if (!s_transparentSprites || tile == 256 + TILE_ACTOR_SLEEPING_IN_BED)
         return x < 0 || y < 0 || x >= 16 || y >= 16 ? -1 : GRAP_BUF_TilePixel(tile, x, y);
     byte color = GRAP_BUF_TilePixel(tile, x, y);
     if (color) return color;

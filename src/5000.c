@@ -91,7 +91,7 @@ int ULTIMA_ResolveActorTile(int param_5, int terrain, int above, int below, bool
 
                 case TILE_MAP_BED: // 171
                     // 529a
-                    param_5 = 0x1a;
+                    param_5 = TILE_ACTOR_SLEEPING_IN_BED;
                     break;
 
                 // 93..9e
