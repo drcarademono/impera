@@ -179,7 +179,7 @@ int main(void)
     assert(MOUSE_CursorDirection(385,462.0f)==U5_KEY_PGDN);
     assert(MOUSE_CursorDirection(384,460.8f)==U5_KEY_PGDN);
     assert(MOUSE_Direction(0,0)==0);
-    assert(MOUSE_Direction(0.1f,0.1f)==0); /* movement keeps its own dead zone */
+    assert(MOUSE_Direction(0.1f,0.1f)==U5_KEY_PGDN);
     assert(MOUSE_CursorDirection(1000,450) == 0);
     assert(MOUSE_CursorDirection(384,460.8f) == U5_KEY_PGDN);
     D_58a4 = 0;
@@ -301,6 +301,18 @@ int main(void)
     assert(MOUSE_PollCommand()==0);
     ticks+=160;
     assert(MOUSE_PollCommand()==U5_KEY_PGDN);
+    cursorX=385; cursorY=460.8f; /* inside the player sprite, east of center */
+    ticks+=160;
+    assert(MOUSE_PollCommand()==U5_KEY_RIGHT);
+    cursorX=384; /* exact center retains the displayed east cursor */
+    ticks+=160;
+    assert(MOUSE_PollCommand()==U5_KEY_RIGHT);
+    cursorX=383; /* crossing the center immediately changes movement */
+    ticks+=160;
+    assert(MOUSE_PollCommand()==U5_KEY_LEFT);
+    cursorX=1000; /* status column still never issues movement */
+    ticks+=160;
+    assert(MOUSE_PollCommand()==0);
     MOUSE_Button(cursorX,cursorY,SDL_BUTTON_RIGHT,false,1);
     ticks+=160;
     assert(MOUSE_PollCommand()==0);

@@ -173,7 +173,7 @@ static int DirectionOctant(float dx, float dy)
 }
 int MOUSE_Direction(float dx, float dy)
 {
-    if (SDL_fabsf(dx) < 0.5f && SDL_fabsf(dy) < 0.5f) return 0;
+    if (dx == 0 && dy == 0) return 0;
     return DirectionOctant(dx, dy);
 }
 static int AdjacentDirection(int dx, int dy)
@@ -284,7 +284,7 @@ int MOUSE_PollCommand(void)
         if (!GRAP_SDL_MouseMapPoint(x, y, &dx, &dy, &rx, &ry)) return 0;
         if (s_single) s_single = false;
         s_moveTime = SDL_GetTicks();
-        int direction = MOUSE_Direction(rx, ry);
+        int direction = MOUSE_CursorDirection(x, y);
         debug("Mouse move: direction=%d cursor_offset=%f,%f\n", direction, rx, ry);
         return direction;
     }
