@@ -51,8 +51,10 @@ bool __wrap_SDL_RenderPresent(SDL_Renderer* renderer)
 {
     bool presented=__real_SDL_RenderPresent(renderer);
     if(checkNoLegacy) {
-        for(int y=39;y<51;y++) for(int x=16;x<296;x++)
-            assert(g_linearEgaBuffer0[y*320+x]==0);
+        /* First named slot occupies the former legacy row and is selected. */
+        assert(g_linearEgaBuffer0[39*320+16]==15);
+        assert(g_linearEgaBuffer0[66*320+16]==15);
+        assert(g_linearEgaBuffer0[67*320+16]==0);
         sawNoLegacy=true;checkNoLegacy=false;
     }
     if(captureBrowser && D_539c[0]) {

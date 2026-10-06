@@ -194,6 +194,7 @@ static int compare(const void* a,const void* b)
 static void timeText(char* out,size_t n,uint64_t ms)
 { SDL_snprintf(out,n,"%lluh %02llum %02llus",(unsigned long long)(ms/3600000),(unsigned long long)(ms/60000%60),(unsigned long long)(ms/1000%60)); }
 static bool s_inGame, s_hasFirstRow;
+static int listY(void) { return s_hasFirstRow?56:39; }
 static void draw(bool saving,int selected,int top,const char* status)
 {
     memset(g_linearEgaBuffer0,0,320*200);ENGINE_UIFrame();
@@ -205,7 +206,7 @@ static void draw(bool saving,int selected,int top,const char* status)
     }
     GRAP_SDL_ClearUIThumbnails();
     for(int row=0;row<4 && top+row<s_count;row++) {
-        int index=top+row,y=56+row*30;Slot* slot=&s_slots[index];
+        int index=top+row,y=listY()+row*30;Slot* slot=&s_slots[index];
         bool active=selected==index+1;
         if(active) ENGINE_UIRect(16,y,280,28,15);
         ENGINE_UIText(20,y+3,slot->name,active?0:15);
@@ -215,8 +216,8 @@ static void draw(bool saving,int selected,int top,const char* status)
         GRAP_SDL_UIThumbnail(row,image,248,y+2,44,24);
     }
     if(s_count>4) {
-        ENGINE_UIRect(300,56,4,118,7);
-        int height=SDL_max(8,118*4/s_count),y=56+(118-height)*top/(s_count-4);
+        ENGINE_UIRect(300,listY(),4,118,7);
+        int height=SDL_max(8,118*4/s_count),y=listY()+(118-height)*top/(s_count-4);
         ENGINE_UIRect(299,y,6,height,15);
     }
     if(selected==s_count+1) ENGINE_UIRect(16,179,280,10,15);
@@ -316,13 +317,13 @@ static bool show(bool saving,bool inGame)
             if(e.type==SDL_EVENT_MOUSE_MOTION || (e.type==SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button==SDL_BUTTON_LEFT)) {
                 float x,y;bool click=e.type==SDL_EVENT_MOUSE_BUTTON_DOWN;
                 if(GRAP_SDL_MouseUIPoint(click?e.button.x:e.motion.x,click?e.button.y:e.motion.y,&x,&y)) {
-                    if(click && x>=298 && x<306 && y>=56 && y<174 && s_count>4) drag=true;
-                    if(drag && s_count>4) top=SDL_clamp((int)((y-56)/118*(s_count-4)),0,s_count-4);
+                    if(click && x>=298 && x<306 && y>=listY() && y<listY()+118 && s_count>4) drag=true;
+                    if(drag && s_count>4) top=SDL_clamp((int)((y-listY())/118*(s_count-4)),0,s_count-4);
                     else if(x>=16 && x<296) {
                         if(y>=179 && y<189) { selected=s_count+1;activate=click; }
                         else if(s_hasFirstRow && y>=39 && y<51) { selected=0;activate=click; }
-                        else if(y>=56 && y<176) {
-                            int index=top+(int)((y-56)/30);
+                        else if(y>=listY() && y<listY()+120) {
+                            int index=top+(int)((y-listY())/30);
                             if(index<s_count) { selected=index+1;activate=click; }
                         }
                     }
