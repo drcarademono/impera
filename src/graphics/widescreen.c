@@ -86,13 +86,18 @@ byte WIDE_MapTile(int dx, int dy)
 }
 
 /* Audited against TILES.16 and LOOK2.DAT: freestanding objects with plain
- * black backgrounds. Furniture with baked brick/grass and structural tiles
+ * black backgrounds. Other furniture with baked brick/grass and solid structural tiles
  * must not be treated as cutout sprites. */
 static bool HasObjectBackground(byte tile)
 {
     return tile == TILE_MAP_WELL || (tile & 0xfc) == TILE_MAP_FOUNTAIN ||
         tile == TILE_MAP_BRAZIER || tile == TILE_MAP_59 ||
-        tile == TILE_MAP_84 /* stocks */ || tile == 0x8e /* guillotine */ ||
+        (tile >= 0x80 && tile <= 0x83) /* animated pendulum */ ||
+        tile == TILE_MAP_84 /* stocks */ || tile == TILE_MAP_85 /* manacles */ ||
+        tile == TILE_MAP_86 /* metal grate */ || tile == 0x8b /* torture rack */ ||
+        tile == 0x8e /* guillotine */ || tile == 0x99 /* portcullis */ ||
+        tile == 0xaa /* carpet */ || tile == TILE_MAP_LADDER_UP ||
+        tile == TILE_MAP_LADDER_DOWN ||
         tile == 0x88 /* cannonballs */ || tile == 0xa3 /* stack of logs */ ||
         (tile >= TILE_MAP_CANNON_B4 && tile <= TILE_MAP_CANNON_B7);
 }

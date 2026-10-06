@@ -116,6 +116,8 @@ int main(void)
     }
     /* The audited object list shares the same inference and opt-in behavior. */
     const byte cutouts[]={TILE_MAP_BRAZIER,TILE_MAP_59,0x88,0xa3,TILE_MAP_84,0x8e,
+        0x80,0x81,0x82,0x83,TILE_MAP_85,TILE_MAP_86,0x8b,0x99,0xaa,
+        TILE_MAP_LADDER_UP,TILE_MAP_LADDER_DOWN,
         TILE_MAP_CANNON_B4,TILE_MAP_CANNON_B5,TILE_MAP_CANNON_B6,TILE_MAP_CANNON_B7};
     for(size_t i=0;i<sizeof(cutouts);i++) {
         byte tile=cutouts[i];
@@ -128,6 +130,12 @@ int main(void)
         assert(pixels[(objectY+8)*broad.width+objectX]==2);
         assert(pixels[(objectY+8)*broad.width+objectX+1]==0); /* outline */
         assert(pixels[(objectY+8)*broad.width+objectX+2]==3); /* floor */
+        D_5896_map_x=18;
+        memset(D_ab02,1,sizeof(D_ab02));
+        GetMapViewport(10,5)=tile;
+        ULTIMA_56ac_DrawMap();
+        assert(g_linearEgaBuffer0[96*320+170]==3);
+        D_5896_map_x=16;
         GRAP_BUF_SetTransparentSprites(false);
         assert(WIDE_GroundTile(7,0)==tile);
         assert(WIDE_Compose(pixels,broad));
