@@ -83,16 +83,19 @@ int CDECL main(int argc, char** argv/*, char** envp*/)
         }
         else if (strcmp(argv[arg], "--transparent-sprites") == 0)
             GRAP_BUF_SetTransparentSprites(true);
+        else if (strcmp(argv[arg], "--legacy-save") == 0)
+            SLOTS_SetLegacyEnabled(true);
         else if (strcmp(argv[arg], "--help") == 0)
         {
-            puts("Usage: ultima5 [--fullscreen] [--mouse] [--smooth-movement] [--movement-speed N] [--animation-speed N] [--diagonal-movement] [--transparent-sprites] [C|H|T|E]\n"
+            puts("Usage: ultima5 [--fullscreen] [--mouse] [--smooth-movement] [--movement-speed N] [--animation-speed N] [--diagonal-movement] [--transparent-sprites] [--legacy-save] [C|H|T|E]\n"
                  "  --fullscreen       Expand the overhead map with uniform integer pixel scaling.\n"
                  "  --mouse            Enable mouse movement and contextual actions.\n"
                  "  --diagonal-movement Enable diagonal movement, actions, cursors and combat.\n"
                  "  --smooth-movement  Animate overhead movement with a scrolling camera.\n"
                  "  --movement-speed N Held movement speed multiplier (0.1 to 10; default 1).\n"
                  "  --animation-speed N Animated sprite speed multiplier (0.1 to 10; default 1).\n"
-                 "  --transparent-sprites Show ground through black sprite backgrounds with a one-pixel outline.");
+                 "  --transparent-sprites Show ground through black sprite backgrounds with a one-pixel outline.\n"
+                 "  --legacy-save      Show Legacy Save in the load menu when original save files are valid.");
             return EXIT_SUCCESS;
         }
         else if (argv[arg][0] == '-')

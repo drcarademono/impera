@@ -27,7 +27,8 @@ static bool storage(void)
 }
 #define NAME_LENGTH 26
 static uint64_t s_accumulated,s_started;
-static bool s_running;
+static bool s_running, s_legacyEnabled;
+void SLOTS_SetLegacyEnabled(bool enabled) { s_legacyEnabled=enabled; }
 static const char* files[]={"SAVED.GAM","SAVED.OOL","meta.txt","thumbnail.bmp"};
 static uint64_t legacyTime(void)
 {
@@ -284,7 +285,7 @@ static bool show(bool saving,bool inGame)
     bool captured=thumbnail && SDL_SaveBMP(thumbnail,capture);
     SDL_DestroySurface(thumbnail);SDL_DestroySurface(shot);
     KEY_SDL_ClearInput();MOUSE_Cancel();GRAP_SDL_SetPixelUI(true);MOUSE_SetPointerMode(true);
-    s_hasFirstRow=saving || validLegacy();
+    s_hasFirstRow=saving || (s_legacyEnabled && validLegacy());
     int first=s_hasFirstRow?0:1;
     int selected=first,top=0;float wheelRemainder=0,dragOffset=0;bool done=false,result=false,drag=false;
     const char* status=s_scanFailed?"Unable to list all saves":NULL;

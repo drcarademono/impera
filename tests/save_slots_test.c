@@ -135,6 +135,10 @@ int main(void)
     assert(SLOTS_ShowSave());
     for(int i=0;i<320*200;i++) assert(g_linearEgaBuffer0[i]==3);
     assert(step==3 && !captureBrowser);
+    /* Legacy stays hidden by default even with valid working files. */
+    checkNoLegacy=true;sawNoLegacy=false;
+    assert(SDL_AddTimer(50,cancel,NULL));assert(!SLOTS_ShowLoad());assert(sawNoLegacy);
+    SLOTS_SetLegacyEnabled(true);
     /* Wheel scrolling and dragging the scrollbar must also allow mouse return. */
     SDL_Event event={0};event.type=SDL_EVENT_MOUSE_WHEEL;event.wheel.y=0;
     assert(SDL_PushEvent(&event));

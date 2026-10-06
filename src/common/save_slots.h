@@ -2,6 +2,7 @@
 #define U5D_SAVE_SLOTS_H
 #include "common.h"
 #if defined(TARGET_SDL)
+void SLOTS_SetLegacyEnabled(bool enabled);
 void SLOTS_ResetTime(void);
 void SLOTS_StartTime(void);
 bool SLOTS_ShowSave(void);

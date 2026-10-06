@@ -84,7 +84,7 @@ Each slot includes the complete party save, both world-object lists, cumulative
 play time, and a small screenshot thumbnail. **Journey Onward** opens the matching
 **Load Game** browser. `Ctrl+L` opens it during gameplay and resumes the selected
 save immediately. Both `Ctrl+W` and `Ctrl+L` work at world, town, and dungeon
-command prompts; they are inactive inside other menus. **Current / Legacy Save** preserves access to the original
+command prompts; they are inactive inside other menus. The command-line-only `--legacy-save` flag enables **Legacy Save** when valid original save files exist; it is hidden by default. This preserves access to the original
 single-slot save. Slot data lives under `SAVEGAME/slots` in the runtime directory;
 back up that directory along with `SAVEGAME` when moving your saves.
 
