@@ -45,11 +45,16 @@ static Uint32 accept(void* unused,SDL_TimerID id,Uint32 interval)
     assert(SDL_PushEvent(&e));return 0;
 }
 static bool captureBrowser;
+static bool checkDrag, sawDrag;
 static bool checkNoLegacy, sawNoLegacy;
 bool __real_SDL_RenderPresent(SDL_Renderer* renderer);
 bool __wrap_SDL_RenderPresent(SDL_Renderer* renderer)
 {
     bool presented=__real_SDL_RenderPresent(renderer);
+    if(checkDrag && g_linearEgaBuffer0[173*320+300]==15) {
+        assert(g_linearEgaBuffer0[56*320+300]==7);
+        sawDrag=true;
+    }
     if(checkNoLegacy) {
         /* First named slot occupies the former legacy row and is selected. */
         assert(g_linearEgaBuffer0[39*320+16]==15);
@@ -123,15 +128,16 @@ int main(void)
     for(int i=0;i<320*200;i++) assert(g_linearEgaBuffer0[i]==3);
     assert(step==3 && !captureBrowser);
     /* Wheel scrolling and dragging the scrollbar must also allow mouse return. */
-    SDL_Event event={0};event.type=SDL_EVENT_MOUSE_WHEEL;event.wheel.y=-25;
+    SDL_Event event={0};event.type=SDL_EVENT_MOUSE_WHEEL;event.wheel.y=0;
     assert(SDL_PushEvent(&event));
     event.type=SDL_EVENT_MOUSE_BUTTON_DOWN;event.button.button=SDL_BUTTON_LEFT;
-    event.button.x=302*4;event.button.y=80+120*4;assert(SDL_PushEvent(&event));
-    event.type=SDL_EVENT_MOUSE_MOTION;event.motion.x=302*4;event.motion.y=80+170*4;assert(SDL_PushEvent(&event));
+    event.button.x=302*4;event.button.y=80+58*4;assert(SDL_PushEvent(&event));
+    event.type=SDL_EVENT_MOUSE_MOTION;event.motion.x=290*4;event.motion.y=80+210*4;assert(SDL_PushEvent(&event));
     event.type=SDL_EVENT_MOUSE_BUTTON_UP;assert(SDL_PushEvent(&event));
     event.type=SDL_EVENT_MOUSE_BUTTON_DOWN;event.button.button=SDL_BUTTON_LEFT;
     event.button.x=24*4;event.button.y=80+184*4;assert(SDL_PushEvent(&event));
-    assert(!SLOTS_ShowLoad());
+    checkDrag=true;
+    assert(!SLOTS_ShowLoad());assert(sawDrag);checkDrag=false;
     for(int i=0;i<320*200;i++) assert(g_linearEgaBuffer0[i]==3);
     /* Missing legacy files hide its row while named slots remain usable. */
     assert(SDL_RenamePath("SAVEGAME/SAVED.GAM","SAVEGAME/SAVED.GAM.test-backup"));

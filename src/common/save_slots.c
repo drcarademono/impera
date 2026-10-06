@@ -286,7 +286,7 @@ static bool show(bool saving,bool inGame)
     KEY_SDL_ClearInput();MOUSE_Cancel();GRAP_SDL_SetPixelUI(true);MOUSE_SetPointerMode(true);
     s_hasFirstRow=saving || validLegacy();
     int first=s_hasFirstRow?0:1;
-    int selected=first,top=0;float wheelRemainder=0;bool done=false,result=false,drag=false;
+    int selected=first,top=0;float wheelRemainder=0,dragOffset=0;bool done=false,result=false,drag=false;
     const char* status=s_scanFailed?"Unable to list all saves":NULL;
     draw(saving,selected,top,status);
     while(!done) {
@@ -313,12 +313,23 @@ static bool show(bool saving,bool inGame)
                 wheelRemainder+=steps;int whole=(int)wheelRemainder;wheelRemainder-=whole;
                 top=SDL_clamp(top-whole,0,SDL_max(0,s_count-4));
             }
-            if(e.type==SDL_EVENT_MOUSE_BUTTON_UP || e.type==SDL_EVENT_WINDOW_FOCUS_LOST) drag=false;
+            if(e.type==SDL_EVENT_MOUSE_BUTTON_UP || e.type==SDL_EVENT_WINDOW_FOCUS_LOST) {
+                drag=false;SDL_CaptureMouse(false);
+            }
             if(e.type==SDL_EVENT_MOUSE_MOTION || (e.type==SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button==SDL_BUTTON_LEFT)) {
-                float x,y;bool click=e.type==SDL_EVENT_MOUSE_BUTTON_DOWN;
-                if(GRAP_SDL_MouseUIPoint(click?e.button.x:e.motion.x,click?e.button.y:e.motion.y,&x,&y)) {
-                    if(click && x>=298 && x<306 && y>=listY() && y<listY()+118 && s_count>4) drag=true;
-                    if(drag && s_count>4) top=SDL_clamp((int)((y-listY())/118*(s_count-4)),0,s_count-4);
+                float x=0,y=0;bool click=e.type==SDL_EVENT_MOUSE_BUTTON_DOWN;
+                bool inside=GRAP_SDL_MouseUIPoint(click?e.button.x:e.motion.x,click?e.button.y:e.motion.y,&x,&y);
+                if(inside || drag) {
+                    if(click && x>=296 && x<310 && y>=listY() && y<listY()+118 && s_count>4) {
+                        int height=SDL_max(8,118*4/s_count);
+                        float thumbY=listY()+(118-height)*top/(s_count-4);
+                        dragOffset=(y>=thumbY && y<thumbY+height)?y-thumbY:height/2.0f;
+                        drag=true;SDL_CaptureMouse(true);
+                    }
+                    if(drag && s_count>4) {
+                        int height=SDL_max(8,118*4/s_count);
+                        top=SDL_clamp((int)SDL_roundf((y-listY()-dragOffset)/(118-height)*(s_count-4)),0,s_count-4);
+                    }
                     else if(x>=16 && x<296) {
                         if(y>=179 && y<189) { selected=s_count+1;activate=click; }
                         else if(s_hasFirstRow && y>=39 && y<51) { selected=0;activate=click; }
@@ -348,6 +359,7 @@ static bool show(bool saving,bool inGame)
         }
         MOUSE_UpdateCursor();SDL_Delay(16);
     }
+    SDL_CaptureMouse(false);
     GRAP_SDL_ClearUIThumbnails();GRAP_SDL_SetPixelUI(false);MOUSE_SetPointerMode(false);
     KEY_SDL_ClearInput();MOUSE_Cancel();
     memcpy(g_linearEgaBuffer0,backup,sizeof(backup));GRAP_BUF_MarkDirty();GRAP_BUF_Present();
