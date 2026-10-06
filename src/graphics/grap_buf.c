@@ -393,7 +393,7 @@ byte GRAP_BUF_TilePixel(int tile, int x, int y)
 bool GRAP_BUF_SpriteIsTransparent(int tile)
 {
     /* These poses include their scenery: preserve the complete original art. */
-    return s_transparentSprites && tile != TILE_MAP_85 &&
+    return s_transparentSprites && !(tile >= 130 && tile <= 139) &&
         tile != 256 + TILE_ACTOR_SLEEPING_IN_BED &&
         !(tile >= 256 + 0x64 && tile <= 256 + 0x67); /* occupied manacles */
 }
