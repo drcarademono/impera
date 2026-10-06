@@ -231,7 +231,10 @@ void GRAP_SDL_Initialize(void)
 
     s_sdlSurface = SDL_CreateSurface(hiresWidth, hiresHeight, SDL_GetPixelFormatForMasks(32, 0xff0000, 0xff00, 0xff, 0xff000000));
 
+    if(!s_sdlSurface) { DEBUG_Error("Cannot create render surface: %s",SDL_GetError());exit(EXIT_FAILURE); }
     s_sdlTexture = SDL_CreateTextureFromSurface(s_sdlRenderer, s_sdlSurface);
+    if(!s_sdlTexture) { DEBUG_Error("Cannot create render texture: %s",SDL_GetError());exit(EXIT_FAILURE); }
+    debug("Renderer=%s video=%s",SDL_GetRendererName(s_sdlRenderer),SDL_GetCurrentVideoDriver());
     SDL_SetTextureScaleMode(s_sdlTexture, s_fullscreen ? SDL_SCALEMODE_NEAREST : SDL_SCALEMODE_LINEAR);
 
     if (SDL_MUSTLOCK(s_sdlSurface))

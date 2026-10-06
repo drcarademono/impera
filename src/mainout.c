@@ -846,6 +846,7 @@ static void MAINOUT_0a60(void)
 
 static void MAINOUT_0a84_MainLoop(void)
 {
+    debug("Entering mainout.c map=%u level=%u position=%u,%u",D_5893_map_id,D_5895_map_level,D_5896_map_x,D_5897_map_y);
     int local_4 = 0;
     byte local_6;
     int local_8;

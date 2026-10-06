@@ -101,6 +101,7 @@ static bool seedWorlds(void)
 }
 bool SETUP_Run(void)
 {
+    debug("Game-data setup begins");
     char error[120]={0};bool configured=false;
     FILE* f=fopen("DATA.CFG","r");
     if(f) { configured=fgets(game,sizeof(game),f)!=NULL;if(!fgets(music,sizeof(music),f)) music[0]=0;fclose(f);
@@ -110,13 +111,14 @@ bool SETUP_Run(void)
     /* Existing prepared runtimes remain usable without another import. */
     if(!configured && SETUP_Validate(".",error,sizeof(error))) SDL_strlcpy(game,".",sizeof(game));
     bool valid=SETUP_Validate(game,error,sizeof(error));
+    debug("Game-data validation configured=%d valid=%d reason=%s",configured,valid,error);
     SDL_PathInfo musicInfo;
     if(*music && (!SDL_GetPathInfo(music,&musicInfo) || musicInfo.type!=SDL_PATHTYPE_DIRECTORY)) valid=false;
     if(!configured || !valid) {
         {
-            if(!SDL_Init(SDL_INIT_VIDEO)) return false;
+            if(!SDL_Init(SDL_INIT_VIDEO)) { DEBUG_Error("Setup video initialization failed: %s",SDL_GetError());return false; }
             SDL_Window* window=NULL;SDL_Renderer* r=NULL;
-            if(!SDL_CreateWindowAndRenderer("Ultima 5 - Game Files",960,600,SDL_WINDOW_RESIZABLE,&window,&r)) { SDL_Quit();return false; }
+            if(!SDL_CreateWindowAndRenderer("Ultima 5 - Game Files",960,600,SDL_WINDOW_RESIZABLE,&window,&r)) { DEBUG_Error("Setup window creation failed: %s",SDL_GetError());SDL_Quit();return false; }
             SDL_SetRenderLogicalPresentation(r,320,200,SDL_LOGICAL_PRESENTATION_INTEGER_SCALE);
             lock=SDL_CreateMutex();if(!lock) { SDL_DestroyRenderer(r);SDL_DestroyWindow(window);SDL_Quit();return false; }
             loadFont();int selected=0;bool done=false,accepted=false,cancel=false;
@@ -177,8 +179,9 @@ bool SETUP_Run(void)
             if(!accepted) return false;
         }
     }
+    debug("Game data directory=%s; music directory=%s",game,music);
     FILE_SetDataDirectory(game);
-    if(!seedWorlds()) { fprintf(stderr,"Cannot initialize writable SAVEGAME directory.\n");return false; }
+    if(!seedWorlds()) { DEBUG_Error("Cannot initialize writable SAVEGAME directory");return false; }
     return true;
 }
 #endif

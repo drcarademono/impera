@@ -18,7 +18,10 @@ bool BACKEND_Initialize(void)
     DEBUG_Initialize();
 
 #if defined(TARGET_SDL)
-    SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_AUDIO);
+    debug("Backend initialization begins");
+    if(!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_AUDIO)) {
+        DEBUG_Error("SDL initialization failed: %s",SDL_GetError());return false;
+    }
 #endif
 
     GRAP_Initialize();
@@ -27,11 +30,13 @@ bool BACKEND_Initialize(void)
     KEY_Initialize();
     AUDIO_Initialize();
 
+    debug("Backend initialization complete");
     return true;
 }
 
 void BACKEND_Cleanup(void)
 {
+    debug("Backend cleanup begins");
     AUDIO_Cleanup();
     KEY_Cleanup();
     EVT_Cleanup();

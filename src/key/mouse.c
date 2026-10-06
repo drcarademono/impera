@@ -340,6 +340,7 @@ void MOUSE_EndDirectionInput(void)
 void MOUSE_Button(float x, float y, int button, bool down, int clicks)
 {
     if (!s_enabled) return;
+    if(down) debug("Mouse button=%d clicks=%d position=%.1f,%.1f menu=%d direction=%d aim=%d map=%u active=%u",button,clicks,(double)x,(double)y,s_menu,s_directionInput,s_aimInput,D_5893_map_id,D_589e);
     if (s_menu) {
         if (down && button == SDL_BUTTON_LEFT) {
             s_menuTarget = MenuItem(x,y);

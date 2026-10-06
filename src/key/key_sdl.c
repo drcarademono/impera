@@ -180,6 +180,7 @@ int KEY_PollKey(void)
         return 0;
     }
 
+    if(s_lastDownKeycode && s_gameplayInput) debug("Gameplay key=%d repeat=%d",s_lastDownKeycode,s_heldMovementKey!=0);
     ret = s_lastDownKeycode;
     s_lastDownKeycode = 0;
     if (!ret) {

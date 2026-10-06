@@ -256,17 +256,19 @@ int FILE_ReadFile(char* fileName, void* buffer, uint size, int offset)
         fileName = buf;
     }
 
+	debug("Read file=%s bytes=%u offset=%d",fileName,size,offset);
 	stream = FILE_Open(fileName, "rb");
 	if (stream == 0)
 	{
+		DEBUG_Error("Cannot read %s: %s",fileName,strerror(errno));
 		return -1;
 	}
 
-	fseek(stream, offset, SEEK_SET);
-	fread(buffer, 1, size, stream);
-	fclose(stream);
-
-	return 0;
+    bool ok=fseek(stream,offset,SEEK_SET)==0;
+    size_t got=ok?fread(buffer,1,size,stream):0;
+    if(got!=size) DEBUG_Error("Short/failed read %s expected=%u actual=%lu offset=%d",fileName,size,(unsigned long)got,offset);
+    fclose(stream);
+    return got==size?0:-1;
 }
 
 int FILE_WriteFile(char* fileName, void* buffer, uint size, int offset)
@@ -281,15 +283,16 @@ int FILE_WriteFile(char* fileName, void* buffer, uint size, int offset)
         fileName = buf;
     }
 
+    debug("Write file=%s bytes=%u offset=%d",fileName,size,offset);
     stream = FILE_Open(fileName, "wb");
     if (stream == 0)
     {
+        DEBUG_Error("Cannot write %s: %s",fileName,strerror(errno));
         return -1;
     }
 
-    fseek(stream, offset, SEEK_SET);
-    fwrite(buffer, size, 1, stream);
-    fclose(stream);
-
-    return 0;
+    bool ok=fseek(stream,offset,SEEK_SET)==0 && fwrite(buffer,1,size,stream)==size;
+    if(fclose(stream)!=0) ok=false;
+    if(!ok) DEBUG_Error("Failed write %s bytes=%u offset=%d: %s",fileName,size,offset,strerror(errno));
+    return ok?0:-1;
 }
