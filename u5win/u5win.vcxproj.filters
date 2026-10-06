@@ -173,6 +173,9 @@
     <ClCompile Include="..\src\graphics\widescreen.c">
       <Filter>graphics</Filter>
     </ClCompile>
+    <ClCompile Include="..\src\graphics\sprites.c">
+      <Filter>graphics</Filter>
+    </ClCompile>
     <ClCompile Include="..\src\key\mouse.c">
       <Filter>key</Filter>
     </ClCompile>

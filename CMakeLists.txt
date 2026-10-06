@@ -55,6 +55,7 @@ set(SOURCES
 	src/event/evt_sdl.c
 	src/graphics/animate.c
 	src/graphics/image.c
+	src/graphics/sprites.c
 	src/graphics/grap_buf.c
 	src/graphics/origin.c
 	src/graphics/grap_sdl.c
@@ -82,6 +83,11 @@ if(U5D_BUILD_TESTS)
     list(APPEND U5D_TARGETS u5d_savegame_test)
     add_executable(u5d_widescreen_test tests/widescreen_test.c ${TEST_SOURCES})
     list(APPEND U5D_TARGETS u5d_widescreen_test)
+    add_executable(u5d_sprites_test tests/sprites_test.c ${TEST_SOURCES})
+    list(APPEND U5D_TARGETS u5d_sprites_test)
+    file(COPY tests/fixtures/sprites/ DESTINATION "${CMAKE_BINARY_DIR}/sprites-runtime/TrAnSpArEnT-SpRiTeS")
+    add_test(NAME transparent_sprites COMMAND u5d_sprites_test)
+    set_tests_properties(transparent_sprites PROPERTIES WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/sprites-runtime" TIMEOUT 10)
     add_test(NAME widescreen COMMAND u5d_widescreen_test)
     file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/widescreen-runtime")
     set_tests_properties(widescreen PROPERTIES
@@ -127,6 +133,8 @@ if(U5D_BUILD_TESTS)
         set_tests_properties(case_insensitive_files PROPERTIES
             WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/case-runtime" TIMEOUT 10)
         find_package(Python3 COMPONENTS Interpreter REQUIRED)
+        add_test(NAME graphics_extractor COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_SOURCE_DIR}/tests/test_extract_graphics.py)
         add_test(NAME runtime_filename_case COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_SOURCE_DIR}/tests/test_prepare_runtime.py)
     endif()

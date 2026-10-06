@@ -7,6 +7,8 @@
 #include "wd.h"
 #include "grap_sdl.h"
 #include "widescreen.h"
+#include "sprites.h"
+#include "tiles.h"
 #include "vars.h"
 #include "funcs.h"
 #include "macros.h"
@@ -30,7 +32,7 @@ static int s_previousWidth, s_previousHeight, s_previousX, s_previousY, s_previo
 typedef struct ActorVisual {
     bool visible, sighted;
     int x,y,worldX,worldY,kind,level;
-    Uint32 sprite[256], terrain[256];
+    Uint32 sprite[256], terrain[256], animation[256];
 } ActorVisual;
 static ActorVisual s_previousActors[32];
 static Uint32 s_egaPalette[16];
@@ -64,8 +66,23 @@ static void CaptureActors(ActorVisual* actors, const byte* indices, int w,
         if (col<0 || row<0 || col>=columns || row>=rows) continue;
         v->visible=true;
         byte terrain=combat?*ULTIMA_4402_GetTileAddr(a->_2_x,a->_3_y):WIDE_MapTile(dx,dy);
+        int tile;
+        if (abs(dx)<=5 && abs(dy)<=5) tile=256+GetActorMap(dx+5,dy+5);
+        else {
+            int sprite=a->_1_animTile;
+            bool reflection=false;
+            if ((a->_0_tile&0xfc)!=TILE_ACTOR_E8 &&
+                a->_0_tile!=TILE_ACTOR_SLEEP && a->_0_tile!=TILE_ACTOR_DEAD &&
+                sprite!=TILE_ACTOR_1D && sprite!=TILE_ACTOR_SLEEP &&
+                !(a->_0_tile==TILE_ACTOR_BARD && terrain==TILE_MAP_CHAIR_92)) {
+                if (a->_0_tile==TILE_ACTOR_BARD) sprite-=8;
+                sprite=ULTIMA_ResolveActorTile(sprite,terrain,WIDE_MapTile(dx,dy-1),WIDE_MapTile(dx,dy+1),&reflection);
+            }
+            tile=256+sprite;
+        }
         for (int y=0;y<16;y++) for (int x=0;x<16;x++) {
             v->sprite[y*16+x]=s_egaPalette[indices[(v->y+y)*w+v->x+x]&15];
+            v->animation[y*16+x]=SPRITES_RGBA(tile,x,y,v->sprite[y*16+x]);
             v->terrain[y*16+x]=s_egaPalette[GRAP_BUF_TilePixel(D_b11e[terrain],x,y)&15];
         }
         if (memcmp(v->sprite,v->terrain,sizeof(v->sprite))==0) v->visible=v->sighted=false;
@@ -316,8 +333,22 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
                 actorTextures[i]=SDL_CreateTexture(s_sdlRenderer,SDL_PIXELFORMAT_ARGB8888,SDL_TEXTUREACCESS_STATIC,16,16);
                 if (actorTextures[i]) {
                     SDL_UpdateTexture(actorTextures[i],NULL,
-                        actors[i].visible?actors[i].sprite:s_previousActors[i].sprite,16*4);
+                        actors[i].visible?actors[i].animation:s_previousActors[i].animation,16*4);
                     SDL_SetTextureScaleMode(actorTextures[i],SDL_SCALEMODE_NEAREST);
+                    SDL_SetTextureBlendMode(actorTextures[i],SDL_BLENDMODE_BLEND);
+                }
+            }
+            SDL_Texture* playerTexture=NULL;
+            int playerTile=256+GetActorMap(5,5);
+            if (!combat && SPRITES_HasOverride(playerTile)) {
+                Uint32 pixels[256];
+                for (int y=0;y<16;y++) for (int x=0;x<16;x++)
+                    pixels[y*16+x]=SPRITES_RGBA(playerTile,x,y,0);
+                playerTexture=SDL_CreateTexture(s_sdlRenderer,SDL_PIXELFORMAT_ARGB8888,SDL_TEXTUREACCESS_STATIC,16,16);
+                if (playerTexture) {
+                    SDL_UpdateTexture(playerTexture,NULL,pixels,16*4);
+                    SDL_SetTextureScaleMode(playerTexture,SDL_SCALEMODE_NEAREST);
+                    SDL_SetTextureBlendMode(playerTexture,SDL_BLENDMODE_BLEND);
                 }
             }
             float sx = dst.w / w, sy = dst.h / h;
@@ -347,13 +378,14 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
                         SDL_RenderTexture(s_sdlRenderer,native,&src,&rect);
                     }
                 }
-                if (!combat) SDL_RenderTexture(s_sdlRenderer,native,&playerSrc,&playerDst);
+                if (!combat) SDL_RenderTexture(s_sdlRenderer,playerTexture?playerTexture:native,playerTexture?NULL:&playerSrc,&playerDst);
                 SDL_SetRenderClipRect(s_sdlRenderer,NULL);
                 SDL_RenderPresent(s_sdlRenderer);
                 SDL_PumpEvents();
                 MOUSE_UpdateCursor();
                 if (frame < 8) SDL_Delay(16);
             }
+            SDL_DestroyTexture(playerTexture);
             for (int i=0;i<32;i++) SDL_DestroyTexture(actorTextures[i]);
         }
         SDL_DestroyTexture(old); SDL_DestroyTexture(next);

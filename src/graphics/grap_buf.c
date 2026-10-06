@@ -6,6 +6,7 @@
 
 #include "grap_buf.h"
 #include "animate.h"
+#include "sprites.h"
 #include "reveal.h"
 
 #if defined(ENABLE_GRAP_OVERLAY_DEBUG)
@@ -66,6 +67,7 @@ void GRAP_BUF_Initialize(pfGrapFlushFrame* pfFlushFrame)
 
 void GRAP_BUF_Cleanup(void)
 {
+    SPRITES_Cleanup();
     if (s_tileset != NULL)
     {
         free(s_tileset);
@@ -370,6 +372,7 @@ void GRAP_BUF_FillWindow(int x1, int y1, int x2, int y2, int xorMode)
 void GRAP_BUF_LoadTileset(byte* tileset)
 {
     s_tileset = tileset;
+    SPRITES_Load();
 }
 
 bool GRAP_BUF_HasTileset(void) { return s_tileset != NULL; }
@@ -409,6 +412,18 @@ void GRAP_BUF_PutTile(int tileX, int tileY, int tileIdx, int xOffset, int yOffse
     int dstX = tileX * width + xOffset;
     int dstY = tileY * height + yOffset;
 
+    if (SPRITES_HasOverride(tileIdx)) {
+        byte* page=GetPage(D_52ba_vdp._52d8_page);
+        for (int y=0;y<16;y++) for (int x=0;x<16;x++) {
+            int px=dstX+x, py=dstY+y;
+            if (px>=0 && px<loresWidth && py>=0 && py<loresHeight) {
+                byte old=GRAP_BUF_TilePixel(tileIdx,x,y);
+                page[py*loresWidth+px]=SPRITES_Composite(tileIdx,x,y,page[py*loresWidth+px],old);
+            }
+        }
+        s_dirty=true;
+        return;
+    }
     for (int y = dstY; y < dstY + height; y++)
     {
         for (int x = dstX; x < dstX + width; x += 2)
@@ -452,14 +467,12 @@ static void PutTileRevealPixel(int tileX, int tileY, int tileIdx, int relX, int 
     dstX = tileX * 16 + xOffset + relX;
     dstY = tileY * 16 + yOffset + relY;
 
-    if ((relX & 1) == 0)
-    {
-        GrPutPixel(D_52ba_vdp._52d8_page, dstX, dstY, packed >> 4);
+    byte color=(relX&1)?packed&0x0f:packed>>4;
+    if (SPRITES_HasOverride(tileIdx) && dstX>=0 && dstX<loresWidth && dstY>=0 && dstY<loresHeight) {
+        byte background=GetPage(D_52ba_vdp._52d8_page)[dstY*loresWidth+dstX];
+        color=SPRITES_Composite(tileIdx,relX,relY,background,color);
     }
-    else
-    {
-        GrPutPixel(D_52ba_vdp._52d8_page, dstX, dstY, packed & 0x0f);
-    }
+    GrPutPixel(D_52ba_vdp._52d8_page,dstX,dstY,color);
 
     s_dirty = true;
 }

@@ -183,3 +183,21 @@ Run `src\build.bat` on a machine or virtual machine with Microsoft C 5.1 install
 The compiler installation path is `C:\MSC51`.
 
 Note: executable linking is currently not possible. This target is used only for disassembly matching.
+
+### Transparent sprite overrides
+
+Export game graphics with `python3 scripts/extract-graphics.py`. The utility
+uses Python's standard library and writes organized PNG folders, contact sheets,
+and a manifest to `extracted-graphics/`. Existing exports are protected unless
+`--overwrite` is specified.
+
+Edit frames from `extracted-graphics/tiles-16/sprites/` in GIMP, add transparency,
+and save them with the same filenames into `transparent-sprites/`. Launch with:
+
+```sh
+bash scripts/run-linux.sh --transparent-sprites
+```
+
+Player, NPC, and monster frames blend over the ground, including with fullscreen
+and smooth movement. Unedited or missing frames retain the original graphics.
+See [editing instructions](transparent-sprites/README.md) for details.

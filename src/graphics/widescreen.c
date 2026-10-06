@@ -4,6 +4,7 @@
 #include "funcs.h"
 #include "macros.h"
 #include "tiles.h"
+#include "sprites.h"
 #include "grap_buf.h"
 #include "widescreen.h"
 #include <string.h>
@@ -179,7 +180,7 @@ bool WIDE_Compose(byte* pixels, WideLayout l)
                 for (int y = 0; y < 16; y++)
                     for (int x = 0; x < 16; x++)
                         pixels[(l.mapY + row * 16 + y) * l.width + l.mapX + col * 16 + x] =
-                            GRAP_BUF_TilePixel(idx, x, y);
+                            SPRITES_Composite(idx,x,y,GRAP_BUF_TilePixel(D_b11e[tile],x,y),GRAP_BUF_TilePixel(idx,x,y));
             }
         }
     }

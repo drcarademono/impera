@@ -265,6 +265,7 @@
     <ClCompile Include="..\src\graphics\grap_buf.c" />
     <ClCompile Include="..\src\graphics\grap_sdl.c" />
     <ClCompile Include="..\src\graphics\widescreen.c" />
+    <ClCompile Include="..\src\graphics\sprites.c" />
     <ClCompile Include="..\src\key\mouse.c" />
     <ClCompile Include="..\src\graphics\grap_vga.c">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
@@ -366,6 +367,7 @@
     <ClInclude Include="..\src\graphics\grap.h" />
     <ClInclude Include="..\src\graphics\grap_buf.h" />
     <ClInclude Include="..\src\graphics\widescreen.h" />
+    <ClInclude Include="..\src\graphics\sprites.h" />
     <ClInclude Include="..\src\key\mouse.h" />
     <ClInclude Include="..\src\graphics\grap_sdl.h" />
     <ClInclude Include="..\src\graphics\grap_ops.h" />

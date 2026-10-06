@@ -1,4 +1,5 @@
 #include "common/common.h"
+#include "graphics/sprites.h"
 #if defined(TARGET_SDL)
 #include "graphics/grap_sdl.h"
 #endif
@@ -301,6 +302,13 @@ void ULTIMA_56ac_DrawMap(void)
             {
                 if (GetActorMap(local_6, local_8) != 0x16)
                 {
+                    // Transparent actor frames need freshly drawn ground, not last frame's actor.
+                    if (SPRITES_HasOverride(0x100+GetActorMap(local_6,local_8))) {
+                        int wx=D_5893_map_id>=128 ? local_6 : D_5896_map_x+local_6-5;
+                        int wy=D_5893_map_id>=128 ? local_8 : D_5897_map_y+local_8-5;
+                        byte ground=*ULTIMA_4402_GetTileAddr(wx,wy);
+                        ULTIMA_10e0_GRAP_51_PutTile(D_b11e[ground],local_6,local_8);
+                    }
                     // draw actor
                     ULTIMA_10e0_GRAP_51_PutTile(0x100 + GetActorMap(local_6, local_8), local_6, local_8);
                 }

@@ -80,6 +80,14 @@ def prepare(data_dir, runtime_dir):
     for source in cursors.iterdir():
         if source.suffix.lower() == ".png":
             shutil.copy2(source, resolve(destination / source.name, allow_missing=True))
+    # Sprite edits are optional and separate from original game data.
+    overrides = Path(__file__).parent.parent / "transparent-sprites"
+    if overrides.is_dir():
+        target = resolve(runtime / "transparent-sprites", allow_missing=True)
+        target.mkdir(exist_ok=True)
+        for source in overrides.iterdir():
+            if source.is_file() and source.suffix.lower() == ".png":
+                shutil.copy2(source, resolve(target / source.name, allow_missing=True))
     return runtime
 
 
