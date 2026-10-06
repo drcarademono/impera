@@ -24,9 +24,10 @@ line-of-sight rules; a window or open arch can still permit sight.
 | `97–98` | Both “odd door” variants. |
 | `b8–bb` | Wooden doors, locked doors, and both windowed door variants. |
 | `bc` | Fireplace, with a masonry surround. |
+| `f8` | Wall-mounted inscription/sign, read through the inscription command. |
 | `fe` | Special wall tile. |
 
-There are 39 included map IDs. Tests check every included ID both visible and
+There are 40 included map IDs. Tests check every included ID both visible and
 hidden, and check that wall barriers prevent fading onto their inside edge.
 
 Excluded groups:
@@ -40,6 +41,7 @@ Excluded groups:
 - `b0–b1` torches: artwork has a floor background, not a masonry surround.
 - `c0–c1`: unnamed graphics, not wall-torch map IDs; removed from the earlier
   incorrectly labelled list.
+- `f0–f7` and `f9`: freestanding trade signs, rather than the wall inscription.
 - `ff`: darkness, not a physical wall.
 
 The implementation is `SolidMasonry` in `src/graphics/widescreen.c`.

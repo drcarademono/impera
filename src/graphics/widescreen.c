@@ -329,6 +329,7 @@ static bool SolidMasonry(byte tile)
         tile==TILE_MAP_87 /* archway */ ||
         tile==TILE_MAP_97 || tile==TILE_MAP_98 /* odd doors */ ||
         (tile>=TILE_MAP_DOOR_B8 && tile<=TILE_MAP_FIREPLACE) ||
+        tile==TILE_MAP_SIGN_F8 /* wall-mounted inscription */ ||
         tile==0xfe; /* wall */
 }
 
