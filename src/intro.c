@@ -11,6 +11,14 @@
 
 #include "font.h"
 #include "intro.h"
+#include "event/event.h"
+#if defined(TARGET_SDL)
+#include "common/engine_settings.h"
+#include "graphics/grap_buf.h"
+#define INTRO_MENU_COUNT 7
+#else
+#define INTRO_MENU_COUNT 6
+#endif
 
 #include <string.h>
 
@@ -388,12 +396,20 @@ static void INTRO_0676_WriteMenuOption(int param_4, int param_3, int param_2, ch
 
 static void INTRO_06bc_BuildMainMenu(int param_1)
 {
+#if defined(TARGET_SDL)
+    /* Seven 8-pixel rows centered between the borders at y=127 and y=192. */
+    GRAP_BUF_SetTextPixelOffset(-4);
+#endif
     INTRO_0676_WriteMenuOption(param_1, 0, 0xc, _TEXT(0x310c, "Journey Onward"));
     INTRO_0676_WriteMenuOption(param_1, 1, 9, _TEXT(0x311b, "Create New Character"));
     INTRO_0676_WriteMenuOption(param_1, 2, 8, _TEXT(0x3130, "Transfer from Ultima IV"));
     INTRO_0676_WriteMenuOption(param_1, 3, 9, _TEXT(0x3148, "Ultima V Introduction"));
     INTRO_0676_WriteMenuOption(param_1, 4, 0xb, _TEXT(0x315e, "Acknowledgements"));
     INTRO_0676_WriteMenuOption(param_1, 5, 10, _TEXT(0x316f, "Return to the View"));
+#if defined(TARGET_SDL)
+    INTRO_0676_WriteMenuOption(param_1, 6, 11, "Engine Settings");
+    GRAP_BUF_SetTextPixelOffset(0);
+#endif
 }
 
 static void INTRO_072e_Acknowledgements(void)
@@ -495,7 +511,7 @@ static int INTRO_094e_Pause(int param_1)
 }
 
 // CHECKED
-void INTRO_0986_Main(void) // intro_main (initialize video) (8b46)
+static void INTRO_RunMain(void) // intro_main (initialize video) (8b46)
 {
     int local_4;
     char* local_6;
@@ -508,7 +524,7 @@ void INTRO_0986_Main(void) // intro_main (initialize video) (8b46)
     byte* local_14;
 
     // 098e
-    D_a9ce = 1;
+    D_a9ce = AUDIO_SoundEnabled();
     local_e = 0;
 
     // 0995
@@ -741,7 +757,7 @@ void INTRO_0986_Main(void) // intro_main (initialize video) (8b46)
                 do
                 {
                     // 0d75
-                    MOUSE_MenuSet(64, 136, 192, 6, local_c);
+                    MOUSE_MenuSet(64, 132, 192, INTRO_MENU_COUNT, local_c);
                     local_10 = ULTIMA_2032_ToUpper(ULTIMA_1b38_PollKeyWithCursor());
                     MOUSE_MenuEnd();
                     if (local_10 == 0)
@@ -759,14 +775,14 @@ void INTRO_0986_Main(void) // intro_main (initialize video) (8b46)
                     local_c--;
                     if (local_c < 0)
                     {
-                        local_c = 5;
+                        local_c = INTRO_MENU_COUNT-1;
                     }
                     INTRO_06bc_BuildMainMenu(local_c);
                     break;
                 case U5_KEY_RIGHT:
                 case U5_KEY_DOWN:
                     local_c++;
-                    if (5 < local_c)
+                    if (INTRO_MENU_COUNT <= local_c)
                     {
                         local_c = 0;
                     }
@@ -775,7 +791,7 @@ void INTRO_0986_Main(void) // intro_main (initialize video) (8b46)
                 case U5_KEY_ENTER:  // CR
                 case U5_KEY_SPACE: // ' '
                     // 0de2
-                    local_10 = _TEXT(0x3270, "JCTUAR")[local_c];
+                    local_10 = local_c==6 ? 'E' : _TEXT(0x3270, "JCTUAR")[local_c];
                     break;
                 case 0:
                     local_10 = 0x52;
@@ -798,6 +814,11 @@ void INTRO_0986_Main(void) // intro_main (initialize video) (8b46)
                 case 0x52: // 'R'
                     INTRO_06bc_BuildMainMenu(5);
                     break;
+#if defined(TARGET_SDL)
+                case 'E':
+                    INTRO_06bc_BuildMainMenu(6);
+                    break;
+#endif
                 default:
                     local_10 = 0;
                     break;
@@ -808,6 +829,11 @@ void INTRO_0986_Main(void) // intro_main (initialize video) (8b46)
         // 0e47
         switch ((int)local_10)
         {
+#if defined(TARGET_SDL)
+        case 'E':
+            ENGINE_ShowSettings();
+            break;
+#endif
         case 0x4a: // 'J'
 #if defined(ENABLE_BGM)
             AUDIO_StopBgm();
@@ -1710,4 +1736,16 @@ void INTRO_2090_AnimateWD(void)
 static void INTRO_20ae_ShowWD(byte* ptr)
 {
     DRV_69(ptr, 1); // ax: a, cf: 1
+}
+
+/* Immediate Ctrl+E is limited to title, menu, and introductory screens. */
+void INTRO_0986_Main(void)
+{
+#if defined(TARGET_SDL)
+    int previous = EVT_SetImmediateExit(1);
+#endif
+    INTRO_RunMain();
+#if defined(TARGET_SDL)
+    EVT_SetImmediateExit(previous);
+#endif
 }

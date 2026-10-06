@@ -60,8 +60,10 @@ int main(void)
     AUDIO_Initialize();
     assert(AUDIO_HasSfx(73) && !AUDIO_HasSfx(74));
     AUDIO_PlayBgm(2); assert(assigned==1); /* descriptive numbered music filename */
+    AUDIO_SetMusicEnabled(0);AUDIO_PlayBgm(2);assert(assigned==1);
+    AUDIO_SetMusicEnabled(1);assert(assigned==2); /* resume requested music */
     AUDIO_DispatchWhiteNoise(1,25,1000);
-    assert(assigned==2 && queued==0); /* WAV takes precedence */
+    assert(assigned==3 && queued==0); /* WAV takes precedence */
     AUDIO_DispatchWhiteNoise(1,25,1500);
     assert(queued==1); /* individual missing WAV synthesizes */
     AUDIO_DispatchWhiteNoise(2,20,3000); assert(queued==2); /* unmapped effects also synthesize */
@@ -69,6 +71,9 @@ int main(void)
     AUDIO_DispatchTone(1193,100); assert(queued==4);
     AUDIO_DispatchSweepTone(1193,2386,1,40); assert(queued==5);
     AUDIO_PlayTitle1Sfx(); AUDIO_PlayTitle2Sfx(); assert(queued==5); /* No invented title definitions. */
+    AUDIO_SetSoundEnabled(0);AUDIO_DispatchWhiteNoise(1,25,1000);assert(assigned==3);
+    AUDIO_DispatchTone(1000,100);assert(queued==5);
+    AUDIO_SetSoundEnabled(1);
     D_a9ce=0;
     AUDIO_DispatchTone(1000,100); assert(queued==5);
     D_a9ce=1;
@@ -81,7 +86,7 @@ int main(void)
     wave("Alongside/Sound/step1.wav");
     AUDIO_Initialize();
     assert(!AUDIO_HasSfx(73) && AUDIO_HasSfx(74));
-    AUDIO_PlayBgm(6); assert(assigned==3);
+    AUDIO_PlayBgm(6); assert(assigned==4);
     AUDIO_Cleanup();
     remove("Alongside/Music/06 - Greyson's Tale.mp3");
     remove("Alongside/Sound/step1.wav");

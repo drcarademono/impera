@@ -8,6 +8,14 @@
 
 static EVT_Callback* s_callbacks[16];
 static int s_registeredCallbackCount;
+static int s_immediateExit;
+
+int EVT_SetImmediateExit(int enabled)
+{
+    int previous = s_immediateExit;
+    s_immediateExit = enabled;
+    return previous;
+}
 
 void EVT_Initialize(void)
 {
@@ -33,6 +41,9 @@ void EVT_PollMessages(void)
 			break;
 
 		case SDL_EVENT_KEY_DOWN:
+            /* Handle exit before menus or cutscenes can consume the key. */
+            if (s_immediateExit && ev.key.key == SDLK_E && (ev.key.mod & SDL_KMOD_CTRL))
+                exit(0);
 			MOUSE_Cancel();
 			KEY_SDL_ProcessKeyDown(ev.key);
 			break;

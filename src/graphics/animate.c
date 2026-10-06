@@ -8,6 +8,7 @@
 
 static float s_animationSpeed = 1.0f;
 static double s_animationRemainder;
+float ANIMATION_Speed(void) { return s_animationSpeed; }
 
 void ANIMATION_SetSpeed(float speed)
 {

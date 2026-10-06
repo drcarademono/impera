@@ -1,4 +1,5 @@
 #include "common/common.h"
+#include "audio/audio.h"
 #include "funcs.h"
 #include "vars.h"
 #include "macros.h"
@@ -490,7 +491,7 @@ static int DUNGEON_06c4_ProcessCommand(int param_1)
         {
             ULTIMA_1850_PrintString(_TEXT(0x2d4f, "On\n"));
         }
-        D_a9ce = !D_a9ce;
+        AUDIO_SetSoundEnabled(!D_a9ce);
         break;
 
     default:

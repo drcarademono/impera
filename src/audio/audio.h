@@ -24,6 +24,10 @@
 #define SFX_TYPE_SYNTH 2
 
 extern void AUDIO_Initialize(void);
+int AUDIO_MusicEnabled(void);
+int AUDIO_SoundEnabled(void);
+void AUDIO_SetMusicEnabled(int enabled);
+void AUDIO_SetSoundEnabled(int enabled);
 extern void AUDIO_Cleanup(void);
 
 extern void AUDIO_PlayBgm(int id);

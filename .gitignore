@@ -12,6 +12,8 @@ CMakeCache.txt
 cmake_install.cmake
 /build/
 __pycache__/
+ENGINE.CFG
+ENGINE.CFG.tmp
 Ultima 5/Music/01 - Ultima Theme.mp3
 Ultima 5/Music/02 - Britannic Lands.mp3
 Ultima 5/Music/03 - Cap'n Johne's Hornpipe.mp3

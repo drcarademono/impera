@@ -30,6 +30,7 @@ extern int g_enableDebugOverlay;
 #include "graphics/grap_buf.h"
 #include "graphics/animate.h"
 #include "key/mouse.h"
+#include "common/engine_settings.h"
 #endif
 
 // 0000
@@ -43,6 +44,7 @@ int CDECL main(int argc, char** argv/*, char** envp*/)
     local_4 = 0x20;
 
 #if defined(TARGET_SDL)
+    ENGINE_Load();
     for (int arg = 1; arg < argc; arg++)
     {
         if (strcmp(argv[arg], "--fullscreen") == 0)

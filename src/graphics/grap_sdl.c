@@ -20,6 +20,8 @@ static SDL_Renderer* s_sdlRenderer;
 static SDL_Surface* s_sdlSurface;
 static SDL_Texture* s_sdlTexture;
 static bool s_fullscreen;
+static bool s_pixelUI;
+static int s_windowedWidth=1280, s_windowedHeight=960;
 static SDL_Texture* s_wideTexture;
 static SDL_Surface* s_wideSurface;
 static byte* s_widePixels;
@@ -119,7 +121,7 @@ bool GRAP_SDL_MouseUIPoint(float x, float y, float* ux, float* uy)
 {
     int w, h, ow, oh;
     if (!s_sdlWindow || !SDL_GetWindowSize(s_sdlWindow, &w, &h) || w <= 0 || h <= 0) return false;
-    if (!s_fullscreen) { *ux = x * 320 / w; *uy = y * 200 / h; return true; }
+    if (!s_fullscreen && !s_pixelUI) { *ux = x * 320 / w; *uy = y * 200 / h; return true; }
     if (!SDL_GetRenderOutputSize(s_sdlRenderer, &ow, &oh)) return false;
     WideLayout l = WIDE_Layout(ow, oh);
     int cw = s_expandedFrame ? l.width : 320, ch = s_expandedFrame ? l.height : 200;
@@ -164,7 +166,24 @@ bool GRAP_SDL_MouseMapPoint(float x, float y, int* dx, int* dy, float* rx, float
 
 void GRAP_SDL_SetFullscreen(bool fullscreen)
 {
+    if (s_sdlWindow && s_fullscreen != fullscreen) {
+        if (fullscreen) SDL_GetWindowSize(s_sdlWindow,&s_windowedWidth,&s_windowedHeight);
+        if (!SDL_SetWindowFullscreen(s_sdlWindow,fullscreen)) {
+            debug("Cannot change fullscreen: %s\n",SDL_GetError());
+            return;
+        }
+        if (!fullscreen) SDL_SetWindowSize(s_sdlWindow,s_windowedWidth,s_windowedHeight);
+        SDL_SetTextureScaleMode(s_sdlTexture,fullscreen || s_pixelUI ? SDL_SCALEMODE_NEAREST : SDL_SCALEMODE_LINEAR);
+        s_previousValid=false;
+    }
     s_fullscreen = fullscreen;
+}
+bool GRAP_SDL_Fullscreen(void) { return s_fullscreen; }
+float GRAP_SDL_MovementSpeed(void) { return s_movementSpeed; }
+void GRAP_SDL_SetPixelUI(bool enabled)
+{
+    s_pixelUI=enabled;
+    if(s_sdlTexture) SDL_SetTextureScaleMode(s_sdlTexture,s_fullscreen || enabled ? SDL_SCALEMODE_NEAREST : SDL_SCALEMODE_LINEAR);
 }
 
 int windowWidth = 1280;
@@ -185,6 +204,7 @@ void GRAP_SDL_Initialize(void)
 {
     windowWidth = SETTINGS_GetInt("window", "width", windowWidth);
     windowHeight = SETTINGS_GetInt("window", "height", windowHeight);
+    s_windowedWidth=windowWidth; s_windowedHeight=windowHeight;
 
     SDL_WindowFlags flags = SDL_WINDOW_HIGH_PIXEL_DENSITY;
     if (s_fullscreen)
@@ -435,7 +455,7 @@ void GRAP_SDL_FlushFrame(void)
     SDL_FRect srcRect = {0, 0, hiresWidth, hiresHeight};
     SDL_SetRenderDrawColor(s_sdlRenderer, 0, 0, 0, 255);
     SDL_RenderClear(s_sdlRenderer);
-    if (s_fullscreen)
+    if (s_fullscreen || s_pixelUI)
     {
         int width, height;
         if (!SDL_GetRenderOutputSize(s_sdlRenderer, &width, &height)) return;
