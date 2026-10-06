@@ -36,6 +36,7 @@ extern void GRAP_BUF_LoadTileset(byte* tileset);
 extern void GRAP_BUF_UnloadTileset(void);
 extern bool GRAP_BUF_HasTileset(void);
 extern byte GRAP_BUF_TilePixel(int tile, int x, int y);
+extern bool GRAP_BUF_TransparentSprites(void);
 extern void GRAP_BUF_SetTransparentSprites(bool enabled);
 extern int GRAP_BUF_SpritePixel(int tile, int x, int y);
 extern void GRAP_BUF_DrawSprite(byte* pixels, int stride, int x, int y, int tile,

@@ -112,7 +112,12 @@ instead of replacing the entire tile. Black sprite pixels are transparent,
 except for a one-pixel black outline around colored pixels (including diagonal
 neighbors). The outline can extend one pixel into adjacent map tiles and is
 clipped at the map frame. This also applies to expanded fullscreen maps and
-smooth movement. Sprites default to opaque when the flag is omitted. Terrain tiles remain opaque;
+smooth movement. Fountains (all animation frames) and wells also use this flag. Their map cells
+have no separate ground layer, so their background uses the most common
+immediately adjacent brick floor, other floor, or grass tile (ties prefer brick
+floor, then grass). With no adjacent recognized ground, they stay opaque. This
+inference affects rendering only and leaves map data and interactions unchanged.
+Sprites default to opaque when the flag is omitted. Terrain tiles remain opaque;
 the original tile data is unchanged.
 
 Enable smooth movement independently with `--smooth-movement`. Each successful

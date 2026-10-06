@@ -86,8 +86,49 @@ int main(void)
     D_5c5a[1]._3_y = 16;
     assert(WIDE_Compose(pixels, broad));
     assert(pixel(pixels, broad, 7, 0) == 2);
+    /* Static objects have a single map layer: infer floor by majority without
+     * mutating it. Test full fountain animation range and the original viewport. */
+    memset(D_5c5a,0,sizeof(D_5c5a));
+    memset(tiles+0x44*128,0x33,128);
+    D_b11e[0x44]=0x44;
+    D_b11e[TILE_MAP_WELL]=TILE_MAP_WELL;
+    memset(tiles+TILE_MAP_WELL*128,0,128);
+    tiles[TILE_MAP_WELL*128+8*8]=0x20;
+    GetMap(23,16)=TILE_MAP_WELL;
+    GetMap(22,16)=GetMap(24,16)=GetMap(23,17)=0x44;
+    GetMap(23,15)=TILE_MAP_GRASS;
+    assert(WIDE_GroundTile(7,0)==0x44);
+    assert(WIDE_TerrainPixel(7,0,2,8)==3);
+    assert(WIDE_TerrainPixel(7,0,0,8)==2);
+    assert(WIDE_TerrainPixel(6,0,15,7)==0); /* neighboring outline */
+    assert(WIDE_Compose(pixels,broad));
+    int objectX=broad.mapX+(broad.columns/2+7)*16;
+    int objectY=broad.mapY+broad.rows/2*16;
+    assert(pixels[(objectY+8)*broad.width+objectX+2]==3);
+    GRAP_BUF_SetTransparentSprites(false);
+    assert(WIDE_GroundTile(7,0)==TILE_MAP_WELL);
+    assert(WIDE_Compose(pixels,broad));
+    assert(pixels[(objectY+8)*broad.width+objectX+2]==0);
+    GRAP_BUF_SetTransparentSprites(true);
+    for(int frame=0;frame<4;frame++) {
+        GetMap(23,16)=TILE_MAP_FOUNTAIN+frame;
+        assert(WIDE_GroundTile(7,0)==0x44);
+    }
+    GetMap(23,16)=TILE_MAP_WELL;
+    D_5896_map_x=18;
+    memset(D_ab02,1,sizeof(D_ab02));
+    GetMapViewport(10,5)=TILE_MAP_WELL;
+    ULTIMA_56ac_DrawMap();
+    assert(g_linearEgaBuffer0[96*320+170]==3);
+    assert(GetMap(23,16)==TILE_MAP_WELL);
+    GetMap(22,16)=GetMap(24,16)=GetMap(23,17)=GetMap(23,15)=TILE_MAP_WALL;
+    assert(WIDE_GroundTile(5,0)==TILE_MAP_WELL); /* no ground: opaque fallback */
+    GetMap(22,16)=GetMap(24,16)=GetMap(23,17)=GetMap(23,15)=1;
+    D_5896_map_x=16;
     /* A bed-bound NPC must keep the same pose across the original viewport
      * boundary. Compare the actual original actor-map result with fullscreen. */
+    D_5c5a[1]._2_x=23;
+    D_5c5a[1]._3_y=16;
     D_5c5a[1]._0_tile = D_5c5a[1]._1_animTile = 0x44;
     GetMap(23, 16) = TILE_MAP_BED;
     memset(tiles + (256 + 0x1a) * 128, 0x77, 128);

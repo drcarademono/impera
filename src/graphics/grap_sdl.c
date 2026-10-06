@@ -79,10 +79,9 @@ static void CaptureActors(ActorVisual* actors, const byte* indices, int w,
             int tx=x-1,ty=y-1;
             int nx=dx+(tx<0?-1:tx>=16?1:0),ny=dy+(ty<0?-1:ty>=16?1:0);
             int wx=a->_2_x+nx-dx, wy=a->_3_y+ny-dy;
-            byte terrain=combat?(wx<0 || wy<0 || wx>=11 || wy>=11?255:*ULTIMA_4402_GetTileAddr(wx,wy)):WIDE_MapTile(nx,ny);
             int color=GRAP_BUF_SpritePixel(tile,tx,ty);
             v->sprite[y*18+x]=color<0?0:s_egaPalette[color];
-            v->terrain[y*18+x]=s_egaPalette[GRAP_BUF_TilePixel(D_b11e[terrain],(tx+16)%16,(ty+16)%16)&15];
+            v->terrain[y*18+x]=s_egaPalette[WIDE_TerrainPixel(combat?wx-D_5896_map_x:nx,combat?wy-D_5897_map_y:ny,(tx+16)%16,(ty+16)%16)&15];
         }
     }
 }
@@ -293,8 +292,7 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
         Uint32* row = (Uint32*)((byte*)clean->pixels + (playerY+y)*clean->pitch);
         for (int x = -1; x <= 16; x++) {
             if (GRAP_BUF_SpritePixel(256+GetActorMap(5,5),x,y)<0) continue;
-            byte terrain=WIDE_MapTile(x<0?-1:x>=16?1:0,y<0?-1:y>=16?1:0);
-            row[playerX+x] = s_egaPalette[GRAP_BUF_TilePixel(D_b11e[terrain],(x+16)%16,(y+16)%16) & 15];
+            row[playerX+x] = s_egaPalette[WIDE_TerrainPixel(x<0?-1:x>=16?1:0,y<0?-1:y>=16?1:0,(x+16)%16,(y+16)%16) & 15];
         }
     }
     int dx = D_5896_map_x - s_previousX, dy = D_5897_map_y - s_previousY;

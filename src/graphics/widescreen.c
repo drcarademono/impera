@@ -76,9 +76,47 @@ static byte WorldTile(int x, int y)
 byte WIDE_MapTile(int dx, int dy)
 {
     int x = D_5896_map_x + dx, y = D_5897_map_y + dy;
+    if (D_5893_map_id >= 128) {
+        if (x < 0 || y < 0 || x >= 11 || y >= 11) return 255;
+        return *ULTIMA_4402_GetTileAddr(x,y);
+    }
     if (D_5893_map_id == 0) return WorldTile(x, y);
     if (x < 0 || y < 0 || x >= 32 || y >= 32) return 255;
     return *ULTIMA_4402_GetTileAddr(x, y);
+}
+
+byte WIDE_GroundTile(int dx, int dy)
+{
+    byte object = WIDE_MapTile(dx,dy);
+    if (!GRAP_BUF_TransparentSprites() ||
+        (object != TILE_MAP_WELL && (object & 0xfc) != TILE_MAP_FOUNTAIN)) return object;
+    /* Maps have no lower terrain layer. Infer only recognized ground from
+     * immediate cardinal neighbors; keep isolated objects opaque. */
+    const byte floors[] = {TILE_MAP_44, TILE_MAP_GRASS, TILE_MAP_45};
+    const int offsets[4][2] = {{0,1},{0,-1},{1,0},{-1,0}};
+    int best=0;
+    byte ground=object;
+    for (int i=0;i<3;i++) {
+        int count=0;
+        for (int j=0;j<4;j++)
+            count += WIDE_MapTile(dx+offsets[j][0],dy+offsets[j][1]) == floors[i];
+        if(count>best) {best=count;ground=floors[i];}
+    }
+    return ground;
+}
+
+byte WIDE_TerrainPixel(int dx, int dy, int x, int y)
+{
+    byte color=GRAP_BUF_TilePixel(D_b11e[WIDE_GroundTile(dx,dy)],x,y);
+    if(!GRAP_BUF_TransparentSprites()) return color;
+    /* Include outlines from adjacent static objects in restored terrain. */
+    for(int oy=-1;oy<=1;oy++) for(int ox=-1;ox<=1;ox++) {
+        byte tile=WIDE_MapTile(dx+ox,dy+oy);
+        if(WIDE_GroundTile(dx+ox,dy+oy)==tile) continue;
+        int pixel=GRAP_BUF_SpritePixel(D_b11e[tile],x-ox*16,y-oy*16);
+        if(pixel>=0) color=(byte)pixel;
+    }
+    return color;
 }
 
 static bool Transparent(byte tile, int distance)
@@ -153,7 +191,7 @@ bool WIDE_Compose(byte* pixels, WideLayout l)
                 if (!WIDE_Visible(dx, dy)) continue;
                 byte tile = WIDE_MapTile(dx, dy);
                 if (tile == 255) continue;
-                int idx = D_b11e[tile];
+                int idx = D_b11e[WIDE_GroundTile(dx,dy)];
                 for (int actor = 31; actor >= 0; actor--) {
                     ActorFmt* a = &D_5c5a[actor];
                     int ax = a->_2_x - D_5896_map_x, ay = a->_3_y - D_5897_map_y;
@@ -194,6 +232,14 @@ bool WIDE_Compose(byte* pixels, WideLayout l)
     /* Keep the engine's central tiles, effects, targeting and modal overlays. */
     Copy(pixels, l.width, l.mapX + (cx - 5) * 16, l.mapY + (cy - 5) * 16,
          8, 8, 176, 176);
+    for(int row=0;row<l.rows;row++) for(int col=0;col<l.columns;col++) {
+        int dx=col-cx,dy=row-cy;
+        if(abs(dx)<=5 && abs(dy)<=5 || !WIDE_Visible(dx,dy)) continue;
+        byte tile=WIDE_MapTile(dx,dy);
+        if(WIDE_GroundTile(dx,dy)!=tile)
+            GRAP_BUF_DrawSprite(pixels,l.width,l.mapX+col*16,l.mapY+row*16,
+                D_b11e[tile],l.mapX,l.mapY,l.mapX+l.columns*16,l.mapY+l.rows*16);
+    }
     for (int row = 0; row < l.rows; row++)
         for (int col = 0; col < l.columns; col++) {
             int sprite = sprites[row * l.columns + col];
@@ -207,8 +253,12 @@ bool WIDE_Compose(byte* pixels, WideLayout l)
         for (int col = 0; col < l.columns; col++) {
             int dx = col - cx, dy = row - cy;
             if (abs(dx) > 5 || abs(dy) > 5 || (abs(dx) != 5 && abs(dy) != 5)) continue;
-            if (GetMapViewport(dx + 5, dy + 5) != 0 || GetActorMap(dx + 5, dy + 5) == 0x16) continue;
-            int tile = 256 + GetActorMap(dx + 5, dy + 5);
+            int tile;
+            if (GetMapViewport(dx+5,dy+5)==0 && GetActorMap(dx+5,dy+5)!=0x16)
+                tile=256+GetActorMap(dx+5,dy+5);
+            else if(GetMapViewport(dx+5,dy+5)!=255 && WIDE_GroundTile(dx,dy)!=WIDE_MapTile(dx,dy))
+                tile=D_b11e[WIDE_MapTile(dx,dy)];
+            else continue;
             for (int sy = -1; sy <= 16; sy++)
                 for (int sx = -1; sx <= 16; sx++) {
                     int px = col * 16 + sx, py = row * 16 + sy;

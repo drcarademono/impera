@@ -41,6 +41,8 @@ static u8 s_colorTable[16] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14,
 static byte* s_tileset;
 static bool s_transparentSprites;
 
+bool GRAP_BUF_TransparentSprites(void) { return s_transparentSprites; }
+
 void GRAP_BUF_SetTransparentSprites(bool enabled) { s_transparentSprites = enabled; }
 
 static pfGrapFlushFrame* s_pfFlushFrame;
