@@ -123,6 +123,7 @@ even when Mouse Control is off, so it can be turned back on.
 | Mouse Control | Enable map movement and contextual actions; options menus remain clickable when off. |
 | Smooth Movement | Animate camera scrolling and visible actor steps. |
 | Diagonal Movement | Enable eight-way movement, neighboring actions, and combat. |
+| CRT Filter | VGA-era scanlines, phosphor stripes, subtle glow and edge shading. |
 | Dithered Darkness | Fade visibility edges with an Ultima 6-style ordered pixel pattern. |
 | Transparent Sprites | Reveal ground around character and supported object sprites. |
 | Music | Enable or mute external music playback. |
@@ -275,6 +276,16 @@ Movement speed also scales smooth tile transitions so held input continues
 without waiting at tile boundaries.
 Smooth movement uses timed keyboard repeats so held input continues across tile
 boundaries; otherwise keyboard repeat retains the operating system's behavior.
+
+### CRT filter
+
+Enable **CRT Filter** in Engine Options or launch with `--crt-filter` for a
+late-1980s color VGA monitor appearance: approximately 400 beam lines, subtle
+RGB phosphor stripes, soft glow and restrained edge shading. It applies to
+gameplay, menus and cutscenes, including smooth movement and fullscreen.
+It is off by default and saved in `ENGINE.CFG`. At small window sizes the
+scanlines are averaged to keep text readable.
+
 
 ### Dithered darkness
 

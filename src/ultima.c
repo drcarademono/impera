@@ -36,6 +36,7 @@ extern int g_enableDebugOverlay;
 #if defined(TARGET_SDL)
 #include <SDL3/SDL_main.h>
 #include "graphics/grap_sdl.h"
+#include "graphics/crt.h"
 #include "graphics/grap_buf.h"
 #include "graphics/animate.h"
 #include "key/mouse.h"
@@ -89,11 +90,13 @@ int CDECL main(int argc, char** argv/*, char** envp*/)
             GRAP_BUF_SetTransparentSprites(true);
         else if (strcmp(argv[arg], "--dithered-darkness") == 0)
             WIDE_SetDitheredDarkness(true);
+        else if (strcmp(argv[arg], "--crt-filter") == 0)
+            CRT_SetEnabled(true);
         else if (strcmp(argv[arg], "--legacy-save") == 0)
             SLOTS_SetLegacyEnabled(true);
         else if (strcmp(argv[arg], "--help") == 0)
         {
-            puts("Usage: ultima5 [--fullscreen] [--mouse] [--smooth-movement] [--movement-speed N] [--animation-speed N] [--diagonal-movement] [--transparent-sprites] [--dithered-darkness] [--legacy-save] [C|H|T|E]\n"
+            puts("Usage: ultima5 [--fullscreen] [--mouse] [--smooth-movement] [--movement-speed N] [--animation-speed N] [--diagonal-movement] [--transparent-sprites] [--dithered-darkness] [--crt-filter] [--legacy-save] [C|H|T|E]\n"
                  "  --fullscreen       Expand the overhead map with uniform integer pixel scaling.\n"
                  "  --mouse            Enable mouse movement and contextual actions.\n"
                  "  --diagonal-movement Enable diagonal movement, actions, cursors and combat.\n"
@@ -102,6 +105,7 @@ int CDECL main(int argc, char** argv/*, char** envp*/)
                  "  --animation-speed N Animated sprite speed multiplier (0.1 to 10; default 1).\n"
                  "  --transparent-sprites Show ground through black sprite backgrounds with a one-pixel outline.\n"
                  "  --dithered-darkness Fade visibility edges with a retro pixel pattern.\n"
+                 "  --crt-filter       Simulate a late-1980s VGA CRT monitor.\n"
                  "  --legacy-save      Show Legacy Save in the load menu when original save files are valid.");
             return EXIT_SUCCESS;
         }

@@ -76,8 +76,10 @@ int main(int argc, char** argv)
     ENGINE_Set(ENGINE_MOUSE,1);assert(ENGINE_Get(ENGINE_MOUSE)==1);
     ENGINE_Set(ENGINE_MOUSE,0);
     ENGINE_Set(ENGINE_DITHERED_DARKNESS,1);
-    assert(ENGINE_Save());ENGINE_Set(ENGINE_DITHERED_DARKNESS,0);ENGINE_Set(ENGINE_MOVEMENT_SPEED,1);ENGINE_Load();
+    assert(ENGINE_Get(ENGINE_CRT)==0);ENGINE_Set(ENGINE_CRT,1);
+    assert(ENGINE_Save());ENGINE_Set(ENGINE_CRT,0);ENGINE_Set(ENGINE_DITHERED_DARKNESS,0);ENGINE_Set(ENGINE_MOVEMENT_SPEED,1);ENGINE_Load();
     assert(ENGINE_Get(ENGINE_DITHERED_DARKNESS)==1);
+    assert(ENGINE_Get(ENGINE_CRT)==1);ENGINE_Set(ENGINE_CRT,0);
     ENGINE_Set(ENGINE_DITHERED_DARKNESS,0);
     assert(ENGINE_Get(ENGINE_MOVEMENT_SPEED)==0.5f);
     f=fopen("ENGINE.CFG","w");assert(f);fputs("movement_speed nan\nanimation_speed 99\nfullscreen 3\n",f);fclose(f);

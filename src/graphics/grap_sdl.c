@@ -1,3 +1,4 @@
+#include "crt.h"
 #include "common/common.h"
 #include "common/settings.h"
 
@@ -256,6 +257,7 @@ void GRAP_SDL_Initialize(void)
 
 void GRAP_SDL_Cleanup(void)
 {
+    CRT_Cleanup();
     GRAP_BUF_Cleanup();
     free(s_previousPixels);
     s_previousPixels = NULL;
@@ -489,7 +491,9 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
                     SDL_RenderFillRect(s_sdlRenderer,&shadow);
                 }
                 SDL_SetRenderClipRect(s_sdlRenderer,NULL);
+                CRT_EndFrame(s_sdlRenderer);
                 SDL_RenderPresent(s_sdlRenderer);
+                CRT_ResumeFrame(s_sdlRenderer);
                 SDL_PumpEvents();
                 MOUSE_UpdateCursor();
                 if (frame < 8) SDL_Delay((Uint32)SDL_roundf(16.0f / s_movementSpeed));
@@ -556,6 +560,7 @@ extern void DisplayDebugMessages(void);
 
 void GRAP_SDL_FlushFrame(void)
 {
+    CRT_BeginFrame(s_sdlRenderer);
     bool completedMap=s_mapDrawn;
     s_expandedFrame = false;
     if(!s_fullscreen || s_pixelUI || !D_58a4) s_completedWideValid=false;
@@ -666,7 +671,9 @@ void GRAP_SDL_FlushFrame(void)
     }
     s_mapDrawn=false;
     if(s_captureRequested) s_capturedFrame=SDL_RenderReadPixels(s_sdlRenderer,NULL);
+    CRT_EndFrame(s_sdlRenderer);
     SDL_RenderPresent(s_sdlRenderer);
+    CRT_ResumeFrame(s_sdlRenderer);
 }
 
 static GraphicsDriverOps s_winOps =
