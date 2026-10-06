@@ -2,6 +2,7 @@
 #define _TALK_H
 
 int TALK_031e_TalkToNpc(int param_1);
+int TALK_Target(int dx,int dy,int* x,int* y);
 int TALK_041c_TalkCmd(void);
 
 #endif

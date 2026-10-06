@@ -5,6 +5,7 @@
 #include "macros.h"
 #include "tiles.h"
 #include "comsubs.h"
+#include "talk.h"
 #include "mouse.h"
 #include "graphics/grap_sdl.h"
 #include <SDL3/SDL.h>
@@ -155,7 +156,7 @@ void MOUSE_SetEnabled(bool enabled)
     }
 }
 bool MOUSE_Enabled(void) { return s_enabled; }
-static int s_dx, s_dy, s_command, s_direction;
+static int s_dx, s_dy, s_command, s_direction, s_targetDx, s_targetDy;
 static int s_map, s_level, s_x, s_y, s_combatEntity;
 static bool s_combatAttack;
 static int s_attackX, s_attackY, s_attackEntity;
@@ -235,6 +236,12 @@ static int AdjacentDirection(int dx, int dy)
     if (!MOVEMENT_Adjacent(dx,dy) || (!dx && !dy)) return 0;
     return MOUSE_Direction((float)dx, (float)dy);
 }
+static int TalkTarget(int dx,int dy,int* x,int* y)
+{
+    /* The original actor lookup uses D_5876 as an output actor index. */
+    int saved=D_5876;int actor=TALK_Target(dx,dy,x,y);D_5876=saved;
+    return actor>=0x30 && (actor&0xfc)!=TILE_ACTOR_SHARD?actor:0;
+}
 int MOUSE_Action(int dx, int dy, bool mainAction)
 {
     if (D_5893_map_id >= 128) {
@@ -265,12 +272,19 @@ int MOUSE_Action(int dx, int dy, bool mainAction)
                 return 'B';
         }
         if (!D_5893_map_id && (tile == TILE_MAP_TOWNE || tile == TILE_MAP_CASTLE ||
-            tile == TILE_MAP_CASTLELB || (tile >= 0x16 && tile <= 0x1a))) return 'E';
+            tile == TILE_MAP_CASTLELB || tile == TILE_MAP_PALACEBT || (tile >= 0x16 && tile <= 0x1a))) return 'E';
         if (tile == TILE_MAP_LADDER_UP || tile == TILE_MAP_LADDER_DOWN) return 'K';
         if (tile == TILE_MAP_BED) return 'H';
         return 0;
     }
-    if (!AdjacentDirection(dx, dy)) return 0;
+    if (!AdjacentDirection(dx, dy)) {
+        /* A two-tile Talk target must lie exactly along a legal direction. */
+        if(D_5893_map_id && dx%2==0 && dy%2==0 && AdjacentDirection(dx/2,dy/2)) {
+            int tx,ty;int actor=TalkTarget(dx/2,dy/2,&tx,&ty);
+            if(actor>=0x30 && tx==x && ty==y) return 'T';
+        }
+        return 0;
+    }
     for (int i = 1; i < 32; i++) {
         ActorFmt* a = &D_5c5a[i];
         if (a->_0_tile && a->_2_x == (byte)x && a->_3_y == (byte)y && a->_4_z == D_5895_map_level) {
@@ -283,7 +297,13 @@ int MOUSE_Action(int dx, int dy, bool mainAction)
     int tile = *ULTIMA_4402_GetTileAddr(x, y);
     if ((tile >= TILE_MAP_DOOR_B8 && tile <= TILE_MAP_DOOR_BB) ||
         tile == TILE_MAP_TRUNK || (tile >= 0x97 && tile <= 0x99)) return 'O';
-    if (tile == TILE_MAP_CROPS || tile == TILE_MAP_B0 || tile == TILE_MAP_B1) return 'G';
+    if (tile == TILE_MAP_CROPS || tile == TILE_MAP_B0 || tile == TILE_MAP_B1 ||
+        (tile==TILE_MAP_TABLE_9A && dy==1) || (tile==TILE_MAP_TABLE_9B && dy==-1) ||
+        (tile==TILE_MAP_TABLE_9C && dx==0)) return 'G';
+    if(D_5893_map_id) {
+        int tx,ty;
+        if(TalkTarget(dx,dy,&tx,&ty)) return 'T';
+    }
     return 'L';
 }
 static void Snapshot(void)
@@ -366,6 +386,8 @@ int MOUSE_PollCommand(void)
             }
             return command;
         }
+        s_targetDx=command=='T'?(s_dx>0)-(s_dx<0):s_dx;
+        s_targetDy=command=='T'?(s_dy>0)-(s_dy<0):s_dy;
         s_direction = MOUSE_Direction((float)s_dx, (float)s_dy);
         if (!s_direction && command == 'L') s_direction = U5_KEY_SPACE;
         debug("Mouse action: %c target_offset=%d,%d\n", command, s_dx, s_dy);
@@ -396,7 +418,7 @@ int MOUSE_TakeDirection(void)
 bool MOUSE_TakeTarget(int* dx, int* dy)
 {
     if (!s_direction || !SamePosition()) { s_direction = 0; return false; }
-    *dx = s_dx; *dy = s_dy;
+    *dx = s_targetDx; *dy = s_targetDy;
     s_direction = 0;
     return true;
 }
