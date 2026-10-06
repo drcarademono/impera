@@ -115,8 +115,8 @@ int main(void)
         assert(WIDE_GroundTile(7,0)==0x44);
     }
     /* The audited object list shares the same inference and opt-in behavior. */
-    const byte cutouts[]={TILE_MAP_BRAZIER,TILE_MAP_59,0xa3,0x8e,
-        0x80,0x81,0x99,0xaa,
+    const byte cutouts[]={TILE_MAP_BRAZIER,TILE_MAP_59,0x88,0xa3,TILE_MAP_84,0x8e,
+        0x80,0x81,0x82,0x83,TILE_MAP_86,0x8b,0x99,0xaa,
         TILE_MAP_LADDER_UP,TILE_MAP_LADDER_DOWN,
         TILE_MAP_CANNON_B4,TILE_MAP_CANNON_B5,TILE_MAP_CANNON_B6,TILE_MAP_CANNON_B7};
     for(size_t i=0;i<sizeof(cutouts);i++) {
@@ -142,28 +142,16 @@ int main(void)
         assert(pixels[(objectY+8)*broad.width+objectX+2]==0);
         GRAP_BUF_SetTransparentSprites(true);
     }
-    /* Both exempt decimal ranges stay opaque regardless of adjacent ground. */
-    const byte exemptions[]={90,91,92,93,94,95,96,130,131,132,133,134,135,136,137,138,139};
-    for(size_t i=0;i<sizeof(exemptions);i++) {
-        int tile=exemptions[i];
-        D_b11e[tile]=(byte)tile;
-        memset(tiles+tile*128,0,128);
-        tiles[tile*128+8*8]=0x20;
-        GetMap(23,16)=(byte)tile;
-        assert(WIDE_GroundTile(7,0)==tile);
-        assert(GRAP_BUF_SpritePixel(tile,2,8)==0);
-        assert(GRAP_BUF_SpritePixel(tile,-1,8)==-1);
-        assert(WIDE_Compose(pixels,broad));
-        assert(pixels[(objectY+8)*broad.width+objectX+2]==0);
-    }
+    /* Empty and occupied stocks use the same grass backdrop; all occupied
+     * poses remain transparent through the existing actor sprite path. */
     GetMap(22,16)=GetMap(24,16)=GetMap(23,17)=GetMap(23,15)=TILE_MAP_GRASS;
     D_b11e[TILE_MAP_GRASS]=TILE_MAP_GRASS;
     memset(tiles+TILE_MAP_GRASS*128,0x55,128);
     for(int object=0;object<2;object++) {
         GetMap(23,16)=object?0x8e:TILE_MAP_84;
-        assert(WIDE_GroundTile(7,0)==(object?TILE_MAP_GRASS:TILE_MAP_84));
+        assert(WIDE_GroundTile(7,0)==TILE_MAP_GRASS);
         assert(WIDE_Compose(pixels,broad));
-        assert(pixels[(objectY+8)*broad.width+objectX+2]==(object?5:0));
+        assert(pixels[(objectY+8)*broad.width+objectX+2]==5);
     }
     GetMap(23,16)=TILE_MAP_84;
     D_5c5a[1]._0_tile=D_5c5a[1]._1_animTile=0x44;
@@ -176,7 +164,7 @@ int main(void)
     int pose=ULTIMA_ResolveActorTile(0x44,TILE_MAP_84,5,5,&stocksReflection);
     assert(pose>=0x60 && pose<=0x63);
     assert(WIDE_Compose(pixels,broad));
-    assert(pixels[(objectY+8)*broad.width+objectX+2]==0);
+    assert(pixels[(objectY+8)*broad.width+objectX+2]==5);
     memset(D_5c5a,0,sizeof(D_5c5a));
     GetMap(22,16)=GetMap(24,16)=GetMap(23,17)=0x44;
     /* Empty manacles and all occupied animation frames stay opaque. */

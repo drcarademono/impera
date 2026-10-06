@@ -90,7 +90,6 @@ byte WIDE_MapTile(int dx, int dy)
  * must not be treated as cutout sprites. */
 static bool HasObjectBackground(byte tile)
 {
-    if((tile >= 90 && tile <= 96) || (tile >= 130 && tile <= 139)) return false;
     return tile == TILE_MAP_WELL || (tile & 0xfc) == TILE_MAP_FOUNTAIN ||
         tile == TILE_MAP_BRAZIER || tile == TILE_MAP_59 ||
         (tile >= 0x80 && tile <= 0x83) /* animated pendulum */ ||
