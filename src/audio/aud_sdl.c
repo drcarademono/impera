@@ -1,5 +1,6 @@
 #include "common/common.h"
 #include "common/file.h"
+#include "common/data_setup.h"
 #include <errno.h>
 #include <string.h>
 
@@ -38,7 +39,10 @@ static void AUDIO_SDL_LoadSfxTable(void);
 static void PlaySpeaker(int kind,int a,int b,int c,int d,int e);
 static bool ResolveAudioPath(const char* name,char* resolved,size_t capacity)
 {
+    if(FILE_NameEqual(name,"Music") && *SETUP_MusicDirectory())
+        return FILE_ResolvePath(SETUP_MusicDirectory(),resolved,capacity,0)==0;
     if (FILE_ResolvePath(name,resolved,capacity,0)==0) return true;
+    if(FILE_DataPath(name,resolved,capacity)==0) return true;
     const char* base=SDL_GetBasePath();
     char alongside[FILE_PATH_SIZE];
     if (!base || SDL_snprintf(alongside,sizeof(alongside),"%s%s",base,name)>=(int)sizeof(alongside)) return false;

@@ -22,6 +22,7 @@
 #if defined(TARGET_SDL)
 #include <setjmp.h>
 #include "common/save_slots.h"
+#include "common/data_setup.h"
 #include "key/key.h"
 #include "key/mouse.h"
 static jmp_buf s_reloadPoint;
@@ -109,6 +110,10 @@ int CDECL main(int argc, char** argv/*, char** envp*/)
 #else
     if (argc > 1)
         local_4 = ULTIMA_2032_ToUpper((unsigned char)argv[1][0]);
+#endif
+
+#if defined(TARGET_SDL)
+    if(!SETUP_Run()) return EXIT_SUCCESS;
 #endif
 
 #if defined(ENABLE_TRANSLATION)

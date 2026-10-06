@@ -4,6 +4,8 @@
 #include <stdio.h>
 
 #define FILE_PATH_SIZE 4096
+void FILE_SetDataDirectory(const char* directory);
+int FILE_DataPath(const char* path,char* resolved,size_t capacity);
 int FILE_NameEqual(const char* left, const char* right);
 /* Exact spelling wins; otherwise require a unique ASCII case-insensitive match.
  * allowMissingLeaf is for creating files, never for creating parent directories. */

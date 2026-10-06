@@ -37,3 +37,7 @@ SAVEGAME/PLAYTIME
 SAVEGAME/*.pending
 SAVEGAME/*.previous
 SAVEGAME/.slot-thumbnail.bmp
+
+# External game-data selections
+DATA.CFG
+DATA.CFG.pending

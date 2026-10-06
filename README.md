@@ -47,6 +47,22 @@ cmake --build build --parallel 4
 bash scripts/run-linux.sh
 ```
 
+On first launch, a pixel-art setup screen asks for the directory containing your
+own Ultima V game files and a **Music (Optional)** directory. Select a row with
+Up/Down and Enter, or click it, to open the system folder picker. **Start Game**
+validates the game files and remembers both locations in `build/runtime/DATA.CFG`.
+The setup screen returns if a selected directory or required game asset goes
+missing. Delete `DATA.CFG` to choose different locations. **Clear Music** removes
+the optional selection. Escape cancels startup.
+
+Before the game files are available, setup uses the engine's public-domain 8×8
+font. After choosing a valid game directory it uses the original `IBM.CH` font.
+Game assets and music stay external; the engine does not embed or copy them.
+Writable saves stay in `build/runtime/SAVEGAME`, leaving the selected installation
+unchanged. `U5D_DATA_DIR=/absolute/path/to/game` also supports an explicit game
+location for unattended launches. The separate music folder takes precedence
+over a `Music` folder alongside the game files.
+
 To fill your display, launch with `bash scripts/run-linux.sh --fullscreen`.
 This detects the desktop resolution, adds overhead map rows and columns, and
 moves the status and command column to the right edge. Tiles and text use the
@@ -203,17 +219,15 @@ bash scripts/run-linux.sh --fullscreen --mouse --smooth-movement --diagonal-move
 For libraries installed under a custom prefix, add its `lib/pkgconfig` (or
 `lib64/pkgconfig`) directory to `PKG_CONFIG_PATH` before configuring.
 
-The launcher copies the original data from `Ultima 5` to `build/runtime`
-on first run and keeps saves in `build/runtime/SAVEGAME`. Existing runtime
-files and saves are preserved on later runs. Set `U5D_DATA_DIR` to an absolute
+The launcher keeps writable saves in `build/runtime/SAVEGAME` and reads game
+assets from the directory selected in setup. Existing saves are preserved. Set `U5D_DATA_DIR` to an absolute
 path to use another data directory, or `U5D_BUILD_DIR` to an absolute path
 if you configured a different build directory. Game filenames and directory
 components are matched without regard to ASCII letter case, including fonts,
 maps, NPCs, conversations, saves, Ultima IV imports, and optional audio.
 Existing saves retain their filename spelling when written. Exact spelling
 wins; if a lookup has multiple matches differing only by case, it reports an
-error rather than choosing one. The launcher rejects conflicting source
-spellings and preserves existing runtime files and saves.
+error rather than choosing one.
 New character creation requires the original `INIT.GAM` file (at least 4192
 bytes), which supplies the starting party and world state. Add it to the data
 directory if it is missing; `INIT.OOL` is a different file and cannot replace
@@ -252,8 +266,8 @@ explicit timing conversion, not an emulation of DOS CPU calibration via
 `D_5356`/`D_5426`; it does not alter the sound algorithms. PCM is sampled at
 48 kHz without frequency/duty clamps or click envelopes. Legacy `SFX` files
 also remain supported.
-The Linux launcher refreshes supplied audio folders in the runtime on each
-launch; players can also place them directly in `build/runtime`.
+Audio is read directly from the optional selected music folder or the usual
+external audio directories; players can also place it in `build/runtime`.
 No audio assets are needed for synthesized effects. Do not set
 SDL's dummy video/audio drivers when playing on your desktop. Headless cloud
 validation covered rendering, menu input, and the character-name prompt;
