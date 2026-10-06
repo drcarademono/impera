@@ -45,10 +45,16 @@ static Uint32 accept(void* unused,SDL_TimerID id,Uint32 interval)
     assert(SDL_PushEvent(&e));return 0;
 }
 static bool captureBrowser;
+static bool checkNoLegacy, sawNoLegacy;
 bool __real_SDL_RenderPresent(SDL_Renderer* renderer);
 bool __wrap_SDL_RenderPresent(SDL_Renderer* renderer)
 {
     bool presented=__real_SDL_RenderPresent(renderer);
+    if(checkNoLegacy) {
+        for(int y=39;y<51;y++) for(int x=16;x<296;x++)
+            assert(g_linearEgaBuffer0[y*320+x]==0);
+        sawNoLegacy=true;checkNoLegacy=false;
+    }
     if(captureBrowser && D_539c[0]) {
         bool title=true;
         for(int y=0;y<8;y++) for(int x=0;x<8;x++)
@@ -125,6 +131,12 @@ int main(void)
     event.button.x=24*4;event.button.y=80+184*4;assert(SDL_PushEvent(&event));
     assert(!SLOTS_ShowLoad());
     for(int i=0;i<320*200;i++) assert(g_linearEgaBuffer0[i]==3);
+    /* Missing legacy files hide its row while named slots remain usable. */
+    assert(SDL_RenamePath("SAVEGAME/SAVED.GAM","SAVEGAME/SAVED.GAM.test-backup"));
+    checkNoLegacy=true;
+    assert(SDL_AddTimer(50,cancel,NULL));assert(!SLOTS_ShowLoad());assert(sawNoLegacy);
+    assert(SDL_AddTimer(50,accept,NULL));assert(SLOTS_ShowLoad());
+    assert(SDL_RemovePath("SAVEGAME/SAVED.GAM.test-backup"));
     /* Shortcuts are inert outside gameplay, including title/cutscene mode. */
     SDL_Event shortcut={0};shortcut.type=SDL_EVENT_KEY_DOWN;shortcut.key.mod=SDL_KMOD_CTRL;
     KEY_SDL_SetGameplayInput(0);

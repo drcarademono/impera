@@ -193,14 +193,16 @@ static int compare(const void* a,const void* b)
 { return strcmp(((const Slot*)b)->id,((const Slot*)a)->id); }
 static void timeText(char* out,size_t n,uint64_t ms)
 { SDL_snprintf(out,n,"%lluh %02llum %02llus",(unsigned long long)(ms/3600000),(unsigned long long)(ms/60000%60),(unsigned long long)(ms/1000%60)); }
-static bool s_inGame;
+static bool s_inGame, s_hasFirstRow;
 static void draw(bool saving,int selected,int top,const char* status)
 {
     memset(g_linearEgaBuffer0,0,320*200);ENGINE_UIFrame();
     ENGINE_UIText(124,12,saving?"Save Game":"Load Game",15);
     ENGINE_UIText(16,26,status?status:"Arrows/Enter  Esc: Back",7);
-    ENGINE_UIRect(16,39,280,12,selected==0?15:0);
-    ENGINE_UIText(24,41,saving?"New Save":"Current / Legacy Save",selected==0?0:15);
+    if(s_hasFirstRow) {
+        ENGINE_UIRect(16,39,280,12,selected==0?15:0);
+        ENGINE_UIText(24,41,saving?"New Save":"Legacy Save",selected==0?0:15);
+    }
     GRAP_SDL_ClearUIThumbnails();
     for(int row=0;row<4 && top+row<s_count;row++) {
         int index=top+row,y=56+row*30;Slot* slot=&s_slots[index];
@@ -277,7 +279,9 @@ static bool show(bool saving,bool inGame)
     bool captured=thumbnail && SDL_SaveBMP(thumbnail,capture);
     SDL_DestroySurface(thumbnail);SDL_DestroySurface(shot);
     KEY_SDL_ClearInput();MOUSE_Cancel();GRAP_SDL_SetPixelUI(true);MOUSE_SetPointerMode(true);
-    int selected=0,top=0;float wheelRemainder=0;bool done=false,result=false,drag=false;
+    s_hasFirstRow=saving || validLegacy();
+    int first=s_hasFirstRow?0:1;
+    int selected=first,top=0;float wheelRemainder=0;bool done=false,result=false,drag=false;
     const char* status=s_scanFailed?"Unable to list all saves":NULL;
     draw(saving,selected,top,status);
     while(!done) {
@@ -288,12 +292,12 @@ static bool show(bool saving,bool inGame)
             if(e.type==SDL_EVENT_KEY_DOWN) {
                 switch(e.key.key) {
                 case SDLK_ESCAPE:done=true;break;
-                case SDLK_UP:selected=SDL_max(0,selected-1);break;
+                case SDLK_UP:selected=SDL_max(first,selected-1);break;
                 case SDLK_DOWN:selected=SDL_min(s_count+1,selected+1);break;
-                case SDLK_PAGEUP:selected=SDL_max(0,selected-4);break;
-                case SDLK_PAGEDOWN:selected=SDL_min(s_count,selected+4);break;
-                case SDLK_HOME:selected=0;break;
-                case SDLK_END:selected=s_count;break;
+                case SDLK_PAGEUP:selected=SDL_max(first,selected-4);break;
+                case SDLK_PAGEDOWN:selected=SDL_min(s_count+1,selected+4);break;
+                case SDLK_HOME:selected=first;break;
+                case SDLK_END:selected=SDL_max(first,s_count);break;
                 case SDLK_RETURN:case SDLK_SPACE:activate=!e.key.repeat;break;
                 }
                 if(selected>0 && selected<=s_count && selected-1<top) top=selected-1;
@@ -312,7 +316,7 @@ static bool show(bool saving,bool inGame)
                     if(drag && s_count>4) top=SDL_clamp((int)((y-56)/118*(s_count-4)),0,s_count-4);
                     else if(x>=16 && x<296) {
                         if(y>=179 && y<189) { selected=s_count+1;activate=click; }
-                        else if(y>=39 && y<51) { selected=0;activate=click; }
+                        else if(s_hasFirstRow && y>=39 && y<51) { selected=0;activate=click; }
                         else if(y>=56 && y<176) {
                             int index=top+(int)((y-56)/30);
                             if(index<s_count) { selected=index+1;activate=click; }
