@@ -407,7 +407,7 @@ static void INTRO_06bc_BuildMainMenu(int param_1)
     INTRO_0676_WriteMenuOption(param_1, 4, 0xb, _TEXT(0x315e, "Acknowledgements"));
     INTRO_0676_WriteMenuOption(param_1, 5, 10, _TEXT(0x316f, "Return to the View"));
 #if defined(TARGET_SDL)
-    INTRO_0676_WriteMenuOption(param_1, 6, 11, "Engine Settings");
+    INTRO_0676_WriteMenuOption(param_1, 6, 12, "Engine Options");
     GRAP_BUF_SetTextPixelOffset(0);
 #endif
 }
@@ -791,7 +791,7 @@ static void INTRO_RunMain(void) // intro_main (initialize video) (8b46)
                 case U5_KEY_ENTER:  // CR
                 case U5_KEY_SPACE: // ' '
                     // 0de2
-                    local_10 = local_c==6 ? 'E' : _TEXT(0x3270, "JCTUAR")[local_c];
+                    local_10 = local_c==6 ? 'O' : _TEXT(0x3270, "JCTUAR")[local_c];
                     break;
                 case 0:
                     local_10 = 0x52;
@@ -815,7 +815,7 @@ static void INTRO_RunMain(void) // intro_main (initialize video) (8b46)
                     INTRO_06bc_BuildMainMenu(5);
                     break;
 #if defined(TARGET_SDL)
-                case 'E':
+                case 'O':
                     INTRO_06bc_BuildMainMenu(6);
                     break;
 #endif
@@ -830,8 +830,8 @@ static void INTRO_RunMain(void) // intro_main (initialize video) (8b46)
         switch ((int)local_10)
         {
 #if defined(TARGET_SDL)
-        case 'E':
-            ENGINE_ShowSettings();
+        case 'O':
+            ENGINE_ShowOptions(false);
             break;
 #endif
         case 0x4a: // 'J'

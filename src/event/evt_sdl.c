@@ -10,6 +10,11 @@ static EVT_Callback* s_callbacks[16];
 static int s_registeredCallbackCount;
 static int s_immediateExit;
 
+int EVT_ImmediateExitEnabled(void)
+{
+    return s_immediateExit;
+}
+
 int EVT_SetImmediateExit(int enabled)
 {
     int previous = s_immediateExit;

@@ -16,6 +16,14 @@ void GRAP_SDL_Cleanup(void);
 
 static void key(SDL_Keycode code)
 { SDL_Event e={0};e.type=SDL_EVENT_KEY_DOWN;e.key.key=code;assert(SDL_PushEvent(&e)); }
+static Uint32 closeGameplayOptions(void* userdata, SDL_TimerID timer, Uint32 interval)
+{
+    (void)userdata;(void)timer;(void)interval;
+    for(int i=0;i<5;i++) key(SDLK_DOWN);
+    key(SDLK_RETURN); /* Toggle music to prove the shortcut opened the screen. */
+    key(SDLK_ESCAPE);
+    return 0;
+}
 int main(int argc, char** argv)
 {
     remove("ENGINE.CFG");
@@ -24,6 +32,22 @@ int main(int argc, char** argv)
     D_5893_map_id=0x40;D_58a4=0;
     byte font[1024];FILE* f=fopen("IBM.CH","rb");assert(f);
     assert(fread(font,1,sizeof(font),f)==sizeof(font));fclose(f);D_539c[0]=font;
+    if(argc==2 && !strcmp(argv[1],"gameplay_options")) {
+        memset(g_linearEgaBuffer0,3,320*200);
+        ENGINE_Set(ENGINE_MUSIC,1);
+        SDL_Event shortcut={0};shortcut.type=SDL_EVENT_KEY_DOWN;
+        shortcut.key.key=SDLK_O;shortcut.key.mod=SDL_KMOD_CTRL;
+        assert(SDL_PushEvent(&shortcut));
+        assert(SDL_AddTimer(50,closeGameplayOptions,NULL));
+        assert(KEY_PollKey()==0);
+        assert(ENGINE_Get(ENGINE_MUSIC)==0);
+        for(int i=0;i<320*200;i++) assert(g_linearEgaBuffer0[i]==3);
+        ENGINE_Set(ENGINE_MUSIC,1);ENGINE_Load();
+        assert(ENGINE_Get(ENGINE_MUSIC)==0);
+        remove("ENGINE.CFG");
+        GRAP_SDL_Cleanup();SDL_Quit();
+        return 0;
+    }
     if(argc==2) {
         SDL_Event exitKey={0};exitKey.type=SDL_EVENT_KEY_DOWN;
         exitKey.key.key=SDLK_E;exitKey.key.mod=SDL_KMOD_CTRL;
@@ -40,7 +64,7 @@ int main(int argc, char** argv)
             return 0;
         }
         if(strcmp(argv[1],"settings")) EVT_SetImmediateExit(1);
-        if(!strcmp(argv[1],"settings")) ENGINE_ShowSettings();
+        if(!strcmp(argv[1],"settings")) ENGINE_ShowOptions(false);
         else if(!strcmp(argv[1],"cutscene")) TIME_SleepMs(100);
         else KEY_PollKey(); /* Main-menu keyboard path. */
         fputs("Ctrl+E was consumed without exiting\n",stderr);
@@ -58,7 +82,7 @@ int main(int argc, char** argv)
     ENGINE_Set(ENGINE_FULLSCREEN,0);assert(ENGINE_Get(ENGINE_FULLSCREEN)==0);
     GRAP_SDL_SetPixelUI(true);ENGINE_DrawSettings(7);
     for(int y=0;y<8;y++) for(int x=0;x<8;x++)
-        assert(g_linearEgaBuffer0[(12+y)*320+96+x]==((font['E'*8+y]&(0x80>>x))?15:0));
+        assert(g_linearEgaBuffer0[(12+y)*320+104+x]==((font['E'*8+y]&(0x80>>x))?15:0));
     /* Both ends of the settings content have four pixels of inset. */
     for(int x=9;x<311;x++) {
         assert(g_linearEgaBuffer0[11*320+x]==0);
@@ -80,7 +104,7 @@ int main(int argc, char** argv)
     e.type=SDL_EVENT_MOUSE_MOTION;e.motion.x=248*4;e.motion.y=80+144*4;assert(SDL_PushEvent(&e));
     e.type=SDL_EVENT_MOUSE_BUTTON_UP;assert(SDL_PushEvent(&e));
     key(SDLK_ESCAPE);
-    ENGINE_ShowSettings();
+    ENGINE_ShowOptions(false);
     assert(ENGINE_Get(ENGINE_MUSIC)==0 && ENGINE_Get(ENGINE_SOUND)==0);
     assert(ENGINE_Get(ENGINE_MOVEMENT_SPEED)==1 && ENGINE_Get(ENGINE_ANIMATION_SPEED)==0.75f);
     for(int i=0;i<320*200;i++) assert(g_linearEgaBuffer0[i]==3); /* restores title art */

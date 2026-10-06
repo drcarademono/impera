@@ -3,6 +3,8 @@
 #include "vars.h"
 #include "macros.h"
 #include "mouse.h"
+#include "common/engine_settings.h"
+#include "event/event.h"
 #include "graphics/grap_sdl.h"
 
 #include <SDL3/SDL.h>
@@ -35,6 +37,12 @@ void KEY_SDL_ReleaseKey(SDL_Keycode key)
     }
 }
 
+void KEY_SDL_ClearInput(void)
+{
+    s_lastDownKeycode = 0;
+    KEY_SDL_ReleaseKey(0);
+}
+
 static u16 KeyboardEventToUltimaKeycode(SDL_KeyboardEvent ev)
 {
     if (ev.mod & SDL_KMOD_CTRL)
@@ -44,6 +52,7 @@ static u16 KeyboardEventToUltimaKeycode(SDL_KeyboardEvent ev)
         case SDLK_B: return 2;
         case SDLK_E: return U5_KEY_CTRL_E;
         case SDLK_K: return U5_KEY_CTRL_K;
+        case SDLK_O: return U5_KEY_CTRL_O;
         case SDLK_M: return U5_KEY_CTRL_M; // same as CR
         case SDLK_S: return U5_KEY_CTRL_S;
         case SDLK_V: return U5_KEY_CTRL_V;
@@ -114,6 +123,7 @@ static u16 KeyboardEventToUltimaKeycode(SDL_KeyboardEvent ev)
 void KEY_SDL_ProcessKeyDown(SDL_KeyboardEvent ev)
 {
     u16 key = KeyboardEventToUltimaKeycode(ev);
+    if (key == U5_KEY_CTRL_O && ev.repeat) return;
     bool direction = (key >= (0x100 | U5_KEY_LEFT) && key <= (0x100 | U5_KEY_DOWN)) ||
                      (key >= (0x100 | U5_KEY_HOME) && key <= (0x100 | U5_KEY_PGDN));
     if ((GRAP_SDL_CustomMovementSpeed() || GRAP_SDL_SmoothMovementEnabled()) && direction) {
@@ -145,6 +155,12 @@ int KEY_PollKey(void)
     {
         s_lastDownKeycode &= 0xff;
         D_538a = 1;
+    }
+
+    if (s_lastDownKeycode == U5_KEY_CTRL_O) {
+        /* Open at an input boundary, preserving the suspended game screen. */
+        ENGINE_ShowOptions(!EVT_ImmediateExitEnabled());
+        return 0;
     }
 
     ret = s_lastDownKeycode;

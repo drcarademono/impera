@@ -87,16 +87,17 @@ static void text(int x,int y,const char* s,byte color)
             if(font[(unsigned char)*s*8+j] & (0x80>>i)) g_linearEgaBuffer0[(y+j)*320+x+i]=color;
 }
 static int rowY(int row) { return row<7 ? 40+row*14 : row==7?140:row==8?160:180; }
+static bool s_gameplay;
 void ENGINE_DrawSettings(int selected)
 {
     memset(g_linearEgaBuffer0,0,320*200);
     rect(8,8,304,1,15);rect(8,8,1,184,15);rect(311,8,1,184,15);rect(8,191,304,1,15);
-    text(96,12,"Engine Settings",15);
+    text(104,12,"Engine Options",15);
     text(32,26,"Arrows / Enter   Esc: Back",7);
     for(int row=0;row<=ENGINE_SETTING_COUNT;row++) {
         int y=rowY(row);
         if(row==selected) rect(16,y-1,288,10,1);
-        text(24,y,row==ENGINE_SETTING_COUNT?"Return to Menu":labels[row],15);
+        text(24,y,row==ENGINE_SETTING_COUNT?(s_gameplay?"Return to Game":"Return to Menu"):labels[row],15);
         if(row==ENGINE_SETTING_COUNT) continue;
         float value=ENGINE_Get(row);
         if(row<ENGINE_MOVEMENT_SPEED) {
@@ -125,11 +126,12 @@ static void adjust(int row,int direction)
         ENGINE_Set(row,next);
     }
 }
-void ENGINE_ShowSettings(void)
+void ENGINE_ShowOptions(bool gameplay)
 {
+    s_gameplay=gameplay;
     byte backup[320*200];memcpy(backup,g_linearEgaBuffer0,sizeof(backup));
-    extern void KEY_SDL_ReleaseKey(SDL_Keycode key);
-    KEY_SDL_ReleaseKey(0);MOUSE_Cancel();
+    extern void KEY_SDL_ClearInput(void);
+    KEY_SDL_ClearInput();MOUSE_Cancel();
     GRAP_SDL_SetPixelUI(true);
     int selected=0,drag=-1;bool done=false,changed=false;
     ENGINE_DrawSettings(selected);
@@ -178,7 +180,7 @@ void ENGINE_ShowSettings(void)
         SDL_Delay(16);
     }
     if(changed && !ENGINE_Save()) fprintf(stderr,"Unable to save engine settings\n");
-    KEY_SDL_ReleaseKey(0);MOUSE_Cancel();
+    KEY_SDL_ClearInput();MOUSE_Cancel();
     GRAP_SDL_SetPixelUI(false);
     memcpy(g_linearEgaBuffer0,backup,sizeof(backup));GRAP_BUF_MarkDirty();GRAP_BUF_Present();
 }

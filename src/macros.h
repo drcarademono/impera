@@ -29,6 +29,7 @@
 #define U5_KEY_CTRL_E 5
 #define U5_KEY_CTRL_K 0xb
 #define U5_KEY_CTRL_M 0xd
+#define U5_KEY_CTRL_O 0xf
 #define U5_KEY_CTRL_S 0x13
 #define U5_KEY_CTRL_V 0x16
 

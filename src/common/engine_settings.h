@@ -9,5 +9,5 @@ void ENGINE_Set(int setting,float value);
 void ENGINE_Load(void);
 bool ENGINE_Save(void);
 void ENGINE_DrawSettings(int selected);
-void ENGINE_ShowSettings(void);
+void ENGINE_ShowOptions(bool gameplay);
 #endif
