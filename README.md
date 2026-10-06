@@ -86,7 +86,10 @@ Mouse actions work on the eight neighboring tiles. Distant targets do not
 trigger actions. Look describes distant objects without
 offering actions such as drinking or dropping coins; those require adjacency,
 including a diagonal neighbor. Single clicks wait 300 ms to distinguish double
-clicks. Map commands are disabled during menus, dialogues, combat, dungeon
+clicks. Right-button movement also works during combat command entry, relative to the
+active fighter, including diagonals. Combat uses its usual turn and collision
+rules; left-click map actions remain disabled in combat.
+Map commands are disabled during menus, dialogues, dungeon
 perspective views, and other input prompts. Menu lists support mouse selection;
 use the keyboard for other prompts. Clicking the status column does not issue map commands.
 

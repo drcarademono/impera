@@ -1,4 +1,7 @@
 #include "common/common.h"
+#if defined(TARGET_SDL)
+#include "key/mouse.h"
+#endif
 #include "vars.h"
 #include "funcs.h"
 #include "macros.h"
@@ -461,7 +464,13 @@ static void COMBAT_063e_ProcessCommand(void)
                     }
                     else
                     {
+#if defined(TARGET_SDL)
+                        MOUSE_SetCommandInput(true);
+#endif
                         local_8 = ULTIMA_266c_GetChar();
+#if defined(TARGET_SDL)
+                        MOUSE_SetCommandInput(false);
+#endif
                         local_6 = 1;
                         local_4 = 0;
 
@@ -638,6 +647,10 @@ static void COMBAT_063e_ProcessCommand(void)
                         case U5_KEY_RIGHT:
                         case U5_KEY_UP:
                         case U5_KEY_DOWN:
+                        case U5_KEY_HOME:
+                        case U5_KEY_END:
+                        case U5_KEY_PGUP:
+                        case U5_KEY_PGDN:
                             // aca4
                             if (SJOG_1c56_CombatMovePlayer(D_589e, local_8) == 0)
                             {

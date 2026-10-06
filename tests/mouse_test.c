@@ -9,12 +9,14 @@
 #include "funcs.h"
 #include "talk.h"
 #include "lookobj.h"
+#include "sjog.h"
 #include "key/mouse.h"
 #include "graphics/grap_sdl.h"
 #include "graphics/grap_buf.h"
 #include "graphics/widescreen.h"
 #include <SDL3/SDL.h>
 static int loadedCursors;
+void __wrap_ULTIMA_433e_AudioFootstep(void) {} /* Audio delay uses a real clock; this test mocks time. */
 SDL_Cursor* __wrap_SDL_CreateColorCursor(SDL_Surface* surface, int x, int y)
 {
     int width,height; GRAP_SDL_CursorSize(&width,&height);
@@ -411,6 +413,40 @@ int main(void)
     presented=0;
     GRAP_SDL_MapDrawn(); GRAP_SDL_FlushFrame();
     assert(presented==9); /* combat party members animate too */
+    /* Right-button combat commands use the active fighter, not the map center. */
+    GRAP_SDL_SetSmoothMovement(false);
+    D_5896_map_x=2; D_5897_map_y=3;
+    float fighterX=centerX+(2-5)*16*l.scale;
+    float fighterY=centerY+(3-5)*16*l.scale;
+    cursorX=fighterX+1; cursorY=fighterY;
+    MOUSE_SetCommandInput(true);
+    MOUSE_Button(cursorX,cursorY,SDL_BUTTON_RIGHT,true,1);
+    assert(MOUSE_PollCommand()==U5_KEY_RIGHT);
+    MOUSE_SetCommandInput(false);
+    ticks+=160;
+    assert(MOUSE_PollCommand()==0); /* target prompts and enemy turns */
+    MOUSE_SetCommandInput(true);
+    cursorX=fighterX-48; cursorY=fighterY-48;
+    assert(MOUSE_PollCommand()==U5_KEY_HOME);
+    MOUSE_Button(cursorX,cursorY,SDL_BUTTON_RIGHT,false,1);
+    ticks+=160;
+    assert(MOUSE_PollCommand()==0);
+    MOUSE_Button(cursorX,cursorY,SDL_BUTTON_LEFT,true,1);
+    ticks+=301;
+    assert(MOUSE_PollCommand()==0); /* combat enables movement, not contextual clicks */
+    memset(D_5c5a,0,sizeof(D_5c5a));
+    memset(D_ba14,0,sizeof(D_ba14));
+    for (int cy=0;cy<11;cy++) for (int cx=0;cx<11;cx++) GetCombatMap(cx,cy)=TILE_MAP_GRASS;
+    D_ba14[0].x=5; D_ba14[0].y=5; D_ba14[0].actorIdx=1;
+    D_5c5a[1]._0_tile=D_5c5a[1]._1_animTile=0x44;
+    D_5c5a[1]._2_x=5; D_5c5a[1]._3_y=5;
+    D_58a1=0;
+    assert(SJOG_1c56_CombatMovePlayer(0,U5_KEY_PGUP)==1);
+    assert(D_ba14[0].x==6 && D_ba14[0].y==4);
+    GetCombatMap(7,4)=0xff;
+    assert(SJOG_1c56_CombatMovePlayer(0,U5_KEY_PGDN)==0);
+    assert(D_ba14[0].x==6 && D_ba14[0].y==4); /* cannot cut a blocked corner */
+    MOUSE_SetCommandInput(false);
     MOUSE_Cleanup();
     GRAP_SDL_Cleanup(); SDL_Quit();
     puts("Mouse directions, action ranges, click timing, modal gating, and coordinate mapping passed.");

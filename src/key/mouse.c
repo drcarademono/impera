@@ -246,7 +246,7 @@ void MOUSE_Button(float x, float y, int button, bool down, int clicks)
         if (down) s_moveTime = 0;
         return;
     }
-    if (!s_input || !down || button != SDL_BUTTON_LEFT) return;
+    if (!s_input || D_5893_map_id >= 128 || !down || button != SDL_BUTTON_LEFT) return;
     int dx, dy;
     float rx, ry;
     if (!GRAP_SDL_MouseMapPoint(x, y, &dx, &dy, &rx, &ry)) { s_single = false; return; }
@@ -262,7 +262,7 @@ void MOUSE_Button(float x, float y, int button, bool down, int clicks)
 int MOUSE_PollCommand(void)
 {
     if (s_enabled && s_menu) return PollMenu();
-    if (!s_enabled || !s_input || D_5893_map_id > 32) return 0;
+    if (!s_enabled || !s_input || (D_5893_map_id > 32 && D_5893_map_id < 128)) return 0;
     if (s_single && SDL_GetTicks() - s_singleTime >= 300) {
         s_single = false;
         if (SamePosition()) s_command = MOUSE_Action(s_dx, s_dy, false);

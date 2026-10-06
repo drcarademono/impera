@@ -102,7 +102,7 @@ if(U5D_BUILD_TESTS)
         add_executable(u5d_mouse_test tests/mouse_test.c ${TEST_SOURCES})
         list(APPEND U5D_TARGETS u5d_mouse_test)
         target_link_options(u5d_mouse_test PRIVATE
-            "-Wl,--wrap=SDL_CreateColorCursor" "-Wl,--wrap=SDL_GetTicks" "-Wl,--wrap=SDL_GetMouseState"
+            "-Wl,--wrap=ULTIMA_433e_AudioFootstep" "-Wl,--wrap=SDL_CreateColorCursor" "-Wl,--wrap=SDL_GetTicks" "-Wl,--wrap=SDL_GetMouseState"
             "-Wl,--wrap=SDL_RenderPresent"
             "-Wl,--wrap=ULTIMA_1850_PrintString" "-Wl,--wrap=ULTIMA_16ba_PrintChar")
         add_test(NAME mouse_controls COMMAND u5d_mouse_test)
