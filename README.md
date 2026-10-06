@@ -1,35 +1,65 @@
-# u5d - Ultima V Decompilation Project
+# Impera — Ultima 5 Engine Port
 
-## Introduction
+**Impera** is an enhanced engine port of **Ultima 5: Warriors of Destiny**,
+in the tradition of [Exult](https://exult.sourceforge.io/),
+[Nuvie](https://nuvie.sourceforge.net/), and [Pentagram](https://pentagram.sourceforge.net/).
+It runs the original game data on modern systems while adding optional graphics,
+input, audio, and save-management improvements.
 
-This is an ongoing decompilation project of Ultima V: Warriors of Destiny.
+Impera uses **[u5d — Ultima V Decompilation Project](https://github.com/wonst719/u5d)**
+by **wonst719** as its base. Credit for the original decompilation and reconstructed
+game engine belongs to that project.
 
-Inspired by [u4-decompiled](https://github.com/ergonomy-joe/u4-decompiled), I started this project as a personal challenge to better understand the original game and its codebase.
+You must supply your own Ultima 5 game files. Game data and optional music are
+external and are not bundled into the engine. The build still produces an
+executable named `ultima5`, and environment variables retain the `U5D_` prefix.
 
-## Goals
+## Enhanced features
 
-- Create a functionally equivalent version of the original game that can run on modern platforms.
+- Fullscreen overhead maps that show more of the world, with crisp integer-scaled pixels.
+- Mouse movement, contextual double-click actions, single-click direction selection,
+  combat aiming, and mouse selection in supported menus.
+- Optional smooth camera and actor movement, with independent movement and sprite-animation speeds.
+- Optional diagonal movement and interactions, including combat and corner sliding.
+- Transparent character and selected static-object sprites, inferred ground beneath
+  objects, and foreground occlusion by southern blocking scenery.
+- In-game Engine Options with persistent settings and the original font and blue pixel-art frame.
+- Unlimited named save slots, gameplay thumbnails, play time, location labels,
+  scrollable save/load browsers, and confirmed deletion.
+- External music playback and optional WAV effects, with synthesized original DOS
+  PC-speaker effects when recordings are absent.
+- First-launch game/music directory selection, separate writable saves, and
+  case-insensitive game-file lookup.
 
-- Match as much of the original code (v1.16 for MS-DOS) as possible.
+## Keyboard commands
 
-Since the original linker (an unknown version of PLINK86) has not been found, perfect binary matching is currently impossible. Instead, the project focuses on assembly-level semantic matching.
+The original game commands remain available. These are the port's main additions
+and the keys used by its new screens:
 
-When necessary, disassemblies from other platforms such as FM-TOWNS are also used as references.
+| Key | Context | Action |
+| --- | --- | --- |
+| `Ctrl+O` | Gameplay | Open **Engine Options**; return to the suspended game afterward. |
+| `Ctrl+W` | World, town, or dungeon command prompt | Open **Save Game**. |
+| `Ctrl+L` | World, town, or dungeon command prompt | Open **Load Game**. |
+| `Q`, then `Y` | Normal save command | Open **Save Game** instead of writing one fixed slot. |
+| `O` | Main menu | Open **Engine Options**. |
+| Arrow keys | Engine Options and save/load browsers | Move between entries; Left/Right adjusts speed settings. |
+| `Enter` | New menus | Select an entry, toggle an option, or confirm a save name. |
+| `Page Up` / `Page Down` | Save/load browsers | Scroll through slots. |
+| `Delete` | Named save selected in a save/load browser | Ask for confirmation, then delete the slot with `Y`; `N` or Escape cancels. |
+| `Escape` | Engine Options or save/load browser | Return to the menu or game. |
+| `Escape` / `Space` | Action direction prompt | Cancel the action. |
+| `Home`, `Page Up`, `End`, `Page Down` | Gameplay, with Diagonal Movement enabled | Northwest, northeast, southwest, southeast respectively. |
+| `Ctrl+E` | Gameplay | Preserve the original **Exit to DOS?** confirmation. |
+| `Ctrl+E` | Main menu, Engine Options, save/load browsers, or cutscenes | Exit immediately. |
 
-## Current Status
+`Ctrl+W` and `Ctrl+L` are gameplay shortcuts and do not open another browser from
+inside menus or other prompts. Normal keyboard action selection still works when
+mouse controls are enabled.
 
-### Matching Progress
+## Getting started
 
-- `ULTIMA.EXE`: approximately 95% matched, excluding assembly functions
-- `*.OVL`: approximately 95% matched
-
-### Playability
-
-The game can be played through to the ending using the original data files. However, major and minor bugs may still remain throughout the game.
-
-## Building
-
-### Linux Target
+### Build and launch on Linux
 
 Install a C compiler, CMake 3.16 or newer, Python 3, pkg-config, SDL3, and SDL3_mixer
 development packages. This target uses **SDL3_mixer 3.2 or newer**, not
@@ -47,6 +77,11 @@ cmake --build build --parallel 4
 bash scripts/run-linux.sh
 ```
 
+For libraries installed under a custom prefix, add its `lib/pkgconfig` (or
+`lib64/pkgconfig`) directory to `PKG_CONFIG_PATH` before configuring.
+
+### Select your game files
+
 On first launch, a pixel-art setup screen asks for the directory containing your
 own Ultima 5 game files and a **Music (Optional)** directory. Select a row with
 Up/Down and Enter, or click it, to open the system folder picker. **Start Game**
@@ -63,16 +98,7 @@ unchanged. `U5D_DATA_DIR=/absolute/path/to/game` also supports an explicit game
 location for unattended launches. The separate music folder takes precedence
 over a `Music` folder alongside the game files.
 
-To fill your display, launch with `bash scripts/run-linux.sh --fullscreen`.
-This detects the desktop resolution, adds overhead map rows and columns, and
-moves the status and command column to the right edge. Tiles and text use the
-same integer scale in both directions, with crisp pixels. Daylight reveals the
-expanded view; darkness and obstacles still restrict visibility. Combat retains
-its original 11x11 battlefield. Title screens and dungeon perspective views keep
-their original layout, centered without stretching. A few unused edge pixels
-may remain when the display dimensions are not divisible by the pixel scale.
-Without the option, the game uses the existing window size settings.
-`--help` lists launch options.
+## Engine Options
 
 Choose **Engine Options** below **Return to the View** in the main menu
 (or press `O`). Press `Ctrl+O` during gameplay to open Engine Options
@@ -88,6 +114,33 @@ next launch. Explicit command line flags override saved settings. Sliders also
 display command line speed values outside their tick range without changing
 them until adjusted. Mouse input remains available on the settings screen
 even when Mouse Control is off, so it can be turned back on.
+
+### Available settings
+
+| Setting | Effect |
+| --- | --- |
+| Fullscreen | Expand the overhead map to the display with uniform pixel scaling. |
+| Mouse Control | Enable map movement and contextual actions; options menus remain clickable when off. |
+| Smooth Movement | Animate camera scrolling and visible actor steps. |
+| Diagonal Movement | Enable eight-way movement, neighboring actions, and combat. |
+| Transparent Sprites | Reveal ground around character and supported object sprites. |
+| Music | Enable or mute external music playback. |
+| Sound Effects | Enable or mute WAV overrides and synthesized effects. |
+| Movement Speed | Adjust held movement and smooth tile transitions. |
+| Animation Speed | Adjust all animated sprites independently of movement and turns. |
+
+Selected rows use a white highlight with black text; checkbox colors remain
+visible to show their state. Mouse hover selects rows, including **Return to
+Menu** / **Return to Game**; left-click activates them. Sliders accept click
+and drag. The menus use a pointer cursor rather than map direction arrows.
+
+### Command-line-only options
+
+`--legacy-save` enables **Legacy Save** in the load menu when valid original save
+files exist. It is disabled by default and has no Engine Options setting.
+`--help` lists the executable's launch options.
+
+## Saving, loading, and starting a new game
 
 Press `Ctrl+W`, or press `Q`, then answer **Y** to **Save game?** to open the **Save Game** browser.
 Choose **New Save**, type a name (up to 26 characters in the game font), and
@@ -119,21 +172,9 @@ slot. Creating or importing a character starts a new clock. Existing DOS saves
 have no historical play-time data, so their clock starts at zero. Menus count
 as time within a loaded session; time while the application is closed does not.
 
-Enable `--diagonal-movement` to use eight directions for movement, neighboring
-interactions, mouse cursors, and combat movement and attacks. This applies to
-keyboard and mouse controls and to AI-controlled combatants, including NPCs,
-monsters, and party members. When one side of a diagonal is blocked, movement
-slides along the open side for that turn. Continued input keeps trying the
-original diagonal. If both sides are blocked, movement stops; diagonal steps
-still cannot cut blocked corners.
+## Mouse controls
 
-Without this option, movement, actions, and combat attacks use cardinal
-directions. The map has four mouse cursor zones (north, south, east, west).
-Distant Look descriptions remain available in either mode, but Look actions
-require a cardinal neighbor by default or any of the eight neighbors when
-`--diagonal-movement` is enabled.
-
-Enable mouse controls with `--mouse`. The supplied PNG cursors show the four or eight
+Enable **Mouse Control** in Engine Options. The supplied PNG cursors show the four or eight
 movement directions over the overhead map and a pointer over menus, cutscenes,
 and the status/text column. Cursor pixels scale with the displayed game pixels
 using nearest-neighbor scaling, including when the window size changes. Hover
@@ -142,17 +183,16 @@ reagent list, shop inventory, or inn guest register to highlight it; left-click
 to select it. Keyboard selection remains available.
 
 The launcher copies `textures/cursors` into the
-runtime directory; copy that folder alongside the game data when running the
+runtime directory; copy that folder into the working directory when running the
 binary directly.
 
-Enable mouse controls with `--mouse`. They work in the overhead town and outdoor
-views, in both windowed and fullscreen mode:
+Overhead map controls work in windowed and fullscreen mode:
 
 - Hold the right button over the map to walk toward the cursor in eight
-  directions when `--diagonal-movement` is enabled, or four otherwise. Release it to stop. Diagonal steps cannot cut through blocked
+  directions when **Diagonal Movement** is enabled, or four otherwise. Release it to stop. Diagonal steps cannot cut through blocked
   corners; sailing retains the game's four-way headings.
 - Single-left-click a tile at any distance to Look. Double-left-click an adjacent
-  or (with `--diagonal-movement`) diagonal NPC to Talk, a door or chest to Open, or a loose object to Get. Other nearby
+  or (with **Diagonal Movement**) diagonal NPC to Talk, a door or chest to Open, or a loose object to Get. Other nearby
   targets fall back to Look. NPCs can also be double-clicked across one of the
   tables, desks, doors, or other tiles supported by keyboard Talk. Food on table
   settings can be taken from the same directions supported by keyboard Get.
@@ -179,7 +219,65 @@ Map commands are disabled during menus, dialogues, dungeon
 perspective views, and other input prompts. Menu lists support mouse selection;
 use the keyboard for other prompts. Clicking the status column does not issue map commands.
 
-Enable `--transparent-sprites` to draw player, NPC, and monster sprites over their ground
+Directional cursors target with their visible arrow tip, including after window
+resizing. On combat maps, both cursor orientation and clicked action directions
+are relative to the **active party character**, rather than the battlefield center.
+
+## Movement and graphics
+
+### Fullscreen maps
+
+To fill your display, enable **Fullscreen** in Engine Options.
+This detects the desktop resolution, adds overhead map rows and columns, and
+moves the status and command column to the right edge. Tiles and text use the
+same integer scale in both directions, with crisp pixels. Daylight reveals the
+expanded view; darkness and obstacles still restrict visibility. Combat retains
+its original 11x11 battlefield. Title screens and dungeon perspective views keep
+their original layout, centered without stretching. A few unused edge pixels
+may remain when the display dimensions are not divisible by the pixel scale.
+Without the option, the game uses the existing window size settings.
+`--help` lists launch options.
+
+### Diagonal movement
+
+Enable **Diagonal Movement** in Engine Options to use eight directions for movement, neighboring
+interactions, mouse cursors, and combat movement and attacks. This applies to
+keyboard and mouse controls and to AI-controlled combatants, including NPCs,
+monsters, and party members. When one side of a diagonal is blocked, movement
+slides along the open side for that turn. Continued input keeps trying the
+original diagonal. If both sides are blocked, movement stops; diagonal steps
+still cannot cut blocked corners.
+
+Without this option, movement, actions, and combat attacks use cardinal
+directions. The map has four mouse cursor zones (north, south, east, west).
+Distant Look descriptions remain available in either mode, but Look actions
+require a cardinal neighbor by default or any of the eight neighbors when
+**Diagonal Movement** is enabled.
+
+### Smooth movement and speed
+
+Enable **Smooth Movement** in Engine Options. Each successful
+tile step animates a scrolling camera over roughly 120 ms, keeping the player
+icon centered and the interface fixed. NPCs and monsters also animate their
+visible tile steps, including combat actors. Their motion stays coordinated
+with camera scrolling; the combat camera stays fixed. This works with keyboard
+or mouse movement; collisions and actions still use the original tile and turn
+rules. Teleports, spawns, map changes, and dungeon perspective views snap to
+their new state without interpolation.
+Use **Movement Speed** to set the held mouse and keyboard movement speed,
+and **Animation Speed** to set animated sprite playback independently,
+including NPC poses, fountains, flames, and water effects.
+Both default to `1`; the menu sliders offer `0.5`, `0.75`, and `1`.
+A multiplier of `0.5` halves the speed. Sprite animation speed works with or without
+**Smooth Movement** and does not change camera transition timing or game turns.
+Movement speed also scales smooth tile transitions so held input continues
+without waiting at tile boundaries.
+Smooth movement uses timed keyboard repeats so held input continues across tile
+boundaries; otherwise keyboard repeat retains the operating system's behavior.
+
+### Transparent sprites
+
+Enable **Transparent Sprites** to draw player, NPC, and monster sprites over their ground
 instead of replacing the entire tile. Black sprite pixels are transparent,
 except for a one-pixel black outline around colored pixels (including diagonal
 neighbors). The outline can extend one pixel into adjacent map tiles and is
@@ -188,7 +286,7 @@ of overlapping sprite outlines. This also applies to expanded fullscreen maps an
 smooth movement. Fountains (all animation frames), wells, braziers, cannonballs, cannons,
 telescopes, stacks of logs, stocks (empty or occupied), guillotines,
 torture racks, pendulums (all animation frames), metal grates, portcullises,
-carpets, and ladders also use this flag. Their map cells
+carpets, ladders, and bellows also use this setting. Their map cells
 have no separate ground layer, so their background uses the most common
 immediately adjacent brick floor, grass, stone floor, or wooden floor tile
 (ties prefer that order). With no adjacent recognized ground, they stay opaque. This
@@ -203,57 +301,11 @@ Chairs, tables (including food and candelabrum variants), and all seated NPC
 poses stay opaque with no added outline.
 The sleeping-in-bed NPC, empty manacles, and all four occupied-manacles NPC
 frames retain their complete opaque artwork with no added outline, even with
-`--transparent-sprites`.
-Sprites default to opaque unless enabled by a flag or saved settings. Terrain tiles remain opaque;
+**Transparent Sprites**.
+Sprites default to opaque unless Transparent Sprites is enabled. Terrain tiles remain opaque;
 the original tile data is unchanged.
 
-Enable smooth movement independently with `--smooth-movement`. Each successful
-tile step animates a scrolling camera over roughly 120 ms, keeping the player
-icon centered and the interface fixed. NPCs and monsters also animate their
-visible tile steps, including combat actors. Their motion stays coordinated
-with camera scrolling; the combat camera stays fixed. This works with keyboard
-or mouse movement; collisions and actions still use the original tile and turn
-rules. Teleports, spawns, map changes, and dungeon perspective views snap to
-their new state without interpolation.
-Use `--movement-speed N` to set the held mouse and keyboard movement speed,
-and `--animation-speed N` to set animated sprite playback independently,
-including NPC poses, fountains, flames, and water effects.
-Both accept multipliers from `0.1` to `10` and default to `1`: `2` doubles the
-speed and `0.5` halves it. Sprite animation speed works with or without
-`--smooth-movement` and does not change camera transition timing or game turns.
-Movement speed also scales smooth tile transitions so held input continues
-without waiting at tile boundaries.
-For example, double both speeds with
-`--smooth-movement --movement-speed 2 --animation-speed 2`.
-Smooth movement or explicit movement speed uses timed keyboard repeats;
-otherwise keyboard repeat retains the operating system's behavior.
-Both options initially default to off. For example:
-
-```sh
-bash scripts/run-linux.sh --fullscreen --mouse --smooth-movement --diagonal-movement
-```
-
-For libraries installed under a custom prefix, add its `lib/pkgconfig` (or
-`lib64/pkgconfig`) directory to `PKG_CONFIG_PATH` before configuring.
-
-The launcher keeps writable saves in `build/runtime/SAVEGAME` and reads game
-assets from the directory selected in setup. Existing saves are preserved. Set `U5D_DATA_DIR` to an absolute
-path to use another data directory, or `U5D_BUILD_DIR` to an absolute path
-if you configured a different build directory. Game filenames and directory
-components are matched without regard to ASCII letter case, including fonts,
-maps, NPCs, conversations, saves, Ultima IV imports, and optional audio.
-Existing saves retain their filename spelling when written. Exact spelling
-wins; if a lookup has multiple matches differing only by case, it reports an
-error rather than choosing one.
-New character creation requires the original `INIT.GAM` file (at least 4192
-bytes), which supplies the starting party and world state. Add it to the data
-directory if it is missing; `INIT.OOL` is a different file and cannot replace
-it. Choose **Create New Character** before **Journey Onward** when there is
-no active saved character.
-
-Characters previously created without `INIT.GAM` have invalid starting state.
-Back up `build/runtime/SAVEGAME`, restore the original `INIT.GAM`, and create
-a new character. Rebuilding alone cannot repair an already damaged save.
+## Music and sound effects
 
 Player-supplied music belongs in `Music` inside the data directory, or beside
 the executable (for example `build/Music` when running the Linux build).
@@ -285,10 +337,30 @@ explicit timing conversion, not an emulation of DOS CPU calibration via
 also remain supported.
 Audio is read directly from the optional selected music folder or the usual
 external audio directories; players can also place it in `build/runtime`.
-No audio assets are needed for synthesized effects. Do not set
-SDL's dummy video/audio drivers when playing on your desktop. Headless cloud
-validation covered rendering, menu input, and the character-name prompt;
-desktop graphics, audible output, and a complete playthrough are unverified.
+No audio assets are needed for synthesized effects. Do not set SDL's dummy video/audio drivers when playing on your desktop.
+
+## File locations and compatibility
+
+The launcher keeps writable saves in `build/runtime/SAVEGAME` and reads game
+assets from the directory selected in setup. Existing saves are preserved. Set `U5D_DATA_DIR` to an absolute
+path to use another data directory, or `U5D_BUILD_DIR` to an absolute path
+if you configured a different build directory. Game filenames and directory
+components are matched without regard to ASCII letter case, including fonts,
+maps, NPCs, conversations, saves, Ultima IV imports, and optional audio.
+Existing saves retain their filename spelling when written. Exact spelling
+wins; if a lookup has multiple matches differing only by case, it reports an
+error rather than choosing one.
+New character creation requires the original `INIT.GAM` file (at least 4192
+bytes), which supplies the starting party and world state. Add it to the data
+directory if it is missing; `INIT.OOL` is a different file and cannot replace
+it. Choose **Create New Character** before **Journey Onward** when there is
+no active saved character.
+
+Characters previously created without `INIT.GAM` have invalid starting state.
+Back up `build/runtime/SAVEGAME`, restore the original `INIT.GAM`, and create
+a new character. Rebuilding alone cannot repair an already damaged save.
+
+## Troubleshooting
 
 Errors are written to the terminal and `build/runtime/LOG.TXT`. The log is
 replaced on each launch, so copy it before restarting when reporting a bug.
@@ -296,6 +368,8 @@ For detailed tracing, run `U5D_DEBUG=1 bash scripts/run-linux.sh`; verbose logs
 can grow quickly. If the log cannot be created, errors still go to the terminal.
 Missing required map or NPC data now exits with an error naming the file
 instead of retrying indefinitely.
+
+## Development
 
 To run the native settings and savegame regression checks:
 
@@ -322,3 +396,17 @@ Run `src\build.bat` on a machine or virtual machine with Microsoft C 5.1 install
 The compiler installation path is `C:\MSC51`.
 
 Note: executable linking is currently not possible. This target is used only for disassembly matching.
+
+## Upstream project
+
+The upstream [u5d project](https://github.com/wonst719/u5d) reconstructs Ultima V
+v1.16 for MS-DOS, aiming for functional equivalence and assembly-level semantic
+matching. Its original linker has not been found, so perfect binary matching is
+not currently possible. FM-TOWNS disassembly is also used as a reference where
+needed. See upstream for current decompilation progress and its original
+project documentation.
+
+## Credits
+
+- **[carademono](https://github.com/drcarademono)** — Impera port and enhancements.
+- **[wonst719](https://github.com/wonst719)** — [u5d — Ultima V Decompilation Project](https://github.com/wonst719/u5d), the base engine and original decompilation.
