@@ -90,6 +90,13 @@ int main(int argc, char** argv)
         assert(g_linearEgaBuffer0[11*320+x]==0);
         assert(g_linearEgaBuffer0[188*320+x]==0);
     }
+    /* Title-menu frame glyphs and white selection with black lettering. */
+    assert(g_linearEgaBuffer0[0*320+8]==1);
+    assert(g_linearEgaBuffer0[7*320+7]==15);
+    assert(g_linearEgaBuffer0[80*320+0]==1);
+    assert(g_linearEgaBuffer0[139*320+16]==15);
+    for(int y=0;y<8;y++) for(int x=0;x<8;x++)
+        assert(g_linearEgaBuffer0[(140+y)*320+24+x]==((font['M'*8+y]&(0x80>>x))?0:15));
     int count;SDL_Window** windows=SDL_GetWindows(&count);assert(count==1);
     SDL_Renderer* renderer=SDL_GetRenderer(windows[0]);SDL_free(windows);
     SDL_Surface* shot=SDL_RenderReadPixels(renderer,NULL);assert(shot);
