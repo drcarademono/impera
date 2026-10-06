@@ -127,6 +127,8 @@ black backgrounds around their artwork. Furniture such as barrels, beds, drawers
 tables, and street lamps already includes colored floor or grass pixels;
 these keep their original artwork. Solid walls, doors, stairs, fences, other wall fixtures,
 terrain, and effects also retain their original rendering.
+Chairs, tables (including food and candelabrum variants), and all seated NPC
+poses stay opaque with no added outline.
 The sleeping-in-bed NPC, empty manacles, and all four occupied-manacles NPC
 frames retain their complete opaque artwork with no added outline, even with
 `--transparent-sprites`.

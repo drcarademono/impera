@@ -392,7 +392,13 @@ byte GRAP_BUF_TilePixel(int tile, int x, int y)
  * black outline, including the one-pixel margin outside the source tile. */
 bool GRAP_BUF_SpriteIsTransparent(int tile)
 {
-    /* These poses include their scenery: preserve the complete original art. */
+    /* Furniture and seated poses include their scenery; keep the original
+     * pixels and do not generate an outline outside their tile. */
+    if ((tile >= TILE_MAP_CHAIR_90 && tile <= TILE_MAP_TABLE_96) ||
+        (tile >= TILE_MAP_TABLE_9A && tile <= TILE_MAP_TABLE_9C) ||
+        tile == TILE_MAP_TABLE_BE ||
+        (tile >= 256 + 0x30 && tile <= 256 + 0x3b))
+        return false;
     return s_transparentSprites && tile != TILE_MAP_85 &&
         tile != 256 + TILE_ACTOR_SLEEPING_IN_BED &&
         !(tile >= 256 + 0x64 && tile <= 256 + 0x67); /* occupied manacles */

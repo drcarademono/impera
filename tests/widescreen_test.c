@@ -202,6 +202,28 @@ int main(void)
     assert(g_linearEgaBuffer0[96*320+87]==3);
     D_5896_map_x=16;
     memset(D_5c5a,0,sizeof(D_5c5a));
+    /* Chairs, table segments (including food/candelabrum variants), and every
+     * seated NPC animation frame preserve black pixels and have no borders. */
+    const int opaqueFurniture[]={0x90,0x91,0x92,0x93,0x94,0x95,0x96,
+        0x9a,0x9b,0x9c,0xbe,0x130,0x131,0x132,0x133,0x134,0x135,
+        0x136,0x137,0x138,0x139,0x13a,0x13b};
+    for(size_t i=0;i<sizeof(opaqueFurniture)/sizeof(opaqueFurniture[0]);i++) {
+        int tile=opaqueFurniture[i];
+        memset(tiles+tile*128,0,128);
+        tiles[tile*128+8*8]=0x20;
+        assert(!GRAP_BUF_SpriteIsTransparent(tile));
+        assert(GRAP_BUF_SpritePixel(tile,2,8)==0);
+        assert(GRAP_BUF_SpritePixel(tile,-1,8)==-1);
+        assert(GRAP_BUF_SpritePixel(tile,0,16)==-1);
+        memset(g_linearEgaBuffer0,5,320*200);
+        GRAP_BUF_PutMapSprite(1,1,tile);
+        assert(g_linearEgaBuffer0[32*320+26]==0);
+        assert(g_linearEgaBuffer0[32*320+23]==5);
+        if(tile<256) {
+            GetMap(23,16)=(byte)tile;
+            assert(WIDE_GroundTile(7,0)==tile);
+        }
+    }
     const byte opaqueObjects[]={TILE_MAP_85,TILE_MAP_CHAIR_90,TILE_MAP_TABLE_94,TILE_MAP_BARREL,
         TILE_MAP_BED,TILE_MAP_DRESSER,TILE_MAP_DOOR_B8,TILE_MAP_FIREPLACE,0xbd};
     for(size_t i=0;i<sizeof(opaqueObjects);i++) {
