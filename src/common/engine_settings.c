@@ -117,8 +117,8 @@ void ENGINE_DrawSettings(int selected)
         if(row==ENGINE_SETTING_COUNT) continue;
         float value=ENGINE_Get(row);
         if(row<ENGINE_MOVEMENT_SPEED) {
-            rect(232,y+1,7,7,highlighted?0:7);
-            rect(233,y+2,5,5,highlighted?(value?0:15):(value?10:0));
+            rect(232,y+1,7,7,7);
+            rect(233,y+2,5,5,value?10:0);
             text(248,y,value?"On":"Off",highlighted?0:(value?10:7));
         } else {
             rect(184,y+4,64,1,highlighted?0:7);
