@@ -3,6 +3,7 @@
 #include "vars.h"
 #include "macros.h"
 #include "mouse.h"
+#include "graphics/grap_sdl.h"
 
 #include <SDL3/SDL.h>
 
@@ -22,6 +23,17 @@ void KEY_Cleanup(void)
 { MOUSE_Cleanup(); }
 
 static u16 s_lastDownKeycode = 0;
+static u16 s_heldMovementKey;
+static SDL_Keycode s_heldSDLKey;
+static Uint64 s_nextMovement;
+
+void KEY_SDL_ReleaseKey(SDL_Keycode key)
+{
+    if (!key || key == s_heldSDLKey) {
+        s_heldMovementKey = 0;
+        s_heldSDLKey = 0;
+    }
+}
 
 static u16 KeyboardEventToUltimaKeycode(SDL_KeyboardEvent ev)
 {
@@ -101,7 +113,16 @@ static u16 KeyboardEventToUltimaKeycode(SDL_KeyboardEvent ev)
 
 void KEY_SDL_ProcessKeyDown(SDL_KeyboardEvent ev)
 {
-    s_lastDownKeycode = KeyboardEventToUltimaKeycode(ev);
+    u16 key = KeyboardEventToUltimaKeycode(ev);
+    bool direction = (key >= (0x100 | U5_KEY_LEFT) && key <= (0x100 | U5_KEY_DOWN)) ||
+                     (key >= (0x100 | U5_KEY_HOME) && key <= (0x100 | U5_KEY_PGDN));
+    if (GRAP_SDL_CustomMovementSpeed() && direction) {
+        if (ev.repeat) return; /* use our timer rather than OS keyboard repeat */
+        s_heldMovementKey = key;
+        s_heldSDLKey = ev.key;
+        s_nextMovement = SDL_GetTicks() + GRAP_SDL_MovementInterval();
+    } else if (!ev.repeat) KEY_SDL_ReleaseKey(0);
+    s_lastDownKeycode = key;
 }
 
 extern void EVT_Yield(void);
@@ -113,6 +134,11 @@ int KEY_PollKey(void)
 	D_538a = 0;
 
 	EVT_Yield();
+
+    if (!s_lastDownKeycode && s_heldMovementKey && SDL_GetTicks() >= s_nextMovement) {
+        s_lastDownKeycode = s_heldMovementKey;
+        s_nextMovement = SDL_GetTicks() + GRAP_SDL_MovementInterval();
+    }
 
     // special keystroke
     if (s_lastDownKeycode & 0x100)

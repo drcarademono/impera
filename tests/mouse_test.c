@@ -14,6 +14,7 @@
 #include "comsubs.h"
 #include "common/movement.h"
 #include "key/mouse.h"
+#include "key/key.h"
 #include "graphics/grap_sdl.h"
 #include "graphics/grap_buf.h"
 #include "graphics/widescreen.h"
@@ -41,6 +42,8 @@ SDL_Cursor* __wrap_SDL_CreateColorCursor(SDL_Surface* surface, int x, int y)
     return NULL; /* SDL dummy driver has no native cursor support. */
 }
 static Uint64 ticks = 2000;
+static Uint32 animationDelay;
+void __wrap_SDL_Delay(Uint32 ms) { animationDelay += ms; }
 static float cursorX, cursorY;
 static bool sawSleepingNpc, sawFountain, sawDrinkPrompt, sawWell, sawCoinPrompt;
 static int presented;
@@ -341,6 +344,12 @@ int main(int argc, char** argv)
     assert(MOUSE_PollCommand()==0);
     ticks++;
     assert(MOUSE_PollCommand()==U5_KEY_PGDN);
+    GRAP_SDL_SetMovementSpeed(2);
+    ticks+=55;
+    assert(MOUSE_PollCommand()==0);
+    ticks++;
+    assert(MOUSE_PollCommand()==U5_KEY_PGDN);
+    GRAP_SDL_SetMovementSpeed(1);
     GRAP_SDL_SetSmoothMovement(false);
     ticks+=112;
     assert(MOUSE_PollCommand()==0); /* original cadence without smooth movement */
@@ -389,7 +398,25 @@ int main(int argc, char** argv)
     MOUSE_MenuSet(192,8,120,3,0);
     assert(MOUSE_PollCommand()==U5_KEY_DOWN);
     MOUSE_MenuEnd(); MOUSE_Cancel();
+    GRAP_SDL_SetMovementSpeed(2);
+    assert(GRAP_SDL_MovementInterval()==80);
+    SDL_Event keyEvent={0};
+    keyEvent.type=SDL_EVENT_KEY_DOWN;
+    keyEvent.key.key=SDLK_DOWN;
+    SDL_PushEvent(&keyEvent);
+    assert(KEY_PollKey()==U5_KEY_DOWN);
+    ticks+=79;
+    assert(KEY_PollKey()==0);
+    ticks++;
+    assert(KEY_PollKey()==U5_KEY_DOWN);
+    keyEvent.type=SDL_EVENT_KEY_UP;
+    SDL_PushEvent(&keyEvent);
+    ticks+=80;
+    assert(KEY_PollKey()==0);
+    GRAP_SDL_SetMovementSpeed(1);
     GRAP_SDL_SetSmoothMovement(true);
+    assert(GRAP_SDL_MovementInterval()==112);
+    GRAP_SDL_SetAnimationSpeed(2);
     memset(g_linearEgaBuffer0,0,320*200);
     g_linearEgaBuffer0[0]=10;
     for (int y=8;y<184;y++) memset(g_linearEgaBuffer0+y*320+40,12,4);
@@ -406,9 +433,12 @@ int main(int argc, char** argv)
     previousMarkerX=(l.mapX+(l.columns/2-5)*16+32)*l.scale;
     int initialMarkerX=previousMarkerX;
     checkAnimation=true;
+    animationDelay=0;
     GRAP_SDL_MapDrawn(); GRAP_SDL_FlushFrame();
     checkAnimation=false;
     assert(presented==9); /* eight intermediate frames plus the completed frame */
+    assert(animationDelay==56); /* animation speed is independent of movement speed */
+    GRAP_SDL_SetAnimationSpeed(1);
     assert(previousMarkerX==initialMarkerX-16*l.scale);
     presented=0;
     D_5896_map_x+=5;

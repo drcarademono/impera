@@ -143,6 +143,15 @@ with camera scrolling; the combat camera stays fixed. This works with keyboard
 or mouse movement; collisions and actions still use the original tile and turn
 rules. Teleports, spawns, map changes, and dungeon perspective views snap to
 their new state without interpolation.
+Use `--movement-speed N` to set the held mouse and keyboard movement speed,
+and `--animation-speed N` to set the smooth transition speed independently.
+Both accept multipliers from `0.1` to `10` and default to `1`: `2` doubles the
+speed and `0.5` halves it. Animation speed applies with `--smooth-movement`.
+Animations finish before the next turn, so a slower animation can limit the
+movement rate. For example, double both speeds with
+`--smooth-movement --movement-speed 2 --animation-speed 2`.
+Explicit movement speed uses timed keyboard repeats; without that option,
+keyboard repeat retains the operating system's behavior.
 Both options default to off. For example:
 
 ```sh
