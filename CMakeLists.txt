@@ -100,6 +100,12 @@ if(U5D_BUILD_TESTS)
              -DTEST_DIR=${CMAKE_BINARY_DIR}/test-runtime
              -P ${CMAKE_SOURCE_DIR}/tests/check_missing_file.cmake)
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        add_executable(u5d_world_scroll_test tests/world_scroll_test.c ${TEST_SOURCES})
+        list(APPEND U5D_TARGETS u5d_world_scroll_test)
+        target_compile_definitions(u5d_world_scroll_test PRIVATE _FORTIFY_SOURCE=2)
+        target_link_options(u5d_world_scroll_test PRIVATE
+            "-Wl,--wrap=OUTSUBS_01b4" "-Wl,--wrap=ULTIMA_5e4a")
+        add_test(NAME world_scroll COMMAND u5d_world_scroll_test)
         add_executable(u5d_mouse_test tests/mouse_test.c ${TEST_SOURCES})
         list(APPEND U5D_TARGETS u5d_mouse_test)
         target_link_options(u5d_mouse_test PRIVATE

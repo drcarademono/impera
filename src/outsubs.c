@@ -191,6 +191,7 @@ void OUTSUBS_01b4(int param_1, int param_2)
 // Load chunk?
 void OUTSUBS_02c8(int param_1, int param_2)
 {
+#if defined(MATCHING_BUILD)
     int local_4;
     int local_8;
 
@@ -205,6 +206,25 @@ void OUTSUBS_02c8(int param_1, int param_2)
 
     memcpy(local_4 * 0x100 + D_6608, local_8 * 0x100 + D_6608, 0x100);
     memcpy(local_6 * 0x100 + D_6608, local_a * 0x100 + D_6608, 0x100);
+#else
+    /* A diagonal shift retains one of the four 16x16 blocks, rather than
+     * the two retained by a cardinal shift. Snapshot before copying so all
+     * source blocks remain intact, and copy only blocks still in the window. */
+    byte previous[1024];
+    memcpy(previous, D_6608, sizeof(previous));
+    for (int y = 0; y < 2; y++)
+    {
+        for (int x = 0; x < 2; x++)
+        {
+            int sourceX = x + param_1;
+            int sourceY = y + param_2;
+            if (sourceX < 0 || sourceX >= 2 || sourceY < 0 || sourceY >= 2)
+                continue;
+            memcpy(D_6608 + (y * 2 + x) * 256,
+                   previous + (sourceY * 2 + sourceX) * 256, 256);
+        }
+    }
+#endif
 }
 
 char* OUTSUBS_0368_GetWorldSavefile(void)
