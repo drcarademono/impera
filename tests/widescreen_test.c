@@ -8,6 +8,7 @@
 #include "tiles.h"
 #include "funcs.h"
 #include "graphics/grap_buf.h"
+#include "graphics/grap.h"
 #include "graphics/widescreen.h"
 
 static byte pixel(byte* pixels, WideLayout l, int dx, int dy)
@@ -23,11 +24,26 @@ int main(void)
     WideLayout broad = WIDE_Layout(2560, 1080);
     assert(broad.columns == 31 && broad.rows == 15);
     assert(WIDE_Layout(320, 200).columns == 11);
-    GRAP_BUF_Initialize(NULL);
+    GRAP_Initialize();
     byte* tiles = malloc(512 * 128);
     memset(tiles, 0x11, 512 * 128);
     memset(tiles + 257 * 128, 0x22, 128);
     GRAP_BUF_LoadTileset(tiles);
+    /* Sparse sprite: black interior/background becomes ground; outline reaches
+     * all eight neighboring pixels and crosses the source tile boundary. */
+    memset(tiles + 300 * 128, 0, 128);
+    tiles[300 * 128 + 8 * 8] = 0x20;
+    assert(GRAP_BUF_SpritePixel(300, 0, 8) == 2);
+    assert(GRAP_BUF_SpritePixel(300, -1, 7) == 0);
+    assert(GRAP_BUF_SpritePixel(300, 2, 8) == -1);
+    assert(GRAP_BUF_SpritePixel(300, 15, 8) == -1);
+    memset(g_linearEgaBuffer0, 5, 320 * 200);
+    GRAP_BUF_PutMapSprite(1, 1, 300);
+    assert(g_linearEgaBuffer0[32 * 320 + 24] == 2);
+    assert(g_linearEgaBuffer0[31 * 320 + 23] == 0);
+    assert(g_linearEgaBuffer0[32 * 320 + 26] == 5);
+    GRAP_BUF_PutMapSprite(0, 0, 300);
+    assert(g_linearEgaBuffer0[15 * 320 + 7] == 5); /* frame is clipped */
     byte* pixels = malloc((size_t)broad.width * broad.height);
     memset(g_linearEgaBuffer0, 3, 320 * 200);
     for (int y = 0; y < 200; y++) memset(g_linearEgaBuffer0 + y * 320 + 192, 4, 128);
@@ -39,6 +55,20 @@ int main(void)
     D_5893_map_id = 13;
     D_5896_map_x = D_5897_map_y = 16;
     D_5895_map_level = 0;
+    memset(D_ab02,1,sizeof(D_ab02));
+    memset(D_ac64,0x16,sizeof(D_ac64));
+    GetMapViewport(5,5)=0;
+    GetActorMap(5,5)=44; /* sparse test sprite at index 300 */
+    ULTIMA_56ac_DrawMap();
+    assert(g_linearEgaBuffer0[96*320+88]==2);
+    assert(g_linearEgaBuffer0[96*320+90]==1); /* fresh terrain under black */
+    assert(g_linearEgaBuffer0[95*320+87]==0); /* outline on neighbor */
+    GetMapViewport(5,5)=1;
+    GetActorMap(5,5)=0x16;
+    ULTIMA_56ac_DrawMap();
+    assert(g_linearEgaBuffer0[95*320+87]==1); /* no stale outline after move */
+    memset(g_linearEgaBuffer0,3,320*200);
+    for(int y=0;y<200;y++) memset(g_linearEgaBuffer0+y*320+192,4,128);
     assert(WIDE_Compose(pixels, broad));
     assert(pixel(pixels, broad, 0, 0) == 3); /* central effects preserved */
     assert(pixel(pixels, broad, 10, 0) == 1); /* genuinely additional terrain */
@@ -66,7 +96,8 @@ int main(void)
     GetMap(23, 16) = 1;
     GetMap(22, 16) = 0x09; /* opaque tree hides actors and terrain beyond */
     assert(WIDE_Compose(pixels, broad));
-    assert(pixel(pixels, broad, 6, 0) == 1);
+    /* A visible central sprite now outlines the first pixel of this cell. */
+    assert(pixels[(broad.mapY + broad.rows / 2 * 16) * broad.width + broad.mapX + (broad.columns / 2 + 6) * 16 + 1] == 1);
     assert(pixel(pixels, broad, 7, 0) == 0);
     GetMap(22, 16) = 1;
     D_58a5 = 2;
@@ -119,7 +150,7 @@ int main(void)
     assert(pixels[lastRow + middle] == 6);
     assert(tall.mapY + tall.rows * 16 <= tall.height - 8);
     free(pixels);
-    GRAP_BUF_Cleanup();
+    GRAP_Cleanup();
     puts("Expanded map, sidebar, visibility, actors, and layout tests passed.");
     return 0;
 }

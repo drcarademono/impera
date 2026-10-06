@@ -8,6 +8,9 @@
 #include "widescreen.h"
 #include <string.h>
 
+static int s_actorTiles[32];
+int WIDE_ActorTile(int actor) { return s_actorTiles[actor]; }
+
 WideLayout WIDE_Layout(int width, int height)
 {
     WideLayout l;
@@ -137,7 +140,11 @@ bool WIDE_Compose(byte* pixels, WideLayout l)
     Copy(pixels, l.width, l.sidebarX - 8, l.height - 8, 184, 184, 8, 8);
     Copy(pixels, l.width, l.sidebarX / 2 - 56, l.height - 8, 40, 184, 112, 8);
 
+    for (int i = 0; i < 32; i++) s_actorTiles[i] = -1;
     int cx = l.columns / 2, cy = l.rows / 2;
+    int* sprites = malloc((size_t)l.columns * l.rows * sizeof(int));
+    if (!sprites) return false;
+    for (int i = 0; i < l.columns * l.rows; i++) sprites[i] = -1;
     if (D_5893_map_id < 33) {
         for (int row = 0; row < l.rows; row++) {
             for (int col = 0; col < l.columns; col++) {
@@ -167,7 +174,8 @@ bool WIDE_Compose(byte* pixels, WideLayout l)
                                 WIDE_MapTile(dx, dy - 1), WIDE_MapTile(dx, dy + 1), &reflection);
                         }
                         if (sprite == -1) continue;
-                        idx = sprite == -2 ? D_b11e[TILE_MAP_38] : 256 + sprite;
+                        if (sprite == -2) idx = D_b11e[TILE_MAP_38];
+                        else sprites[row * l.columns + col] = s_actorTiles[actor] = 256 + sprite;
                         if (reflection && row > 0 && WIDE_Visible(dx, dy - 1)) {
                             for (int y = 0; y < 16; y++)
                                 for (int x = 0; x < 16; x++)
@@ -186,5 +194,30 @@ bool WIDE_Compose(byte* pixels, WideLayout l)
     /* Keep the engine's central tiles, effects, targeting and modal overlays. */
     Copy(pixels, l.width, l.mapX + (cx - 5) * 16, l.mapY + (cy - 5) * 16,
          8, 8, 176, 176);
+    for (int row = 0; row < l.rows; row++)
+        for (int col = 0; col < l.columns; col++) {
+            int sprite = sprites[row * l.columns + col];
+            if (sprite >= 0)
+                GRAP_BUF_DrawSprite(pixels, l.width, l.mapX + col * 16, l.mapY + row * 16,
+                    sprite, l.mapX, l.mapY, l.mapX + l.columns * 16, l.mapY + l.rows * 16);
+        }
+    free(sprites);
+    /* Restore outline margins at the seam after copying central effects. */
+    for (int row = 0; row < l.rows; row++)
+        for (int col = 0; col < l.columns; col++) {
+            int dx = col - cx, dy = row - cy;
+            if (abs(dx) > 5 || abs(dy) > 5 || (abs(dx) != 5 && abs(dy) != 5)) continue;
+            if (GetMapViewport(dx + 5, dy + 5) != 0 || GetActorMap(dx + 5, dy + 5) == 0x16) continue;
+            int tile = 256 + GetActorMap(dx + 5, dy + 5);
+            for (int sy = -1; sy <= 16; sy++)
+                for (int sx = -1; sx <= 16; sx++) {
+                    int px = col * 16 + sx, py = row * 16 + sy;
+                    if (px < 0 || py < 0 || px >= l.columns * 16 || py >= l.rows * 16) continue;
+                    if (px >= (cx - 5) * 16 && px < (cx + 6) * 16 &&
+                        py >= (cy - 5) * 16 && py < (cy + 6) * 16) continue;
+                    if (GRAP_BUF_SpritePixel(tile, sx, sy) == 0)
+                        pixels[(l.mapY + py) * l.width + l.mapX + px] = 0;
+                }
+        }
     return true;
 }

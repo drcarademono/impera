@@ -85,7 +85,8 @@ if(U5D_BUILD_TESTS)
     add_test(NAME widescreen COMMAND u5d_widescreen_test)
     file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/widescreen-runtime")
     set_tests_properties(widescreen PROPERTIES
-        WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/widescreen-runtime" TIMEOUT 10)
+        WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/widescreen-runtime" TIMEOUT 10
+        ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software")
     file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/test-runtime/SAVEGAME")
     foreach(NPC_FILE TOWNE.NPC DWELLING.NPC CASTLE.NPC KEEP.NPC)
         configure_file("${CMAKE_SOURCE_DIR}/Ultima 5/${NPC_FILE}"

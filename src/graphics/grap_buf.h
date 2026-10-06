@@ -36,6 +36,10 @@ extern void GRAP_BUF_LoadTileset(byte* tileset);
 extern void GRAP_BUF_UnloadTileset(void);
 extern bool GRAP_BUF_HasTileset(void);
 extern byte GRAP_BUF_TilePixel(int tile, int x, int y);
+extern int GRAP_BUF_SpritePixel(int tile, int x, int y);
+extern void GRAP_BUF_DrawSprite(byte* pixels, int stride, int x, int y, int tile,
+                                int left, int top, int right, int bottom);
+extern void GRAP_BUF_PutMapSprite(int x, int y, int tile);
 extern void GRAP_BUF_AnimateTileset(void);
 extern void GRAP_BUF_UpdateTimeTileset(int mode, byte hour, byte minute);
 extern void GRAP_BUF_PutAnimatedMoongateTile(int tileX, int tileY, int visibleRows, byte floorType, int xOffset, int yOffset);

@@ -1,6 +1,7 @@
 #include "common/common.h"
 #if defined(TARGET_SDL)
 #include "graphics/grap_sdl.h"
+#include "graphics/grap_buf.h"
 #endif
 #include "vars.h"
 #include "funcs.h"
@@ -301,8 +302,14 @@ void ULTIMA_56ac_DrawMap(void)
             {
                 if (GetActorMap(local_6, local_8) != 0x16)
                 {
-                    // draw actor
+                    // Draw the ground before the sprite overlay on modern platforms.
+#if defined(TARGET_SDL)
+                    int wx = D_5893_map_id >= 128 ? local_6 : D_5896_map_x + local_6 - 5;
+                    int wy = D_5893_map_id >= 128 ? local_8 : D_5897_map_y + local_8 - 5;
+                    ULTIMA_10e0_GRAP_51_PutTile(D_b11e[*ULTIMA_4402_GetTileAddr(wx, wy)], local_6, local_8);
+#else
                     ULTIMA_10e0_GRAP_51_PutTile(0x100 + GetActorMap(local_6, local_8), local_6, local_8);
+#endif
                 }
             }
             else
@@ -320,6 +327,14 @@ void ULTIMA_56ac_DrawMap(void)
             }
         }
     }
+
+#if defined(TARGET_SDL)
+    /* All terrain must be complete before outlines spill across cell edges. */
+    for (local_8 = 0; local_8 < 11; local_8++)
+        for (local_6 = 0; local_6 < 11; local_6++)
+            if (GetMapViewport(local_6, local_8) == 0 && GetActorMap(local_6, local_8) != 0x16)
+                GRAP_BUF_PutMapSprite(local_6, local_8, 256 + GetActorMap(local_6, local_8));
+#endif
 
     if (0x7f < D_5893_map_id && (D_589f = !D_589f) != 0 && D_589e != 0xff && ULTIMA_5646(D_589e) == 0)
     {
