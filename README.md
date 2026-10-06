@@ -48,7 +48,7 @@ bash scripts/run-linux.sh
 ```
 
 On first launch, a pixel-art setup screen asks for the directory containing your
-own Ultima V game files and a **Music (Optional)** directory. Select a row with
+own Ultima 5 game files and a **Music (Optional)** directory. Select a row with
 Up/Down and Enter, or click it, to open the system folder picker. **Start Game**
 validates the game files and remembers both locations in `build/runtime/DATA.CFG`.
 The setup screen returns if a selected directory or required game asset goes

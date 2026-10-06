@@ -116,7 +116,7 @@ bool SETUP_Run(void)
         {
             if(!SDL_Init(SDL_INIT_VIDEO)) return false;
             SDL_Window* window=NULL;SDL_Renderer* r=NULL;
-            if(!SDL_CreateWindowAndRenderer("Ultima V - Game Files",960,600,SDL_WINDOW_RESIZABLE,&window,&r)) { SDL_Quit();return false; }
+            if(!SDL_CreateWindowAndRenderer("Ultima 5 - Game Files",960,600,SDL_WINDOW_RESIZABLE,&window,&r)) { SDL_Quit();return false; }
             SDL_SetRenderLogicalPresentation(r,320,200,SDL_LOGICAL_PRESENTATION_INTEGER_SCALE);
             lock=SDL_CreateMutex();if(!lock) { SDL_DestroyRenderer(r);SDL_DestroyWindow(window);SDL_Quit();return false; }
             loadFont();int selected=0;bool done=false,accepted=false,cancel=false;
@@ -136,9 +136,9 @@ bool SETUP_Run(void)
                 SDL_SetRenderDrawColor(r,0,0,0,255);SDL_RenderClear(r);
                 rect(r,5,5,310,190,1);rect(r,8,8,304,184,0);
                 SDL_SetRenderDrawColor(r,0,0,0,255);SDL_FRect inner={9,9,302,182};SDL_RenderFillRect(r,&inner);
-                text(r,72,18,"Ultima V Game Files",0);
+                text(r,72,18,"Ultima 5 Game Files",0);
                 text(r,16,36,"Choose your own game files.",2);
-                const char* labels[]={"Ultima V Directory","Music (Optional)","Clear Music","Start Game"};
+                const char* labels[]={"Ultima 5 Directory","Music (Optional)","Clear Music","Start Game"};
                 int ys[]={56,94,132,156};
                 for(int i=0;i<4;i++) {
                     if(selected==i) rect(r,14,ys[i]-2,292,12,0);
