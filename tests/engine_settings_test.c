@@ -159,6 +159,42 @@ int main(int argc, char** argv)
         ENGINE_ShowOptions(gameplay!=0);
         assert(GRAP_SDL_Fullscreen()==fullscreen);
     }
+    /* The dropdown chooses a mode, persists it, and Escape dismisses it
+     * without leaving the parent options screen. */
+    key(SDLK_RETURN);key(SDLK_DOWN);key(SDLK_RETURN);key(SDLK_ESCAPE);
+    ENGINE_ShowOptions(false);
+    assert(GRAP_SDL_VideoMode()==GRAP_VIDEO_FULLSCREEN_43);
+    GRAP_SDL_SetPixelUI(true);ENGINE_DrawSettings(ENGINE_FULLSCREEN);
+    int ow,oh,ww,wh;assert(SDL_GetRenderOutputSize(renderer,&ow,&oh));
+    SDL_Window* window=SDL_GetRenderWindow(renderer);assert(SDL_GetWindowSize(window,&ww,&wh));
+    int scale=SDL_min(ow/320,oh/240);if(scale<1) scale=1;
+    float left=(ow-320*scale)/2.0f,top=(oh-240*scale)/2.0f,ux,uy;
+    assert(GRAP_SDL_MouseUIPoint((left+160*scale)*ww/ow,
+        (top+60*scale)*wh/oh,&ux,&uy));
+    assert(SDL_fabsf(ux-160)<0.01f && SDL_fabsf(uy-50)<0.01f);
+    /* The blue frame begins at the 4:3 top edge, not the old 16:10 inset. */
+    SDL_Surface* aspectShot=SDL_RenderReadPixels(renderer,NULL);assert(aspectShot);
+    Uint8 ar,ag,ab,aa;
+    assert(SDL_ReadSurfacePixel(aspectShot,(int)(left+8.5f*scale),
+        (int)(top+0.6f*scale),&ar,&ag,&ab,&aa));
+    assert(ar==0 && ag==0 && ab==170);
+    assert(SDL_SaveBMP(aspectShot,"engine-options-4-3.bmp"));SDL_DestroySurface(aspectShot);
+    GRAP_SDL_SetPixelUI(false);
+    ENGINE_Set(ENGINE_FULLSCREEN,0);ENGINE_Load();
+    assert(GRAP_SDL_VideoMode()==GRAP_VIDEO_FULLSCREEN_43);
+    ENGINE_Set(ENGINE_FULLSCREEN,0);
+    key(SDLK_RETURN);key(SDLK_DOWN);key(SDLK_ESCAPE);key(SDLK_ESCAPE);
+    ENGINE_ShowOptions(false);assert(GRAP_SDL_VideoMode()==GRAP_VIDEO_WINDOWED);
+    /* Older configurations retain the original monitor-fullscreen behavior. */
+    f=fopen("ENGINE.CFG","w");assert(f);fputs("fullscreen 1\n",f);fclose(f);
+    ENGINE_Load();assert(GRAP_SDL_VideoMode()==GRAP_VIDEO_FULLSCREEN);
+    ENGINE_Set(ENGINE_FULLSCREEN,0);
+    /* Mouse opens the dropdown and chooses its second entry. */
+    SDL_Event choose={0};choose.type=SDL_EVENT_MOUSE_BUTTON_DOWN;choose.button.button=SDL_BUTTON_LEFT;
+    choose.button.x=160*4;choose.button.y=80+44*4;assert(SDL_PushEvent(&choose));
+    choose.button.y=80+65*4;assert(SDL_PushEvent(&choose));key(SDLK_ESCAPE);
+    ENGINE_ShowOptions(false);assert(GRAP_SDL_VideoMode()==GRAP_VIDEO_FULLSCREEN_43);
+    ENGINE_Set(ENGINE_FULLSCREEN,0);
     remove("ENGINE.CFG");D_539c[0]=NULL;GRAP_SDL_Cleanup();SDL_Quit();
     puts("Engine settings persistence, live options, keyboard, and slider dragging passed");
     return 0;

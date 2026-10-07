@@ -102,7 +102,7 @@ over a `Music` folder alongside the game files.
 
 Choose **Engine Options** below **Return to the View** in the main menu
 (or press `O`). Press `Ctrl+O` during gameplay to open Engine Options
-and return to your game with `Esc`. Fullscreen, Mouse Control, Smooth Movement, Diagonal Movement,
+and return to your game with `Esc`. Video Mode, Mouse Control, Smooth Movement, Diagonal Movement,
 Transparent Sprites, Music, and Sound Effects can be switched on or off.
 Changes apply immediately. Movement Speed and Animation Speed have sliders
 with ticks at 0.5, 0.75, and 1; use Left/Right or click and drag the slider.
@@ -119,7 +119,7 @@ even when Mouse Control is off, so it can be turned back on.
 
 | Setting | Effect |
 | --- | --- |
-| Fullscreen | Expand the overhead map to the display with uniform pixel scaling. |
+| Video Mode | Dropdown: Windowed, Fullscreen 4:3 (centered with black bars), or Fullscreen with the detected monitor aspect ratio (for example, 16:9). |
 | Mouse Control | Enable map movement and contextual actions; options menus remain clickable when off. |
 | Smooth Movement | Animate camera scrolling and visible actor steps. |
 | Diagonal Movement | Enable eight-way movement, neighboring actions, and combat. |
@@ -229,7 +229,10 @@ are relative to the **active party character**, rather than the battlefield cent
 
 ### Fullscreen maps
 
-To fill your display, enable **Fullscreen** in Engine Options.
+Choose the fullscreen entry labelled with your monitor’s detected aspect ratio
+(for example, **Fullscreen 16:9**) from the **Video Mode** dropdown in Engine Options
+to fill your display, or **Fullscreen 4:3** for a centered 4:3 map viewport. Menus and title screens also use 4:3 in this mode.
+Choose **Windowed** to return to a window.
 This detects the desktop resolution, adds overhead map rows and columns, and
 moves the status and command column to the right edge. Tiles and text use the
 same integer scale in both directions, with crisp pixels. Daylight reveals the

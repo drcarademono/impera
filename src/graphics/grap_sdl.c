@@ -21,6 +21,22 @@ static SDL_Renderer* s_sdlRenderer;
 static SDL_Surface* s_sdlSurface;
 static SDL_Texture* s_sdlTexture;
 static bool s_fullscreen;
+static int s_videoMode;
+static WideLayout VideoLayout(int width,int height)
+{
+    if(s_videoMode==GRAP_VIDEO_FULLSCREEN_43) {
+        if(width*3>height*4) width=height*4/3;
+        else height=width*3/4;
+    }
+    return WIDE_Layout(width,height);
+}
+/* The native 320x200 menus use DOS 4:3 pixel aspect in this mode. */
+static SDL_FRect NativeRect(int width,int height)
+{
+    WideLayout l=VideoLayout(width,height);
+    float w=320*l.scale,h=(s_videoMode==GRAP_VIDEO_FULLSCREEN_43?240:200)*l.scale;
+    return (SDL_FRect){(width-w)/2,(height-h)/2,w,h};
+}
 static bool s_pixelUI;
 static int s_windowedWidth=1280, s_windowedHeight=960;
 static SDL_Texture* s_wideTexture;
@@ -114,9 +130,13 @@ void GRAP_SDL_CursorSize(int* width, int* height)
     if (s_sdlWindow) SDL_GetWindowSize(s_sdlWindow, &w, &h);
     float sx = w / 320.0f, sy = h / 200.0f;
     if ((s_fullscreen || s_pixelUI) && SDL_GetRenderOutputSize(s_sdlRenderer, &outputW, &outputH)) {
-        WideLayout l = WIDE_Layout(outputW, outputH);
+        WideLayout l = VideoLayout(outputW, outputH);
         sx = l.scale * (float)w / outputW;
         sy = l.scale * (float)h / outputH;
+        if(s_videoMode==GRAP_VIDEO_FULLSCREEN_43 && !s_expandedFrame) {
+            SDL_FRect native=NativeRect(outputW,outputH);
+            sx=native.w/320*w/outputW;sy=native.h/200*h/outputH;
+        }
     }
     *width = SDL_max(16, (int)SDL_roundf(16 * sx));
     *height = SDL_max(16, (int)SDL_roundf(16 * sy));
@@ -128,10 +148,16 @@ bool GRAP_SDL_MouseUIPoint(float x, float y, float* ux, float* uy)
     if (!s_sdlWindow || !SDL_GetWindowSize(s_sdlWindow, &w, &h) || w <= 0 || h <= 0) return false;
     if (!s_fullscreen && !s_pixelUI) { *ux = x * 320 / w; *uy = y * 200 / h; return true; }
     if (!SDL_GetRenderOutputSize(s_sdlRenderer, &ow, &oh)) return false;
-    WideLayout l = WIDE_Layout(ow, oh);
+    WideLayout l = VideoLayout(ow, oh);
     int cw = s_expandedFrame ? l.width : 320, ch = s_expandedFrame ? l.height : 200;
-    *ux = (x * ow / w - (ow - cw * l.scale) / 2) / l.scale;
-    *uy = (y * oh / h - (oh - ch * l.scale) / 2) / l.scale;
+    if(!s_expandedFrame) {
+        SDL_FRect native=NativeRect(ow,oh);
+        *ux=(x*ow/w-native.x)*320/native.w;
+        *uy=(y*oh/h-native.y)*200/native.h;
+    } else {
+        *ux = (x * ow / w - (ow - cw * l.scale) / 2) / l.scale;
+        *uy = (y * oh / h - (oh - ch * l.scale) / 2) / l.scale;
+    }
     if (*ux < 0 || *uy < 0 || *ux >= cw || *uy >= ch) return false;
     /* The original right-hand 128 pixels move to the far edge in widescreen. */
     if (s_expandedFrame) {
@@ -150,11 +176,16 @@ bool GRAP_SDL_MouseMapPoint(float x, float y, int* dx, int* dy, float* rx, float
     float gx = x * width / windowW, gy = y * height / windowH;
     int mapX = 8, mapY = 8, columns = 11, rows = 11;
     if (s_fullscreen) {
-        WideLayout l = WIDE_Layout(width, height);
+        WideLayout l = VideoLayout(width, height);
         int canvasW = s_expandedFrame ? l.width : 320;
         int canvasH = s_expandedFrame ? l.height : 200;
-        gx = (gx - (width - canvasW * l.scale) / 2) / l.scale;
-        gy = (gy - (height - canvasH * l.scale) / 2) / l.scale;
+        if(!s_expandedFrame) {
+            SDL_FRect native=NativeRect(width,height);
+            gx=(gx-native.x)*320/native.w;gy=(gy-native.y)*200/native.h;
+        } else {
+            gx = (gx - (width - canvasW * l.scale) / 2) / l.scale;
+            gy = (gy - (height - canvasH * l.scale) / 2) / l.scale;
+        }
         if (s_expandedFrame) { mapX = l.mapX; mapY = l.mapY; columns = l.columns; rows = l.rows; }
     } else {
         gx = gx * 320 / width;
@@ -169,8 +200,10 @@ bool GRAP_SDL_MouseMapPoint(float x, float y, int* dx, int* dy, float* rx, float
     return true;
 }
 
-void GRAP_SDL_SetFullscreen(bool fullscreen)
+void GRAP_SDL_SetVideoMode(int mode)
 {
+    if(mode<GRAP_VIDEO_WINDOWED || mode>GRAP_VIDEO_FULLSCREEN_43) return;
+    bool fullscreen=mode!=GRAP_VIDEO_WINDOWED;
     if (s_sdlWindow && s_fullscreen != fullscreen) {
         if (fullscreen) SDL_GetWindowSize(s_sdlWindow,&s_windowedWidth,&s_windowedHeight);
         if (!SDL_SetWindowFullscreen(s_sdlWindow,fullscreen)) {
@@ -181,8 +214,24 @@ void GRAP_SDL_SetFullscreen(bool fullscreen)
         SDL_SetTextureScaleMode(s_sdlTexture,fullscreen || s_pixelUI ? SDL_SCALEMODE_NEAREST : SDL_SCALEMODE_LINEAR);
         s_previousValid=false;
     }
+    if(s_videoMode!=mode) { s_previousValid=false;s_completedWideValid=false; }
+    s_videoMode=mode;
     s_fullscreen = fullscreen;
 }
+int GRAP_SDL_VideoMode(void) { return s_videoMode; }
+bool GRAP_SDL_MonitorSize(int* width,int* height)
+{
+    SDL_DisplayID display=s_sdlWindow?SDL_GetDisplayForWindow(s_sdlWindow):SDL_GetPrimaryDisplay();
+    const SDL_DisplayMode* mode=SDL_GetDesktopDisplayMode(display);
+    if(mode && mode->w>0 && mode->h>0) { *width=mode->w;*height=mode->h;return true; }
+    SDL_Rect bounds;
+    if(SDL_GetDisplayBounds(display,&bounds) && bounds.w>0 && bounds.h>0) {
+        *width=bounds.w;*height=bounds.h;return true;
+    }
+    return false;
+}
+void GRAP_SDL_SetFullscreen(bool fullscreen)
+{ GRAP_SDL_SetVideoMode(fullscreen?GRAP_VIDEO_FULLSCREEN:GRAP_VIDEO_WINDOWED); }
 bool GRAP_SDL_Fullscreen(void) { return s_fullscreen; }
 float GRAP_SDL_MovementSpeed(void) { return s_movementSpeed; }
 void GRAP_SDL_SetPixelUI(bool enabled)
@@ -589,7 +638,7 @@ void GRAP_SDL_FlushFrame(void)
     {
         int width, height;
         if (!SDL_GetRenderOutputSize(s_sdlRenderer, &width, &height)) return;
-        WideLayout layout = WIDE_Layout(width, height);
+        WideLayout layout = VideoLayout(width, height);
         if (!s_wideSurface || s_wideSurface->w != layout.width || s_wideSurface->h != layout.height)
         {
             SDL_DestroyTexture(s_wideTexture);
@@ -650,9 +699,7 @@ void GRAP_SDL_FlushFrame(void)
         else
         {
             s_completedWideValid=false;
-            SDL_FRect dst = {(width - 320 * layout.scale) / 2,
-                             (height - 200 * layout.scale) / 2,
-                             320 * layout.scale, 200 * layout.scale};
+            SDL_FRect dst = NativeRect(width,height);
             SDL_RenderTexture(s_sdlRenderer, s_sdlTexture, &srcRect, &dst);
             PrepareDarkness(11,11,completedMap);
             SmoothFrame(g_linearEgaBuffer0,320,200,8,8,11,11,s_sdlTexture,2,dst);
@@ -672,12 +719,12 @@ void GRAP_SDL_FlushFrame(void)
     if(s_pixelUI) {
         int w,h;
         if(SDL_GetRenderOutputSize(s_sdlRenderer,&w,&h)) {
-            WideLayout l=WIDE_Layout(w,h);
+            SDL_FRect native=NativeRect(w,h);
             for(int i=0;i<4;i++) if(s_uiThumbnails[i]) {
                 SDL_FRect r=s_uiThumbnailRects[i];
-                r.x=(w-320*l.scale)/2+r.x*l.scale;
-                r.y=(h-200*l.scale)/2+r.y*l.scale;
-                r.w*=l.scale;r.h*=l.scale;
+                r.x=native.x+r.x*native.w/320;
+                r.y=native.y+r.y*native.h/200;
+                r.w*=native.w/320;r.h*=native.h/200;
                 SDL_RenderTexture(s_sdlRenderer,s_uiThumbnails[i],NULL,&r);
             }
         }
