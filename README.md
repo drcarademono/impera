@@ -119,7 +119,7 @@ even when Mouse Control is off, so it can be turned back on.
 
 | Setting | Effect |
 | --- | --- |
-| Video Mode | Dropdown: Windowed, Fullscreen 4:3 (centered with black bars), or Fullscreen (Monitor), which uses your monitor’s aspect ratio. |
+| Video Mode | Dropdown: Windowed, Fullscreen 4:3 (centered with black bars), or Fullscreen with the detected monitor aspect ratio (for example, 16:9). |
 | Mouse Control | Enable map movement and contextual actions; options menus remain clickable when off. |
 | Smooth Movement | Animate camera scrolling and visible actor steps. |
 | Diagonal Movement | Enable eight-way movement, neighboring actions, and combat. |
@@ -229,7 +229,8 @@ are relative to the **active party character**, rather than the battlefield cent
 
 ### Fullscreen maps
 
-Choose **Fullscreen (Monitor)** from the **Video Mode** dropdown in Engine Options
+Choose the fullscreen entry labelled with your monitor’s detected aspect ratio
+(for example, **Fullscreen 16:9**) from the **Video Mode** dropdown in Engine Options
 to fill your display, or **Fullscreen 4:3** for a centered 4:3 map viewport.
 Choose **Windowed** to return to a window.
 This detects the desktop resolution, adds overhead map rows and columns, and

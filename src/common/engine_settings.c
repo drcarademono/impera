@@ -114,7 +114,21 @@ void ENGINE_UIFrame(void)
 static int rowY(int row) { return row<ENGINE_MOVEMENT_SPEED ? 40+row*11 : row==ENGINE_MOVEMENT_SPEED?140:row==ENGINE_ANIMATION_SPEED?160:180; }
 static bool s_gameplay;
 static int s_videoChoice=-1;
-static const char* videoLabels[]={"Windowed","Fullscreen 4:3","Fullscreen (Monitor)"};
+static const char* videoLabel(int choice)
+{
+    if(choice==0) return "Windowed";
+    if(choice==1) return "Fullscreen 4:3";
+    static char label[32];
+    int width,height;
+    if(!GRAP_SDL_MonitorSize(&width,&height)) return "Fullscreen Native";
+    int a=width,b=height;
+    while(b) { int remainder=a%b;a=b;b=remainder; }
+    width/=a;height/=a;
+    /* Conventional monitor notation for the mathematically equivalent 8:5. */
+    if(width==8 && height==5) { width=16;height=10; }
+    SDL_snprintf(label,sizeof(label),"Fullscreen %d:%d",width,height);
+    return label;
+}
 static const int videoModes[]={GRAP_VIDEO_WINDOWED,GRAP_VIDEO_FULLSCREEN_43,GRAP_VIDEO_FULLSCREEN};
 static int videoChoice(void)
 {
@@ -136,8 +150,7 @@ void ENGINE_DrawSettings(int selected)
         if(row==ENGINE_SETTING_COUNT) continue;
         float value=ENGINE_Get(row);
         if(row==ENGINE_FULLSCREEN) {
-            ENGINE_UIText(128,y,videoLabels[videoChoice()],foreground);
-            ENGINE_UIText(296,y,"v",foreground);
+            ENGINE_UIText(128,y,videoLabel(videoChoice()),foreground);
         } else if(row<ENGINE_MOVEMENT_SPEED) {
             ENGINE_UIRect(232,y+1,7,7,7);
             ENGINE_UIRect(233,y+2,5,5,value?10:0);
@@ -157,7 +170,7 @@ void ENGINE_DrawSettings(int selected)
         for(int i=0;i<3;i++) {
             int y=52+i*11;
             if(i==s_videoChoice) ENGINE_UIRect(122,y-1,180,10,15);
-            ENGINE_UIText(128,y,videoLabels[i],i==s_videoChoice?0:15);
+            ENGINE_UIText(128,y,videoLabel(i),i==s_videoChoice?0:15);
         }
     }
     GRAP_BUF_MarkDirty();GRAP_BUF_Present();

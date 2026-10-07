@@ -197,6 +197,17 @@ void GRAP_SDL_SetVideoMode(int mode)
     s_fullscreen = fullscreen;
 }
 int GRAP_SDL_VideoMode(void) { return s_videoMode; }
+bool GRAP_SDL_MonitorSize(int* width,int* height)
+{
+    SDL_DisplayID display=s_sdlWindow?SDL_GetDisplayForWindow(s_sdlWindow):SDL_GetPrimaryDisplay();
+    const SDL_DisplayMode* mode=SDL_GetDesktopDisplayMode(display);
+    if(mode && mode->w>0 && mode->h>0) { *width=mode->w;*height=mode->h;return true; }
+    SDL_Rect bounds;
+    if(SDL_GetDisplayBounds(display,&bounds) && bounds.w>0 && bounds.h>0) {
+        *width=bounds.w;*height=bounds.h;return true;
+    }
+    return false;
+}
 void GRAP_SDL_SetFullscreen(bool fullscreen)
 { GRAP_SDL_SetVideoMode(fullscreen?GRAP_VIDEO_FULLSCREEN:GRAP_VIDEO_WINDOWED); }
 bool GRAP_SDL_Fullscreen(void) { return s_fullscreen; }
