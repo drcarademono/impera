@@ -435,6 +435,62 @@ cmake --build build --parallel 4
 ctest --test-dir build --output-on-failure
 ```
 
+### Automated executable releases
+
+GitHub Actions builds Windows x64, Linux x64, macOS Intel, and macOS Apple
+Silicon packages using [Build releases](.github/workflows/release.yml).
+The release build pins SDL 3.4.18 and SDL_mixer 3.2.4, links them statically,
+and includes built-in WAV, MP3 and Ogg Vorbis decoding. Original Ultima 5 game files,
+music, saves and personal settings are never included in the packages.
+ScaleFX is not part of these releases.
+
+To test a build, open **Actions → Build releases → Run workflow**, select the
+branch, and download its platform artifacts when all jobs finish. To make a
+release after merging, tag the desired commit:
+
+```sh
+git switch main
+git pull --ff-only
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The workflow runs tests and attaches archives and SHA-256 checksums to a
+**draft** GitHub Release. Download and test each platform before publishing
+the draft from GitHub's Releases page. A failed platform build prevents release
+creation. Release jobs use GitHub's built-in token; no personal token is needed.
+Manual workflow runs only upload artifacts and do not create a release.
+
+Extract the archive before launching:
+
+- **Windows:** run `Run Impera.cmd` from the extracted folder. Keep engine assets
+  beside the executable. Saves and logs stay in this folder.
+- **macOS:** extract the archive, move `Impera.app` to Applications, and open it.
+  Requires macOS 12 or newer; choose the Intel or Apple Silicon download. Settings, saves and
+  logs live in `~/Library/Application Support/Impera`.
+- **Linux:** run `./Impera.sh` from the extracted folder. Settings, saves and logs
+  live in `$XDG_DATA_HOME/impera`, or `~/.local/share/impera` by default. These
+  portable archives target Ubuntu 22.04 or newer compatible systems and require
+  system graphics/audio libraries; they are not fully static AppImages.
+
+On first launch, select your own Ultima 5 directory and optionally a music
+folder. Builds are unsigned: macOS may require allowing the app in Privacy &
+Security, and Windows may show a SmartScreen prompt. Signing/notarization is
+not configured in this workflow.
+
+To build the same engine locally, install CMake, a C compiler and platform SDL
+development prerequisites, then run:
+
+```sh
+cmake -S . -B release-build -DCMAKE_BUILD_TYPE=Release -DIMPERA_BUNDLED_SDL=ON
+cmake --build release-build --config Release --parallel 3
+python scripts/package-release.py --build release-build --platform linux-x86_64 --version v0.1.0
+```
+
+Use `windows-x86_64`, `macos-x86_64`, or `macos-arm64` when building natively on
+those platforms. CMake downloads pinned dependencies on the first build.
+Packaging requires Python 3.9 or newer and writes archives to `dist/`.
+
 ### Windows Target
 
 Open `u5win/u5win.slnx` with Visual Studio 2026 and build the solution.

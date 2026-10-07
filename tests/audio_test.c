@@ -15,6 +15,12 @@ const char* __wrap_SDL_GetBasePath(void) { return "Alongside/"; }
 bool __real_SDL_PutAudioStreamData(SDL_AudioStream*,const void*,int);
 bool __wrap_SDL_PutAudioStreamData(SDL_AudioStream* stream,const void* data,int len)
 {
+    /* Static SDL also routes mixer-internal writes through this wrapper.
+     * Only the engine's mono float synthesis stream is under test here. */
+    SDL_AudioSpec src,dst;
+    assert(SDL_GetAudioStreamFormat(stream,&src,&dst));
+    if(src.format!=SDL_AUDIO_F32 || src.channels!=1 || dst.channels!=1)
+        return __real_SDL_PutAudioStreamData(stream,data,len);
     const float* pcm=data;
     bool audible=false;
     for (int i=0;i<len/(int)sizeof(float);i++) {
