@@ -47,7 +47,7 @@ class PackagingTest(unittest.TestCase):
                         self.assertEqual(engine.mode, 0o755)
                         readme = next(m for m in f.getmembers() if m.name.endswith('/README.md'))
                         self.assertEqual(readme.mode, 0o644)
-                self.assertTrue(any('/textures/cursors/' in name for name in names))
+                self.assertFalse(any('/textures/' in name for name in names))
                 self.assertTrue(any('/Licenses/SDL.txt' in name for name in names))
                 self.assertFalse(any(name.upper().endswith(('.GAM', '.OOL', '.NPC', '.16', '.CH', '.MP3')) for name in names))
                 self.assertTrue(Path(str(archive) + '.sha256').is_file())

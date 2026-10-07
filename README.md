@@ -176,7 +176,7 @@ as time within a loaded session; time while the application is closed does not.
 
 ## Mouse controls
 
-Enable **Mouse Control** in Engine Options. The supplied PNG cursors show the four or eight
+Enable **Mouse Control** in Engine Options. The embedded cursors show the four or eight
 movement directions over the overhead map and a pointer over menus, cutscenes,
 and the status/text column. Cursor pixels scale with the displayed game pixels
 using nearest-neighbor scaling, including when the window size changes. Hover
@@ -184,9 +184,10 @@ over an item in the main menu, party selector, equipment/scroll selector,
 reagent list, shop inventory, or inn guest register to highlight it; left-click
 to select it. Keyboard selection remains available.
 
-The launcher copies `textures/cursors` into the
-runtime directory; copy that folder into the working directory when running the
-binary directly.
+All nine cursors are embedded in the engine executable, including the cursor
+used by the CRT filter. No separate cursor files are required. Developers can
+edit the source PNGs under `textures/cursors` and run
+`python scripts/embed-cursors.py` to regenerate the embedded data.
 
 Overhead map controls work in windowed and fullscreen mode:
 
@@ -464,8 +465,7 @@ Manual workflow runs only upload artifacts and do not create a release.
 
 Launch the download for your platform:
 
-- **Windows:** run `Run Impera.cmd` from the extracted folder. Keep engine assets
-  beside the executable. Saves and logs stay in this folder.
+- **Windows:** run `Run Impera.cmd` from the extracted folder. Saves and logs stay in this folder; cursor assets are embedded.
 - **macOS:** extract the archive, move `Impera.app` to Applications, and open it.
   Requires macOS 12 or newer; choose the Intel or Apple Silicon download. Settings, saves and
   logs live in `~/Library/Application Support/Impera`.

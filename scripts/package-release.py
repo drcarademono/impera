@@ -27,21 +27,17 @@ def package(build, platform, version, destination):
     source = next((p for p in candidates if p.is_file()), None)
     if not source:
         raise FileNotFoundError(f'No built executable in {build}')
-    assets = stage
     if mac:
         contents = stage / 'Impera.app' / 'Contents'
-        assets = contents / 'Resources'
-        assets.mkdir(parents=True)
         executables = contents / 'MacOS'
-        executables.mkdir()
+        executables.mkdir(parents=True)
         shutil.copy2(source, executables / 'impera-engine')
         launcher = executables / 'Impera'
         launcher.write_text('''#!/bin/sh
 set -eu
 app_dir="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 runtime="$HOME/Library/Application Support/Impera"
-mkdir -p "$runtime/textures"
-cp -R "$app_dir/Resources/textures/cursors" "$runtime/textures/"
+mkdir -p "$runtime"
 cd "$runtime"
 exec "$app_dir/MacOS/impera-engine" "$@"
 ''')
@@ -61,13 +57,11 @@ exec "$app_dir/MacOS/impera-engine" "$@"
 set -eu
 app_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 runtime="${XDG_DATA_HOME:-$HOME/.local/share}/impera"
-mkdir -p "$runtime/textures"
-cp -R "$app_dir/textures/cursors" "$runtime/textures/"
+mkdir -p "$runtime"
 cd "$runtime"
 exec "$app_dir/impera" "$@"
 ''')
             launcher.chmod(0o755)
-    shutil.copytree(REPO / 'textures' / 'cursors', assets / 'textures' / 'cursors')
     shutil.copy2(REPO / 'README.md', stage / 'README.md')
     licenses = stage / 'Licenses'
     licenses.mkdir()

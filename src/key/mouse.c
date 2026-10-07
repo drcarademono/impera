@@ -9,11 +9,12 @@
 #include "mouse.h"
 #include "graphics/grap_sdl.h"
 #include <SDL3/SDL.h>
-#include "common/file.h"
+#include "cursor_assets.h"
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_STATIC
 #define STBI_NO_LINEAR
 #define STBI_NO_HDR
+#define STBI_NO_STDIO
 #define STBI_ONLY_PNG
 #include "third_party/stb_image.h"
 
@@ -173,14 +174,9 @@ static void LoadCursors(void)
 {
     GRAP_SDL_CursorSize(&s_cursorWidth,&s_cursorHeight);
     for (int i = 0; i < 9; ++i) {
-        char path[128];
-        snprintf(path, sizeof(path), "textures/cursors/cursor-%s.png", s_cursorNames[i]);
-        FILE* fp = FILE_Open(path, "rb");
-        if (!fp) { debug("Cannot load mouse cursor: %s\n", path); continue; }
         int w, h, channels;
-        unsigned char* pixels = stbi_load_from_file(fp, &w, &h, &channels, 4);
-        fclose(fp);
-        if (!pixels) { debug("Invalid mouse cursor PNG: %s\n", path); continue; }
+        unsigned char* pixels = stbi_load_from_memory(cursor_pngs[i].data, cursor_pngs[i].size, &w, &h, &channels, 4);
+        if (!pixels) { DEBUG_Error("Invalid embedded mouse cursor: %s", s_cursorNames[i]);continue; }
         SDL_Surface* surface = SDL_CreateSurfaceFrom(w, h, SDL_PIXELFORMAT_RGBA32, pixels, w * 4);
         if (surface) {
             SDL_Surface* scaled = SDL_ScaleSurface(surface,s_cursorWidth,s_cursorHeight,SDL_SCALEMODE_NEAREST);

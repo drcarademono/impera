@@ -187,7 +187,6 @@ if(U5D_BUILD_TESTS)
         add_test(NAME mouse_controls COMMAND u5d_mouse_test)
         add_test(NAME mouse_controls_opaque COMMAND u5d_mouse_test --opaque)
         file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/mouse-runtime")
-        file(COPY textures DESTINATION "${CMAKE_BINARY_DIR}/mouse-runtime")
         set_tests_properties(mouse_controls mouse_controls_opaque PROPERTIES
             WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/mouse-runtime" TIMEOUT 10
             ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software")
