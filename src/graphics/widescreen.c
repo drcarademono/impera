@@ -14,16 +14,18 @@ int WIDE_ActorTile(int actor) { return s_actorTiles[actor]; }
 WideLayout WIDE_Layout(int width, int height)
 {
     WideLayout l;
-    /* Reserve room for extra rows instead of scaling the old 200px canvas
-     * all the way up to the display height. */
+    /* Integer horizontal scaling, with the historical 6:5 vertical pixel
+     * aspect. Extra logical width becomes map columns, never wider pixels. */
     l.scale = height / 240;
     if (width / 320 < l.scale) l.scale = width / 320;
     if (l.scale < 1) l.scale = 1;
     l.width = width / l.scale;
-    l.height = height / l.scale;
+    l.scaleY = l.scale * 1.2f;
+    l.height = height * 5 / (l.scale * 6);
+    if(l.height < 200) l.height = 200;
     l.sidebarX = l.width - 128;
     l.columns = (l.sidebarX - 16) / 16;
-    l.rows = (l.height - 16) / 16;
+    l.rows = (l.height - 16 + 15) / 16;
     l.mapX = 8 + ((l.sidebarX - 16) - l.columns * 16) / 2;
     l.mapY = 8 + ((l.height - 16) - l.rows * 16) / 2;
     return l;
@@ -258,6 +260,7 @@ bool WIDE_Compose(byte* pixels, WideLayout l)
                         else sprites[row * l.columns + col] = s_actorTiles[actor] = 256 + sprite;
                         if (reflection && row > 0 && WIDE_Visible(dx, dy - 1)) {
                             for (int y = 0; y < 16; y++)
+                                if(l.mapY+(row-1)*16+y>=8 && l.mapY+(row-1)*16+y<l.height-8)
                                 for (int x = 0; x < 16; x++)
                                     pixels[(l.mapY + (row - 1) * 16 + y) * l.width + l.mapX + col * 16 + x] =
                                         GRAP_BUF_TilePixel(D_b11e[TILE_MAP_MIRROR_9E], x, y);
@@ -265,6 +268,7 @@ bool WIDE_Compose(byte* pixels, WideLayout l)
                     }
                 }
                 for (int y = 0; y < 16; y++)
+                    if(l.mapY+row*16+y>=8 && l.mapY+row*16+y<l.height-8)
                     for (int x = 0; x < 16; x++)
                         pixels[(l.mapY + row * 16 + y) * l.width + l.mapX + col * 16 + x] =
                             GRAP_BUF_TilePixel(idx, x, y);
@@ -273,7 +277,8 @@ bool WIDE_Compose(byte* pixels, WideLayout l)
     }
     /* Keep the engine's central tiles, effects, targeting and modal overlays. */
     Copy(pixels, l.width, l.mapX + (cx - 5) * 16, l.mapY + (cy - 5) * 16,
-         8, 8, 176, 176);
+         8, 8, 176, l.height-8-(l.mapY+(cy-5)*16)<176 ?
+         l.height-8-(l.mapY+(cy-5)*16) : 176);
     for(int row=0;row<l.rows;row++) for(int col=0;col<l.columns;col++) {
         int dx=col-cx,dy=row-cy;
         if(abs(dx)<=5 && abs(dy)<=5 || !WIDE_Visible(dx,dy)) continue;
@@ -282,14 +287,14 @@ bool WIDE_Compose(byte* pixels, WideLayout l)
         byte tile=WIDE_MapTile(dx,dy);
         if(WIDE_GroundTile(dx,dy)!=tile)
             GRAP_BUF_DrawSprite(pixels,l.width,l.mapX+col*16,l.mapY+row*16,
-                D_b11e[tile],l.mapX,l.mapY,l.mapX+l.columns*16,l.mapY+l.rows*16,dx,dy);
+                D_b11e[tile],l.mapX,8,l.mapX+l.columns*16,l.height-8,dx,dy);
     }
     for (int row = 0; row < l.rows; row++)
         for (int col = 0; col < l.columns; col++) {
             int sprite = sprites[row * l.columns + col];
             if (sprite >= 0)
                 GRAP_BUF_DrawSprite(pixels, l.width, l.mapX + col * 16, l.mapY + row * 16,
-                    sprite, l.mapX, l.mapY, l.mapX + l.columns * 16, l.mapY + l.rows * 16,col-cx,row-cy);
+                    sprite, l.mapX, 8, l.mapX + l.columns * 16, l.height - 8,col-cx,row-cy);
         }
     free(sprites);
     /* Restore outline margins at the seam after copying central effects. */
@@ -309,7 +314,7 @@ bool WIDE_Compose(byte* pixels, WideLayout l)
                     if (px < 0 || py < 0 || px >= l.columns * 16 || py >= l.rows * 16) continue;
                     if (px >= (cx - 5) * 16 && px < (cx + 6) * 16 &&
                         py >= (cy - 5) * 16 && py < (cy + 6) * 16) continue;
-                    if (WIDE_SpritePixel(tile, dx, dy, sx, sy) == 0)
+                    if (l.mapY+py>=8 && l.mapY+py<l.height-8 && WIDE_SpritePixel(tile, dx, dy, sx, sy) == 0)
                         pixels[(l.mapY + py) * l.width + l.mapX + px] = 0;
                 }
         }

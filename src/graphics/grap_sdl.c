@@ -47,7 +47,7 @@ static SDL_FRect NativeRect(int width,int height)
         return (SDL_FRect){(width-w)/2,(height-h)/2+(NativeGameplay()?h*4/200:0),w,h};
     }
     WideLayout l=VideoLayout(width,height);
-    float w=320*l.scale,h=200*l.scale;
+    float w=320*l.scale,h=200*(s_videoMode==GRAP_VIDEO_FULLSCREEN?l.scaleY:l.scale);
     return (SDL_FRect){(width-w)/2,(height-h)/2,w,h};
 }
 static int s_windowedWidth=1280, s_windowedHeight=960;
@@ -144,8 +144,8 @@ void GRAP_SDL_CursorSize(int* width, int* height)
     if ((s_fullscreen || s_pixelUI) && SDL_GetRenderOutputSize(s_sdlRenderer, &outputW, &outputH)) {
         WideLayout l = VideoLayout(outputW, outputH);
         sx = l.scale * (float)w / outputW;
-        sy = l.scale * (float)h / outputH;
-        if(s_videoMode==GRAP_VIDEO_FULLSCREEN_43 && !s_expandedFrame) {
+        sy = l.scaleY * (float)h / outputH;
+        if(!s_expandedFrame) {
             SDL_FRect native=NativeRect(outputW,outputH);
             sx=native.w/320*w/outputW;sy=native.h/200*h/outputH;
         }
@@ -168,7 +168,7 @@ bool GRAP_SDL_MouseUIPoint(float x, float y, float* ux, float* uy)
         *uy=(y*oh/h-native.y)*200/native.h;
     } else {
         *ux = (x * ow / w - (ow - cw * l.scale) / 2) / l.scale;
-        *uy = (y * oh / h - (oh - ch * l.scale) / 2) / l.scale;
+        *uy = (y * oh / h - (oh - ch * l.scaleY) / 2) / l.scaleY;
     }
     if (*ux < 0 || *uy < 0 || *ux >= cw || *uy >= ch) return false;
     /* The original right-hand 128 pixels move to the far edge in widescreen. */
@@ -196,9 +196,12 @@ bool GRAP_SDL_MouseMapPoint(float x, float y, int* dx, int* dy, float* rx, float
             gx=(gx-native.x)*320/native.w;gy=(gy-native.y)*200/native.h;
         } else {
             gx = (gx - (width - canvasW * l.scale) / 2) / l.scale;
-            gy = (gy - (height - canvasH * l.scale) / 2) / l.scale;
+            gy = (gy - (height - canvasH * l.scaleY) / 2) / l.scaleY;
         }
-        if (s_expandedFrame) { mapX = l.mapX; mapY = l.mapY; columns = l.columns; rows = l.rows; }
+        if (s_expandedFrame) {
+            if(gy<8 || gy>=l.height-8) return false;
+            mapX = l.mapX; mapY = l.mapY; columns = l.columns; rows = l.rows;
+        }
     } else {
         gx = gx * 320 / width;
         gy = gy * 200 / height;
@@ -414,7 +417,10 @@ static void DrawDarkness(SDL_FRect dst,int width,int height,int mapX,int mapY,in
     if(!s_darknessTexture) return;
     SDL_FRect map={dst.x+mapX*dst.w/width,dst.y+mapY*dst.h/height,columns*16*dst.w/width,rows*16*dst.h/height};
     SDL_FRect source={16,16,columns*16,rows*16};
+    SDL_Rect clip={(int)map.x,(int)(dst.y+8*dst.h/height),(int)map.w,(int)((height-16)*dst.h/height)};
+    if(s_expandedFrame) SDL_SetRenderClipRect(s_sdlRenderer,&clip);
     SDL_RenderTexture(s_sdlRenderer,s_darknessTexture,&source,&map);
+    if(s_expandedFrame) SDL_SetRenderClipRect(s_sdlRenderer,NULL);
 }
 
 /* Snapshot only completed map redraws, never intermediate text updates. The
@@ -432,6 +438,8 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
     }
     int playerX = mapX + columns / 2 * 16, playerY = mapY + rows / 2 * 16;
     bool combat=D_5893_map_id>=128;
+    int mapTop=s_expandedFrame?8:mapY;
+    int mapBottom=s_expandedFrame?h-8:mapY+rows*16;
     for (int y = -1; !combat && y <= 16; y++) {
         Uint32* row = (Uint32*)((byte*)clean->pixels + (playerY+y)*clean->pitch);
         for (int x = -1; x <= 16; x++) {
@@ -460,12 +468,12 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
             animate=true;
             if (next->visible) {
                 for(int y=0;y<18;y++) for(int x=0;x<18;x++)
-                    if((next->sprite[y*18+x]>>24) && next->x+x>=mapX && next->x+x<mapX+columns*16 && next->y+y>=mapY && next->y+y<mapY+rows*16)
+                    if((next->sprite[y*18+x]>>24) && next->x+x>=mapX && next->x+x<mapX+columns*16 && next->y+y>=mapTop && next->y+y<mapBottom)
                         ((Uint32*)((byte*)clean->pixels+(next->y+y)*clean->pitch))[next->x+x]=next->terrain[y*18+x];
             }
             if (old->visible)
                 for (int y=0;y<18;y++) for(int x=0;x<18;x++)
-                    if((old->sprite[y*18+x]>>24) && old->x+x>=mapX && old->x+x<mapX+columns*16 && old->y+y>=mapY && old->y+y<mapY+rows*16)
+                    if((old->sprite[y*18+x]>>24) && old->x+x>=mapX && old->x+x<mapX+columns*16 && old->y+y>=mapTop && old->y+y<mapBottom)
                         s_previousPixels[(old->y+y)*w+old->x+x]=old->terrain[y*18+x];
         }
     }
@@ -484,7 +492,9 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
             bool valid=WIDE_MapTile(tx,ty)!=255;
             for(int y=0;y<16;y++) {
                 Uint32* dest=(Uint32*)((byte*)padded->pixels+((row+1)*16+y)*padded->pitch)+(col+1)*16;
-                if(interior && (combat || lit)) memcpy(dest,(byte*)clean->pixels+(mapY+row*16+y)*clean->pitch+(mapX+col*16)*4,16*4);
+                /* Clipped tile portions lie under the static frame in clean.
+                 * Regenerate them from terrain; never scroll frame pixels. */
+                if(interior && mapY+row*16+y>=mapTop && mapY+row*16+y<mapBottom && (combat || lit)) memcpy(dest,(byte*)clean->pixels+(mapY+row*16+y)*clean->pitch+(mapX+col*16)*4,16*4);
                 else for(int x=0;x<16;x++) dest[x]=s_egaPalette[valid?WIDE_TerrainPixel(tx,ty,x,y)&15:0];
             }
         }
@@ -505,6 +515,7 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
             float sx = dst.w / w, sy = dst.h / h;
             SDL_Rect clip = {(int)(dst.x+mapX*sx),(int)(dst.y+mapY*sy),
                              (int)(columns*16*sx),(int)(rows*16*sy)};
+            if(s_expandedFrame) { clip.y=(int)(dst.y+8*sy);clip.h=(int)((h-16)*sy); }
             SDL_FRect mapSrc = {0,0,paddedWidth,paddedHeight};
             SDL_FRect mapDst = {dst.x+mapX*sx,dst.y+mapY*sy,columns*16*sx,rows*16*sy};
             SDL_Texture* playerTexture=NULL;
@@ -685,7 +696,9 @@ void GRAP_SDL_FlushFrame(void)
                 for(int row=0;row<layout.rows;row++) for(int col=0;col<layout.columns;col++) {
                     if(abs(col-layout.columns/2)<=5 && abs(row-layout.rows/2)<=5) continue;
                     for(int y=0;y<16;y++) {
-                        int offset=(layout.mapY+row*16+y)*layout.width+layout.mapX+col*16;
+                        int py=layout.mapY+row*16+y;
+                        if(py<8 || py>=layout.height-8) continue;
+                        int offset=py*layout.width+layout.mapX+col*16;
                         memcpy(s_widePixels+offset,s_completedWidePixels+offset,16);
                     }
                 }
@@ -700,8 +713,8 @@ void GRAP_SDL_FlushFrame(void)
             }
             SDL_UpdateTexture(s_wideTexture, NULL, s_wideSurface->pixels, s_wideSurface->pitch);
             SDL_FRect dst = {(width - layout.width * layout.scale) / 2,
-                             (height - layout.height * layout.scale) / 2,
-                             layout.width * layout.scale, layout.height * layout.scale};
+                             (height - layout.height * layout.scaleY) / 2,
+                             layout.width * layout.scale, layout.height * layout.scaleY};
             SDL_RenderTexture(s_sdlRenderer, s_wideTexture, NULL, &dst);
             PrepareDarkness(layout.columns,layout.rows,completedMap);
             SmoothFrame(s_widePixels,layout.width,layout.height,layout.mapX,layout.mapY,

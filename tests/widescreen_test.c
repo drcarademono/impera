@@ -18,11 +18,13 @@ static byte pixel(byte* pixels, WideLayout l, int dx, int dy)
 int main(void)
 {
     WideLayout l = WIDE_Layout(1920, 1080);
-    assert(l.scale == 4 && l.columns == 21 && l.rows == 15);
+    assert(l.scale == 4 && l.columns == 21 && l.rows == 14);
     WideLayout tall = WIDE_Layout(1920, 1200);
-    assert(tall.columns == 15 && tall.rows == 14);
+    assert(tall.columns == 15 && tall.rows == 12);
+    assert(tall.width == 384 && tall.height == 200 && tall.scaleY == 6);
+    assert(l.scaleY / l.scale > 1.199f && l.scaleY / l.scale < 1.201f);
     WideLayout broad = WIDE_Layout(2560, 1080);
-    assert(broad.columns == 31 && broad.rows == 15);
+    assert(broad.columns == 31 && broad.rows == 14);
     assert(WIDE_Layout(320, 200).columns == 11);
     GRAP_Initialize();
     byte* tiles = malloc(512 * 128);
@@ -524,7 +526,19 @@ int main(void)
     int lastRow = (tall.height - 1) * tall.width;
     assert(pixels[lastRow + 40] == 2);
     assert(pixels[lastRow + middle] == 6);
-    assert(tall.mapY + tall.rows * 16 <= tall.height - 8);
+    assert(tall.mapY <= 8 && tall.mapY + tall.rows * 16 >= tall.height - 8);
+    free(pixels);
+    /* Partial edge rows contain their map tiles, while the frame stays intact. */
+    D_5893_map_id=13;D_58a4=1;D_58a5=50;
+    D_5896_map_x=D_5897_map_y=16;
+    memset(D_6608_map.town,1,sizeof(D_6608_map.town));
+    memset(D_5c5a,0,sizeof(D_5c5a));
+    D_b11e[1]=1;memset(tiles+128,0x11,128);
+    pixels=malloc((size_t)l.width*l.height);
+    assert(WIDE_Compose(pixels,l));
+    int edgeX=l.mapX+(l.columns/2)*16+8;
+    assert(pixels[8*l.width+edgeX]==1);
+    assert(pixels[(l.height-9)*l.width+edgeX]==1);
     free(pixels);
     GRAP_Cleanup();
     puts("Expanded map, sidebar, visibility, actors, and layout tests passed.");

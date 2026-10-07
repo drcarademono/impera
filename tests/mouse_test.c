@@ -96,14 +96,14 @@ bool __wrap_SDL_RenderPresent(SDL_Renderer* renderer)
     if(checkEdges) {
         SDL_Surface* image=SDL_RenderReadPixels(renderer,NULL);assert(image);
         Uint8 r,g,b,a;
-        assert(SDL_ReadSurfacePixel(image,waterMap.x+1,waterMap.y+1,&r,&g,&b,&a));
+        assert(SDL_ReadSurfacePixel(image,waterMap.x+1,waterMap.y+30,&r,&g,&b,&a));
         assert(r==0 && g==0 && b==(edgeBright?170:0)); /* completed map retained during UI-only flush */
         SDL_DestroySurface(image);
     }
     if(checkCRT) {
         SDL_Surface* image=SDL_RenderReadPixels(renderer,NULL);assert(image);
         Uint8 r,g,b,a;
-        int x=waterMap.x+waterMap.w/2,y=waterMap.y+waterMap.h/2;
+        int x=waterMap.x+waterMap.w/2+59,y=waterMap.y+waterMap.h/2+28;
         assert(SDL_ReadSurfacePixel(image,x,y,&r,&g,&b,&a));
         assert(r==0 && g==0 && b>80 && b<200 && b!=170); /* filtered on every presented frame, with brightness compensation */
         if(presented==9) assert(SDL_SaveBMP(image,"crt-gameplay.bmp"));
@@ -114,10 +114,10 @@ bool __wrap_SDL_RenderPresent(SDL_Renderer* renderer)
         int dark=0,lit=0;
         unsigned pattern=0;
         int scrollX=presented<=8 ? ditherDx*(8-presented)*6 : 0;
-        int scrollY=presented<=8 ? ditherDy*(8-presented)*6 : 0;
+        float scrollY=presented<=8 ? SDL_roundf(ditherDy*(8-presented)*7.2f) : 0;
         for(int y=4;y<8;y++) for(int x=4;x<8;x++) {
             Uint8 r,g,b,a;
-            assert(SDL_ReadSurfacePixel(image,lightX-2+x*3+scrollX,lightY-8*3+y*3+scrollY,&r,&g,&b,&a));
+            assert(SDL_ReadSurfacePixel(image,lightX-2+x*3+scrollX,lightY-8*3.6f+(y+0.5f)*3.6f+scrollY,&r,&g,&b,&a));
             assert(r==0 && g==0 && (b==0 || b==170));
             dark+=b==0;lit+=b==170;
             if(b==0) pattern|=1u<<((y-4)*4+x-4);
@@ -130,16 +130,19 @@ bool __wrap_SDL_RenderPresent(SDL_Renderer* renderer)
     if(checkDarkness) {
         SDL_Surface* image=SDL_RenderReadPixels(renderer,NULL);assert(image);
         Uint8 r,g,b,a;
-        assert(SDL_ReadSurfacePixel(image,lightX+(presented<=8?ditherDx*(8-presented)*6:0),lightY+(presented<=8?ditherDy*(8-presented)*6:0),&r,&g,&b,&a));
+        assert(SDL_ReadSurfacePixel(image,lightX+(presented<=8?ditherDx*(8-presented)*6:0),lightY+(presented<=8?SDL_roundf(ditherDy*(8-presented)*7.2f):0),&r,&g,&b,&a));
         assert(r==0 && g==0 && b==170); /* visible ground follows the map */
-        assert(SDL_ReadSurfacePixel(image,darkX+(presented<=8?ditherDx*(8-presented)*6:0),lightY+(presented<=8?ditherDy*(8-presented)*6:0),&r,&g,&b,&a));
+        assert(SDL_ReadSurfacePixel(image,darkX+(presented<=8?ditherDx*(8-presented)*6:0),lightY+(presented<=8?SDL_roundf(ditherDy*(8-presented)*7.2f):0),&r,&g,&b,&a));
         assert(r==0 && g==0 && b==0); /* hidden ground stays covered as it scrolls */
         SDL_DestroySurface(image);
     }
     if(checkWater) {
         SDL_Surface* image=SDL_RenderReadPixels(renderer,NULL);assert(image);
         int xs[]={waterMap.x+1,waterMap.x+waterMap.w/2,waterMap.x+waterMap.w-2};
-        int ys[]={waterMap.y+1,waterMap.y+waterMap.h/2,waterMap.y+waterMap.h-2};
+        WideLayout edgeLayout=WIDE_Layout(1024,768);
+        float canvasY=(768-edgeLayout.height*edgeLayout.scaleY)/2;
+        int ys[]={(int)(canvasY+8*edgeLayout.scaleY)+1,waterMap.y+waterMap.h/2,
+                  (int)(canvasY+(edgeLayout.height-8)*edgeLayout.scaleY)-2};
         for(int y=0;y<3;y++) for(int x=0;x<3;x++) {
             if(x==1 && y==1) continue; /* player sprite */
             Uint8 r,g,b,a;assert(SDL_ReadSurfacePixel(image,xs[x],ys[y],&r,&g,&b,&a));
@@ -656,19 +659,19 @@ int main(int argc, char** argv)
     GRAP_SDL_FlushFrame();
     WideLayout l=WIDE_Layout(1024,768); /* dummy driver's desktop */
     float centerX=(1024-l.width*l.scale)/2+(l.mapX+(l.columns/2)*16+8)*l.scale;
-    float centerY=(768-l.height*l.scale)/2+(l.mapY+(l.rows/2)*16+8)*l.scale;
+    float centerY=(768-l.height*l.scaleY)/2+(l.mapY+(l.rows/2)*16+8)*l.scaleY;
     assert(GRAP_SDL_MouseMapPoint(centerX,centerY,&dx,&dy,&rx,&ry) && dx==0 && dy==0);
     assert(GRAP_SDL_MouseMapPoint(centerX+16*l.scale,centerY,&dx,&dy,&rx,&ry) && dx==1 && dy==0);
     assert(!GRAP_SDL_MouseMapPoint(1020,centerY,&dx,&dy,&rx,&ry));
     int cursorWidth,cursorHeight;
     GRAP_SDL_CursorSize(&cursorWidth,&cursorHeight);
-    assert(cursorWidth==48 && cursorHeight==48);
+    assert(cursorWidth==48 && cursorHeight==58);
     /* Menu coordinates follow the shifted sidebar in expanded fullscreen. */
     float uiX,uiY;
     float sidebarX=(1024-l.width*l.scale)/2+(l.sidebarX+8)*l.scale;
-    assert(GRAP_SDL_MouseUIPoint(sidebarX,24*l.scale,&uiX,&uiY));
-    assert(uiX==200 && uiY==24);
-    cursorX=sidebarX; cursorY=24*l.scale;
+    assert(GRAP_SDL_MouseUIPoint(sidebarX,(768-l.height*l.scaleY)/2+24*l.scaleY,&uiX,&uiY));
+    assert(SDL_fabsf(uiX-200)<0.001f && SDL_fabsf(uiY-24)<0.001f);
+    cursorX=sidebarX; cursorY=(768-l.height*l.scaleY)/2+24*l.scaleY;
     MOUSE_MenuSet(192,8,120,3,0);
     assert(MOUSE_PollCommand()==U5_KEY_DOWN);
     MOUSE_MenuEnd(); MOUSE_Cancel();
@@ -733,13 +736,16 @@ int main(int argc, char** argv)
     D_589b=90;D_589c=90;memset(D_3876,255,sizeof(D_3876));
     memset(D_5c5a,0,sizeof(D_5c5a));
     D_b11e[1]=1;
-    waterMap=(SDL_Rect){(1024-l.width*l.scale)/2+l.mapX*l.scale,(768-l.height*l.scale)/2+l.mapY*l.scale,l.columns*16*l.scale,l.rows*16*l.scale};
+    waterMap=(SDL_Rect){(1024-l.width*l.scale)/2+l.mapX*l.scale,(768-l.height*l.scaleY)/2+l.mapY*l.scaleY,l.columns*16*l.scale,l.rows*16*l.scaleY};
     for(int stepY=-1;stepY<=1;stepY+=2) for(int stepX=-1;stepX<=1;stepX+=2) {
         D_5896_map_x=100;D_5897_map_y=100;
         memset(tiles+128,0x11,128);memset(g_linearEgaBuffer0,1,320*200);
         GRAP_SDL_SetSmoothMovement(true); /* reset interpolation history */
         GRAP_SDL_MapDrawn();GRAP_SDL_FlushFrame();
         memset(tiles+128,0x33,128);memset(g_linearEgaBuffer0,3,320*200);
+        /* A contrasting frame must never be sampled into scrolling terrain. */
+        memset(g_linearEgaBuffer0,4,320*8);
+        memset(g_linearEgaBuffer0+184*320,4,320*8);
         D_5896_map_x+=stepX;D_5897_map_y+=stepY;
         checkWater=true;presented=0;
         GRAP_SDL_MapDrawn();GRAP_SDL_FlushFrame();
@@ -771,7 +777,7 @@ int main(int argc, char** argv)
         for(int py=0;py<16;py++) memset(g_linearEgaBuffer0+(8+yy*16+py)*320+8+xx*16,visible?1:0,16);
     }
     lightX=waterMap.x+(l.columns/2-1)*16*l.scale+2;
-    lightY=waterMap.y+(l.rows/2)*16*l.scale+8*l.scale;
+    lightY=waterMap.y+(l.rows/2)*16*l.scaleY+8*l.scaleY;
     darkX=waterMap.x+(l.columns/2-2)*16*l.scale+8*l.scale;
     /* Also test daylight with an occluded central mask: the engine's LOS
      * result must win over the expanded view's independent visibility test. */
@@ -830,7 +836,7 @@ int main(int argc, char** argv)
     GRAP_SDL_MapDrawn(); GRAP_SDL_FlushFrame();
     actorStart=(l.mapX+(l.columns/2-3)*16)*l.scale;
     actorEnd=actorStart+48; actorMarker=actorStart;
-    actorRow=(l.mapY+(l.rows/2-2)*16+8)*l.scale;
+    actorRow=(l.mapY+(l.rows/2-2)*16+8)*l.scaleY;
     paintActor(1,14,14);
     presented=0; checkActor=true;
     GRAP_SDL_MapDrawn(); GRAP_SDL_FlushFrame();
@@ -849,7 +855,7 @@ int main(int argc, char** argv)
     GRAP_SDL_MapDrawn(); GRAP_SDL_FlushFrame();
     actorStart=(l.mapX+(l.columns/2-3)*16)*l.scale;
     actorEnd=actorStart+48; actorMarker=actorStart;
-    actorRow=(l.mapY+(l.rows/2-2)*16+8)*l.scale;
+    actorRow=(l.mapY+(l.rows/2-2)*16+8)*l.scaleY;
     D_5896_map_x=3;
     paintActor(7,3,3);
     presented=0; checkActor=true;
@@ -868,7 +874,7 @@ int main(int argc, char** argv)
     D_5896_map_x=2; D_5897_map_y=3;
     D_589e=0;D_ba14[0].x=2;D_ba14[0].y=3;
     float fighterX=centerX+(2-5)*16*l.scale;
-    float fighterY=centerY+(3-5)*16*l.scale;
+    float fighterY=centerY+(3-5)*16*l.scaleY;
     cursorX=fighterX+1; cursorY=fighterY;
     MOUSE_SetCommandInput(true);
     MOUSE_Button(cursorX,cursorY,SDL_BUTTON_RIGHT,true,1);
@@ -924,20 +930,20 @@ int main(int argc, char** argv)
     D_589e=0; D_ba14[0].x=2; D_ba14[0].y=8;
     D_5896_map_x=5; D_5897_map_y=5;
     MOVEMENT_SetDiagonal(true);
-    fighterX=centerX-3*16*l.scale;fighterY=centerY+3*16*l.scale;
+    fighterX=centerX-3*16*l.scale;fighterY=centerY+3*16*l.scaleY;
     assert(MOUSE_CursorDirection(fighterX+16*l.scale,fighterY)==U5_KEY_RIGHT);
-    assert(MOUSE_CursorDirection(fighterX,fighterY-16*l.scale)==U5_KEY_UP);
+    assert(MOUSE_CursorDirection(fighterX,fighterY-16*l.scaleY)==U5_KEY_UP);
     MOUSE_BeginDirectionInput(false);
     MOUSE_Button(fighterX+16*l.scale,fighterY,SDL_BUTTON_LEFT,true,1);
     assert(MOUSE_PollCommand()==U5_KEY_RIGHT);
-    MOUSE_Button(centerX,centerY-16*l.scale,SDL_BUTTON_LEFT,true,1);
+    MOUSE_Button(centerX,centerY-16*l.scaleY,SDL_BUTTON_LEFT,true,1);
     assert(MOUSE_PollCommand()==0); /* adjacent to map center, far from fighter */
     MOUSE_EndDirectionInput();
     D_589e=1; D_ba14[1].x=8; D_ba14[1].y=2;
-    fighterX=centerX+3*16*l.scale;fighterY=centerY-3*16*l.scale;
+    fighterX=centerX+3*16*l.scale;fighterY=centerY-3*16*l.scaleY;
     assert(MOUSE_CursorDirection(fighterX-16*l.scale,fighterY)==U5_KEY_LEFT);
     MOUSE_BeginDirectionInput(false);
-    MOUSE_Button(fighterX-16*l.scale,fighterY+16*l.scale,SDL_BUTTON_LEFT,true,1);
+    MOUSE_Button(fighterX-16*l.scale,fighterY+16*l.scaleY,SDL_BUTTON_LEFT,true,1);
     assert(MOUSE_PollCommand()==U5_KEY_END);
     MOUSE_EndDirectionInput();
     D_ba14[0].x=6;D_ba14[0].y=4;
