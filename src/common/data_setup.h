@@ -5,5 +5,6 @@
 bool SETUP_Run(void);
 bool SETUP_Validate(const char* directory,char* error,size_t capacity);
 const char* SETUP_MusicDirectory(void);
+bool SETUP_SetMusicDirectory(const char* directory);
 #endif
 #endif

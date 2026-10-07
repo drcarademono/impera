@@ -6,6 +6,7 @@
 #include <SDL3_mixer/SDL_mixer.h>
 #include "common/common.h"
 #include "audio/audio.h"
+#include "common/data_setup.h"
 #include "audio/aud_sfx.h"
 #include "audio/pcspeaker.h"
 #include "vars.h"
@@ -33,7 +34,7 @@ bool __wrap_SDL_PutAudioStreamData(SDL_AudioStream* stream,const void* data,int 
 }
 bool __real_MIX_SetTrackAudio(MIX_Track*,MIX_Audio*);
 bool __wrap_MIX_SetTrackAudio(MIX_Track* track,MIX_Audio* audio)
-{ assert(audio); assigned++; return __real_MIX_SetTrackAudio(track,audio); }
+{ if(audio) assigned++; return __real_MIX_SetTrackAudio(track,audio); }
 
 static void wave(const char* path)
 {
@@ -93,7 +94,18 @@ int main(void)
     AUDIO_Initialize();
     assert(!AUDIO_HasSfx(73) && AUDIO_HasSfx(74));
     AUDIO_PlayBgm(6); assert(assigned==4);
+    assert(SDL_CreateDirectory("SelectedMusic"));
+    wave("SelectedMusic/07 - Fanfare for the Virtuous.mp3");
+    AUDIO_PlayBgm(7);assert(assigned==4); /* Not loaded until the new directory is selected. */
+    assert(SETUP_SetMusicDirectory("SelectedMusic"));
+    assert(!SETUP_SetMusicDirectory("missing-music-directory"));
+    assert(!strcmp(SETUP_MusicDirectory(),"SelectedMusic"));
+    AUDIO_ReloadMusic();assert(assigned==5); /* Requested track resumes without restart. */
+    assert(AUDIO_HasSfx(74)); /* Sound effects are not reinitialized. */
+    AUDIO_PlayBgm(6);assert(assigned==5); /* Old folder's tracks were released. */
     AUDIO_Cleanup();
+    remove("SelectedMusic/07 - Fanfare for the Virtuous.mp3");
+    assert(SDL_RemovePath("SelectedMusic"));remove("DATA.CFG");
     remove("Alongside/Music/06 - Greyson's Tale.mp3");
     remove("Alongside/Sound/step1.wav");
     SDL_Quit();

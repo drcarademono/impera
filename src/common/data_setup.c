@@ -82,6 +82,16 @@ static bool saveConfig(void)
     if(ok) ok=SDL_RenamePath("DATA.CFG.pending","DATA.CFG");
     if(!ok) SDL_RemovePath("DATA.CFG.pending");return ok;
 }
+bool SETUP_SetMusicDirectory(const char* directory)
+{
+    SDL_PathInfo info;
+    if(!directory || !*directory || strlen(directory)>=sizeof(music) ||
+       strpbrk(directory,"\r\n") || !SDL_GetPathInfo(directory,&info) || info.type!=SDL_PATHTYPE_DIRECTORY) return false;
+    char previous[FILE_PATH_SIZE];SDL_strlcpy(previous,music,sizeof(previous));
+    SDL_strlcpy(music,directory,sizeof(music));
+    if(!saveConfig()) { SDL_strlcpy(music,previous,sizeof(music));return false; }
+    debug("Music directory selected: %s",music);return true;
+}
 static bool seedWorlds(void)
 {
     char save[FILE_PATH_SIZE];

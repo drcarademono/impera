@@ -1,6 +1,8 @@
 #include "engine_settings.h"
 #include "graphics/crt.h"
 #include "file.h"
+#include "data_setup.h"
+#include "folder_picker.h"
 #include "movement.h"
 #include "graphics/grap_sdl.h"
 #include "graphics/grap_buf.h"
@@ -20,6 +22,7 @@ static const char* keys[]={"video_mode","mouse","smooth","diagonal","transparent
     "dithered_darkness","crt_filter","music","sound","movement_speed","animation_speed"};
 static const char* labels[]={"Video Mode","Mouse Control","Smooth Movement","Diagonal Movement",
     "Transparent Sprites","Dithered Darkness","CRT Filter","Music","Sound Effects","Movement Speed","Animation Speed"};
+static const char* musicStatus;
 static const float ticks[]={0.5f,0.75f,1.0f};
 float ENGINE_Get(int row)
 {
@@ -140,7 +143,7 @@ void ENGINE_DrawSettings(int selected)
     memset(g_linearEgaBuffer0,0,320*200);
     ENGINE_UIFrame();
     ENGINE_UIText(104,12,"Engine Options",15);
-    ENGINE_UIText(32,26,"Arrows / Enter   Esc: Back",7);
+    ENGINE_UIText(24,26,musicStatus?musicStatus:"Arrows / Enter   Esc: Back",7);
     for(int row=0;row<=ENGINE_SETTING_COUNT;row++) {
         int y=rowY(row);
         bool highlighted=row==selected;
@@ -179,7 +182,12 @@ void ENGINE_DrawSettings(int selected)
 static void adjust(int row,int direction)
 {
     float value=ENGINE_Get(row);
-    if(row<ENGINE_MOVEMENT_SPEED) ENGINE_Set(row,!value);
+    if(row==ENGINE_MUSIC && !value) {
+        if(FOLDER_SelectMusic(SETUP_MusicDirectory(),SETUP_SetMusicDirectory)) {
+            AUDIO_ReloadMusic();ENGINE_Set(ENGINE_MUSIC,1);
+            musicStatus="Music folder saved";
+        } else musicStatus="Music selection cancelled";
+    } else if(row<ENGINE_MOVEMENT_SPEED) ENGINE_Set(row,!value);
     else {
         float next=value;
         if(direction>0) { for(int i=0;i<3;i++) if(ticks[i]>value+0.001f) { next=ticks[i];break; } }
@@ -190,6 +198,7 @@ static void adjust(int row,int direction)
 void ENGINE_ShowOptions(bool gameplay)
 {
     s_gameplay=gameplay;
+    musicStatus=NULL;
     s_videoChoice=-1;
     byte backup[320*200];memcpy(backup,g_linearEgaBuffer0,sizeof(backup));
     extern void KEY_SDL_ClearInput(void);

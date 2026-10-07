@@ -14,6 +14,15 @@ You must supply your own Ultima 5 game files. Game data and optional music are
 external and are not bundled into the engine. The build still produces an
 executable named `ultima5`, and environment variables retain the `U5D_` prefix.
 
+> **Want music? Download the Ultima 5 MP3 music from
+> [Exodus — Downloads](https://exodus.voyd.net/downloads/), extract the archive,
+> and select the folder containing the MP3 files. Music is not bundled with
+> Impera; without player-supplied music files, the game has no music.
+> If you skipped music at first launch, open **Engine Options**, switch **Music**
+> off and then on, and choose your music folder in the **Ultima-themed, pixelated
+> folder browser**. Open a directory, then choose **Select this folder**.
+> No restart is required.
+
 ## Enhanced features
 
 - Fullscreen overhead maps that show more of the world, with crisp integer-scaled pixels.
@@ -134,7 +143,7 @@ even when Mouse Control is off, so it can be turned back on.
 | CRT Filter | Subtle DOS monitor scanlines, phosphor softness, glow and nearly flat curvature. |
 | Dithered Darkness | Fade visibility edges with an Ultima 6-style ordered pixel pattern. |
 | Transparent Sprites | Reveal ground around character and supported object sprites. |
-| Music | Enable or mute external music playback. |
+| Music | Mute playback, or switch on to choose and save a music folder. |
 | Sound Effects | Enable or mute WAV overrides and synthesized effects. |
 | Movement Speed | Adjust held movement and smooth tile transitions. |
 | Animation Speed | Adjust all animated sprites independently of movement and turns. |
@@ -360,6 +369,8 @@ Sprites default to opaque unless Transparent Sprites is enabled. Terrain tiles r
 the original tile data is unchanged.
 
 ## Music and sound effects
+
+Download the **Ultima 5 MP3 music** from [Exodus — Downloads](https://exodus.voyd.net/downloads/) and extract it before selecting its folder.
 
 Player-supplied music belongs in `Music` inside the data directory, or beside
 the executable (for example `build/Music` when running the Linux build).
