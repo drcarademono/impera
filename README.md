@@ -1,4 +1,4 @@
-# Impera — Ultima 5 Engine Port
+# Impera — An Ultima 5 Engine
 
 **Impera** is an enhanced engine port of **Ultima 5: Warriors of Destiny**,
 in the tradition of [Exult](https://exult.sourceforge.io/),
