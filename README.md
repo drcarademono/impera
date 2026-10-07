@@ -141,13 +141,13 @@ even when Mouse Control is off, so it can be turned back on.
 | CRT Filter | Subtle DOS monitor scanlines, phosphor softness, glow and nearly flat curvature. |
 | Transparent Sprites | Reveal ground around character and supported object sprites. |
 | Dithered Darkness | Fade visibility edges with an Ultima 6-style ordered pixel pattern. |
+| Music | Toggle playback. Switching on opens the folder browser only if no music folder is configured. |
+| Sound Effects | Enable or mute WAV overrides and synthesized effects. |
 | Mouse Control | Enable map movement and contextual actions; options menus remain clickable when off. |
 | Smooth Movement | Animate camera scrolling and visible actor steps. |
 | Diagonal Movement | Enable eight-way movement, neighboring actions, and combat. |
 | Movement Speed | Adjust held movement and smooth tile transitions. |
 | Animation Speed | Adjust all animated sprites independently of movement and turns. |
-| Music | Toggle playback. Switching on opens the folder browser only if no music folder is configured. |
-| Sound Effects | Enable or mute WAV overrides and synthesized effects. |
 
 Selected rows use a white highlight with black text; checkbox colors remain
 visible to show their state. Mouse hover selects rows, including **Return to

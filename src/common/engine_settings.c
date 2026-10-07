@@ -19,9 +19,9 @@
 #include <math.h>
 
 static const char* keys[]={"video_mode","crt_filter","transparent","dithered_darkness",
-    "mouse","smooth","diagonal","movement_speed","animation_speed","music","sound"};
+    "music","sound","mouse","smooth","diagonal","movement_speed","animation_speed"};
 static const char* labels[]={"Video Mode","CRT Filter","Transparent Sprites","Dithered Darkness",
-    "Mouse Control","Smooth Movement","Diagonal Movement","Movement Speed","Animation Speed","Music","Sound Effects"};
+    "Music","Sound Effects","Mouse Control","Smooth Movement","Diagonal Movement","Movement Speed","Animation Speed"};
 static bool isSpeed(int row) { return row==ENGINE_MOVEMENT_SPEED || row==ENGINE_ANIMATION_SPEED; }
 static const char* musicStatus;
 static const float ticks[]={0.5f,0.75f,1.0f};
@@ -118,10 +118,8 @@ void ENGINE_UIFrame(void)
 static int rowY(int row)
 {
     if(row<ENGINE_MOVEMENT_SPEED) return 40+row*11;
-    if(row==ENGINE_MOVEMENT_SPEED) return 117;
-    if(row==ENGINE_ANIMATION_SPEED) return 137;
-    if(row==ENGINE_MUSIC) return 157;
-    if(row==ENGINE_SOUND) return 168;
+    if(row==ENGINE_MOVEMENT_SPEED) return 140;
+    if(row==ENGINE_ANIMATION_SPEED) return 160;
     return 180;
 }
 static bool s_gameplay;
