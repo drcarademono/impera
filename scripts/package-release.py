@@ -13,7 +13,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 
 
-def package(build, platform, version, destination):
+def package(build, platform, version, destination, unpacked=False):
     version = re.sub(r'[^A-Za-z0-9._-]', '-', version)
     name = f'Impera-{version}-{platform}'
     stage = destination / name
@@ -50,7 +50,7 @@ exec "$app_dir/MacOS/impera-engine" "$@"
     else:
         shutil.copy2(source, stage / ('Impera.exe' if windows else 'impera'))
         if windows:
-            (stage / 'Run Impera.cmd').write_text('@echo off\r\ncd /d "%~dp0"\r\nImpera.exe %*\r\n')
+            (stage / 'Run Impera.cmd').write_text('@echo off\r\ncd /d "%~dp0"\r\nImpera.exe %*\r\n', newline='')
         else:
             launcher = stage / 'Impera.sh'
             launcher.write_text('''#!/bin/sh
@@ -74,6 +74,10 @@ exec "$app_dir/impera" "$@"
     stb = (dependencies / 'sdl3_mixer-src/src/stb_vorbis/stb_vorbis.h').read_text()
     license_start = stb.index('This software is available under 2 licenses')
     (licenses / 'stb_vorbis.txt').write_text(stb[license_start:])
+    if unpacked:
+        if not windows:
+            raise ValueError("Unpacked artifacts are only supported for Windows")
+        return stage
     if mac:
         archive = destination / f'{name}.tar.gz'
     elif windows:
@@ -110,8 +114,9 @@ if __name__ == '__main__':
     parser.add_argument('--platform', choices=['linux-x86_64', 'windows-x86_64', 'macos-x86_64', 'macos-arm64'], required=True)
     parser.add_argument('--version', default=os.environ.get('RELEASE_VERSION'))
     parser.add_argument('--output', type=Path, default=Path('dist'))
+    parser.add_argument('--unpacked', action='store_true', help='Stage Windows files directly for Actions downloads')
     args = parser.parse_args()
     if not args.version:
         parser.error("--version or RELEASE_VERSION is required")
     args.output.mkdir(parents=True, exist_ok=True)
-    package(args.build.resolve(), args.platform, args.version, args.output.resolve())
+    package(args.build.resolve(), args.platform, args.version, args.output.resolve(), args.unpacked)

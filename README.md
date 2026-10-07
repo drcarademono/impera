@@ -442,12 +442,15 @@ GitHub Actions builds Windows x64, Linux x64, macOS Intel, and macOS Apple
 Silicon packages using [Build releases](.github/workflows/release.yml).
 The release build pins SDL 3.4.18 and SDL_mixer 3.2.4, links them statically,
 and includes built-in WAV, MP3 and Ogg Vorbis decoding. Linux releases provide
-an AppImage and an additional portable archive. Original Ultima 5 game files,
+only an AppImage (plus its checksum). Original Ultima 5 game files,
 music, saves and personal settings are never included in the packages.
 ScaleFX is not part of these releases.
 
 To test a build, open **Actions → Build releases → Run workflow**, select the
-branch, and download its platform artifacts when all jobs finish. To make a
+branch, and download its platform artifacts when all jobs finish. GitHub wraps
+Actions downloads in a ZIP; the Windows artifact contains the executable
+directly. Release assets have no extra wrapper: one Windows ZIP, one Linux
+AppImage, and one macOS archive per architecture, with checksums. To make a
 release after merging, tag the desired commit:
 
 ```sh
@@ -472,7 +475,7 @@ Launch the download for your platform:
 - **Linux:** download the `.AppImage`, make it executable with
   `chmod +x Impera-*.AppImage`, then double-click it or run `./Impera-*.AppImage`.
   If FUSE is unavailable, run `./Impera-*.AppImage --appimage-extract-and-run`
-  instead. For the additional portable archive, extract it and run `./Impera.sh`.
+  instead.
   Settings, saves and logs live in `$XDG_DATA_HOME/impera`, or `~/.local/share/impera` by default.
   Linux builds target Ubuntu 22.04 or newer compatible systems. The AppImage
   bundles the engine, SDL, its audio decoders and cursor assets; system graphics
