@@ -166,6 +166,12 @@ flow stays the same: return to the title, then choose **Journey Onward** to find
 the new game at the top of **Load Game**. Imported Ultima IV characters also get
 a normal slot. Existing named saves are preserved.
 
+**Transfer from Ultima IV** opens a file browser styled like the engine menus.
+Navigate to your Ultima IV `party.sav` (filename case is ignored), then select it
+with Enter or a left-click. Use Backspace to go up a directory, the arrow keys
+or mouse wheel to scroll, and Escape to cancel. Missing, truncated, or invalid
+saves show an error without exiting the engine.
+
 Each slot includes the complete party save, both world-object lists, cumulative
 play time, location metadata (map, level and coordinates), and a small screenshot
 thumbnail for manual saves. Save and load rows show the location using the
