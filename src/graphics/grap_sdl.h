@@ -13,6 +13,7 @@ enum { GRAP_VIDEO_WINDOWED, GRAP_VIDEO_FULLSCREEN, GRAP_VIDEO_FULLSCREEN_43 };
 void GRAP_SDL_SetVideoMode(int mode);
 int GRAP_SDL_VideoMode(void);
 bool GRAP_SDL_MonitorSize(int* width,int* height);
+int GRAP_SDL_PixelScale(void);
 void GRAP_SDL_SetFullscreen(bool fullscreen);
 bool GRAP_SDL_Fullscreen(void);
 float GRAP_SDL_MovementSpeed(void);

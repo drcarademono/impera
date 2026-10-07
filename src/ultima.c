@@ -37,6 +37,7 @@ extern int g_enableDebugOverlay;
 #include <SDL3/SDL_main.h>
 #include "graphics/grap_sdl.h"
 #include "graphics/crt.h"
+#include "graphics/scalefx.h"
 #include "graphics/grap_buf.h"
 #include "graphics/animate.h"
 #include "key/mouse.h"
@@ -60,6 +61,8 @@ int CDECL main(int argc, char** argv/*, char** envp*/)
     ENGINE_Load();
     for (int arg = 1; arg < argc; arg++)
     {
+        if (strcmp(argv[arg], "--scalefx") == 0)
+        { SCALEFX_SetEnabled(true);continue; }
         if (strcmp(argv[arg], "--fullscreen-4:3") == 0)
         { GRAP_SDL_SetVideoMode(GRAP_VIDEO_FULLSCREEN_43);continue; }
         if (strcmp(argv[arg], "--fullscreen") == 0)
@@ -98,7 +101,8 @@ int CDECL main(int argc, char** argv/*, char** envp*/)
             SLOTS_SetLegacyEnabled(true);
         else if (strcmp(argv[arg], "--help") == 0)
         {
-            puts("Usage: ultima5 [--fullscreen | --fullscreen-4:3] [--mouse] [--smooth-movement] [--movement-speed N] [--animation-speed N] [--diagonal-movement] [--transparent-sprites] [--dithered-darkness] [--crt-filter] [--legacy-save] [C|H|T|E]\n"
+            puts("Usage: ultima5 [--fullscreen | --fullscreen-4:3] [--mouse] [--smooth-movement] [--movement-speed N] [--animation-speed N] [--diagonal-movement] [--transparent-sprites] [--dithered-darkness] [--crt-filter | --scalefx] [--legacy-save] [C|H|T|E]\n"
+                 "  --scalefx          Use the original five-pass ScaleFX pixel-art shader.\n"
                  "  --fullscreen-4:3   Center the fullscreen map in a 4:3 viewport.\n"
                  "  --fullscreen       Expand the overhead map with uniform integer pixel scaling.\n"
                  "  --mouse            Enable mouse movement and contextual actions.\n"

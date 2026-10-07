@@ -1,4 +1,5 @@
 #include "crt.h"
+#include "scalefx.h"
 #include "common/common.h"
 #include "common/settings.h"
 
@@ -233,6 +234,11 @@ bool GRAP_SDL_MonitorSize(int* width,int* height)
 void GRAP_SDL_SetFullscreen(bool fullscreen)
 { GRAP_SDL_SetVideoMode(fullscreen?GRAP_VIDEO_FULLSCREEN:GRAP_VIDEO_WINDOWED); }
 bool GRAP_SDL_Fullscreen(void) { return s_fullscreen; }
+int GRAP_SDL_PixelScale(void)
+{
+    int w,h;if(!s_sdlRenderer || !SDL_GetRenderOutputSize(s_sdlRenderer,&w,&h)) return 1;
+    return s_fullscreen || s_pixelUI?VideoLayout(w,h).scale:SDL_max(1,SDL_min(w/320,h/200));
+}
 float GRAP_SDL_MovementSpeed(void) { return s_movementSpeed; }
 void GRAP_SDL_SetPixelUI(bool enabled)
 {
@@ -275,6 +281,12 @@ void GRAP_SDL_Initialize(void)
         flags |= SDL_WINDOW_FULLSCREEN;
     }
 
+    /* Prefer the backend that can run our optional ScaleFX shaders. Respect
+     * explicit SDL_RENDER_DRIVER choices (including software/headless tests). */
+    if(!SDL_GetHint(SDL_HINT_RENDER_DRIVER))
+        for(int i=0;i<SDL_GetNumRenderDrivers();i++) if(!strcmp(SDL_GetRenderDriver(i),"opengl")) {
+            SDL_SetHintWithPriority(SDL_HINT_RENDER_DRIVER,"opengl",SDL_HINT_DEFAULT);break;
+        }
     if (!SDL_CreateWindowAndRenderer("Ultima V: Warriors of Destiny", windowWidth, windowHeight,
                                     flags, &s_sdlWindow, &s_sdlRenderer))
     {
@@ -622,7 +634,7 @@ void GRAP_SDL_FlushFrame(void)
     CRT_BeginFrame(s_sdlRenderer);
     /* Reconstruct the original pixels first; CRT owns the gentle softness. */
     SDL_SetTextureScaleMode(s_sdlTexture,
-        s_fullscreen || s_pixelUI || CRT_Enabled() ? SDL_SCALEMODE_NEAREST : SDL_SCALEMODE_LINEAR);
+        s_fullscreen || s_pixelUI || CRT_Enabled() || SCALEFX_Enabled() ? SDL_SCALEMODE_NEAREST : SDL_SCALEMODE_LINEAR);
     bool completedMap=s_mapDrawn;
     s_expandedFrame = false;
     if(!s_fullscreen || s_pixelUI || !D_58a4) s_completedWideValid=false;

@@ -195,6 +195,15 @@ int main(int argc, char** argv)
     choose.button.y=80+65*4;assert(SDL_PushEvent(&choose));key(SDLK_ESCAPE);
     ENGINE_ShowOptions(false);assert(GRAP_SDL_VideoMode()==GRAP_VIDEO_FULLSCREEN_43);
     ENGINE_Set(ENGINE_FULLSCREEN,0);
+    /* Display Filter shares the dropdown behavior and persists ScaleFX. */
+    for(int i=0;i<ENGINE_CRT;i++) key(SDLK_DOWN);
+    key(SDLK_RETURN);key(SDLK_DOWN);key(SDLK_DOWN);key(SDLK_RETURN);key(SDLK_ESCAPE);
+    ENGINE_ShowOptions(false);assert(ENGINE_Get(ENGINE_CRT)==2);
+    ENGINE_Set(ENGINE_CRT,0);ENGINE_Load();assert(ENGINE_Get(ENGINE_CRT)==2);
+    ENGINE_Set(ENGINE_CRT,1);assert(ENGINE_Get(ENGINE_CRT)==1);
+    ENGINE_Set(ENGINE_CRT,0);assert(ENGINE_Get(ENGINE_CRT)==0);
+    f=fopen("ENGINE.CFG","w");assert(f);fputs("crt_filter 1\n",f);fclose(f);
+    ENGINE_Load();assert(ENGINE_Get(ENGINE_CRT)==1);ENGINE_Set(ENGINE_CRT,0);
     remove("ENGINE.CFG");D_539c[0]=NULL;GRAP_SDL_Cleanup();SDL_Quit();
     puts("Engine settings persistence, live options, keyboard, and slider dragging passed");
     return 0;

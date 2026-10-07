@@ -123,7 +123,7 @@ even when Mouse Control is off, so it can be turned back on.
 | Mouse Control | Enable map movement and contextual actions; options menus remain clickable when off. |
 | Smooth Movement | Animate camera scrolling and visible actor steps. |
 | Diagonal Movement | Enable eight-way movement, neighboring actions, and combat. |
-| CRT Filter | Subtle DOS monitor scanlines, phosphor softness, glow and nearly flat curvature. |
+| Display Filter | Dropdown: Off, DOS Monitor CRT, or ScaleFX pixel-art edge interpolation. |
 | Dithered Darkness | Fade visibility edges with an Ultima 6-style ordered pixel pattern. |
 | Transparent Sprites | Reveal ground around character and supported object sprites. |
 | Music | Enable or mute external music playback. |
@@ -280,9 +280,22 @@ without waiting at tile boundaries.
 Smooth movement uses timed keyboard repeats so held input continues across tile
 boundaries; otherwise keyboard repeat retains the operating system's behavior.
 
+### ScaleFX
+
+Choose **ScaleFX** under **Display Filter** to smooth pixel-art edges with
+Sp00kyFox’s original five-pass ScaleFX shader. It selects colours from the game’s
+existing palette rather than blending new colours. This is an alternative to
+DOS Monitor CRT; only one display filter is active at a time. The choice is saved
+in `ENGINE.CFG` and applies to gameplay, menus, cutscenes and the cursor.
+
+ScaleFX requires a compatible OpenGL renderer with floating-point render targets.
+The engine prefers OpenGL when available; an explicitly selected incompatible
+SDL renderer uses unfiltered output and records the reason in the log.
+The bundled shaders in `textures/shaders/scalefx` must remain alongside the engine.
+
 ### CRT filter
 
-Enable **CRT Filter** in Engine Options or launch with `--crt-filter` for a
+Select **DOS Monitor CRT** under **Display Filter** in Engine Options or launch with `--crt-filter` for a
 **DOS Monitor** preset, inspired by a good late-1980s MS-DOS color CRT:
 subtle scanlines, slight horizontal phosphor softness, mild bloom and halation,
 a gentle vignette and nearly flat curvature. Brightness compensation keeps
@@ -464,5 +477,6 @@ project documentation.
 
 ## Credits
 
+- **Sp00kyFox** — [ScaleFX](https://github.com/libretro/glsl-shaders/tree/master/scalefx) pixel-art shaders, distributed with their MIT license notices.
 - **[carademono](https://github.com/drcarademono)** — Impera port and enhancements.
 - **[wonst719](https://github.com/wonst719)** — [u5d — Ultima V Decompilation Project](https://github.com/wonst719/u5d), the base engine and original decompilation.

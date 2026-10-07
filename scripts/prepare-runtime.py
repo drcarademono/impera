@@ -83,6 +83,8 @@ def prepare(data_dir, runtime_dir):
     for source in cursors.iterdir():
         if source.suffix.lower() == ".png":
             shutil.copy2(source, resolve(destination / source.name, allow_missing=True))
+    shaders = resolve(Path(__file__).parent.parent / "textures" / "shaders")
+    shutil.copytree(shaders, resolve(runtime / "textures" / "shaders", allow_missing=True), dirs_exist_ok=True)
     return runtime
 
 

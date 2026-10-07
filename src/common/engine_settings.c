@@ -1,5 +1,6 @@
 #include "engine_settings.h"
 #include "graphics/crt.h"
+#include "graphics/scalefx.h"
 #include "file.h"
 #include "movement.h"
 #include "graphics/grap_sdl.h"
@@ -17,9 +18,9 @@
 #include <math.h>
 
 static const char* keys[]={"video_mode","mouse","smooth","diagonal","transparent",
-    "dithered_darkness","crt_filter","music","sound","movement_speed","animation_speed"};
+    "dithered_darkness","display_filter","music","sound","movement_speed","animation_speed"};
 static const char* labels[]={"Video Mode","Mouse Control","Smooth Movement","Diagonal Movement",
-    "Transparent Sprites","Dithered Darkness","CRT Filter","Music","Sound Effects","Movement Speed","Animation Speed"};
+    "Transparent Sprites","Dithered Darkness","Display Filter","Music","Sound Effects","Movement Speed","Animation Speed"};
 static const float ticks[]={0.5f,0.75f,1.0f};
 float ENGINE_Get(int row)
 {
@@ -30,7 +31,7 @@ float ENGINE_Get(int row)
     case ENGINE_DIAGONAL:return MOVEMENT_Diagonal();
     case ENGINE_TRANSPARENT:return GRAP_BUF_TransparentSprites();
     case ENGINE_DITHERED_DARKNESS:return WIDE_DitheredDarkness();
-    case ENGINE_CRT:return CRT_Enabled();
+    case ENGINE_CRT:return SCALEFX_Enabled()?2:CRT_Enabled()?1:0;
     case ENGINE_MUSIC:return AUDIO_MusicEnabled();
     case ENGINE_SOUND:return AUDIO_SoundEnabled();
     case ENGINE_MOVEMENT_SPEED:return GRAP_SDL_MovementSpeed();
@@ -41,8 +42,8 @@ float ENGINE_Get(int row)
 void ENGINE_Set(int row,float value)
 {
     if(!isfinite(value) || row<0 || row>=ENGINE_SETTING_COUNT) return;
-    if(row==ENGINE_FULLSCREEN && value!=0 && value!=1 && value!=2) return;
-    if(row!=ENGINE_FULLSCREEN && row<ENGINE_MOVEMENT_SPEED && value!=0 && value!=1) return;
+    if((row==ENGINE_FULLSCREEN || row==ENGINE_CRT) && value!=0 && value!=1 && value!=2) return;
+    if(row!=ENGINE_FULLSCREEN && row!=ENGINE_CRT && row<ENGINE_MOVEMENT_SPEED && value!=0 && value!=1) return;
     if(row>=ENGINE_MOVEMENT_SPEED && (value<0.1f || value>10)) return;
     debug("Engine option %s=%.6g",keys[row],(double)value);
     switch(row) {
@@ -52,7 +53,7 @@ void ENGINE_Set(int row,float value)
     case ENGINE_DIAGONAL:MOVEMENT_SetDiagonal(value!=0);break;
     case ENGINE_TRANSPARENT:GRAP_BUF_SetTransparentSprites(value!=0);break;
     case ENGINE_DITHERED_DARKNESS:WIDE_SetDitheredDarkness(value!=0);break;
-    case ENGINE_CRT:CRT_SetEnabled(value!=0);break;
+    case ENGINE_CRT:CRT_SetEnabled(value==1);SCALEFX_SetEnabled(value==2);break;
     case ENGINE_MUSIC:AUDIO_SetMusicEnabled(value!=0);break;
     case ENGINE_SOUND:AUDIO_SetSoundEnabled(value!=0);break;
     case ENGINE_MOVEMENT_SPEED:GRAP_SDL_SetMovementSpeed(value);break;
@@ -67,6 +68,7 @@ void ENGINE_Load(void)
     float value;
     while(fgets(line,sizeof(line),f))
         if(sscanf(line,"%63s %f %c",key,&value,&extra)==2) {
+            if(!strcmp(key,"crt_filter") && (value==0 || value==1)) ENGINE_Set(ENGINE_CRT,value);
             if(!strcmp(key,"fullscreen") && (value==0 || value==1)) ENGINE_Set(ENGINE_FULLSCREEN,value);
             for(int i=0;i<ENGINE_SETTING_COUNT;i++) if(!strcmp(key,keys[i])) ENGINE_Set(i,value);
         }
@@ -113,7 +115,7 @@ void ENGINE_UIFrame(void)
 }
 static int rowY(int row) { return row<ENGINE_MOVEMENT_SPEED ? 40+row*11 : row==ENGINE_MOVEMENT_SPEED?140:row==ENGINE_ANIMATION_SPEED?160:180; }
 static bool s_gameplay;
-static int s_videoChoice=-1;
+static int s_dropdownChoice=-1,s_dropdownRow=ENGINE_FULLSCREEN;
 static const char* videoLabel(int choice)
 {
     if(choice==0) return "Windowed";
@@ -130,8 +132,16 @@ static const char* videoLabel(int choice)
     return label;
 }
 static const int videoModes[]={GRAP_VIDEO_WINDOWED,GRAP_VIDEO_FULLSCREEN_43,GRAP_VIDEO_FULLSCREEN};
-static int videoChoice(void)
+static const char* dropdownLabel(int choice)
 {
+    static const char* filters[]={"Off","DOS Monitor CRT","ScaleFX"};
+    return s_dropdownRow==ENGINE_CRT?filters[choice]:videoLabel(choice);
+}
+static int dropdownValue(int choice)
+{ return s_dropdownRow==ENGINE_CRT?choice:videoModes[choice]; }
+static int dropdownChoice(void)
+{
+    if(s_dropdownRow==ENGINE_CRT) return (int)ENGINE_Get(ENGINE_CRT);
     for(int i=0;i<3;i++) if(videoModes[i]==GRAP_SDL_VideoMode()) return i;
     return 0;
 }
@@ -149,8 +159,11 @@ void ENGINE_DrawSettings(int selected)
         ENGINE_UIText(24,y,row==ENGINE_SETTING_COUNT?(s_gameplay?"Return to Game":"Return to Menu"):labels[row],foreground);
         if(row==ENGINE_SETTING_COUNT) continue;
         float value=ENGINE_Get(row);
-        if(row==ENGINE_FULLSCREEN) {
-            const char* label=videoLabel(videoChoice());
+        if(row==ENGINE_FULLSCREEN || row==ENGINE_CRT) {
+            static const char* filters[]={"Off","DOS Monitor CRT","ScaleFX"};
+            int choice=0;
+            for(int i=0;i<3;i++) if(videoModes[i]==GRAP_SDL_VideoMode()) choice=i;
+            const char* label=row==ENGINE_CRT?filters[(int)value]:videoLabel(choice);
             ENGINE_UIText(296-(int)strlen(label)*8,y,label,foreground);
         } else if(row<ENGINE_MOVEMENT_SPEED) {
             ENGINE_UIRect(232,y+1,7,7,7);
@@ -166,12 +179,13 @@ void ENGINE_DrawSettings(int selected)
             ENGINE_UIText(172,y+9,"0.5",7);ENGINE_UIText(200,y+9,"0.75",7);ENGINE_UIText(244,y+9,"1",7);
         }
     }
-    if(s_videoChoice>=0) {
-        ENGINE_UIRect(120,50,184,35,15);ENGINE_UIRect(121,51,182,33,0);
+    if(s_dropdownChoice>=0) {
+        int top=rowY(s_dropdownRow)+10;
+        ENGINE_UIRect(120,top,184,35,15);ENGINE_UIRect(121,top+1,182,33,0);
         for(int i=0;i<3;i++) {
-            int y=52+i*11;
-            if(i==s_videoChoice) ENGINE_UIRect(122,y-1,180,10,15);
-            ENGINE_UIText(128,y,videoLabel(i),i==s_videoChoice?0:15);
+            int y=top+2+i*11;
+            if(i==s_dropdownChoice) ENGINE_UIRect(122,y-1,180,10,15);
+            ENGINE_UIText(128,y,dropdownLabel(i),i==s_dropdownChoice?0:15);
         }
     }
     GRAP_BUF_MarkDirty();GRAP_BUF_Present();
@@ -190,7 +204,7 @@ static void adjust(int row,int direction)
 void ENGINE_ShowOptions(bool gameplay)
 {
     s_gameplay=gameplay;
-    s_videoChoice=-1;
+    s_dropdownChoice=-1;
     byte backup[320*200];memcpy(backup,g_linearEgaBuffer0,sizeof(backup));
     extern void KEY_SDL_ClearInput(void);
     KEY_SDL_ClearInput();MOUSE_Cancel();
@@ -204,26 +218,26 @@ void ENGINE_ShowOptions(bool gameplay)
             if(event.type==SDL_EVENT_QUIT ||
                (event.type==SDL_EVENT_KEY_DOWN && event.key.key==SDLK_E &&
                 (event.key.mod & SDL_KMOD_CTRL))) { if(changed) ENGINE_Save();exit(0); }
-            if(s_videoChoice>=0) {
+            if(s_dropdownChoice>=0) {
                 if(event.type==SDL_EVENT_KEY_DOWN) {
                     switch(event.key.key) {
-                    case SDLK_ESCAPE:s_videoChoice=-1;break;
-                    case SDLK_UP:s_videoChoice=(s_videoChoice+2)%3;break;
-                    case SDLK_DOWN:s_videoChoice=(s_videoChoice+1)%3;break;
+                    case SDLK_ESCAPE:s_dropdownChoice=-1;break;
+                    case SDLK_UP:s_dropdownChoice=(s_dropdownChoice+2)%3;break;
+                    case SDLK_DOWN:s_dropdownChoice=(s_dropdownChoice+1)%3;break;
                     case SDLK_RETURN:case SDLK_SPACE:
-                        ENGINE_Set(ENGINE_FULLSCREEN,videoModes[s_videoChoice]);changed=true;s_videoChoice=-1;break;
+                        ENGINE_Set(s_dropdownRow,dropdownValue(s_dropdownChoice));changed=true;s_dropdownChoice=-1;break;
                     }
                 } else if(event.type==SDL_EVENT_MOUSE_MOTION ||
                           (event.type==SDL_EVENT_MOUSE_BUTTON_DOWN && event.button.button==SDL_BUTTON_LEFT)) {
                     float x,y;
                     float ex=event.type==SDL_EVENT_MOUSE_MOTION?event.motion.x:event.button.x;
                     float ey=event.type==SDL_EVENT_MOUSE_MOTION?event.motion.y:event.button.y;
-                    if(GRAP_SDL_MouseUIPoint(ex,ey,&x,&y) && x>=120 && x<304 && y>=51 && y<84) {
-                        s_videoChoice=SDL_clamp((int)(y-51)/11,0,2);
+                    if(GRAP_SDL_MouseUIPoint(ex,ey,&x,&y) && x>=120 && x<304 && y>=rowY(s_dropdownRow)+11 && y<rowY(s_dropdownRow)+44) {
+                        s_dropdownChoice=SDL_clamp((int)(y-rowY(s_dropdownRow)-11)/11,0,2);
                         if(event.type==SDL_EVENT_MOUSE_BUTTON_DOWN) {
-                            ENGINE_Set(ENGINE_FULLSCREEN,videoModes[s_videoChoice]);changed=true;s_videoChoice=-1;
+                            ENGINE_Set(s_dropdownRow,dropdownValue(s_dropdownChoice));changed=true;s_dropdownChoice=-1;
                         }
-                    } else if(event.type==SDL_EVENT_MOUSE_BUTTON_DOWN) s_videoChoice=-1;
+                    } else if(event.type==SDL_EVENT_MOUSE_BUTTON_DOWN) s_dropdownChoice=-1;
                 }
                 ENGINE_DrawSettings(selected);continue;
             }
@@ -235,7 +249,9 @@ void ENGINE_ShowOptions(bool gameplay)
                 case SDLK_LEFT:case SDLK_RIGHT:case SDLK_RETURN:case SDLK_SPACE:
                     if(event.key.repeat && selected<ENGINE_MOVEMENT_SPEED) break;
                     if(selected==ENGINE_SETTING_COUNT) { done=true;break; }
-                    if(selected==ENGINE_FULLSCREEN) s_videoChoice=videoChoice();
+                    if(selected==ENGINE_FULLSCREEN || selected==ENGINE_CRT) {
+                        s_dropdownRow=selected;s_dropdownChoice=dropdownChoice();
+                    }
                     else { adjust(selected,event.key.key==SDLK_LEFT?-1:1);changed=true; }
                     break;
                 }
@@ -245,7 +261,9 @@ void ENGINE_ShowOptions(bool gameplay)
                 if(GRAP_SDL_MouseUIPoint(event.button.x,event.button.y,&x,&y) && x>=16 && x<304)
                     for(int row=0;row<=ENGINE_SETTING_COUNT;row++) if(y>=rowY(row)-1 && y<rowY(row)+9) {
                         selected=row;
-                        if(row==ENGINE_FULLSCREEN) s_videoChoice=videoChoice();
+                        if(row==ENGINE_FULLSCREEN || row==ENGINE_CRT) {
+                            s_dropdownRow=row;s_dropdownChoice=dropdownChoice();
+                        }
                         else if(row==ENGINE_SETTING_COUNT) done=true;
                         else if(row>=ENGINE_MOVEMENT_SPEED && x>=176 && x<=256) {
                             int tick=SDL_clamp((int)SDL_roundf((x-184)/32),0,2);

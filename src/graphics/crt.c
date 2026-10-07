@@ -1,4 +1,6 @@
 #include "crt.h"
+#include "scalefx.h"
+#include "grap_sdl.h"
 #include "key/mouse.h"
 #include <SDL3/SDL.h>
 #include <math.h>
@@ -16,10 +18,11 @@ static bool enabled,active;
 static SDL_Renderer* owner;
 static SDL_Texture *frame,*scene,*soft,*glow,*halo,*mask;
 static int width,height;
-void CRT_SetEnabled(bool value) { enabled=value;if(!value && SDL_WasInit(SDL_INIT_VIDEO)) SDL_ShowCursor(); }
+void CRT_SetEnabled(bool value) { enabled=value;if(value) SCALEFX_SetEnabled(false);if(!value && SDL_WasInit(SDL_INIT_VIDEO)) SDL_ShowCursor(); }
 bool CRT_Enabled(void) { return enabled; }
 void CRT_Cleanup(void)
 {
+    SCALEFX_Cleanup();
     MOUSE_ReleaseFilteredCursors();
     if(owner && active) SDL_SetRenderTarget(owner,NULL);
     if(SDL_WasInit(SDL_INIT_VIDEO)) SDL_ShowCursor();
@@ -30,7 +33,7 @@ void CRT_BeginFrame(SDL_Renderer* renderer)
 {
     if(owner && active) SDL_SetRenderTarget(owner,NULL);
     active=false;
-    if(!enabled) { if(frame) CRT_Cleanup();return; }
+    if(!enabled && !SCALEFX_Enabled()) { if(frame) CRT_Cleanup();return; }
     int w,h;
     if(!SDL_GetRenderOutputSize(renderer,&w,&h) || w<=0 || h<=0) return;
     if(owner!=renderer || width!=w || height!=h) {
@@ -127,7 +130,13 @@ void CRT_EndFrame(SDL_Renderer* renderer)
     SDL_SetRenderTarget(renderer,scene);
     SDL_SetTextureBlendMode(frame,SDL_BLENDMODE_NONE);
     SDL_RenderTexture(renderer,frame,NULL,NULL);
-    MOUSE_DrawFilteredCursor(renderer,curvatureX,curvatureY);
+    MOUSE_DrawFilteredCursor(renderer,enabled?curvatureX:0,enabled?curvatureY:0);
+    if(SCALEFX_Enabled()) {
+        SDL_SetRenderTarget(renderer,NULL);
+        if(!SCALEFX_Apply(renderer,scene,width,height,GRAP_SDL_PixelScale()))
+            SDL_RenderTexture(renderer,scene,NULL,NULL);
+        return;
+    }
     SDL_SetRenderTarget(renderer,soft);
     SDL_SetTextureBlendMode(scene,SDL_BLENDMODE_NONE);
     Uint8 center=(Uint8)(255*(1-horizontalSoftness-verticalSoftness)+0.5f);
@@ -167,7 +176,7 @@ void CRT_ResumeFrame(SDL_Renderer* renderer)
 
 void CRT_RefreshCursor(void)
 {
-    if(active && enabled && owner) {
+    if(active && (enabled || SCALEFX_Enabled()) && owner) {
         CRT_EndFrame(owner);SDL_RenderPresent(owner);CRT_ResumeFrame(owner);
     }
 }

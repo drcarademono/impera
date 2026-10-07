@@ -62,6 +62,7 @@ set(SOURCES
 	src/graphics/grap_buf.c
 	src/graphics/origin.c
 	src/graphics/crt.c
+    src/graphics/scalefx.c
 	src/graphics/grap_sdl.c
 	src/graphics/widescreen.c
 	src/graphics/grap.c
@@ -99,6 +100,12 @@ if(U5D_BUILD_TESTS)
         target_compile_definitions(u5d_crt_test PRIVATE TEST_FILTERED_CURSOR)
     endif()
     add_test(NAME crt_filter COMMAND u5d_crt_test)
+    file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/scalefx-runtime/textures")
+    file(COPY textures/shaders DESTINATION "${CMAKE_BINARY_DIR}/scalefx-runtime/textures")
+    add_test(NAME scalefx_shader COMMAND u5d_crt_test --scalefx)
+    set_tests_properties(scalefx_shader PROPERTIES TIMEOUT 30 SKIP_RETURN_CODE 77
+        WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/scalefx-runtime"
+        ENVIRONMENT "SDL_VIDEO_DRIVER=offscreen;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=opengl;MESA_SHADER_CACHE_DIR=/tmp/impera-mesa-cache")
     set_tests_properties(crt_filter PROPERTIES TIMEOUT 10
         ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software")
     add_executable(u5d_savegame_test tests/savegame_test.c ${TEST_SOURCES})
