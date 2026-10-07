@@ -247,6 +247,8 @@ int main(int argc, char** argv)
     memset(D_6608_map.town,1,sizeof(D_6608_map.town));
     memset(D_ab02,1,sizeof(D_ab02));
     memset(g_linearEgaBuffer0,3,320*200);
+    memset(g_linearEgaBuffer0+320*192,0,320*8);
+    top+=4*scale*1.2f;
     GRAP_BUF_MarkDirty();GRAP_BUF_Present();
     int dx,dy;float rx,ry;
     for(int row=0;row<11;row++) for(int col=0;col<11;col++) {
@@ -265,6 +267,10 @@ int main(int argc, char** argv)
         assert(SDL_ReadSurfacePixel(vanilla,0,oh/2,&ar,&ag,&ab,&aa));
         assert(ar==0 && ag==0 && ab==0);
     }
+    assert(SDL_ReadSurfacePixel(vanilla,ow/2,(int)(top/2),&ar,&ag,&ab,&aa));
+    assert(ar==0 && ag==0 && ab==0);
+    assert(SDL_ReadSurfacePixel(vanilla,ow/2,oh-1-(int)(top/2),&ar,&ag,&ab,&aa));
+    assert(ar==0 && ag==0 && ab==0);
     assert(SDL_SaveBMP(vanilla,"gameplay-4-3.bmp"));SDL_DestroySurface(vanilla);
     D_5893_map_id=0x40;D_58a4=0;
     ENGINE_Set(ENGINE_FULLSCREEN,0);ENGINE_Load();
