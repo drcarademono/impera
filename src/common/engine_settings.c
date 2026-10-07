@@ -151,7 +151,7 @@ void ENGINE_DrawSettings(int selected)
         float value=ENGINE_Get(row);
         if(row==ENGINE_FULLSCREEN) {
             const char* label=videoLabel(videoChoice());
-            ENGINE_UIText(264-(int)strlen(label)*8,y,label,foreground);
+            ENGINE_UIText(296-(int)strlen(label)*8,y,label,foreground);
         } else if(row<ENGINE_MOVEMENT_SPEED) {
             ENGINE_UIRect(232,y+1,7,7,7);
             ENGINE_UIRect(233,y+2,5,5,value?10:0);
