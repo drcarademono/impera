@@ -16,6 +16,8 @@ void MOUSE_ClearCombatAttack(void);
 bool MOUSE_CombatAttackTarget(int entity, int range, int* distance);
 void MOUSE_Initialize(void);
 void MOUSE_Cleanup(void);
+struct SDL_Renderer;
+bool MOUSE_DrawFilteredCursor(struct SDL_Renderer* renderer,float curvatureX,float curvatureY);
 void MOUSE_UpdateCursor(void);
 void MOUSE_SetPointerMode(bool enabled);
 int MOUSE_CursorDirection(float x, float y);

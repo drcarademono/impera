@@ -1,4 +1,5 @@
 #include "crt.h"
+#include "key/mouse.h"
 #include <SDL3/SDL.h>
 #include <math.h>
 
@@ -13,15 +14,16 @@ static const float displayBrightness=1.04f,displayContrast=1.02f;
 static float averageBeam;
 static bool enabled,active;
 static SDL_Renderer* owner;
-static SDL_Texture *frame,*soft,*glow,*halo,*mask;
+static SDL_Texture *frame,*scene,*soft,*glow,*halo,*mask;
 static int width,height;
-void CRT_SetEnabled(bool value) { enabled=value; }
+void CRT_SetEnabled(bool value) { enabled=value;if(!value && SDL_WasInit(SDL_INIT_VIDEO)) SDL_ShowCursor(); }
 bool CRT_Enabled(void) { return enabled; }
 void CRT_Cleanup(void)
 {
     if(owner && active) SDL_SetRenderTarget(owner,NULL);
-    SDL_DestroyTexture(frame);SDL_DestroyTexture(soft);SDL_DestroyTexture(glow);SDL_DestroyTexture(halo);SDL_DestroyTexture(mask);
-    frame=soft=glow=halo=mask=NULL;owner=NULL;active=false;width=height=0;
+    if(SDL_WasInit(SDL_INIT_VIDEO)) SDL_ShowCursor();
+    SDL_DestroyTexture(scene);SDL_DestroyTexture(frame);SDL_DestroyTexture(soft);SDL_DestroyTexture(glow);SDL_DestroyTexture(halo);SDL_DestroyTexture(mask);
+    frame=scene=soft=glow=halo=mask=NULL;owner=NULL;active=false;width=height=0;
 }
 void CRT_BeginFrame(SDL_Renderer* renderer)
 {
@@ -33,6 +35,7 @@ void CRT_BeginFrame(SDL_Renderer* renderer)
     if(owner!=renderer || width!=w || height!=h) {
         CRT_Cleanup();owner=renderer;width=w;height=h;
         frame=SDL_CreateTexture(renderer,SDL_PIXELFORMAT_ARGB8888,SDL_TEXTUREACCESS_TARGET,w,h);
+        scene=SDL_CreateTexture(renderer,SDL_PIXELFORMAT_ARGB8888,SDL_TEXTUREACCESS_TARGET,w,h);
         soft=SDL_CreateTexture(renderer,SDL_PIXELFORMAT_ARGB8888,SDL_TEXTUREACCESS_TARGET,w,h);
         halo=SDL_CreateTexture(renderer,SDL_PIXELFORMAT_ARGB8888,SDL_TEXTUREACCESS_TARGET,w/8?w/8:1,h/8?h/8:1);
         glow=SDL_CreateTexture(renderer,SDL_PIXELFORMAT_ARGB8888,SDL_TEXTUREACCESS_TARGET,w/4?w/4:1,h/4?h/4:1);
@@ -72,7 +75,7 @@ void CRT_BeginFrame(SDL_Renderer* renderer)
             }
             mask=SDL_CreateTextureFromSurface(renderer,surface);SDL_DestroySurface(surface);
         }
-        if(!frame || !soft || !glow || !halo || !mask) {
+        if(!frame || !scene || !soft || !glow || !halo || !mask) {
             DEBUG_Error("CRT filter unavailable: %s",SDL_GetError());CRT_Cleanup();return;
         }
         SDL_SetTextureBlendMode(frame,SDL_BLENDMODE_NONE);
@@ -120,24 +123,28 @@ void CRT_EndFrame(SDL_Renderer* renderer)
     if(!active) return;
     /* DOS Monitor: Lottes-style beam modulation and phosphor reconstruction,
      * expressed in SDL render passes to work on OpenGL and software alike. */
-    SDL_SetRenderTarget(renderer,soft);
+    SDL_SetRenderTarget(renderer,scene);
     SDL_SetTextureBlendMode(frame,SDL_BLENDMODE_NONE);
-    Uint8 center=(Uint8)(255*(1-horizontalSoftness-verticalSoftness)+0.5f);
-    SDL_SetTextureColorMod(frame,center,center,center);
     SDL_RenderTexture(renderer,frame,NULL,NULL);
-    SDL_SetTextureBlendMode(frame,SDL_BLENDMODE_ADD);
+    MOUSE_DrawFilteredCursor(renderer,curvatureX,curvatureY);
+    SDL_SetRenderTarget(renderer,soft);
+    SDL_SetTextureBlendMode(scene,SDL_BLENDMODE_NONE);
+    Uint8 center=(Uint8)(255*(1-horizontalSoftness-verticalSoftness)+0.5f);
+    SDL_SetTextureColorMod(scene,center,center,center);
+    SDL_RenderTexture(renderer,scene,NULL,NULL);
+    SDL_SetTextureBlendMode(scene,SDL_BLENDMODE_ADD);
     Uint8 softness=(Uint8)(255*horizontalSoftness*0.5f+0.5f);
-    SDL_SetTextureColorMod(frame,softness,softness,softness);
+    SDL_SetTextureColorMod(scene,softness,softness,softness);
     float horizontal=width/320.0f*0.30f,vertical=height/200.0f*0.20f;
     SDL_FRect left={-horizontal,0,width,height},right={horizontal,0,width,height};
-    SDL_RenderTexture(renderer,frame,NULL,&left);SDL_RenderTexture(renderer,frame,NULL,&right);
+    SDL_RenderTexture(renderer,scene,NULL,&left);SDL_RenderTexture(renderer,scene,NULL,&right);
     Uint8 verticalWeight=(Uint8)(255*verticalSoftness*0.5f+0.5f);
-    SDL_SetTextureColorMod(frame,verticalWeight,verticalWeight,verticalWeight);
+    SDL_SetTextureColorMod(scene,verticalWeight,verticalWeight,verticalWeight);
     SDL_FRect above={0,-vertical,width,height},below={0,vertical,width,height};
-    SDL_RenderTexture(renderer,frame,NULL,&above);SDL_RenderTexture(renderer,frame,NULL,&below);
-    SDL_SetTextureBlendMode(frame,SDL_BLENDMODE_NONE);SDL_SetTextureColorMod(frame,255,255,255);
-    SDL_SetRenderTarget(renderer,glow);SDL_RenderTexture(renderer,frame,NULL,NULL);
-    SDL_SetRenderTarget(renderer,halo);SDL_RenderTexture(renderer,frame,NULL,NULL);
+    SDL_RenderTexture(renderer,scene,NULL,&above);SDL_RenderTexture(renderer,scene,NULL,&below);
+    SDL_SetTextureBlendMode(scene,SDL_BLENDMODE_NONE);SDL_SetTextureColorMod(scene,255,255,255);
+    SDL_SetRenderTarget(renderer,glow);SDL_RenderTexture(renderer,scene,NULL,NULL);
+    SDL_SetRenderTarget(renderer,halo);SDL_RenderTexture(renderer,scene,NULL,NULL);
     SDL_SetRenderTarget(renderer,soft);
     SDL_RenderTexture(renderer,glow,NULL,NULL);SDL_RenderTexture(renderer,halo,NULL,NULL);
     SDL_SetRenderTarget(renderer,NULL);
@@ -155,4 +162,11 @@ void CRT_EndFrame(SDL_Renderer* renderer)
 void CRT_ResumeFrame(SDL_Renderer* renderer)
 {
     if(active) SDL_SetRenderTarget(renderer,frame);
+}
+
+void CRT_RefreshCursor(void)
+{
+    if(active && enabled && owner) {
+        CRT_EndFrame(owner);SDL_RenderPresent(owner);CRT_ResumeFrame(owner);
+    }
 }

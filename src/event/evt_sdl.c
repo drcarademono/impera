@@ -4,6 +4,7 @@
 #include "event.h"
 #include "vars.h"
 #include "key/mouse.h"
+#include "graphics/crt.h"
 
 #include <SDL3/SDL.h>
 
@@ -58,6 +59,9 @@ void EVT_PollMessages(void)
             KEY_SDL_ReleaseKey(ev.key.key);
             break;
 
+        case SDL_EVENT_MOUSE_MOTION:
+            CRT_RefreshCursor();
+            break;
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
         case SDL_EVENT_MOUSE_BUTTON_UP:
             MOUSE_Button(ev.button.x, ev.button.y, ev.button.button,

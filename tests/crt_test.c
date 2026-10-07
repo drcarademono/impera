@@ -4,6 +4,18 @@
 #include <stdlib.h>
 #include <SDL3/SDL.h>
 #include "graphics/crt.h"
+#ifdef TEST_FILTERED_CURSOR
+static bool testCursor;
+static float cursorX=100;
+bool __wrap_MOUSE_DrawFilteredCursor(SDL_Renderer* r,float cx,float cy)
+{
+    (void)cx;(void)cy;
+    if(!testCursor) return false;
+    SDL_FRect rect={cursorX,100,16,16};
+    assert(SDL_SetRenderDrawColor(r,255,255,255,255));
+    return SDL_RenderFillRect(r,&rect);
+}
+#endif
 static void white(SDL_Renderer* r)
 { assert(SDL_SetRenderDrawColor(r,255,255,255,255));assert(SDL_RenderClear(r)); }
 static int red(SDL_Surface* s,int x,int y)
@@ -43,6 +55,15 @@ int main(void)
     assert(red(output,349,400)>0); /* low-intensity glow outside the bright shape */
     assert(red(output,100,100)==0); /* glow does not lift distant black */
     assert(SDL_SaveBMP(output,"crt-preview.bmp"));
+#ifdef TEST_FILTERED_CURSOR
+    testCursor=true;CRT_ResumeFrame(r);finish(r);
+    assert(red(output,108,108)>180); /* cursor enters the CRT image */
+    assert(red(output,108,108)!=red(output,108,109)); /* scanlines affect cursor */
+    cursorX=200;CRT_ResumeFrame(r);finish(r);
+    assert(red(output,108,108)==0); /* backing frame has no cursor trails */
+    assert(red(output,208,108)>180);
+    testCursor=false;
+#endif
     CRT_ResumeFrame(r);CRT_SetEnabled(false);CRT_BeginFrame(r);
     assert(!SDL_GetRenderTarget(r));white(r);finish(r);
     assert(red(output,480,401)==255); /* toggling off releases the target */

@@ -289,7 +289,8 @@ aberration, noise or flicker. The filter uses lightweight SDL render passes
 with the same effect on OpenGL and software renderers. Original pixels are
 scaled before CRT processing, using the existing integer scaling in fullscreen
 and menu layouts. It applies to
-gameplay, menus and cutscenes, including smooth movement and fullscreen.
+gameplay, menus, cutscenes and the mouse cursor, including smooth movement
+and fullscreen. Save thumbnails retain the clean gameplay image.
 It is off by default and saved in `ENGINE.CFG`. At small window sizes the
 scanlines are averaged to keep text readable.
 

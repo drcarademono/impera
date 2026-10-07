@@ -8,4 +8,5 @@ void CRT_BeginFrame(struct SDL_Renderer* renderer);
 void CRT_EndFrame(struct SDL_Renderer* renderer);
 void CRT_ResumeFrame(struct SDL_Renderer* renderer);
 void CRT_Cleanup(void);
+void CRT_RefreshCursor(void);
 #endif
