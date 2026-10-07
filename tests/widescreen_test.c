@@ -445,7 +445,44 @@ int main(void)
     D_58a5 = 50;
     D_5896_map_x = 31;
     assert(WIDE_Compose(pixels, broad));
-    assert(pixel(pixels, broad, 7, 0) == 0); /* no reading past town edges */
+    assert(WIDE_MapTile(7,0)==D_6a07); /* vanilla location backdrop */
+    assert(pixel(pixels,broad,7,0)==GRAP_BUF_TilePixel(D_b11e[D_6a07],0,0));
+    /* Background extends on every side without wrapping or reading past
+     * the map. Dithered and plain fullscreen composition share this path. */
+    byte boundaryTown[sizeof(D_6608_map.town)],boundaryView[sizeof(D_ab02)],boundaryActors[sizeof(D_5c5a)];
+    memcpy(boundaryActors,D_5c5a,sizeof(boundaryActors));
+    memset(D_5c5a,0,sizeof(D_5c5a));
+    memcpy(boundaryTown,D_6608_map.town,sizeof(boundaryTown));
+    memcpy(boundaryView,D_ab02,sizeof(boundaryView));
+    memset(D_6608_map.town,TILE_MAP_GRASS,sizeof(D_6608_map.town));
+    memset(D_ab02,TILE_MAP_GRASS,sizeof(D_ab02));
+    const int boundaryPositions[][2]={{0,16},{31,16},{16,0},{16,31},{0,0},{31,31}};
+    WideLayout boundaryLayouts[]={WIDE_Layout(1600,1200),broad};
+    for(int dither=0;dither<2;dither++) {
+        WIDE_SetDitheredDarkness(dither!=0);
+        for(unsigned pos=0;pos<sizeof(boundaryPositions)/sizeof(boundaryPositions[0]);pos++) {
+            D_5896_map_x=boundaryPositions[pos][0];D_5897_map_y=boundaryPositions[pos][1];
+            for(unsigned view=0;view<sizeof(boundaryLayouts)/sizeof(boundaryLayouts[0]);view++) {
+                WideLayout layout=boundaryLayouts[view];
+                byte* backdrop=malloc((size_t)layout.width*layout.height);assert(backdrop);
+                byte* darkness=malloc((size_t)layout.columns*layout.rows*256);assert(darkness);
+                assert(WIDE_Compose(backdrop,layout));
+                assert(WIDE_DarknessMask(darkness,layout.columns,layout.rows));
+                for(int row=0;row<layout.rows;row++) for(int col=0;col<layout.columns;col++) {
+                    int dx=col-layout.columns/2,dy=row-layout.rows/2;
+                    if(abs(dx)<=5 && abs(dy)<=5) continue;
+                    assert(WIDE_MapTile(dx,dy)==TILE_MAP_GRASS);
+                    assert(backdrop[(layout.mapY+row*16+8)*layout.width+layout.mapX+col*16+8]==GRAP_BUF_TilePixel(D_b11e[TILE_MAP_GRASS],8,8));
+                    assert(darkness[(row*16+8)*layout.columns*16+col*16+8]==0);
+                }
+                free(backdrop);free(darkness);
+            }
+        }
+    }
+    WIDE_SetDitheredDarkness(false);
+    memcpy(D_6608_map.town,boundaryTown,sizeof(boundaryTown));
+    memcpy(D_ab02,boundaryView,sizeof(boundaryView));
+    memcpy(D_5c5a,boundaryActors,sizeof(boundaryActors));
     /* Read beyond the four resident outdoor blocks without modulo-32 aliasing,
      * including the wrapping seam at coordinate zero. */
     FILE* world = fopen("UNDER.DAT", "wb");
