@@ -18,10 +18,11 @@
 #include <string.h>
 #include <math.h>
 
-static const char* keys[]={"video_mode","mouse","smooth","diagonal","transparent",
-    "dithered_darkness","crt_filter","music","sound","movement_speed","animation_speed"};
-static const char* labels[]={"Video Mode","Mouse Control","Smooth Movement","Diagonal Movement",
-    "Transparent Sprites","Dithered Darkness","CRT Filter","Music","Sound Effects","Movement Speed","Animation Speed"};
+static const char* keys[]={"video_mode","crt_filter","transparent","dithered_darkness",
+    "music","sound","mouse","smooth","diagonal","movement_speed","animation_speed"};
+static const char* labels[]={"Video Mode","CRT Filter","Transparent Sprites","Dithered Darkness",
+    "Music","Sound Effects","Mouse Control","Smooth Movement","Diagonal Movement","Movement Speed","Animation Speed"};
+static bool isSpeed(int row) { return row==ENGINE_MOVEMENT_SPEED || row==ENGINE_ANIMATION_SPEED; }
 static const char* musicStatus;
 static const float ticks[]={0.5f,0.75f,1.0f};
 float ENGINE_Get(int row)
@@ -45,8 +46,8 @@ void ENGINE_Set(int row,float value)
 {
     if(!isfinite(value) || row<0 || row>=ENGINE_SETTING_COUNT) return;
     if(row==ENGINE_FULLSCREEN && value!=0 && value!=1 && value!=2) return;
-    if(row!=ENGINE_FULLSCREEN && row<ENGINE_MOVEMENT_SPEED && value!=0 && value!=1) return;
-    if(row>=ENGINE_MOVEMENT_SPEED && (value<0.1f || value>10)) return;
+    if(row!=ENGINE_FULLSCREEN && !isSpeed(row) && value!=0 && value!=1) return;
+    if(isSpeed(row) && (value<0.1f || value>10)) return;
     debug("Engine option %s=%.6g",keys[row],(double)value);
     switch(row) {
     case ENGINE_FULLSCREEN:GRAP_SDL_SetVideoMode((int)value);break;
@@ -114,7 +115,13 @@ void ENGINE_UIFrame(void)
     ENGINE_UIRect(7,7,306,1,15);ENGINE_UIRect(7,7,1,186,15);
     ENGINE_UIRect(312,7,1,186,15);ENGINE_UIRect(7,192,306,1,15);
 }
-static int rowY(int row) { return row<ENGINE_MOVEMENT_SPEED ? 40+row*11 : row==ENGINE_MOVEMENT_SPEED?140:row==ENGINE_ANIMATION_SPEED?160:180; }
+static int rowY(int row)
+{
+    if(row<ENGINE_MOVEMENT_SPEED) return 40+row*11;
+    if(row==ENGINE_MOVEMENT_SPEED) return 140;
+    if(row==ENGINE_ANIMATION_SPEED) return 160;
+    return 180;
+}
 static bool s_gameplay;
 static int s_videoChoice=-1;
 static const char* videoLabel(int choice)
@@ -155,7 +162,7 @@ void ENGINE_DrawSettings(int selected)
         if(row==ENGINE_FULLSCREEN) {
             const char* label=videoLabel(videoChoice());
             ENGINE_UIText(296-(int)strlen(label)*8,y,label,foreground);
-        } else if(row<ENGINE_MOVEMENT_SPEED) {
+        } else if(!isSpeed(row)) {
             ENGINE_UIRect(232,y+1,7,7,7);
             ENGINE_UIRect(233,y+2,5,5,value?10:0);
             ENGINE_UIText(248,y,value?"On":"Off",highlighted?0:(value?10:7));
@@ -187,7 +194,7 @@ static void adjust(int row,int direction)
             AUDIO_ReloadMusic();ENGINE_Set(ENGINE_MUSIC,1);
             musicStatus="Music folder saved";
         } else musicStatus="Music selection cancelled";
-    } else if(row<ENGINE_MOVEMENT_SPEED) ENGINE_Set(row,!value);
+    } else if(!isSpeed(row)) ENGINE_Set(row,!value);
     else {
         float next=value;
         if(direction>0) { for(int i=0;i<3;i++) if(ticks[i]>value+0.001f) { next=ticks[i];break; } }
@@ -242,7 +249,7 @@ void ENGINE_ShowOptions(bool gameplay)
                 case SDLK_UP:selected=(selected+ENGINE_SETTING_COUNT)%(ENGINE_SETTING_COUNT+1);break;
                 case SDLK_DOWN:selected=(selected+1)%(ENGINE_SETTING_COUNT+1);break;
                 case SDLK_LEFT:case SDLK_RIGHT:case SDLK_RETURN:case SDLK_SPACE:
-                    if(event.key.repeat && selected<ENGINE_MOVEMENT_SPEED) break;
+                    if(event.key.repeat && !isSpeed(selected)) break;
                     if(selected==ENGINE_SETTING_COUNT) { done=true;break; }
                     if(selected==ENGINE_FULLSCREEN) s_videoChoice=videoChoice();
                     else { adjust(selected,event.key.key==SDLK_LEFT?-1:1);changed=true; }
@@ -256,7 +263,7 @@ void ENGINE_ShowOptions(bool gameplay)
                         selected=row;
                         if(row==ENGINE_FULLSCREEN) s_videoChoice=videoChoice();
                         else if(row==ENGINE_SETTING_COUNT) done=true;
-                        else if(row>=ENGINE_MOVEMENT_SPEED && x>=176 && x<=256) {
+                        else if(isSpeed(row) && x>=176 && x<=256) {
                             int tick=SDL_clamp((int)SDL_roundf((x-184)/32),0,2);
                             ENGINE_Set(row,ticks[tick]);changed=true;
                             drag=row;

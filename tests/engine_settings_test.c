@@ -198,7 +198,8 @@ int main(int argc, char** argv)
     for(int i=0;i<ENGINE_MUSIC;i++) key(SDLK_DOWN);
     key(SDLK_RETURN); /* music off */
     key(SDLK_DOWN);key(SDLK_RETURN); /* effects off */
-    key(SDLK_DOWN);key(SDLK_LEFT); /* movement 0.75 */
+    for(int i=ENGINE_SOUND;i<ENGINE_MOVEMENT_SPEED;i++) key(SDLK_DOWN);
+    key(SDLK_LEFT); /* movement 0.75 */
     key(SDLK_DOWN);key(SDLK_LEFT); /* animation 0.75 */
     SDL_Event e={0};e.type=SDL_EVENT_MOUSE_BUTTON_DOWN;e.button.button=SDL_BUTTON_LEFT;
     e.button.x=184*4;e.button.y=80+144*4;assert(SDL_PushEvent(&e));

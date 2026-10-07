@@ -138,14 +138,14 @@ even when Mouse Control is off, so it can be turned back on.
 | Setting | Effect |
 | --- | --- |
 | Video Mode | Dropdown: Windowed, Fullscreen 4:3 (centered with black bars), or Fullscreen with the detected monitor aspect ratio (for example, 16:9). |
+| CRT Filter | Subtle DOS monitor scanlines, phosphor softness, glow and nearly flat curvature. |
+| Transparent Sprites | Reveal ground around character and supported object sprites. |
+| Dithered Darkness | Fade visibility edges with an Ultima 6-style ordered pixel pattern. |
+| Music | Toggle playback. Switching on opens the folder browser only if no music folder is configured. |
+| Sound Effects | Enable or mute WAV overrides and synthesized effects. |
 | Mouse Control | Enable map movement and contextual actions; options menus remain clickable when off. |
 | Smooth Movement | Animate camera scrolling and visible actor steps. |
 | Diagonal Movement | Enable eight-way movement, neighboring actions, and combat. |
-| CRT Filter | Subtle DOS monitor scanlines, phosphor softness, glow and nearly flat curvature. |
-| Dithered Darkness | Fade visibility edges with an Ultima 6-style ordered pixel pattern. |
-| Transparent Sprites | Reveal ground around character and supported object sprites. |
-| Music | Toggle playback. Switching on opens the folder browser only if no music folder is configured. |
-| Sound Effects | Enable or mute WAV overrides and synthesized effects. |
 | Movement Speed | Adjust held movement and smooth tile transitions. |
 | Animation Speed | Adjust all animated sprites independently of movement and turns. |
 
