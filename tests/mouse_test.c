@@ -96,14 +96,14 @@ bool __wrap_SDL_RenderPresent(SDL_Renderer* renderer)
     if(checkEdges) {
         SDL_Surface* image=SDL_RenderReadPixels(renderer,NULL);assert(image);
         Uint8 r,g,b,a;
-        assert(SDL_ReadSurfacePixel(image,waterMap.x+1,waterMap.y+1,&r,&g,&b,&a));
+        assert(SDL_ReadSurfacePixel(image,waterMap.x+1,waterMap.y+30,&r,&g,&b,&a));
         assert(r==0 && g==0 && b==(edgeBright?170:0)); /* completed map retained during UI-only flush */
         SDL_DestroySurface(image);
     }
     if(checkCRT) {
         SDL_Surface* image=SDL_RenderReadPixels(renderer,NULL);assert(image);
         Uint8 r,g,b,a;
-        int x=waterMap.x+waterMap.w/2+24,y=waterMap.y+waterMap.h/2+28;
+        int x=waterMap.x+waterMap.w/2+59,y=waterMap.y+waterMap.h/2+28;
         assert(SDL_ReadSurfacePixel(image,x,y,&r,&g,&b,&a));
         assert(r==0 && g==0 && b>80 && b<200 && b!=170); /* filtered on every presented frame, with brightness compensation */
         if(presented==9) assert(SDL_SaveBMP(image,"crt-gameplay.bmp"));

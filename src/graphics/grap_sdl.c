@@ -198,7 +198,10 @@ bool GRAP_SDL_MouseMapPoint(float x, float y, int* dx, int* dy, float* rx, float
             gx = (gx - (width - canvasW * l.scale) / 2) / l.scale;
             gy = (gy - (height - canvasH * l.scaleY) / 2) / l.scaleY;
         }
-        if (s_expandedFrame) { mapX = l.mapX; mapY = l.mapY; columns = l.columns; rows = l.rows; }
+        if (s_expandedFrame) {
+            if(gy<8 || gy>=l.height-8) return false;
+            mapX = l.mapX; mapY = l.mapY; columns = l.columns; rows = l.rows;
+        }
     } else {
         gx = gx * 320 / width;
         gy = gy * 200 / height;
@@ -414,7 +417,10 @@ static void DrawDarkness(SDL_FRect dst,int width,int height,int mapX,int mapY,in
     if(!s_darknessTexture) return;
     SDL_FRect map={dst.x+mapX*dst.w/width,dst.y+mapY*dst.h/height,columns*16*dst.w/width,rows*16*dst.h/height};
     SDL_FRect source={16,16,columns*16,rows*16};
+    SDL_Rect clip={(int)map.x,(int)(dst.y+8*dst.h/height),(int)map.w,(int)((height-16)*dst.h/height)};
+    if(s_expandedFrame) SDL_SetRenderClipRect(s_sdlRenderer,&clip);
     SDL_RenderTexture(s_sdlRenderer,s_darknessTexture,&source,&map);
+    if(s_expandedFrame) SDL_SetRenderClipRect(s_sdlRenderer,NULL);
 }
 
 /* Snapshot only completed map redraws, never intermediate text updates. The
@@ -484,7 +490,7 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
             bool valid=WIDE_MapTile(tx,ty)!=255;
             for(int y=0;y<16;y++) {
                 Uint32* dest=(Uint32*)((byte*)padded->pixels+((row+1)*16+y)*padded->pitch)+(col+1)*16;
-                if(interior && (combat || lit)) memcpy(dest,(byte*)clean->pixels+(mapY+row*16+y)*clean->pitch+(mapX+col*16)*4,16*4);
+                if(interior && mapY+row*16+y>=0 && mapY+row*16+y<h && (combat || lit)) memcpy(dest,(byte*)clean->pixels+(mapY+row*16+y)*clean->pitch+(mapX+col*16)*4,16*4);
                 else for(int x=0;x<16;x++) dest[x]=s_egaPalette[valid?WIDE_TerrainPixel(tx,ty,x,y)&15:0];
             }
         }
@@ -505,6 +511,7 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
             float sx = dst.w / w, sy = dst.h / h;
             SDL_Rect clip = {(int)(dst.x+mapX*sx),(int)(dst.y+mapY*sy),
                              (int)(columns*16*sx),(int)(rows*16*sy)};
+            if(s_expandedFrame) { clip.y=(int)(dst.y+8*sy);clip.h=(int)((h-16)*sy); }
             SDL_FRect mapSrc = {0,0,paddedWidth,paddedHeight};
             SDL_FRect mapDst = {dst.x+mapX*sx,dst.y+mapY*sy,columns*16*sx,rows*16*sy};
             SDL_Texture* playerTexture=NULL;
@@ -685,7 +692,9 @@ void GRAP_SDL_FlushFrame(void)
                 for(int row=0;row<layout.rows;row++) for(int col=0;col<layout.columns;col++) {
                     if(abs(col-layout.columns/2)<=5 && abs(row-layout.rows/2)<=5) continue;
                     for(int y=0;y<16;y++) {
-                        int offset=(layout.mapY+row*16+y)*layout.width+layout.mapX+col*16;
+                        int py=layout.mapY+row*16+y;
+                        if(py<8 || py>=layout.height-8) continue;
+                        int offset=py*layout.width+layout.mapX+col*16;
                         memcpy(s_widePixels+offset,s_completedWidePixels+offset,16);
                     }
                 }
