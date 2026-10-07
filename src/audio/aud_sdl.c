@@ -158,6 +158,20 @@ static void AUDIO_SDL_LoadBgmTable(void)
     }
 }
 
+void AUDIO_SDL_ReloadMusic(void)
+{
+    if(!s_mixer) return;
+    /* Detach music before releasing its audio; leave effects and synthesis intact. */
+    MIX_SetTrackStoppedCallback(s_bgmTrack,NULL,NULL);
+    MIX_StopTrack(s_bgmTrack,0);
+    MIX_SetTrackAudio(s_bgmTrack,NULL);
+    s_currentBgmId=s_queuedBgmId=0;
+    for(int i=0;i<20;i++) { MIX_DestroyAudio(s_bgm[i]);s_bgm[i]=NULL; }
+    AUDIO_SDL_LoadBgmTable();
+    MIX_SetTrackStoppedCallback(s_bgmTrack,AUDIO_SDL_OnBgmStopped,NULL);
+    SDL_ClearError();
+}
+
 static void AUDIO_SDL_LoadSfxTable(void)
 {
     for (int i = 0; i < SFX_RULE_COUNT; i++)

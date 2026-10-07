@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <SDL3/SDL.h>
 #include "common/engine_settings.h"
+#include "common/data_setup.h"
 #include "graphics/grap_buf.h"
 #include "graphics/grap_sdl.h"
 #include "vars.h"
@@ -18,6 +19,22 @@ void GRAP_SDL_Cleanup(void);
 
 static void key(SDL_Keycode code)
 { SDL_Event e={0};e.type=SDL_EVENT_KEY_DOWN;e.key.key=code;assert(SDL_PushEvent(&e)); }
+static int musicPickerMode,musicPickerCalls,musicInputStep;
+void __wrap_SDL_ShowOpenFolderDialog(SDL_DialogFileCallback callback,void* data,SDL_Window* window,const char* location,bool many)
+{
+    (void)window;(void)location;assert(!many);musicPickerCalls++;
+    const char* paths[]={musicPickerMode==1?".":musicPickerMode==2?"missing-music-directory":NULL,NULL};
+    callback(data,musicPickerMode==3?NULL:paths,-1);
+}
+static Uint32 musicInput(void* data,SDL_TimerID timer,Uint32 interval)
+{
+    (void)data;(void)timer;
+    if(!musicInputStep++) {
+        for(int i=0;i<ENGINE_MUSIC;i++) key(SDLK_DOWN);
+        key(SDLK_RETURN);return interval;
+    }
+    key(SDLK_ESCAPE);return 0;
+}
 static Uint32 closeGameplayOptions(void* userdata, SDL_TimerID timer, Uint32 interval)
 {
     (void)userdata;(void)timer;(void)interval;
@@ -34,6 +51,22 @@ int main(int argc, char** argv)
     D_5893_map_id=0x40;D_58a4=0;
     byte font[1024];FILE* f=fopen("IBM.CH","rb");assert(f);
     assert(fread(font,1,sizeof(font),f)==sizeof(font));fclose(f);D_539c[0]=font;
+    if(argc==2 && !strcmp(argv[1],"music_picker")) {
+        for(musicPickerMode=0;musicPickerMode<4;musicPickerMode++) {
+            ENGINE_Set(ENGINE_MUSIC,0);musicInputStep=0;
+            assert(SDL_AddTimer(50,musicInput,NULL));ENGINE_ShowOptions(false);
+            assert(musicPickerCalls==musicPickerMode+1);
+            assert(ENGINE_Get(ENGINE_MUSIC)==(musicPickerMode==1));
+            if(musicPickerMode==1) {
+                assert(!strcmp(SETUP_MusicDirectory(),"."));
+                FILE* config=fopen("DATA.CFG","r");assert(config);
+                char line[4096];assert(fgets(line,sizeof(line),config));
+                assert(fgets(line,sizeof(line),config) && !strcmp(line,".\n"));fclose(config);
+            }
+        }
+        remove("DATA.CFG");remove("ENGINE.CFG");
+        GRAP_SDL_Cleanup();SDL_Quit();return 0;
+    }
     if(argc==2 && !strcmp(argv[1],"gameplay_options")) {
         memset(g_linearEgaBuffer0,3,320*200);
         ENGINE_Set(ENGINE_MUSIC,1);

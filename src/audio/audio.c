@@ -30,6 +30,14 @@ void AUDIO_SetMusicEnabled(int enabled)
         if(s_requestedQueue) s_musicOps->QueueBgm(s_requestedQueue);
     }
 }
+void AUDIO_ReloadMusic(void)
+{
+#if defined(TARGET_SDL)
+    extern void AUDIO_SDL_ReloadMusic(void);
+    AUDIO_SDL_ReloadMusic();
+    AUDIO_SetMusicEnabled(s_musicEnabled);
+#endif
+}
 void AUDIO_SetSoundEnabled(int enabled)
 {
     s_soundEnabled=enabled!=0;

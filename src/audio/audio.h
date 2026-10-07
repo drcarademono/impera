@@ -27,6 +27,7 @@ extern void AUDIO_Initialize(void);
 int AUDIO_MusicEnabled(void);
 int AUDIO_SoundEnabled(void);
 void AUDIO_SetMusicEnabled(int enabled);
+void AUDIO_ReloadMusic(void);
 void AUDIO_SetSoundEnabled(int enabled);
 extern void AUDIO_Cleanup(void);
 
