@@ -12,8 +12,7 @@ fi
 if [[ -n "${U5D_DATA_DIR:-}" ]]; then
     export U5D_DATA_DIR="$(realpath -- "$U5D_DATA_DIR")"
 fi
-mkdir -p "$runtime_dir/textures/cursors"
-cp "$repo_dir"/textures/cursors/*.png "$runtime_dir/textures/cursors/"
+mkdir -p "$runtime_dir"
 
 cd -- "$runtime_dir"
 exec "$build_dir/ultima5" "$@"

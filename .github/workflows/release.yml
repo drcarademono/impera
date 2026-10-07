@@ -9,6 +9,9 @@ on:
       - 'CMakeLists.txt'
       - 'scripts/package-release.py'
       - 'scripts/build-appimage.py'
+      - 'scripts/embed-cursors.py'
+      - 'src/key/**'
+      - 'textures/cursors/**'
       - 'packaging/**'
       - 'tests/**'
   workflow_dispatch:
@@ -47,6 +50,8 @@ jobs:
         run: cmake --build release-build --config Release --parallel 3
       - name: Tests
         run: ctest --test-dir release-build -C Release --output-on-failure
+      - name: Embedded cursor consistency
+        run: python scripts/embed-cursors.py --check
       - name: Packaging regression
         run: python tests/test_package_release.py
       - name: Package

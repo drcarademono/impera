@@ -74,15 +74,6 @@ def prepare(data_dir, runtime_dir):
                 shutil.copytree(source, target, dirs_exist_ok=True)
             elif not os.path.lexists(target):
                 shutil.copytree(source, target)
-    # Refresh shipped UI art without replacing writable game data or saves.
-    cursors = resolve(Path(__file__).parent.parent / "textures" / "cursors")
-    destination = resolve(runtime / "textures", allow_missing=True)
-    destination.mkdir(exist_ok=True)
-    destination = resolve(destination / "cursors", allow_missing=True)
-    destination.mkdir(exist_ok=True)
-    for source in cursors.iterdir():
-        if source.suffix.lower() == ".png":
-            shutil.copy2(source, resolve(destination / source.name, allow_missing=True))
     return runtime
 
 
