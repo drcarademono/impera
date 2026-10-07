@@ -92,8 +92,17 @@ exec "$app_dir/impera" "$@"
                 if path.is_file():
                     f.write(path, path.relative_to(destination))
     else:
+        # Windows filesystems do not retain chmod's Unix execute bits.
+        # Define portable permissions in the archive itself on every host.
+        executable_paths = {'impera', 'Impera.sh',
+                            'Impera.app/Contents/MacOS/Impera',
+                            'Impera.app/Contents/MacOS/impera-engine'}
+        def portable_permissions(member):
+            relative = Path(member.name).relative_to(name).as_posix()
+            member.mode = 0o755 if member.isdir() or relative in executable_paths else 0o644
+            return member
         with tarfile.open(archive, 'w:gz') as f:
-            f.add(stage, arcname=name)
+            f.add(stage, arcname=name, filter=portable_permissions)
     digest = hashlib.sha256(archive.read_bytes()).hexdigest()
     (destination / f'{archive.name}.sha256').write_text(f'{digest}  {archive.name}\n')
     shutil.rmtree(stage)
