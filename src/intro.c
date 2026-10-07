@@ -15,6 +15,7 @@
 #if defined(TARGET_SDL)
 #include "common/engine_settings.h"
 #include "common/save_slots.h"
+#include "common/u4_transfer.h"
 #include "graphics/grap_buf.h"
 #define INTRO_MENU_COUNT 7
 #else
@@ -978,7 +979,9 @@ static int INTRO_1016_ConvertU4Savegame(void)
 
     D_a9cc = ULTIMA_16a6_GetDefaultDrive(); // NOT MATCHING
 
+#if !defined(TARGET_SDL)
     ULTIMA_256e_ReadFileFromDisk(/*0x3278*/ "party.sav", &D_bc88, 0x28, local_10);
+#endif
 
     if (D_bc88.str > 0x46 || D_bc88.dex > 0x46 || D_bc88.intel > 0x46 || D_bc88.exp > 9999 || D_bc88.hp > 9999 ||
         D_bc88.maxHp > 9999 || D_bc88.cls > 7)
@@ -1080,7 +1083,9 @@ static int INTRO_1016_ConvertU4Savegame(void)
     local_10 = 0x140;
     local_c = &D_bb1c;
 
+#if !defined(TARGET_SDL)
     ULTIMA_256e_ReadFileFromDisk(/*0x32f9*/ "party.sav", &D_bb1c, 0xb6, 0x140);
+#endif
 
     if (D_bb1c._6 == 0 && D_bb1c._8 == 0 && D_bb1c._a == 0 && D_bb1c._c == 0 && D_bb1c._e == 0 && D_bb1c._10 == 0 &&
         D_bb1c._12 == 0 && D_bb1c._14 == 0)
@@ -1151,6 +1156,10 @@ static void INTRO_132a_TransferFromU4(void)
     int uVar8;
     byte local_12;
 
+#if defined(TARGET_SDL)
+    if(!U4_SelectTransfer(&D_bc88,&D_bb1c)) return;
+#endif
+
 #if defined(GOG_BUILD)
     // GOG patched (1332..134c)
     local_e = D_5893_map_id == 66 ? 65 : D_5893_map_id;
@@ -1185,12 +1194,13 @@ static void INTRO_132a_TransferFromU4(void)
     ULTIMA_1b94_SelectTextWindow(0);
     ULTIMA_16ba_PrintChar(CTRL_CHAR_CLEAR_WINDOW);
 
-#if defined(GOG_BUILD)
+#if defined(GOG_BUILD) && !defined(TARGET_SDL)
     // GOG patched (1392..1399)
     local_12 = D_a9c8[0];
     goto L_GOG_1402;
 #endif
 
+#if !defined(TARGET_SDL)
     ULTIMA_1bf2_SetTextPosition(4, 0xc);
     ULTIMA_1850_PrintString(_TEXT(0x3357, "Transfer Character from Ultima IV"));
     ULTIMA_1bf2_SetTextPosition(0, 0xf);
@@ -1217,6 +1227,8 @@ L_GOG_1402:
     } while (ULTIMA_1eac_SetDefaultDrive(local_12) == 0);
 
     D_5394_fn = ULTIMA_2322_DiskSwapMessage;
+
+#endif
 
     if (INTRO_1016_ConvertU4Savegame() != 0)
     {
