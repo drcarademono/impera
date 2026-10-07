@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Impera
+Comment=Enhanced Ultima 5 engine port
+Exec=AppRun
+Icon=impera
+Terminal=false
+Categories=Game;RolePlaying;

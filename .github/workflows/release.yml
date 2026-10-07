@@ -8,6 +8,8 @@ on:
       - 'cmake/**'
       - 'CMakeLists.txt'
       - 'scripts/package-release.py'
+      - 'scripts/build-appimage.py'
+      - 'packaging/**'
       - 'tests/**'
   workflow_dispatch:
 permissions:
@@ -51,6 +53,14 @@ jobs:
         env:
           RELEASE_VERSION: ${{ github.ref_name }}
         run: python scripts/package-release.py --build release-build --platform ${{ matrix.platform }}
+      - name: Build Linux AppImage
+        if: runner.os == 'Linux'
+        run: python scripts/build-appimage.py dist/*-linux-x86_64.tar.gz
+      - name: AppImage startup smoke check
+        if: runner.os == 'Linux'
+        run: |
+          XDG_DATA_HOME="$RUNNER_TEMP/impera-smoke" dist/*.AppImage --appimage-extract-and-run --help > "$RUNNER_TEMP/impera-help.txt"
+          grep -q 'Usage: ultima5' "$RUNNER_TEMP/impera-help.txt"
       - uses: actions/upload-artifact@v4
         with:
           name: Impera-${{ matrix.platform }}

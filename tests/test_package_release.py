@@ -9,6 +9,9 @@ from pathlib import Path
 spec = importlib.util.spec_from_file_location('packager', Path(__file__).resolve().parents[1] / 'scripts/package-release.py')
 packager = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(packager)
+appspec = importlib.util.spec_from_file_location('appimage', Path(__file__).resolve().parents[1] / 'scripts/build-appimage.py')
+appimage = importlib.util.module_from_spec(appspec)
+appspec.loader.exec_module(appimage)
 
 
 class PackagingTest(unittest.TestCase):
@@ -40,6 +43,24 @@ class PackagingTest(unittest.TestCase):
                 self.assertTrue(any('/Licenses/SDL.txt' in name for name in names))
                 self.assertFalse(any(name.upper().endswith(('.GAM', '.OOL', '.NPC', '.16', '.CH', '.MP3')) for name in names))
                 self.assertTrue(Path(str(archive) + '.sha256').is_file())
+                if platform == 'linux-x86_64':
+                    appdir = appimage.stage_appdir(archive, root / 'AppDir-stage')
+                    self.assertTrue((appdir / 'AppRun').stat().st_mode & 0o111)
+                    self.assertTrue((appdir / '.DirIcon').is_symlink())
+                    self.assertIn('Icon=impera', (appdir / 'impera.desktop').read_text())
+                    self.assertTrue((appdir / 'Licenses/AppImage-runtime.txt').is_file())
+                    self.assertFalse((appdir / 'SAVED.GAM').exists())
+                    with archive.open('ab') as file:
+                        file.write(b'corrupt')
+                    with self.assertRaisesRegex(ValueError, 'checksum mismatch'):
+                        appimage.stage_appdir(archive, root / 'bad-stage')
+
+    def test_cached_tool_verification(self):
+        with tempfile.TemporaryDirectory() as temp:
+            cache = Path(temp)
+            (cache / 'appimagetool.AppImage').write_bytes(b'corrupt executable')
+            with self.assertRaisesRegex(ValueError, 'Checksum mismatch'):
+                appimage.verified_tool(cache, 'appimagetool.AppImage')
 
 
 if __name__ == '__main__':

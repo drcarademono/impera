@@ -440,7 +440,8 @@ ctest --test-dir build --output-on-failure
 GitHub Actions builds Windows x64, Linux x64, macOS Intel, and macOS Apple
 Silicon packages using [Build releases](.github/workflows/release.yml).
 The release build pins SDL 3.4.18 and SDL_mixer 3.2.4, links them statically,
-and includes built-in WAV, MP3 and Ogg Vorbis decoding. Original Ultima 5 game files,
+and includes built-in WAV, MP3 and Ogg Vorbis decoding. Linux releases provide
+an AppImage and an additional portable archive. Original Ultima 5 game files,
 music, saves and personal settings are never included in the packages.
 ScaleFX is not part of these releases.
 
@@ -461,17 +462,21 @@ the draft from GitHub's Releases page. A failed platform build prevents release
 creation. Release jobs use GitHub's built-in token; no personal token is needed.
 Manual workflow runs only upload artifacts and do not create a release.
 
-Extract the archive before launching:
+Launch the download for your platform:
 
 - **Windows:** run `Run Impera.cmd` from the extracted folder. Keep engine assets
   beside the executable. Saves and logs stay in this folder.
 - **macOS:** extract the archive, move `Impera.app` to Applications, and open it.
   Requires macOS 12 or newer; choose the Intel or Apple Silicon download. Settings, saves and
   logs live in `~/Library/Application Support/Impera`.
-- **Linux:** run `./Impera.sh` from the extracted folder. Settings, saves and logs
-  live in `$XDG_DATA_HOME/impera`, or `~/.local/share/impera` by default. These
-  portable archives target Ubuntu 22.04 or newer compatible systems and require
-  system graphics/audio libraries; they are not fully static AppImages.
+- **Linux:** download the `.AppImage`, make it executable with
+  `chmod +x Impera-*.AppImage`, then double-click it or run `./Impera-*.AppImage`.
+  If FUSE is unavailable, run `./Impera-*.AppImage --appimage-extract-and-run`
+  instead. For the additional portable archive, extract it and run `./Impera.sh`.
+  Settings, saves and logs live in `$XDG_DATA_HOME/impera`, or `~/.local/share/impera` by default.
+  Linux builds target Ubuntu 22.04 or newer compatible systems. The AppImage
+  bundles the engine, SDL, its audio decoders and cursor assets; system graphics
+  drivers and audio/display services still come from the host.
 
 On first launch, select your own Ultima 5 directory and optionally a music
 folder. Builds are unsigned: macOS may require allowing the app in Privacy &
@@ -490,6 +495,17 @@ python scripts/package-release.py --build release-build --platform linux-x86_64 
 Use `windows-x86_64`, `macos-x86_64`, or `macos-arm64` when building natively on
 those platforms. CMake downloads pinned dependencies on the first build.
 Packaging requires Python 3.9 or newer and writes archives to `dist/`.
+To produce the Linux AppImage from that archive:
+
+```sh
+python scripts/build-appimage.py dist/Impera-v0.1.0-linux-x86_64.tar.gz
+```
+
+The script downloads appimagetool 1.9.1 and the type-2 runtime dated 20251108,
+verifies their pinned SHA-256 hashes, and caches them under
+`release-build/appimage-tools/`. AppImage packaging and CI smoke checks do not
+require FUSE. The AppImage contains no Ultima 5 game files. Its read-only image
+uses the same external save/settings directory as the portable Linux launcher.
 
 ### Windows Target
 
