@@ -231,7 +231,7 @@ are relative to the **active party character**, rather than the battlefield cent
 
 Choose the fullscreen entry labelled with your monitor’s detected aspect ratio
 (for example, **Fullscreen 16:9**) from the **Video Mode** dropdown in Engine Options
-to fill your display, or **Fullscreen 4:3** for a centered 4:3 map viewport.
+to fill your display, or **Fullscreen 4:3** for a centered 4:3 map viewport. Menus and title screens also use 4:3 in this mode.
 Choose **Windowed** to return to a window.
 This detects the desktop resolution, adds overhead map rows and columns, and
 moves the status and command column to the right edge. Tiles and text use the
