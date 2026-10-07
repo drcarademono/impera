@@ -438,6 +438,8 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
     }
     int playerX = mapX + columns / 2 * 16, playerY = mapY + rows / 2 * 16;
     bool combat=D_5893_map_id>=128;
+    int mapTop=s_expandedFrame?8:mapY;
+    int mapBottom=s_expandedFrame?h-8:mapY+rows*16;
     for (int y = -1; !combat && y <= 16; y++) {
         Uint32* row = (Uint32*)((byte*)clean->pixels + (playerY+y)*clean->pitch);
         for (int x = -1; x <= 16; x++) {
@@ -466,12 +468,12 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
             animate=true;
             if (next->visible) {
                 for(int y=0;y<18;y++) for(int x=0;x<18;x++)
-                    if((next->sprite[y*18+x]>>24) && next->x+x>=mapX && next->x+x<mapX+columns*16 && next->y+y>=mapY && next->y+y<mapY+rows*16)
+                    if((next->sprite[y*18+x]>>24) && next->x+x>=mapX && next->x+x<mapX+columns*16 && next->y+y>=mapTop && next->y+y<mapBottom)
                         ((Uint32*)((byte*)clean->pixels+(next->y+y)*clean->pitch))[next->x+x]=next->terrain[y*18+x];
             }
             if (old->visible)
                 for (int y=0;y<18;y++) for(int x=0;x<18;x++)
-                    if((old->sprite[y*18+x]>>24) && old->x+x>=mapX && old->x+x<mapX+columns*16 && old->y+y>=mapY && old->y+y<mapY+rows*16)
+                    if((old->sprite[y*18+x]>>24) && old->x+x>=mapX && old->x+x<mapX+columns*16 && old->y+y>=mapTop && old->y+y<mapBottom)
                         s_previousPixels[(old->y+y)*w+old->x+x]=old->terrain[y*18+x];
         }
     }
@@ -490,7 +492,9 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
             bool valid=WIDE_MapTile(tx,ty)!=255;
             for(int y=0;y<16;y++) {
                 Uint32* dest=(Uint32*)((byte*)padded->pixels+((row+1)*16+y)*padded->pitch)+(col+1)*16;
-                if(interior && mapY+row*16+y>=0 && mapY+row*16+y<h && (combat || lit)) memcpy(dest,(byte*)clean->pixels+(mapY+row*16+y)*clean->pitch+(mapX+col*16)*4,16*4);
+                /* Clipped tile portions lie under the static frame in clean.
+                 * Regenerate them from terrain; never scroll frame pixels. */
+                if(interior && mapY+row*16+y>=mapTop && mapY+row*16+y<mapBottom && (combat || lit)) memcpy(dest,(byte*)clean->pixels+(mapY+row*16+y)*clean->pitch+(mapX+col*16)*4,16*4);
                 else for(int x=0;x<16;x++) dest[x]=s_egaPalette[valid?WIDE_TerrainPixel(tx,ty,x,y)&15:0];
             }
         }

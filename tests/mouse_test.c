@@ -139,7 +139,10 @@ bool __wrap_SDL_RenderPresent(SDL_Renderer* renderer)
     if(checkWater) {
         SDL_Surface* image=SDL_RenderReadPixels(renderer,NULL);assert(image);
         int xs[]={waterMap.x+1,waterMap.x+waterMap.w/2,waterMap.x+waterMap.w-2};
-        int ys[]={waterMap.y+1,waterMap.y+waterMap.h/2,waterMap.y+waterMap.h-2};
+        WideLayout edgeLayout=WIDE_Layout(1024,768);
+        float canvasY=(768-edgeLayout.height*edgeLayout.scaleY)/2;
+        int ys[]={(int)(canvasY+8*edgeLayout.scaleY)+1,waterMap.y+waterMap.h/2,
+                  (int)(canvasY+(edgeLayout.height-8)*edgeLayout.scaleY)-2};
         for(int y=0;y<3;y++) for(int x=0;x<3;x++) {
             if(x==1 && y==1) continue; /* player sprite */
             Uint8 r,g,b,a;assert(SDL_ReadSurfacePixel(image,xs[x],ys[y],&r,&g,&b,&a));
@@ -740,6 +743,9 @@ int main(int argc, char** argv)
         GRAP_SDL_SetSmoothMovement(true); /* reset interpolation history */
         GRAP_SDL_MapDrawn();GRAP_SDL_FlushFrame();
         memset(tiles+128,0x33,128);memset(g_linearEgaBuffer0,3,320*200);
+        /* A contrasting frame must never be sampled into scrolling terrain. */
+        memset(g_linearEgaBuffer0,4,320*8);
+        memset(g_linearEgaBuffer0+184*320,4,320*8);
         D_5896_map_x+=stepX;D_5897_map_y+=stepY;
         checkWater=true;presented=0;
         GRAP_SDL_MapDrawn();GRAP_SDL_FlushFrame();
