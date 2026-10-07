@@ -333,13 +333,18 @@ static void PrepareDarkness(int columns,int rows,bool completed)
             Uint32* pixels=(Uint32*)((byte*)surface->pixels+y*surface->pitch);
             for(int x=0;x<width;x++) pixels[x]=pattern[(y&3)*4+(x&3)]<mask[y*width+x]?0xff000000:0;
         }
-        SDL_Texture* next=SDL_CreateTextureFromSurface(s_sdlRenderer,surface);
-        if(next) {
-            SDL_SetTextureBlendMode(next,SDL_BLENDMODE_BLEND);
-            SDL_SetTextureScaleMode(next,SDL_SCALEMODE_NEAREST);
-            SDL_DestroyTexture(s_darknessTexture);s_darknessTexture=next;
+        /* Reuse GPU storage while walking; only dimensions require a new
+         * texture. Changing darkness should be an upload, not reallocation. */
+        bool reuse=s_darknessTexture && columns==s_darknessColumns && rows==s_darknessRows;
+        SDL_Texture* next=reuse?s_darknessTexture:SDL_CreateTextureFromSurface(s_sdlRenderer,surface);
+        if(next && (!reuse || SDL_UpdateTexture(next,NULL,surface->pixels,surface->pitch))) {
+            if(!reuse) {
+                SDL_SetTextureBlendMode(next,SDL_BLENDMODE_BLEND);
+                SDL_SetTextureScaleMode(next,SDL_SCALEMODE_NEAREST);
+                SDL_DestroyTexture(s_darknessTexture);s_darknessTexture=next;
+            }
             s_darknessColumns=columns;s_darknessRows=rows;s_darknessMap=D_5893_map_id;s_darknessLevel=D_5895_map_level;
-        } else DEBUG_Error("Cannot create dithered darkness texture: %s",SDL_GetError());
+        } else DEBUG_Error("Cannot update dithered darkness texture: %s",SDL_GetError());
     } else DEBUG_Error("Cannot allocate dithered darkness mask");
     free(mask);SDL_DestroySurface(surface);
 }
@@ -457,6 +462,7 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
                 }
             }
             for (int frame = 1; frame <= 8; frame++) {
+                Uint64 frameStarted=SDL_GetTicks();
                 float t = frame / 8.0f;
                 /* Constant speed avoids braking and restarting at every tile. */
                 float progress = t;
@@ -496,7 +502,11 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
                 CRT_ResumeFrame(s_sdlRenderer);
                 SDL_PumpEvents();
                 MOUSE_UpdateCursor();
-                if (frame < 8) SDL_Delay((Uint32)SDL_roundf(16.0f / s_movementSpeed));
+                if (frame < 8) {
+                    Uint64 elapsed=SDL_GetTicks()-frameStarted;
+                    Uint32 interval=(Uint32)SDL_roundf(16.0f/s_movementSpeed);
+                    if(elapsed<interval) SDL_Delay(interval-(Uint32)elapsed);
+                }
             }
             SDL_DestroyTexture(playerTexture);
             for (int i=0;i<32;i++) SDL_DestroyTexture(actorTextures[i]);

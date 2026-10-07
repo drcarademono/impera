@@ -20,6 +20,7 @@ void CRT_SetEnabled(bool value) { enabled=value;if(!value && SDL_WasInit(SDL_INI
 bool CRT_Enabled(void) { return enabled; }
 void CRT_Cleanup(void)
 {
+    MOUSE_ReleaseFilteredCursors();
     if(owner && active) SDL_SetRenderTarget(owner,NULL);
     if(SDL_WasInit(SDL_INIT_VIDEO)) SDL_ShowCursor();
     SDL_DestroyTexture(scene);SDL_DestroyTexture(frame);SDL_DestroyTexture(soft);SDL_DestroyTexture(glow);SDL_DestroyTexture(halo);SDL_DestroyTexture(mask);

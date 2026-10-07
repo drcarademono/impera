@@ -351,13 +351,28 @@ bool WIDE_DarknessMask(byte* mask,int columns,int rows)
         bool visible=lit[(row+2)*stride+col+2];
         byte tile=visible ? WIDE_MapTile(col-columns/2,row-rows/2) : 255;
         bool masonry=SolidMasonry(tile);
+        /* Tile visibility is constant across its pixels. Collect only nearby
+         * exposed darkness once, rather than scanning 25 tiles per pixel. */
+        int candidateX[25],candidateY[25],candidateCount=0;
+        if(visible && !masonry && (col!=columns/2 || row!=rows/2))
+            for(int oy=-2;oy<=2;oy++) for(int ox=-2;ox<=2;ox++) {
+                int i=(row+oy+2)*stride+col+ox+2;
+                if(!lit[i] && !solid[i]) {
+                    candidateX[candidateCount]=ox;candidateY[candidateCount++]=oy;
+                }
+            }
+        if(!visible || candidateCount==0) {
+            for(int py=0;py<16;py++)
+                memset(mask+(row*16+py)*columns*16+col*16,visible?0:16,16);
+            continue;
+        }
         for(int py=0;py<16;py++) for(int px=0;px<16;px++) {
             int shade=0;
             if(!visible) shade=16;
             else if(!masonry && (col!=columns/2 || row!=rows/2)) {
                 int nearest=24*24;
-                for(int oy=-2;oy<=2;oy++) for(int ox=-2;ox<=2;ox++) {
-                    if(lit[(row+oy+2)*stride+col+ox+2] || solid[(row+oy+2)*stride+col+ox+2]) continue;
+                for(int candidate=0;candidate<candidateCount;candidate++) {
+                    int ox=candidateX[candidate],oy=candidateY[candidate];
                     int x=px-ox*16,y=py-oy*16;
                     int dx=x<0?-x:x>15?x-15:0,dy=y<0?-y:y>15?y-15:0;
                     int distance=dx*dx+dy*dy;

@@ -47,7 +47,7 @@ SDL_Cursor* __wrap_SDL_CreateColorCursor(SDL_Surface* surface, int x, int y)
     return NULL; /* SDL dummy driver has no native cursor support. */
 }
 static Uint64 ticks = 2000;
-static Uint32 animationDelay;
+static Uint32 animationDelay,renderCost;
 void __wrap_SDL_Delay(Uint32 ms) { animationDelay += ms; }
 static float cursorX, cursorY;
 static bool sawSleepingNpc, sawFountain, sawDrinkPrompt, sawWell, sawCoinPrompt;
@@ -72,6 +72,7 @@ bool __real_SDL_RenderPresent(SDL_Renderer* renderer);
 bool __wrap_SDL_RenderPresent(SDL_Renderer* renderer)
 {
     presented++;
+    ticks+=renderCost;
     if (checkActor) {
         SDL_Surface* image=SDL_RenderReadPixels(renderer,NULL);
         assert(image);
@@ -756,7 +757,15 @@ int main(int argc, char** argv)
     CRT_SetEnabled(true);GRAP_SDL_MapDrawn();GRAP_SDL_FlushFrame();
     checkCRT=true;presented=0;D_5896_map_x++;D_5897_map_y++;
     GRAP_SDL_MapDrawn();GRAP_SDL_FlushFrame();assert(presented==9);
-    checkCRT=false;CRT_SetEnabled(false);
+    checkCRT=false;
+    /* Rendering time is part of each movement interval, not extra delay. */
+    renderCost=6;animationDelay=0;presented=0;D_5896_map_x++;
+    GRAP_SDL_MapDrawn();GRAP_SDL_FlushFrame();
+    assert(presented==9 && animationDelay==70);
+    renderCost=20;animationDelay=0;presented=0;D_5897_map_y++;
+    GRAP_SDL_MapDrawn();GRAP_SDL_FlushFrame();
+    assert(presented==9 && animationDelay==0); /* don't wait when over budget */
+    renderCost=0;CRT_SetEnabled(false);
     D_58a5=50;
     D_5893_map_id=1;D_5896_map_x=16;D_5897_map_y=16;
     memset(D_6608_map.town,1,sizeof(D_6608_map.town));

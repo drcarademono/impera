@@ -38,6 +38,7 @@ void KEY_SDL_ReleaseKey(SDL_Keycode key);
 
 void EVT_PollMessages(void)
 {
+    bool cursorMoved=false;
 	SDL_Event ev;
 	while (SDL_PollEvent(&ev))
 	{
@@ -60,7 +61,7 @@ void EVT_PollMessages(void)
             break;
 
         case SDL_EVENT_MOUSE_MOTION:
-            CRT_RefreshCursor();
+            cursorMoved=true;
             break;
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
         case SDL_EVENT_MOUSE_BUTTON_UP:
@@ -74,6 +75,7 @@ void EVT_PollMessages(void)
             break;
 		}
 	}
+    if(cursorMoved) CRT_RefreshCursor();
 }
 
 void EVT_Yield(void)

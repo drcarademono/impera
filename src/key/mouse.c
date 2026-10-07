@@ -72,6 +72,13 @@ static int PollMenu(void)
 static SDL_Cursor* s_cursors[9];
 static SDL_Cursor* s_currentCursor;
 static SDL_Surface* s_cursorImages[9];
+static SDL_Texture* s_filteredCursors[9];
+static SDL_Renderer* s_cursorRenderer;
+void MOUSE_ReleaseFilteredCursors(void)
+{
+    for(int i=0;i<9;i++) { SDL_DestroyTexture(s_filteredCursors[i]);s_filteredCursors[i]=NULL; }
+    s_cursorRenderer=NULL;
+}
 static int s_hotspotX[9],s_hotspotY[9],s_cursorIndex;
 static int s_lastCursorDirection = U5_KEY_UP;
 static const int s_cursorDirections[9] = {0, U5_KEY_UP, U5_KEY_PGUP, U5_KEY_RIGHT, U5_KEY_PGDN, U5_KEY_DOWN, U5_KEY_END, U5_KEY_LEFT, U5_KEY_HOME};
@@ -124,7 +131,12 @@ bool MOUSE_DrawFilteredCursor(SDL_Renderer* renderer,float curvatureX,float curv
     int w,h,ow,oh;
     if(!SDL_GetWindowSize(window,&w,&h) || !SDL_GetRenderOutputSize(renderer,&ow,&oh) || w<=0 || h<=0)
         return false;
-    SDL_Texture* texture=SDL_CreateTextureFromSurface(renderer,s_cursorImages[s_cursorIndex]);
+    if(s_cursorRenderer!=renderer) { MOUSE_ReleaseFilteredCursors();s_cursorRenderer=renderer; }
+    SDL_Texture* texture=s_filteredCursors[s_cursorIndex];
+    if(!texture) {
+        texture=SDL_CreateTextureFromSurface(renderer,s_cursorImages[s_cursorIndex]);
+        s_filteredCursors[s_cursorIndex]=texture;
+    }
     if(!texture) { SDL_ShowCursor();return false; }
     float x,y;SDL_GetMouseState(&x,&y);
     /* Invert the shared CRT warp at the tip so the visible hotspot still
@@ -141,13 +153,13 @@ bool MOUSE_DrawFilteredCursor(SDL_Renderer* renderer,float curvatureX,float curv
     SDL_SetTextureBlendMode(texture,SDL_BLENDMODE_BLEND);
     SDL_SetTextureScaleMode(texture,SDL_SCALEMODE_NEAREST);
     bool drawn=SDL_RenderTexture(renderer,texture,NULL,&dst);
-    SDL_DestroyTexture(texture);
     if(drawn) SDL_HideCursor();else SDL_ShowCursor();
     return drawn;
 }
 
 void MOUSE_Cleanup(void)
 {
+    MOUSE_ReleaseFilteredCursors();
     SDL_Cursor* cursor = SDL_GetDefaultCursor();
     if (cursor) SDL_SetCursor(cursor);
     for (int i = 0; i < 9; ++i) { SDL_DestroyCursor(s_cursors[i]); s_cursors[i] = NULL; }
