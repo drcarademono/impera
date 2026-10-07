@@ -21,6 +21,15 @@ static SDL_Renderer* s_sdlRenderer;
 static SDL_Surface* s_sdlSurface;
 static SDL_Texture* s_sdlTexture;
 static bool s_fullscreen;
+static int s_videoMode;
+static WideLayout VideoLayout(int width,int height)
+{
+    if(s_videoMode==GRAP_VIDEO_FULLSCREEN_43) {
+        if(width*3>height*4) width=height*4/3;
+        else height=width*3/4;
+    }
+    return WIDE_Layout(width,height);
+}
 static bool s_pixelUI;
 static int s_windowedWidth=1280, s_windowedHeight=960;
 static SDL_Texture* s_wideTexture;
@@ -114,7 +123,7 @@ void GRAP_SDL_CursorSize(int* width, int* height)
     if (s_sdlWindow) SDL_GetWindowSize(s_sdlWindow, &w, &h);
     float sx = w / 320.0f, sy = h / 200.0f;
     if ((s_fullscreen || s_pixelUI) && SDL_GetRenderOutputSize(s_sdlRenderer, &outputW, &outputH)) {
-        WideLayout l = WIDE_Layout(outputW, outputH);
+        WideLayout l = VideoLayout(outputW, outputH);
         sx = l.scale * (float)w / outputW;
         sy = l.scale * (float)h / outputH;
     }
@@ -128,7 +137,7 @@ bool GRAP_SDL_MouseUIPoint(float x, float y, float* ux, float* uy)
     if (!s_sdlWindow || !SDL_GetWindowSize(s_sdlWindow, &w, &h) || w <= 0 || h <= 0) return false;
     if (!s_fullscreen && !s_pixelUI) { *ux = x * 320 / w; *uy = y * 200 / h; return true; }
     if (!SDL_GetRenderOutputSize(s_sdlRenderer, &ow, &oh)) return false;
-    WideLayout l = WIDE_Layout(ow, oh);
+    WideLayout l = VideoLayout(ow, oh);
     int cw = s_expandedFrame ? l.width : 320, ch = s_expandedFrame ? l.height : 200;
     *ux = (x * ow / w - (ow - cw * l.scale) / 2) / l.scale;
     *uy = (y * oh / h - (oh - ch * l.scale) / 2) / l.scale;
@@ -150,7 +159,7 @@ bool GRAP_SDL_MouseMapPoint(float x, float y, int* dx, int* dy, float* rx, float
     float gx = x * width / windowW, gy = y * height / windowH;
     int mapX = 8, mapY = 8, columns = 11, rows = 11;
     if (s_fullscreen) {
-        WideLayout l = WIDE_Layout(width, height);
+        WideLayout l = VideoLayout(width, height);
         int canvasW = s_expandedFrame ? l.width : 320;
         int canvasH = s_expandedFrame ? l.height : 200;
         gx = (gx - (width - canvasW * l.scale) / 2) / l.scale;
@@ -169,8 +178,10 @@ bool GRAP_SDL_MouseMapPoint(float x, float y, int* dx, int* dy, float* rx, float
     return true;
 }
 
-void GRAP_SDL_SetFullscreen(bool fullscreen)
+void GRAP_SDL_SetVideoMode(int mode)
 {
+    if(mode<GRAP_VIDEO_WINDOWED || mode>GRAP_VIDEO_FULLSCREEN_43) return;
+    bool fullscreen=mode!=GRAP_VIDEO_WINDOWED;
     if (s_sdlWindow && s_fullscreen != fullscreen) {
         if (fullscreen) SDL_GetWindowSize(s_sdlWindow,&s_windowedWidth,&s_windowedHeight);
         if (!SDL_SetWindowFullscreen(s_sdlWindow,fullscreen)) {
@@ -181,8 +192,13 @@ void GRAP_SDL_SetFullscreen(bool fullscreen)
         SDL_SetTextureScaleMode(s_sdlTexture,fullscreen || s_pixelUI ? SDL_SCALEMODE_NEAREST : SDL_SCALEMODE_LINEAR);
         s_previousValid=false;
     }
+    if(s_videoMode!=mode) { s_previousValid=false;s_completedWideValid=false; }
+    s_videoMode=mode;
     s_fullscreen = fullscreen;
 }
+int GRAP_SDL_VideoMode(void) { return s_videoMode; }
+void GRAP_SDL_SetFullscreen(bool fullscreen)
+{ GRAP_SDL_SetVideoMode(fullscreen?GRAP_VIDEO_FULLSCREEN:GRAP_VIDEO_WINDOWED); }
 bool GRAP_SDL_Fullscreen(void) { return s_fullscreen; }
 float GRAP_SDL_MovementSpeed(void) { return s_movementSpeed; }
 void GRAP_SDL_SetPixelUI(bool enabled)
@@ -589,7 +605,7 @@ void GRAP_SDL_FlushFrame(void)
     {
         int width, height;
         if (!SDL_GetRenderOutputSize(s_sdlRenderer, &width, &height)) return;
-        WideLayout layout = WIDE_Layout(width, height);
+        WideLayout layout = VideoLayout(width, height);
         if (!s_wideSurface || s_wideSurface->w != layout.width || s_wideSurface->h != layout.height)
         {
             SDL_DestroyTexture(s_wideTexture);
@@ -672,7 +688,7 @@ void GRAP_SDL_FlushFrame(void)
     if(s_pixelUI) {
         int w,h;
         if(SDL_GetRenderOutputSize(s_sdlRenderer,&w,&h)) {
-            WideLayout l=WIDE_Layout(w,h);
+            WideLayout l=VideoLayout(w,h);
             for(int i=0;i<4;i++) if(s_uiThumbnails[i]) {
                 SDL_FRect r=s_uiThumbnailRects[i];
                 r.x=(w-320*l.scale)/2+r.x*l.scale;

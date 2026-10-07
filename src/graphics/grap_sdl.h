@@ -9,6 +9,9 @@ void GRAP_SDL_UIThumbnail(int index,const char* path,int x,int y,int w,int h);
 void GRAP_SDL_ClearUIThumbnails(void);
 
 /* Set before BACKEND_Initialize creates the window. */
+enum { GRAP_VIDEO_WINDOWED, GRAP_VIDEO_FULLSCREEN, GRAP_VIDEO_FULLSCREEN_43 };
+void GRAP_SDL_SetVideoMode(int mode);
+int GRAP_SDL_VideoMode(void);
 void GRAP_SDL_SetFullscreen(bool fullscreen);
 bool GRAP_SDL_Fullscreen(void);
 float GRAP_SDL_MovementSpeed(void);

@@ -159,6 +159,26 @@ int main(int argc, char** argv)
         ENGINE_ShowOptions(gameplay!=0);
         assert(GRAP_SDL_Fullscreen()==fullscreen);
     }
+    /* The dropdown chooses a mode, persists it, and Escape dismisses it
+     * without leaving the parent options screen. */
+    key(SDLK_RETURN);key(SDLK_DOWN);key(SDLK_RETURN);key(SDLK_ESCAPE);
+    ENGINE_ShowOptions(false);
+    assert(GRAP_SDL_VideoMode()==GRAP_VIDEO_FULLSCREEN_43);
+    ENGINE_Set(ENGINE_FULLSCREEN,0);ENGINE_Load();
+    assert(GRAP_SDL_VideoMode()==GRAP_VIDEO_FULLSCREEN_43);
+    ENGINE_Set(ENGINE_FULLSCREEN,0);
+    key(SDLK_RETURN);key(SDLK_DOWN);key(SDLK_ESCAPE);key(SDLK_ESCAPE);
+    ENGINE_ShowOptions(false);assert(GRAP_SDL_VideoMode()==GRAP_VIDEO_WINDOWED);
+    /* Older configurations retain the original monitor-fullscreen behavior. */
+    f=fopen("ENGINE.CFG","w");assert(f);fputs("fullscreen 1\n",f);fclose(f);
+    ENGINE_Load();assert(GRAP_SDL_VideoMode()==GRAP_VIDEO_FULLSCREEN);
+    ENGINE_Set(ENGINE_FULLSCREEN,0);
+    /* Mouse opens the dropdown and chooses its second entry. */
+    SDL_Event choose={0};choose.type=SDL_EVENT_MOUSE_BUTTON_DOWN;choose.button.button=SDL_BUTTON_LEFT;
+    choose.button.x=160*4;choose.button.y=80+44*4;assert(SDL_PushEvent(&choose));
+    choose.button.y=80+65*4;assert(SDL_PushEvent(&choose));key(SDLK_ESCAPE);
+    ENGINE_ShowOptions(false);assert(GRAP_SDL_VideoMode()==GRAP_VIDEO_FULLSCREEN_43);
+    ENGINE_Set(ENGINE_FULLSCREEN,0);
     remove("ENGINE.CFG");D_539c[0]=NULL;GRAP_SDL_Cleanup();SDL_Quit();
     puts("Engine settings persistence, live options, keyboard, and slider dragging passed");
     return 0;
