@@ -59,7 +59,7 @@ and the keys used by its new screens:
 | `Delete` | Named save selected in a save/load browser | Ask for confirmation, then delete the slot with `Y`; `N` or Escape cancels. |
 | `Escape` | Engine Options or save/load browser | Return to the menu or game. |
 | `Escape` / `Space` | Action direction prompt | Cancel the action. |
-| `Home`, `Page Up`, `End`, `Page Down` | Gameplay, with Diagonal Movement enabled | Northwest, northeast, southwest, southeast respectively. |
+| Two perpendicular arrow keys, or numpad `7/9/1/3`, or `Home`, `Page Up`, `End`, `Page Down` | Gameplay, with Diagonal Movement enabled | Northwest, northeast, southwest, southeast respectively. |
 | `Ctrl+E` | Gameplay | Preserve the original **Exit to DOS?** confirmation. |
 | `Ctrl+E` | Main menu, Engine Options, save/load browsers, or cutscenes | Exit immediately. |
 
@@ -272,7 +272,9 @@ Without the option, the game uses the existing window size settings.
 
 Enable **Diagonal Movement** in Engine Options to use eight directions for movement, neighboring
 interactions, mouse cursors, and combat movement and attacks. This applies to
-keyboard and mouse controls and to AI-controlled combatants, including NPCs,
+keyboard and mouse controls. Hold two perpendicular arrow keys together to move
+diagonally, or use numpad `7/9/1/3` for northwest/northeast/southwest/southeast.
+It also applies to AI-controlled combatants, including NPCs,
 monsters, and party members. When one side of a diagonal is blocked, movement
 slides along the open side for that turn. Continued input keeps trying the
 original diagonal. If both sides are blocked, movement stops; diagonal steps
