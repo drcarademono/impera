@@ -81,7 +81,10 @@ byte WIDE_MapTile(int dx, int dy)
         return *ULTIMA_4402_GetTileAddr(x,y);
     }
     if (D_5893_map_id == 0) return WorldTile(x, y);
-    if (x < 0 || y < 0 || x >= 32 || y >= 32) return 255;
+    /* Vanilla ULTIMA_4402_GetTileAddr uses the location's final map byte
+     * as background outside town bounds. Extend the same backdrop rather
+     * than turning the extra fullscreen columns/rows into black void. */
+    if (x < 0 || y < 0 || x >= 32 || y >= 32) return D_6a07;
     return *ULTIMA_4402_GetTileAddr(x, y);
 }
 
@@ -344,8 +347,12 @@ bool WIDE_DarknessMask(byte* mask,int columns,int rows)
     if(!lit || !solid) { free(lit);free(solid);return false; }
     for(int row=-2;row<rows+2;row++) for(int col=-2;col<columns+2;col++) {
         int dx=col-columns/2,dy=row-rows/2;
-        solid[(row+2)*stride+col+2]=SolidMasonry(WIDE_MapTile(dx,dy));
-        lit[(row+2)*stride+col+2]=abs(dx)<=5 && abs(dy)<=5 ? GetMapViewport(dx+5,dy+5)!=255 : WIDE_Visible(dx,dy) && WIDE_MapTile(dx,dy)!=255;
+        byte tile=WIDE_MapTile(dx,dy);
+        /* Unavailable terrain is not a source of an inward fade. Town
+         * backgrounds are valid tiles, just like the original viewport. */
+        solid[(row+2)*stride+col+2]=tile==255 || SolidMasonry(tile);
+        lit[(row+2)*stride+col+2]=tile!=255 &&
+            (abs(dx)<=5 && abs(dy)<=5 ? GetMapViewport(dx+5,dy+5)!=255 : WIDE_Visible(dx,dy));
     }
     for(int row=0;row<rows;row++) for(int col=0;col<columns;col++) {
         bool visible=lit[(row+2)*stride+col+2];

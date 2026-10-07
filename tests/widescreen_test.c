@@ -354,6 +354,25 @@ int main(void)
     assert(!WIDE_DitheredDarkness());WIDE_SetDitheredDarkness(true);assert(WIDE_DitheredDarkness());
     assert(WIDE_DarknessMask(mask,11,11));
     for(int i=0;i<176*176;i++) assert(mask[i]==0); /* clear daylight stays clear */
+    /* Finite map boundaries must not darken valid edge tiles, including
+     * fullscreen's extra cells beyond the original viewport. */
+    const int edges[][2]={{0,16},{31,16},{16,0},{16,31},{0,0},{31,31}};
+    for(unsigned edge=0;edge<sizeof(edges)/sizeof(edges[0]);edge++) {
+        D_5896_map_x=edges[edge][0];D_5897_map_y=edges[edge][1];
+        WideLayout views[]={WIDE_Layout(320,200),WIDE_Layout(1600,1200),broad};
+        for(unsigned view=0;view<sizeof(views)/sizeof(views[0]);view++) {
+            int columns=views[view].columns,rows=views[view].rows;
+            byte* boundary=malloc((size_t)columns*rows*256);assert(boundary);
+            assert(WIDE_DarknessMask(boundary,columns,rows));
+            for(int row=0;row<rows;row++) for(int col=0;col<columns;col++) {
+                int expected=WIDE_MapTile(col-columns/2,row-rows/2)==255?16:0;
+                for(int y=0;y<16;y++) for(int x=0;x<16;x++)
+                    assert(boundary[(row*16+y)*columns*16+col*16+x]==expected);
+            }
+            free(boundary);
+        }
+    }
+    D_5896_map_x=D_5897_map_y=16;
     GetMapViewport(8,5)=255;
     assert(WIDE_DarknessMask(mask,11,11));assert(WIDE_DarknessMask(again,11,11));
     assert(!memcmp(mask,again,sizeof(mask))); /* stable pattern input */
@@ -426,7 +445,44 @@ int main(void)
     D_58a5 = 50;
     D_5896_map_x = 31;
     assert(WIDE_Compose(pixels, broad));
-    assert(pixel(pixels, broad, 7, 0) == 0); /* no reading past town edges */
+    assert(WIDE_MapTile(7,0)==D_6a07); /* vanilla location backdrop */
+    assert(pixel(pixels,broad,7,0)==GRAP_BUF_TilePixel(D_b11e[D_6a07],0,0));
+    /* Background extends on every side without wrapping or reading past
+     * the map. Dithered and plain fullscreen composition share this path. */
+    byte boundaryTown[sizeof(D_6608_map.town)],boundaryView[sizeof(D_ab02)],boundaryActors[sizeof(D_5c5a)];
+    memcpy(boundaryActors,D_5c5a,sizeof(boundaryActors));
+    memset(D_5c5a,0,sizeof(D_5c5a));
+    memcpy(boundaryTown,D_6608_map.town,sizeof(boundaryTown));
+    memcpy(boundaryView,D_ab02,sizeof(boundaryView));
+    memset(D_6608_map.town,TILE_MAP_GRASS,sizeof(D_6608_map.town));
+    memset(D_ab02,TILE_MAP_GRASS,sizeof(D_ab02));
+    const int boundaryPositions[][2]={{0,16},{31,16},{16,0},{16,31},{0,0},{31,31}};
+    WideLayout boundaryLayouts[]={WIDE_Layout(1600,1200),broad};
+    for(int dither=0;dither<2;dither++) {
+        WIDE_SetDitheredDarkness(dither!=0);
+        for(unsigned pos=0;pos<sizeof(boundaryPositions)/sizeof(boundaryPositions[0]);pos++) {
+            D_5896_map_x=boundaryPositions[pos][0];D_5897_map_y=boundaryPositions[pos][1];
+            for(unsigned view=0;view<sizeof(boundaryLayouts)/sizeof(boundaryLayouts[0]);view++) {
+                WideLayout layout=boundaryLayouts[view];
+                byte* backdrop=malloc((size_t)layout.width*layout.height);assert(backdrop);
+                byte* darkness=malloc((size_t)layout.columns*layout.rows*256);assert(darkness);
+                assert(WIDE_Compose(backdrop,layout));
+                assert(WIDE_DarknessMask(darkness,layout.columns,layout.rows));
+                for(int row=0;row<layout.rows;row++) for(int col=0;col<layout.columns;col++) {
+                    int dx=col-layout.columns/2,dy=row-layout.rows/2;
+                    if(abs(dx)<=5 && abs(dy)<=5) continue;
+                    assert(WIDE_MapTile(dx,dy)==TILE_MAP_GRASS);
+                    assert(backdrop[(layout.mapY+row*16+8)*layout.width+layout.mapX+col*16+8]==GRAP_BUF_TilePixel(D_b11e[TILE_MAP_GRASS],8,8));
+                    assert(darkness[(row*16+8)*layout.columns*16+col*16+8]==0);
+                }
+                free(backdrop);free(darkness);
+            }
+        }
+    }
+    WIDE_SetDitheredDarkness(false);
+    memcpy(D_6608_map.town,boundaryTown,sizeof(boundaryTown));
+    memcpy(D_ab02,boundaryView,sizeof(boundaryView));
+    memcpy(D_5c5a,boundaryActors,sizeof(boundaryActors));
     /* Read beyond the four resident outdoor blocks without modulo-32 aliasing,
      * including the wrapping seam at coordinate zero. */
     FILE* world = fopen("UNDER.DAT", "wb");

@@ -12,6 +12,7 @@
 #include "funcs.h"
 #include "macros.h"
 #include "key/mouse.h"
+#include "event/event.h"
 #include <string.h>
 
 #include <SDL3/SDL.h>
@@ -368,7 +369,7 @@ static void LinearToRGB(void)
 static int s_darknessColumns,s_darknessRows,s_darknessMap,s_darknessLevel;
 static void PrepareDarkness(int columns,int rows,bool completed)
 {
-    if(!WIDE_DitheredDarkness() || s_pixelUI || !D_58a4 || D_5893_map_id>32) {
+    if(!WIDE_DitheredDarkness() || EVT_ImmediateExitEnabled() || s_pixelUI || !D_58a4 || D_5893_map_id>32) {
         SDL_DestroyTexture(s_darknessTexture);s_darknessTexture=NULL;return;
     }
     if(!completed && s_darknessTexture && columns==s_darknessColumns && rows==s_darknessRows && s_darknessMap==D_5893_map_id && s_darknessLevel==D_5895_map_level) return;
@@ -410,7 +411,7 @@ static void DrawDarkness(SDL_FRect dst,int width,int height,int mapX,int mapY,in
 static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
                         int columns, int rows, SDL_Texture* native, int sourceScale, SDL_FRect dst)
 {
-    if (s_pixelUI || !s_smoothMovement || !s_mapDrawn || !D_58a4 || (D_5893_map_id>32 && D_5893_map_id<128)) return;
+    if (EVT_ImmediateExitEnabled() || s_pixelUI || !s_smoothMovement || !s_mapDrawn || !D_58a4 || (D_5893_map_id>32 && D_5893_map_id<128)) return;
     s_mapDrawn = false;
     SDL_Surface* clean = SDL_CreateSurface(w, h, SDL_PIXELFORMAT_ARGB8888);
     if (!clean) { s_previousValid = false; return; }
@@ -663,7 +664,7 @@ void GRAP_SDL_FlushFrame(void)
             SDL_SetTextureScaleMode(s_wideTexture, SDL_SCALEMODE_NEAREST);
             debug("Expanded layout: %dx%d tiles, pixel scale=%d\n", layout.columns, layout.rows, layout.scale);
         }
-        if (!s_pixelUI && WIDE_Compose(s_widePixels, layout))
+        if (!EVT_ImmediateExitEnabled() && !s_pixelUI && WIDE_Compose(s_widePixels, layout))
         {
             s_expandedFrame = true;
             /* UI/effect updates can flush between a movement/light change and
