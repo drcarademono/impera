@@ -3,13 +3,13 @@
 #include <math.h>
 
 /* DOS Monitor preset. Keep tuning in normalized strengths. */
-static const float scanlineStrength=0.22f,scanlineSharpness=0.60f,maskStrength=0.06f;
-static const float bloomStrength=0.06f,halationStrength=0.04f,vignetteStrength=0.04f;
-static const float horizontalSoftness=0.16f,verticalSoftness=0.03f;
+static const float scanlineStrength=0.28f,scanlineSharpness=0.58f,maskStrength=0.08f;
+static const float bloomStrength=0.07f,halationStrength=0.05f,vignetteStrength=0.05f;
+static const float horizontalSoftness=0.20f,verticalSoftness=0.04f;
 static const float curvatureX=0.004f,curvatureY=0.007f;
 /* Contrast is a black-anchored gain: black remains black. Gamma is unity;
  * all channels share the same coordinates (zero chromatic aberration). */
-static const float displayBrightness=1.03f,displayContrast=1.01f;
+static const float displayBrightness=1.04f,displayContrast=1.02f;
 static float averageBeam;
 static bool enabled,active;
 static SDL_Renderer* owner;
@@ -46,6 +46,13 @@ void CRT_BeginFrame(SDL_Renderer* renderer)
             for(int i=0;i<1024;i++)
                 averageBeam+=1-scanlineStrength*powf(0.5f-0.5f*cosf(6.2831853f*i/1024),scanlineSharpness);
             averageBeam/=1024;
+            /* Match compensation to the beam samples actually displayed. */
+            if(h>=800) {
+                averageBeam=0;
+                for(int y=0;y<h;y++) averageBeam+=1-scanlineStrength*powf(
+                    0.5f-0.5f*cosf(6.2831853f*y*400.0f/h),scanlineSharpness);
+                averageBeam/=h;
+            }
             for(int y=0;y<h;y++) {
                 Uint32* pixels=(Uint32*)((byte*)surface->pixels+y*surface->pitch);
                 float beam=averageBeam;

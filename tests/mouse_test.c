@@ -103,7 +103,7 @@ bool __wrap_SDL_RenderPresent(SDL_Renderer* renderer)
         Uint8 r,g,b,a;
         int x=waterMap.x+waterMap.w/2,y=waterMap.y+waterMap.h/2;
         assert(SDL_ReadSurfacePixel(image,x,y,&r,&g,&b,&a));
-        assert(r==0 && g==0 && b>80 && b<170); /* filtered on every presented frame */
+        assert(r==0 && g==0 && b>80 && b<200 && b!=170); /* filtered on every presented frame, with brightness compensation */
         if(presented==9) assert(SDL_SaveBMP(image,"crt-gameplay.bmp"));
         SDL_DestroySurface(image);
     }

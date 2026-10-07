@@ -25,7 +25,7 @@ int main(void)
     assert(SDL_ReadSurfacePixel(output,481,401,&e,&f,&g,&h));
     assert(a>b && a>c && f>e && f>g); /* fine RGB grille, aligned channels */
     assert(a-b<=20 && f-e<=20); /* restrained mask strength */
-    assert((red(output,480,400)+red(output,480,401))/2>=240); /* brightness retained */
+    assert((red(output,480,400)+red(output,480,401))/2>=230); /* bright whites retained with stronger scanlines */
     assert(red(output,0,0)==0); /* nearly flat curved corners */
     size_t bytes=(size_t)output->pitch*output->h;
     void* previous=malloc(bytes);assert(previous);memcpy(previous,output->pixels,bytes);
