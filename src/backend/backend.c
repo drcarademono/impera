@@ -19,6 +19,7 @@ bool BACKEND_Initialize(void)
 
 #if defined(TARGET_SDL)
     debug("Backend initialization begins");
+    SDL_SetHint(SDL_HINT_APP_ID, "impera"); /* Matches impera.desktop on Wayland. */
     if(!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_AUDIO)) {
         DEBUG_Error("SDL initialization failed: %s",SDL_GetError());return false;
     }

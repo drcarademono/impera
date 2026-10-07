@@ -11,6 +11,9 @@ on:
       - 'scripts/assemble-release.py'
       - 'scripts/build-appimage.py'
       - 'scripts/embed-cursors.py'
+      - 'scripts/generate-icons.py'
+      - 'scripts/verify-package-icons.py'
+      - 'src/common/icon*'
       - 'src/key/**'
       - 'textures/cursors/**'
       - 'packaging/**'
@@ -53,8 +56,13 @@ jobs:
         run: ctest --test-dir release-build -C Release --output-on-failure
       - name: Embedded cursor consistency
         run: python scripts/embed-cursors.py --check
+      - name: Generated icon consistency
+        run: python scripts/generate-icons.py --check
       - name: Packaging regression
         run: python tests/test_package_release.py
+      - name: Release rerun regression
+        if: runner.os == 'Linux'
+        run: python tests/test_release_workflow.py
       - name: Package
         env:
           RELEASE_VERSION: ${{ github.ref_name }}
@@ -76,6 +84,9 @@ jobs:
                                       capture_output=True, text=True, check=True,
                                       env={**os.environ, 'HOME': str(runtime)}, timeout=30)
               assert 'Usage: ultima5' in result.stdout, result.stdout + result.stderr
+      - name: Verify packaged native icon
+        if: runner.os != 'Linux'
+        run: python scripts/verify-package-icons.py --platform ${{ matrix.platform }} --package-root dist
       - name: Build Linux AppImage
         if: runner.os == 'Linux'
         run: python scripts/build-appimage.py dist/*-linux-x86_64.tar.gz
@@ -84,6 +95,9 @@ jobs:
         run: |
           XDG_DATA_HOME="$RUNNER_TEMP/impera-smoke" dist/*.AppImage --appimage-extract-and-run --help > "$RUNNER_TEMP/impera-help.txt"
           grep -q 'Usage: ultima5' "$RUNNER_TEMP/impera-help.txt"
+      - name: Verify AppImage icon
+        if: runner.os == 'Linux'
+        run: python scripts/verify-package-icons.py --platform linux-x86_64 --package-root dist
       - name: Remove internal Linux archive
         if: runner.os == 'Linux'
         run: rm dist/*-linux-x86_64.tar.gz dist/*-linux-x86_64.tar.gz.sha256
@@ -115,7 +129,7 @@ jobs:
           pattern: Impera-*
       - name: Assemble release downloads
         run: python scripts/assemble-release.py --artifacts artifacts --version "${{ github.ref_name }}"
-      - name: Create or update draft release
+      - name: Create or reuse release and replace assets
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -123,9 +137,6 @@ jobs:
         run: |
           if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release create "$RELEASE_TAG" --verify-tag --draft --title "Impera $RELEASE_TAG" --generate-notes
-          elif [ "$(gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft')" != "true" ]; then
-            echo "Refusing to replace assets on an already published release." >&2
-            exit 1
           fi
           # Older draft runs included an internal Linux archive. Remove those
           # obsolete assets when rerunning this workflow on the same tag.

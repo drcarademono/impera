@@ -6,6 +6,7 @@ from unittest import mock
 import unittest
 import tarfile
 import zipfile
+import struct
 from pathlib import Path
 
 spec = importlib.util.spec_from_file_location('packager', Path(__file__).resolve().parents[1] / 'scripts/package-release.py')
@@ -18,6 +19,49 @@ appspec.loader.exec_module(appimage)
 assembly_spec = importlib.util.spec_from_file_location('assembly', Path(__file__).resolve().parents[1] / 'scripts/assemble-release.py')
 assembly = importlib.util.module_from_spec(assembly_spec)
 assembly_spec.loader.exec_module(assembly)
+
+icon_spec = importlib.util.spec_from_file_location('icons', Path(__file__).resolve().parents[1] / 'scripts/verify-package-icons.py')
+icons = importlib.util.module_from_spec(icon_spec)
+icon_spec.loader.exec_module(icons)
+
+
+def icon_pe_fixture(images):
+    """Minimal PE resource section exercising the same reader used on CI binaries."""
+    group = struct.pack('<HHH', 0, 1, len(images))
+    for i, image in enumerate(images):
+        group += struct.pack('<BBBBHHIH', 0, 0, 0, 0, 1, 32, len(image), i+1)
+    tree = {3: {i+1: {1033: image} for i, image in enumerate(images)},
+            14: {1: {1033: group}}}
+    resource = bytearray()
+
+    def allocate(size):
+        offset = len(resource)
+        resource.extend(bytes(size))
+        return offset
+
+    def directory(entries):
+        offset = allocate(16+len(entries)*8)
+        struct.pack_into('<HH', resource, offset+12, 0, len(entries))
+        for i, (name, value) in enumerate(entries.items()):
+            if isinstance(value, dict):
+                child = directory(value) | 0x80000000
+            else:
+                child = allocate(16)
+                start = allocate(len(value))
+                resource[start:start+len(value)] = value
+                struct.pack_into('<II', resource, child, 0x1000+start, len(value))
+            struct.pack_into('<II', resource, offset+16+i*8, name, child)
+        return offset
+    directory(tree)
+    header = bytearray(512)
+    header[:2] = b'MZ';struct.pack_into('<I', header, 0x3c, 0x80)
+    header[0x80:0x84] = b'PE\0\0'
+    struct.pack_into('<HH', header, 0x84, 0x8664, 1)
+    struct.pack_into('<H', header, 0x94, 240)
+    struct.pack_into('<H', header, 0x98, 0x20b)
+    struct.pack_into('<II', header, 0x98+112+16, 0x1000, len(resource))
+    struct.pack_into('<IIII', header, 0x98+240+8, len(resource), 0x1000, len(resource), 512)
+    return header+resource
 
 
 class PackagingTest(unittest.TestCase):
@@ -59,6 +103,8 @@ class PackagingTest(unittest.TestCase):
                 self.assertTrue(any('/Licenses/SDL.txt' in name for name in names))
                 self.assertFalse(any(name.upper().endswith(('.GAM', '.OOL', '.NPC', '.16', '.CH', '.MP3')) for name in names))
                 self.assertTrue(Path(str(archive) + '.sha256').is_file())
+                if platform.startswith('macos-'):
+                    icons.verify_mac(archive)
                 # AppDir staging uses Linux filesystem permissions and symlinks.
                 # Archive contents above are verified on every platform.
                 if platform == 'linux-x86_64' and sys.platform == 'linux':
@@ -66,6 +112,7 @@ class PackagingTest(unittest.TestCase):
                     self.assertTrue((appdir / 'AppRun').stat().st_mode & 0o111)
                     self.assertTrue((appdir / '.DirIcon').is_symlink())
                     self.assertIn('Icon=impera', (appdir / 'impera.desktop').read_text())
+                    icons.verify_appdir(appdir)
                     self.assertTrue((appdir / 'Licenses/AppImage-runtime.txt').is_file())
                     self.assertFalse((appdir / 'SAVED.GAM').exists())
                     with archive.open('ab') as file:
@@ -112,6 +159,19 @@ class PackagingTest(unittest.TestCase):
             (cache / 'appimagetool.AppImage').write_bytes(b'corrupt executable')
             with self.assertRaisesRegex(ValueError, 'Checksum mismatch'):
                 appimage.verified_tool(cache, 'appimagetool.AppImage')
+
+    def test_windows_icon_resource_verification(self):
+        with tempfile.TemporaryDirectory() as temp:
+            executable = Path(temp) / 'Impera.exe'
+            images = icons.ico_images((icons.ROOT / 'packaging/impera.ico').read_bytes())
+            executable.write_bytes(icon_pe_fixture(images))
+            icons.verify_windows(executable)
+            executable.write_bytes(icon_pe_fixture([b'wrong artwork', *images[1:]]))
+            with self.assertRaisesRegex(AssertionError, 'does not match'):
+                icons.verify_windows(executable)
+            executable.write_bytes(b'not a PE executable')
+            with self.assertRaisesRegex(AssertionError, 'Windows executable'):
+                icons.verify_windows(executable)
 
 
 if __name__ == '__main__':

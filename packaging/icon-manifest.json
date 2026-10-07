@@ -1,0 +1,7 @@
+{
+  "packaging/impera.svg": "1d4064575d936634a5bc7d3e439135d5541a1e73655309708be0837216a0cf47",
+  "packaging/impera.png": "71bd783128254aa15884deceb70d0fcdc2eae3ee7dfa7f898e5c358d9d8026e1",
+  "packaging/impera.ico": "007e5f19add5b8efe96c7d3fff76d71ee6cfa9ce0a53c602a3f972617a37a753",
+  "packaging/impera.icns": "a1feb6b19c10bf3275ae2edc981d1282d3533e51da63000191a425fe64348413",
+  "src/common/icon_pixels.h": "153eb2907dbcf816f9832eb9680dc09db7e840d8bf8b474fe79614786c85de9c"
+}
