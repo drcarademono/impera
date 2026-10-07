@@ -5,11 +5,12 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
-WORKFLOW = (ROOT / '.github/workflows/release.yml').read_text()
-STEP = WORKFLOW.split('      - name: Create or reuse release and replace assets\n', 1)[1]
-SCRIPT = '\n'.join(line[10:] for line in STEP.split('        run: |\n', 1)[1].splitlines())
+WORKFLOW = yaml.safe_load((ROOT / '.github/workflows/release.yml').read_text())
+SCRIPT = next(step['run'] for step in WORKFLOW['jobs']['release']['steps']
+              if step.get('name') == 'Create or reuse release and replace assets')
 
 FAKE_GH = '''#!/usr/bin/env python3
 import json, os, sys
