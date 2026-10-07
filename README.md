@@ -19,8 +19,9 @@ executable named `ultima5`, and environment variables retain the `U5D_` prefix.
 > and select the folder containing the MP3 files. Music is not bundled with
 > Impera; without player-supplied music files, the game has no music.
 > If you skipped music at first launch, open **Engine Options**, switch **Music**
-> off and then on, and choose your music folder in the **Ultima-themed, pixelated
+> on (or off and then on if already enabled), and choose your music folder in the **Ultima-themed, pixelated
 > folder browser**. Open a directory, then choose **Select this folder**.
+> Once a music folder is configured, Music simply toggles playback on and off.
 > No restart is required.
 
 ## Enhanced features
@@ -143,7 +144,7 @@ even when Mouse Control is off, so it can be turned back on.
 | CRT Filter | Subtle DOS monitor scanlines, phosphor softness, glow and nearly flat curvature. |
 | Dithered Darkness | Fade visibility edges with an Ultima 6-style ordered pixel pattern. |
 | Transparent Sprites | Reveal ground around character and supported object sprites. |
-| Music | Mute playback, or switch on to choose and save a music folder. |
+| Music | Toggle playback. Switching on opens the folder browser only if no music folder is configured. |
 | Sound Effects | Enable or mute WAV overrides and synthesized effects. |
 | Movement Speed | Adjust held movement and smooth tile transitions. |
 | Animation Speed | Adjust all animated sprites independently of movement and turns. |
