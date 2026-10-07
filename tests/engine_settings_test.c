@@ -19,21 +19,23 @@ void GRAP_SDL_Cleanup(void);
 
 static void key(SDL_Keycode code)
 { SDL_Event e={0};e.type=SDL_EVENT_KEY_DOWN;e.key.key=code;assert(SDL_PushEvent(&e)); }
-static int musicPickerMode,musicPickerCalls,musicInputStep;
-void __wrap_SDL_ShowOpenFolderDialog(SDL_DialogFileCallback callback,void* data,SDL_Window* window,const char* location,bool many)
-{
-    (void)window;(void)location;assert(!many);musicPickerCalls++;
-    const char* paths[]={musicPickerMode==1?".":musicPickerMode==2?"missing-music-directory":NULL,NULL};
-    callback(data,musicPickerMode==3?NULL:paths,-1);
-}
+static int musicPickerMode,musicInputStep;
 static Uint32 musicInput(void* data,SDL_TimerID timer,Uint32 interval)
 {
     (void)data;(void)timer;
-    if(!musicInputStep++) {
+    int step=musicInputStep++;
+    if(!step) {
         for(int i=0;i<ENGINE_MUSIC;i++) key(SDLK_DOWN);
         key(SDLK_RETURN);return interval;
     }
-    key(SDLK_ESCAPE);return 0;
+    if(step==1) {
+        if(musicPickerMode==3) { key(SDLK_DOWN);key(SDLK_DOWN);key(SDLK_RETURN); }
+        else key(musicPickerMode?SDLK_RETURN:SDLK_ESCAPE);
+        return interval;
+    }
+    if(step==2 && musicPickerMode==3) { key(SDLK_RETURN);return interval; }
+    key(SDLK_ESCAPE);
+    return step==2 && musicPickerMode==2?interval:0;
 }
 static Uint32 closeGameplayOptions(void* userdata, SDL_TimerID timer, Uint32 interval)
 {
@@ -54,17 +56,23 @@ int main(int argc, char** argv)
     if(argc==2 && !strcmp(argv[1],"music_picker")) {
         for(musicPickerMode=0;musicPickerMode<4;musicPickerMode++) {
             ENGINE_Set(ENGINE_MUSIC,0);musicInputStep=0;
-            assert(SDL_AddTimer(50,musicInput,NULL));ENGINE_ShowOptions(false);
-            assert(musicPickerCalls==musicPickerMode+1);
-            assert(ENGINE_Get(ENGINE_MUSIC)==(musicPickerMode==1));
-            if(musicPickerMode==1) {
-                assert(!strcmp(SETUP_MusicDirectory(),"."));
+            if(musicPickerMode==2) assert(SDL_CreateDirectory("DATA.CFG.pending"));
+            if(musicPickerMode==3) assert(SDL_CreateDirectory("MusicChoice"));
+            assert(SDL_AddTimer(80,musicInput,NULL));ENGINE_ShowOptions(false);
+            bool success=musicPickerMode==1 || musicPickerMode==3;
+            assert(ENGINE_Get(ENGINE_MUSIC)==success);
+            if(success) {
+                char* cwd=SDL_GetCurrentDirectory();assert(cwd);
+                assert(strstr(SETUP_MusicDirectory(),cwd));SDL_free(cwd);
+                if(musicPickerMode==3) assert(strstr(SETUP_MusicDirectory(),"MusicChoice"));
                 FILE* config=fopen("DATA.CFG","r");assert(config);
                 char line[4096];assert(fgets(line,sizeof(line),config));
-                assert(fgets(line,sizeof(line),config) && !strcmp(line,".\n"));fclose(config);
+                assert(fgets(line,sizeof(line),config));line[strcspn(line,"\r\n")]=0;
+                assert(!strcmp(line,SETUP_MusicDirectory()));fclose(config);
             }
+            if(musicPickerMode==2) assert(SDL_RemovePath("DATA.CFG.pending"));
         }
-        remove("DATA.CFG");remove("ENGINE.CFG");
+        assert(SDL_RemovePath("MusicChoice"));remove("DATA.CFG");remove("ENGINE.CFG");
         GRAP_SDL_Cleanup();SDL_Quit();return 0;
     }
     if(argc==2 && !strcmp(argv[1],"gameplay_options")) {

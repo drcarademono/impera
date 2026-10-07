@@ -2,6 +2,7 @@
 #include "graphics/crt.h"
 #include "file.h"
 #include "data_setup.h"
+#include "folder_picker.h"
 #include "movement.h"
 #include "graphics/grap_sdl.h"
 #include "graphics/grap_buf.h"
@@ -21,21 +22,7 @@ static const char* keys[]={"video_mode","mouse","smooth","diagonal","transparent
     "dithered_darkness","crt_filter","music","sound","movement_speed","animation_speed"};
 static const char* labels[]={"Video Mode","Mouse Control","Smooth Movement","Diagonal Movement",
     "Transparent Sprites","Dithered Darkness","CRT Filter","Music","Sound Effects","Movement Speed","Animation Speed"};
-static SDL_AtomicInt musicReady;
-static bool musicPicking;
-static char musicChoice[FILE_PATH_SIZE];
 static const char* musicStatus;
-static void SDLCALL musicChosen(void* userdata,const char* const* paths,int filter)
-{
-    (void)userdata;(void)filter;
-    musicChoice[0]=0;
-    if(!paths) SDL_strlcpy(musicChoice,"!",sizeof(musicChoice));
-    else if(paths[0]) {
-        if(strlen(paths[0])>=sizeof(musicChoice)) SDL_strlcpy(musicChoice,"!",sizeof(musicChoice));
-        else SDL_strlcpy(musicChoice,paths[0],sizeof(musicChoice));
-    }
-    SDL_SetAtomicInt(&musicReady,1);
-}
 static const float ticks[]={0.5f,0.75f,1.0f};
 float ENGINE_Get(int row)
 {
@@ -196,9 +183,10 @@ static void adjust(int row,int direction)
 {
     float value=ENGINE_Get(row);
     if(row==ENGINE_MUSIC && !value) {
-        musicPicking=true;musicStatus="Select your music folder";
-        SDL_SetAtomicInt(&musicReady,0);
-        SDL_ShowOpenFolderDialog(musicChosen,NULL,NULL,*SETUP_MusicDirectory()?SETUP_MusicDirectory():NULL,false);
+        if(FOLDER_SelectMusic(SETUP_MusicDirectory(),SETUP_SetMusicDirectory)) {
+            AUDIO_ReloadMusic();ENGINE_Set(ENGINE_MUSIC,1);
+            musicStatus="Music folder saved";
+        } else musicStatus="Music selection cancelled";
     } else if(row<ENGINE_MOVEMENT_SPEED) ENGINE_Set(row,!value);
     else {
         float next=value;
@@ -220,22 +208,11 @@ void ENGINE_ShowOptions(bool gameplay)
     int selected=0,drag=-1;bool done=false,changed=false;
     ENGINE_DrawSettings(selected);
     while(!done) {
-        if(musicPicking && SDL_GetAtomicInt(&musicReady)) {
-            musicPicking=false;
-            if(!*musicChoice) musicStatus="Music selection cancelled";
-            else if(!strcmp(musicChoice,"!") || !SETUP_SetMusicDirectory(musicChoice)) musicStatus="Could not set music folder";
-            else {
-                AUDIO_ReloadMusic();ENGINE_Set(ENGINE_MUSIC,1);changed=true;
-                musicStatus="Music folder saved";
-            }
-            KEY_SDL_ClearInput();ENGINE_DrawSettings(selected);
-        }
         SDL_Event event;
         while(SDL_PollEvent(&event)) {
             if(event.type==SDL_EVENT_QUIT ||
                (event.type==SDL_EVENT_KEY_DOWN && event.key.key==SDLK_E &&
                 (event.key.mod & SDL_KMOD_CTRL))) { if(changed) ENGINE_Save();exit(0); }
-            if(musicPicking) continue;
             if(s_videoChoice>=0) {
                 if(event.type==SDL_EVENT_KEY_DOWN) {
                     switch(event.key.key) {

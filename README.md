@@ -19,7 +19,9 @@ executable named `ultima5`, and environment variables retain the `U5D_` prefix.
 > and select the folder containing the MP3 files. Music is not bundled with
 > Impera; without player-supplied music files, the game has no music.
 > If you skipped music at first launch, open **Engine Options**, switch **Music**
-> off and then on, and choose your music folder. No restart is required.
+> off and then on, and choose your music folder in the **Ultima-themed, pixelated
+> folder browser**. Open a directory, then choose **Select this folder**.
+> No restart is required.
 
 ## Enhanced features
 
