@@ -1,6 +1,7 @@
 #include "common/common.h"
 #include "common/file.h"
 #include "common/data_setup.h"
+#include "common/icon.h"
 #if defined(TARGET_SDL)
 #include <SDL3/SDL.h>
 #include <stdlib.h>
@@ -126,9 +127,11 @@ bool SETUP_Run(void)
     if(*music && (!SDL_GetPathInfo(music,&musicInfo) || musicInfo.type!=SDL_PATHTYPE_DIRECTORY)) valid=false;
     if(!configured || !valid) {
         {
+            SDL_SetHint(SDL_HINT_APP_ID, "impera");
             if(!SDL_Init(SDL_INIT_VIDEO)) { DEBUG_Error("Setup video initialization failed: %s",SDL_GetError());return false; }
             SDL_Window* window=NULL;SDL_Renderer* r=NULL;
             if(!SDL_CreateWindowAndRenderer("Impera - An Ultima 5 Engine",960,600,SDL_WINDOW_RESIZABLE,&window,&r)) { DEBUG_Error("Setup window creation failed: %s",SDL_GetError());SDL_Quit();return false; }
+            IMPERA_SetWindowIcon(window);
             SDL_SetRenderLogicalPresentation(r,320,200,SDL_LOGICAL_PRESENTATION_INTEGER_SCALE);
             lock=SDL_CreateMutex();if(!lock) { SDL_DestroyRenderer(r);SDL_DestroyWindow(window);SDL_Quit();return false; }
             loadFont();int selected=0;bool done=false,accepted=false,cancel=false;

@@ -491,10 +491,17 @@ git push origin v0.1.0
 ```
 
 The workflow runs tests and attaches archives and SHA-256 checksums to a
-**draft** GitHub Release. Download and test each platform before publishing
-the draft from GitHub's Releases page. A failed platform build prevents release
+GitHub Release. If none exists, it creates a **draft**; otherwise it reuses the
+existing release, whether draft or published. Reruns replace matching assets
+and their checksums. Download and test each platform before publishing a new
+draft from GitHub's Releases page. A failed platform build prevents release
 creation. Release jobs use GitHub's built-in token; no personal token is needed.
 Manual workflow runs only upload artifacts and do not create a release.
+
+Tag runs use the workflow and source code recorded in that tag. Rerunning an
+older tag does not pick up later workflow fixes; use a new tag for a new build,
+or upload recovered packages to the existing release with
+`gh release upload TAG FILES... --clobber`.
 
 Launch the download for your platform:
 

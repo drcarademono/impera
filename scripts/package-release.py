@@ -31,6 +31,9 @@ def package(build, platform, version, destination, unpacked=False):
         contents = stage / 'Impera.app' / 'Contents'
         executables = contents / 'MacOS'
         executables.mkdir(parents=True)
+        resources = contents / 'Resources'
+        resources.mkdir()
+        shutil.copy2(REPO / 'packaging/impera.icns', resources / 'impera.icns')
         shutil.copy2(source, executables / 'impera-engine')
         launcher = executables / 'Impera'
         launcher.write_text('''#!/bin/sh
@@ -44,6 +47,7 @@ exec "$app_dir/MacOS/impera-engine" "$@"
         launcher.chmod(0o755)
         with (contents / 'Info.plist').open('wb') as f:
             plistlib.dump(dict(CFBundleExecutable='Impera', CFBundleIdentifier='org.impera.engine',
+                              CFBundleIconFile='impera.icns',
                               CFBundleName='Impera', CFBundlePackageType='APPL',
                               CFBundleShortVersionString=version.removeprefix('v') if re.fullmatch(r'v?\d+\.\d+\.\d+', version) else '0.0.0',
                               LSMinimumSystemVersion='12.0', NSHighResolutionCapable=True), f)

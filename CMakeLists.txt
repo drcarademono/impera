@@ -15,6 +15,7 @@ else()
 endif()
 
 set(SOURCES
+    src/common/icon.c
     src/common/folder_picker.c
     src/common/u4_transfer.c
     src/common/data_setup.c
@@ -83,6 +84,11 @@ set(SOURCES
 )
 
 add_executable(ultima5 ${SOURCES})
+if(WIN32)
+    enable_language(RC)
+    target_sources(ultima5 PRIVATE packaging/impera.rc)
+    target_include_directories(ultima5 PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/packaging")
+endif()
 
 option(U5D_BUILD_TESTS "Build native savegame regression tests" OFF)
 set(U5D_TARGETS ultima5)

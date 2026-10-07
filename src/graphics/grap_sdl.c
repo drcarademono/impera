@@ -1,6 +1,7 @@
 #include "crt.h"
 #include "common/common.h"
 #include "common/settings.h"
+#include "common/icon.h"
 
 #include "grap_buf.h"
 #include "grap_ops.h"
@@ -296,6 +297,7 @@ void GRAP_SDL_Initialize(void)
         DEBUG_Error("Cannot create game window: %s\n", SDL_GetError());
         exit(EXIT_FAILURE);
     }
+    IMPERA_SetWindowIcon(s_sdlWindow);
     debug("Game window: %dx%d fullscreen=%d\n", windowWidth, windowHeight, s_fullscreen);
 
     s_sdlSurface = SDL_CreateSurface(hiresWidth, hiresHeight, SDL_GetPixelFormatForMasks(32, 0xff0000, 0xff00, 0xff, 0xff000000));
