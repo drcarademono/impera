@@ -16,6 +16,7 @@ endif()
 
 set(SOURCES
     src/common/folder_picker.c
+    src/common/u4_transfer.c
     src/common/data_setup.c
     src/common/save_slots.c
     src/common/engine_settings.c
@@ -129,6 +130,12 @@ if(U5D_BUILD_TESTS)
              -DTEST_DIR=${CMAKE_BINARY_DIR}/test-runtime
              -P ${CMAKE_SOURCE_DIR}/tests/check_missing_file.cmake)
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        add_executable(impera_u4_transfer_test tests/u4_transfer_test.c ${TEST_SOURCES})
+        list(APPEND U5D_TARGETS impera_u4_transfer_test)
+        target_compile_definitions(impera_u4_transfer_test PRIVATE TEST_GAME_DIR="${CMAKE_SOURCE_DIR}/Ultima 5")
+        add_test(NAME u4_transfer COMMAND impera_u4_transfer_test)
+        set_tests_properties(u4_transfer PROPERTIES WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/test-runtime"
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy" TIMEOUT 10)
         add_executable(u5d_data_setup_test tests/data_setup_test.c ${TEST_SOURCES})
         list(APPEND U5D_TARGETS u5d_data_setup_test)
         target_link_options(u5d_data_setup_test PRIVATE "-Wl,--wrap=SDL_ShowOpenFolderDialog" "-Wl,--wrap=SDL_RenderPresent")
