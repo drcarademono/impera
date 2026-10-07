@@ -121,12 +121,9 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
-          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release create "$RELEASE_TAG" --verify-tag --draft --title "Impera $RELEASE_TAG" --generate-notes
-          elif [ "$(gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft')" != "true" ]; then
-            echo "Refusing to replace assets on an already published release." >&2
-            exit 1
-          fi
+            if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+              gh release create "$RELEASE_TAG" --verify-tag --draft --title "Impera $RELEASE_TAG" --generate-notes
+            fi
           # Older draft runs included an internal Linux archive. Remove those
           # obsolete assets when rerunning this workflow on the same tag.
           for obsolete in "Impera-$RELEASE_TAG-linux-x86_64.tar.gz" "Impera-$RELEASE_TAG-linux-x86_64.tar.gz.sha256"; do
