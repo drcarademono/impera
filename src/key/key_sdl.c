@@ -4,11 +4,13 @@
 #include "macros.h"
 #include "mouse.h"
 #include "common/engine_settings.h"
+#include "common/movement.h"
 #include "common/save_slots.h"
 #include "event/event.h"
 #include "graphics/grap_sdl.h"
 
 #include <SDL3/SDL.h>
+#include <string.h>
 
 #define KBD_HOME   0x47
 #define KBD_UP     0x48
@@ -32,8 +34,35 @@ static u16 s_heldMovementKey;
 static SDL_Keycode s_heldSDLKey;
 static Uint64 s_nextMovement;
 
+static bool s_arrows[4];
+static int ArrowIndex(SDL_Keycode key)
+{
+    switch(key) {
+    case SDLK_UP:return 0;case SDLK_DOWN:return 1;
+    case SDLK_LEFT:return 2;case SDLK_RIGHT:return 3;
+    default:return -1;
+    }
+}
+static u16 ArrowDirection(u16 fallback)
+{
+    int y=(int)s_arrows[1]-(int)s_arrows[0];
+    int x=(int)s_arrows[3]-(int)s_arrows[2];
+    if(MOVEMENT_Diagonal() && x && y)
+        return 0x100 | (y<0?(x<0?U5_KEY_HOME:U5_KEY_PGUP):(x<0?U5_KEY_END:U5_KEY_PGDN));
+    return fallback;
+}
 void KEY_SDL_ReleaseKey(SDL_Keycode key)
 {
+    int index=ArrowIndex(key);
+    if(index>=0) s_arrows[index]=false;
+    if(!key) memset(s_arrows,0,sizeof(s_arrows));
+    if(index>=0 && s_heldMovementKey) {
+        const SDL_Keycode arrows[]={SDLK_UP,SDLK_DOWN,SDLK_LEFT,SDLK_RIGHT};
+        const u16 directions[]={U5_KEY_UP,U5_KEY_DOWN,U5_KEY_LEFT,U5_KEY_RIGHT};
+        for(int i=0;i<4;i++) if(s_arrows[i]) {
+            s_heldSDLKey=arrows[i];s_heldMovementKey=ArrowDirection(0x100|directions[i]);return;
+        }
+    }
     if (!key || key == s_heldSDLKey) {
         s_heldMovementKey = 0;
         s_heldSDLKey = 0;
@@ -86,14 +115,14 @@ static u16 KeyboardEventToUltimaKeycode(SDL_KeyboardEvent ev)
     u8 extendedKeycode;
     switch (ev.key)
     {
-    case SDLK_HOME: extendedKeycode = KBD_HOME; break;
-    case SDLK_UP: extendedKeycode = KBD_UP; break;
-    case SDLK_PAGEUP: extendedKeycode = KBD_PGUP; break;
-    case SDLK_LEFT: extendedKeycode = KBD_LEFT; break;
-    case SDLK_RIGHT: extendedKeycode = KBD_RIGHT; break;
-    case SDLK_END: extendedKeycode = KBD_END; break;
-    case SDLK_DOWN: extendedKeycode = KBD_DOWN; break;
-    case SDLK_PAGEDOWN: extendedKeycode = KBD_PGDN; break;
+    case SDLK_KP_7:case SDLK_HOME: extendedKeycode = KBD_HOME; break;
+    case SDLK_KP_8:case SDLK_UP: extendedKeycode = KBD_UP; break;
+    case SDLK_KP_9:case SDLK_PAGEUP: extendedKeycode = KBD_PGUP; break;
+    case SDLK_KP_4:case SDLK_LEFT: extendedKeycode = KBD_LEFT; break;
+    case SDLK_KP_6:case SDLK_RIGHT: extendedKeycode = KBD_RIGHT; break;
+    case SDLK_KP_1:case SDLK_END: extendedKeycode = KBD_END; break;
+    case SDLK_KP_2:case SDLK_DOWN: extendedKeycode = KBD_DOWN; break;
+    case SDLK_KP_3:case SDLK_PAGEDOWN: extendedKeycode = KBD_PGDN; break;
     default:
         return 0;
     }
@@ -128,6 +157,8 @@ static u16 KeyboardEventToUltimaKeycode(SDL_KeyboardEvent ev)
 void KEY_SDL_ProcessKeyDown(SDL_KeyboardEvent ev)
 {
     u16 key = KeyboardEventToUltimaKeycode(ev);
+    int arrow=ArrowIndex(ev.key);
+    if(arrow>=0) { s_arrows[arrow]=true;key=ArrowDirection(key); }
     if ((key == U5_KEY_CTRL_O || key == U5_KEY_CTRL_W || key == U5_KEY_CTRL_L) && ev.repeat) return;
     bool direction = (key >= (0x100 | U5_KEY_LEFT) && key <= (0x100 | U5_KEY_DOWN)) ||
                      (key >= (0x100 | U5_KEY_HOME) && key <= (0x100 | U5_KEY_PGDN));
@@ -136,7 +167,7 @@ void KEY_SDL_ProcessKeyDown(SDL_KeyboardEvent ev)
         s_heldMovementKey = key;
         s_heldSDLKey = ev.key;
         s_nextMovement = SDL_GetTicks() + GRAP_SDL_MovementInterval();
-    } else if (!ev.repeat) KEY_SDL_ReleaseKey(0);
+    } else if (!ev.repeat && !direction) KEY_SDL_ReleaseKey(0);
     s_lastDownKeycode = key;
 }
 

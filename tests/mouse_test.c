@@ -523,6 +523,31 @@ int main(int argc, char** argv)
     ticks+=400;
     assert(MOUSE_PollCommand()==0); /* discard stale click targets */
     D_5896_map_x--;
+    /* Perpendicular keyboard arrows use the same diagonal commands as mouse input. */
+    extern void KEY_SDL_ReleaseKey(SDL_Keycode key);
+    bool diagonalBefore=MOVEMENT_Diagonal();
+    MOVEMENT_SetDiagonal(true);KEY_SDL_ClearInput();MOUSE_Cancel();
+    const SDL_Keycode vertical[]={SDLK_UP,SDLK_UP,SDLK_DOWN,SDLK_DOWN};
+    const SDL_Keycode horizontal[]={SDLK_LEFT,SDLK_RIGHT,SDLK_LEFT,SDLK_RIGHT};
+    const int diagonals[]={U5_KEY_HOME,U5_KEY_PGUP,U5_KEY_END,U5_KEY_PGDN};
+    const SDL_Keycode keypad[]={SDLK_KP_7,SDLK_KP_9,SDLK_KP_1,SDLK_KP_3};
+    for(int i=0;i<4;i++) {
+        SDL_KeyboardEvent press={0};KEY_SDL_ClearInput();
+        press.key=vertical[i];KEY_SDL_ProcessKeyDown(press);
+        press.key=horizontal[i];KEY_SDL_ProcessKeyDown(press);
+        assert(KEY_PollKey()==diagonals[i]);
+        KEY_SDL_ClearInput();press.key=keypad[i];KEY_SDL_ProcessKeyDown(press);
+        assert(KEY_PollKey()==diagonals[i]);
+    }
+    KEY_SDL_ClearInput();MOVEMENT_SetDiagonal(false);
+    SDL_KeyboardEvent chord={0};chord.key=SDLK_UP;KEY_SDL_ProcessKeyDown(chord);
+    chord.key=SDLK_RIGHT;KEY_SDL_ProcessKeyDown(chord);assert(KEY_PollKey()==U5_KEY_RIGHT);
+    KEY_SDL_ClearInput();MOVEMENT_SetDiagonal(true);GRAP_SDL_SetSmoothMovement(true);
+    chord.key=SDLK_UP;KEY_SDL_ProcessKeyDown(chord);
+    chord.key=SDLK_RIGHT;KEY_SDL_ProcessKeyDown(chord);assert(KEY_PollKey()==U5_KEY_PGUP);
+    KEY_SDL_ReleaseKey(SDLK_RIGHT);ticks+=112;assert(KEY_PollKey()==U5_KEY_UP);
+    KEY_SDL_ReleaseKey(SDLK_UP);ticks+=112;assert(KEY_PollKey()==0);
+    KEY_SDL_ClearInput();GRAP_SDL_SetSmoothMovement(false);MOVEMENT_SetDiagonal(diagonalBefore);
     /* Smooth keyboard movement must not depend on OS repeat events, even
      * without an explicit movement-speed option. */
     assert(!GRAP_SDL_CustomMovementSpeed());
