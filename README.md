@@ -137,7 +137,7 @@ even when Mouse Control is off, so it can be turned back on.
 
 | Setting | Effect |
 | --- | --- |
-| Video Mode | Dropdown: Windowed, Fullscreen 4:3 (centered with black bars), or Fullscreen with the detected monitor aspect ratio (for example, 16:9). |
+| Video Mode | Dropdown: Windowed, Fullscreen 4:3 (vanilla 11×11 map, scaled to fit vertically with black side bars), or Fullscreen with the detected monitor aspect ratio (for example, 16:9). |
 | CRT Filter | Subtle DOS monitor scanlines, phosphor softness, glow and nearly flat curvature. |
 | Transparent Sprites | Reveal ground around character and supported object sprites. |
 | Dithered Darkness | Fade visibility edges with an Ultima 6-style ordered pixel pattern. |

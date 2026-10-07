@@ -229,7 +229,7 @@ int main(int argc, char** argv)
     GRAP_SDL_SetPixelUI(true);ENGINE_DrawSettings(ENGINE_FULLSCREEN);
     int ow,oh,ww,wh;assert(SDL_GetRenderOutputSize(renderer,&ow,&oh));
     SDL_Window* window=SDL_GetRenderWindow(renderer);assert(SDL_GetWindowSize(window,&ww,&wh));
-    int scale=SDL_min(ow/320,oh/240);if(scale<1) scale=1;
+    float scale=SDL_min(ow/320.0f,oh/240.0f);
     float left=(ow-320*scale)/2.0f,top=(oh-240*scale)/2.0f,ux,uy;
     assert(GRAP_SDL_MouseUIPoint((left+160*scale)*ww/ow,
         (top+60*scale)*wh/oh,&ux,&uy));
@@ -242,6 +242,37 @@ int main(int argc, char** argv)
     assert(ar==0 && ag==0 && ab==170);
     assert(SDL_SaveBMP(aspectShot,"engine-options-4-3.bmp"));SDL_DestroySurface(aspectShot);
     GRAP_SDL_SetPixelUI(false);
+    /* 4:3 gameplay uses exactly the original 11x11 map, not WIDE_Compose. */
+    D_5893_map_id=13;D_58a4=1;D_5896_map_x=D_5897_map_y=16;
+    memset(D_6608_map.town,1,sizeof(D_6608_map.town));
+    memset(D_ab02,1,sizeof(D_ab02));
+    memset(g_linearEgaBuffer0,3,320*200);
+    memset(g_linearEgaBuffer0+320*192,0,320*8);
+    top+=4*scale*1.2f;
+    GRAP_BUF_MarkDirty();GRAP_BUF_Present();
+    int dx,dy;float rx,ry;
+    for(int row=0;row<11;row++) for(int col=0;col<11;col++) {
+        float px=(left+(8+col*16+8)*scale)*ww/ow;
+        float py=(top+(8+row*16+8)*scale*1.2f)*wh/oh;
+        assert(GRAP_SDL_MouseMapPoint(px,py,&dx,&dy,&rx,&ry));
+        assert(dx==col-5 && dy==row-5);
+    }
+    assert(!GRAP_SDL_MouseMapPoint((left+192*scale)*ww/ow,
+        (top+96*scale*1.2f)*wh/oh,&dx,&dy,&rx,&ry));
+    SDL_Surface* vanilla=SDL_RenderReadPixels(renderer,NULL);assert(vanilla);
+    assert(SDL_ReadSurfacePixel(vanilla,(int)(left+96*scale),
+        (int)(top+96*scale*1.2f),&ar,&ag,&ab,&aa));
+    assert(ar==0 && ag==170 && ab==170); /* Native buffer color 3 is preserved. */
+    if(left>=1) {
+        assert(SDL_ReadSurfacePixel(vanilla,0,oh/2,&ar,&ag,&ab,&aa));
+        assert(ar==0 && ag==0 && ab==0);
+    }
+    assert(SDL_ReadSurfacePixel(vanilla,ow/2,(int)(top/2),&ar,&ag,&ab,&aa));
+    assert(ar==0 && ag==0 && ab==0);
+    assert(SDL_ReadSurfacePixel(vanilla,ow/2,oh-1-(int)(top/2),&ar,&ag,&ab,&aa));
+    assert(ar==0 && ag==0 && ab==0);
+    assert(SDL_SaveBMP(vanilla,"gameplay-4-3.bmp"));SDL_DestroySurface(vanilla);
+    D_5893_map_id=0x40;D_58a4=0;
     ENGINE_Set(ENGINE_FULLSCREEN,0);ENGINE_Load();
     assert(GRAP_SDL_VideoMode()==GRAP_VIDEO_FULLSCREEN_43);
     ENGINE_Set(ENGINE_FULLSCREEN,0);

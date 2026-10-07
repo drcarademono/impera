@@ -31,14 +31,25 @@ static WideLayout VideoLayout(int width,int height)
     }
     return WIDE_Layout(width,height);
 }
-/* The native 320x200 menus use DOS 4:3 pixel aspect in this mode. */
+static bool s_pixelUI;
+static bool NativeGameplay(void)
+{
+    return s_videoMode==GRAP_VIDEO_FULLSCREEN_43 && !s_pixelUI &&
+        !EVT_ImmediateExitEnabled() && D_58a4;
+}
+/* The native screen uses DOS 4:3 pixel aspect in this mode. */
 static SDL_FRect NativeRect(int width,int height)
 {
+    if(s_videoMode==GRAP_VIDEO_FULLSCREEN_43) {
+        float scale=SDL_min(width/320.0f,height/240.0f);
+        float w=320*scale,h=240*scale;
+        /* Gameplay occupies 192 rows; center it within the 200-row canvas. */
+        return (SDL_FRect){(width-w)/2,(height-h)/2+(NativeGameplay()?h*4/200:0),w,h};
+    }
     WideLayout l=VideoLayout(width,height);
-    float w=320*l.scale,h=(s_videoMode==GRAP_VIDEO_FULLSCREEN_43?240:200)*l.scale;
+    float w=320*l.scale,h=200*l.scale;
     return (SDL_FRect){(width-w)/2,(height-h)/2,w,h};
 }
-static bool s_pixelUI;
 static int s_windowedWidth=1280, s_windowedHeight=960;
 static SDL_Texture* s_wideTexture;
 static SDL_Texture* s_darknessTexture;
@@ -664,7 +675,7 @@ void GRAP_SDL_FlushFrame(void)
             SDL_SetTextureScaleMode(s_wideTexture, SDL_SCALEMODE_NEAREST);
             debug("Expanded layout: %dx%d tiles, pixel scale=%d\n", layout.columns, layout.rows, layout.scale);
         }
-        if (!EVT_ImmediateExitEnabled() && !s_pixelUI && WIDE_Compose(s_widePixels, layout))
+        if (s_videoMode==GRAP_VIDEO_FULLSCREEN && !EVT_ImmediateExitEnabled() && !s_pixelUI && WIDE_Compose(s_widePixels, layout))
         {
             s_expandedFrame = true;
             /* UI/effect updates can flush between a movement/light change and
@@ -701,7 +712,12 @@ void GRAP_SDL_FlushFrame(void)
         {
             s_completedWideValid=false;
             SDL_FRect dst = NativeRect(width,height);
-            SDL_RenderTexture(s_sdlRenderer, s_sdlTexture, &srcRect, &dst);
+            SDL_FRect imageDst=dst;
+            if(NativeGameplay()) {
+                srcRect.h*=192.0f/200;
+                imageDst.h*=192.0f/200;
+            }
+            SDL_RenderTexture(s_sdlRenderer, s_sdlTexture, &srcRect, &imageDst);
             PrepareDarkness(11,11,completedMap);
             SmoothFrame(g_linearEgaBuffer0,320,200,8,8,11,11,s_sdlTexture,2,dst);
             DrawDarkness(dst,320,200,8,8,11,11);
