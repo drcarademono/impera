@@ -5,9 +5,14 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(SDL3 REQUIRED sdl3)
-pkg_check_modules(SDL3_MIXER REQUIRED sdl3-mixer)
+option(IMPERA_BUNDLED_SDL "Build pinned SDL dependencies for portable releases" OFF)
+if(IMPERA_BUNDLED_SDL)
+    include(cmake/ReleaseDependencies.cmake)
+else()
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(SDL3 REQUIRED sdl3)
+    pkg_check_modules(SDL3_MIXER REQUIRED sdl3-mixer)
+endif()
 
 set(SOURCES
     src/common/data_setup.c
@@ -224,6 +229,12 @@ target_link_libraries(${U5D_TARGET} PRIVATE
     ${SDL3_LIBRARIES}
     ${SDL3_MIXER_LIBRARIES}
 )
+if(IMPERA_BUNDLED_SDL)
+    target_link_libraries(${U5D_TARGET} PRIVATE SDL3::SDL3-static SDL3_mixer::SDL3_mixer-static)
+endif()
+if(MSVC)
+    target_compile_definitions(${U5D_TARGET} PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif()
 if(UNIX)
     target_link_libraries(${U5D_TARGET} PRIVATE m)
 endif()

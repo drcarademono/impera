@@ -41,3 +41,5 @@ SAVEGAME/.slot-thumbnail.bmp
 # External game-data selections
 DATA.CFG
 DATA.CFG.pending
+/release-build/
+/dist/
