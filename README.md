@@ -59,6 +59,14 @@ mouse controls are enabled.
 
 ## Getting started
 
+Download packaged builds from [Impera Releases](https://github.com/drcarademono/impera/releases).
+To work from source, clone the repository:
+
+```sh
+git clone https://github.com/drcarademono/impera.git
+cd impera
+```
+
 ### Build and launch on Linux
 
 Install a C compiler, CMake 3.16 or newer, Python 3, pkg-config, SDL3, and SDL3_mixer
