@@ -66,6 +66,23 @@ static int scalefxTest(void)
     SDL_Surface* repeat=SDL_RenderReadPixels(r,NULL);assert(repeat);
     assert(SDL_ReadSurfacePixel(repeat,20,20,&red,&green,&blue,&alpha));
     assert(red==255 && green==0 && blue==0);SDL_DestroySurface(repeat);
+    /* ScaleFX must also preserve orientation when feeding a CRT target. */
+    SDL_Texture* output=SDL_CreateTexture(r,SDL_PIXELFORMAT_ARGB8888,SDL_TEXTUREACCESS_TARGET,960,600);assert(output);
+    SDL_SetRenderTarget(r,output);
+    assert(SCALEFX_Apply(r,input,960,600,3));
+    SDL_Surface* target=SDL_RenderReadPixels(r,NULL);assert(target);
+    assert(SDL_ReadSurfacePixel(target,20,20,&red,&green,&blue,&alpha));
+    assert(red==255 && green==0 && blue==0);SDL_DestroySurface(target);
+    SDL_SetRenderTarget(r,NULL);SDL_DestroyTexture(output);
+    CRT_SetCombinedEnabled();assert(CRT_Enabled() && SCALEFX_Enabled());
+    CRT_BeginFrame(r);SDL_RenderTexture(r,native,NULL,NULL);CRT_EndFrame(r);
+    SDL_Surface* combined=SDL_RenderReadPixels(r,NULL);assert(combined);
+    assert(SDL_ReadSurfacePixel(combined,20,20,&red,&green,&blue,&alpha));
+    assert(red>150 && blue<30);
+    assert(SDL_ReadSurfacePixel(combined,20,580,&red,&green,&blue,&alpha));
+    assert(blue>150 && red<30);
+    SDL_SaveBMP(combined,"scalefx-crt-preview.bmp");SDL_DestroySurface(combined);
+    CRT_Cleanup();CRT_SetEnabled(false);
     SDL_SaveBMP(after,"scalefx-preview.bmp");
     SDL_DestroySurface(before);SDL_DestroySurface(after);
     SCALEFX_Cleanup();SCALEFX_SetEnabled(false);

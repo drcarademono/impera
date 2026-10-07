@@ -197,9 +197,9 @@ int main(int argc, char** argv)
     ENGINE_Set(ENGINE_FULLSCREEN,0);
     /* Display Filter shares the dropdown behavior and persists ScaleFX. */
     for(int i=0;i<ENGINE_CRT;i++) key(SDLK_DOWN);
-    key(SDLK_RETURN);key(SDLK_DOWN);key(SDLK_DOWN);key(SDLK_RETURN);key(SDLK_ESCAPE);
-    ENGINE_ShowOptions(false);assert(ENGINE_Get(ENGINE_CRT)==2);
-    ENGINE_Set(ENGINE_CRT,0);ENGINE_Load();assert(ENGINE_Get(ENGINE_CRT)==2);
+    key(SDLK_RETURN);key(SDLK_DOWN);key(SDLK_DOWN);key(SDLK_DOWN);key(SDLK_RETURN);key(SDLK_ESCAPE);
+    ENGINE_ShowOptions(false);assert(ENGINE_Get(ENGINE_CRT)==3);
+    ENGINE_Set(ENGINE_CRT,0);ENGINE_Load();assert(ENGINE_Get(ENGINE_CRT)==3);
     ENGINE_Set(ENGINE_CRT,1);assert(ENGINE_Get(ENGINE_CRT)==1);
     ENGINE_Set(ENGINE_CRT,0);assert(ENGINE_Get(ENGINE_CRT)==0);
     f=fopen("ENGINE.CFG","w");assert(f);fputs("crt_filter 1\n",f);fclose(f);

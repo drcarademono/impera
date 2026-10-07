@@ -161,8 +161,8 @@ bool SCALEFX_Apply(SDL_Renderer* renderer,SDL_Texture* input,int width,int heigh
         GLuint program=programs[i];fxUseProgram(program);
         GLfloat identity[]={1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1};
         /* SDL target textures have top-down coordinates. Flip only the final
-         * presentation; intermediate passes and original samples stay aligned. */
-        if(i==4) identity[5]=-1;
+         * window presentation; SDL texture targets retain their native orientation. */
+        if(i==4 && !SDL_GetRenderTarget(renderer)) identity[5]=-1;
         fxUniformMatrix4fv(fxGetUniformLocation(program,"MVPMatrix"),1,GL_FALSE,identity);
         fxUniform2f(fxGetUniformLocation(program,"TextureSize"),w,h);fxUniform2f(fxGetUniformLocation(program,"InputSize"),w,h);
         fxUniform2f(fxGetUniformLocation(program,"OutputSize"),i==4?width:w,i==4?height:h);

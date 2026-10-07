@@ -123,7 +123,7 @@ even when Mouse Control is off, so it can be turned back on.
 | Mouse Control | Enable map movement and contextual actions; options menus remain clickable when off. |
 | Smooth Movement | Animate camera scrolling and visible actor steps. |
 | Diagonal Movement | Enable eight-way movement, neighboring actions, and combat. |
-| Display Filter | Dropdown: Off, DOS Monitor CRT, or ScaleFX pixel-art edge interpolation. |
+| Display Filter | Dropdown: Off, DOS Monitor CRT, ScaleFX pixel-art edge interpolation, or ScaleFX + DOS CRT. |
 | Dithered Darkness | Fade visibility edges with an Ultima 6-style ordered pixel pattern. |
 | Transparent Sprites | Reveal ground around character and supported object sprites. |
 | Music | Enable or mute external music playback. |
@@ -284,13 +284,16 @@ boundaries; otherwise keyboard repeat retains the operating system's behavior.
 
 Choose **ScaleFX** under **Display Filter** to smooth pixel-art edges with
 Sp00kyFox’s original five-pass ScaleFX shader. It selects colours from the game’s
-existing palette rather than blending new colours. This is an alternative to
-DOS Monitor CRT; only one display filter is active at a time. The choice is saved
+existing palette rather than blending new colours. The choice is saved
 in `ENGINE.CFG` and applies to gameplay, menus, cutscenes and the cursor.
+
+**ScaleFX + DOS CRT** applies the DOS Monitor CRT effect after ScaleFX edge
+interpolation, including the mouse cursor.
 
 ScaleFX requires a compatible OpenGL renderer with floating-point render targets.
 The engine prefers OpenGL when available; an explicitly selected incompatible
-SDL renderer uses unfiltered output and records the reason in the log.
+SDL renderer skips ScaleFX and records the reason in the log. The combined
+option retains the DOS CRT effect when ScaleFX is unavailable.
 The bundled shaders in `textures/shaders/scalefx` must remain alongside the engine.
 
 ### CRT filter

@@ -31,7 +31,7 @@ float ENGINE_Get(int row)
     case ENGINE_DIAGONAL:return MOVEMENT_Diagonal();
     case ENGINE_TRANSPARENT:return GRAP_BUF_TransparentSprites();
     case ENGINE_DITHERED_DARKNESS:return WIDE_DitheredDarkness();
-    case ENGINE_CRT:return SCALEFX_Enabled()?2:CRT_Enabled()?1:0;
+    case ENGINE_CRT:return SCALEFX_Enabled()?(CRT_Enabled()?3:2):CRT_Enabled()?1:0;
     case ENGINE_MUSIC:return AUDIO_MusicEnabled();
     case ENGINE_SOUND:return AUDIO_SoundEnabled();
     case ENGINE_MOVEMENT_SPEED:return GRAP_SDL_MovementSpeed();
@@ -42,7 +42,8 @@ float ENGINE_Get(int row)
 void ENGINE_Set(int row,float value)
 {
     if(!isfinite(value) || row<0 || row>=ENGINE_SETTING_COUNT) return;
-    if((row==ENGINE_FULLSCREEN || row==ENGINE_CRT) && value!=0 && value!=1 && value!=2) return;
+    if(row==ENGINE_FULLSCREEN && value!=0 && value!=1 && value!=2) return;
+    if(row==ENGINE_CRT && value!=0 && value!=1 && value!=2 && value!=3) return;
     if(row!=ENGINE_FULLSCREEN && row!=ENGINE_CRT && row<ENGINE_MOVEMENT_SPEED && value!=0 && value!=1) return;
     if(row>=ENGINE_MOVEMENT_SPEED && (value<0.1f || value>10)) return;
     debug("Engine option %s=%.6g",keys[row],(double)value);
@@ -53,7 +54,7 @@ void ENGINE_Set(int row,float value)
     case ENGINE_DIAGONAL:MOVEMENT_SetDiagonal(value!=0);break;
     case ENGINE_TRANSPARENT:GRAP_BUF_SetTransparentSprites(value!=0);break;
     case ENGINE_DITHERED_DARKNESS:WIDE_SetDitheredDarkness(value!=0);break;
-    case ENGINE_CRT:CRT_SetEnabled(value==1);SCALEFX_SetEnabled(value==2);break;
+    case ENGINE_CRT:if(value==3) CRT_SetCombinedEnabled();else { CRT_SetEnabled(value==1);SCALEFX_SetEnabled(value==2); }break;
     case ENGINE_MUSIC:AUDIO_SetMusicEnabled(value!=0);break;
     case ENGINE_SOUND:AUDIO_SetSoundEnabled(value!=0);break;
     case ENGINE_MOVEMENT_SPEED:GRAP_SDL_SetMovementSpeed(value);break;
@@ -134,9 +135,10 @@ static const char* videoLabel(int choice)
 static const int videoModes[]={GRAP_VIDEO_WINDOWED,GRAP_VIDEO_FULLSCREEN_43,GRAP_VIDEO_FULLSCREEN};
 static const char* dropdownLabel(int choice)
 {
-    static const char* filters[]={"Off","DOS Monitor CRT","ScaleFX"};
+    static const char* filters[]={"Off","DOS Monitor CRT","ScaleFX","ScaleFX + DOS CRT"};
     return s_dropdownRow==ENGINE_CRT?filters[choice]:videoLabel(choice);
 }
+static int dropdownCount(void) { return s_dropdownRow==ENGINE_CRT?4:3; }
 static int dropdownValue(int choice)
 { return s_dropdownRow==ENGINE_CRT?choice:videoModes[choice]; }
 static int dropdownChoice(void)
@@ -160,7 +162,7 @@ void ENGINE_DrawSettings(int selected)
         if(row==ENGINE_SETTING_COUNT) continue;
         float value=ENGINE_Get(row);
         if(row==ENGINE_FULLSCREEN || row==ENGINE_CRT) {
-            static const char* filters[]={"Off","DOS Monitor CRT","ScaleFX"};
+            static const char* filters[]={"Off","DOS Monitor CRT","ScaleFX","ScaleFX + DOS CRT"};
             int choice=0;
             for(int i=0;i<3;i++) if(videoModes[i]==GRAP_SDL_VideoMode()) choice=i;
             const char* label=row==ENGINE_CRT?filters[(int)value]:videoLabel(choice);
@@ -181,8 +183,8 @@ void ENGINE_DrawSettings(int selected)
     }
     if(s_dropdownChoice>=0) {
         int top=rowY(s_dropdownRow)+10;
-        ENGINE_UIRect(120,top,184,35,15);ENGINE_UIRect(121,top+1,182,33,0);
-        for(int i=0;i<3;i++) {
+        ENGINE_UIRect(120,top,184,2+11*dropdownCount(),15);ENGINE_UIRect(121,top+1,182,11*dropdownCount(),0);
+        for(int i=0;i<dropdownCount();i++) {
             int y=top+2+i*11;
             if(i==s_dropdownChoice) ENGINE_UIRect(122,y-1,180,10,15);
             ENGINE_UIText(128,y,dropdownLabel(i),i==s_dropdownChoice?0:15);
@@ -222,8 +224,8 @@ void ENGINE_ShowOptions(bool gameplay)
                 if(event.type==SDL_EVENT_KEY_DOWN) {
                     switch(event.key.key) {
                     case SDLK_ESCAPE:s_dropdownChoice=-1;break;
-                    case SDLK_UP:s_dropdownChoice=(s_dropdownChoice+2)%3;break;
-                    case SDLK_DOWN:s_dropdownChoice=(s_dropdownChoice+1)%3;break;
+                    case SDLK_UP:s_dropdownChoice=(s_dropdownChoice+dropdownCount()-1)%dropdownCount();break;
+                    case SDLK_DOWN:s_dropdownChoice=(s_dropdownChoice+1)%dropdownCount();break;
                     case SDLK_RETURN:case SDLK_SPACE:
                         ENGINE_Set(s_dropdownRow,dropdownValue(s_dropdownChoice));changed=true;s_dropdownChoice=-1;break;
                     }
@@ -232,8 +234,8 @@ void ENGINE_ShowOptions(bool gameplay)
                     float x,y;
                     float ex=event.type==SDL_EVENT_MOUSE_MOTION?event.motion.x:event.button.x;
                     float ey=event.type==SDL_EVENT_MOUSE_MOTION?event.motion.y:event.button.y;
-                    if(GRAP_SDL_MouseUIPoint(ex,ey,&x,&y) && x>=120 && x<304 && y>=rowY(s_dropdownRow)+11 && y<rowY(s_dropdownRow)+44) {
-                        s_dropdownChoice=SDL_clamp((int)(y-rowY(s_dropdownRow)-11)/11,0,2);
+                    if(GRAP_SDL_MouseUIPoint(ex,ey,&x,&y) && x>=120 && x<304 && y>=rowY(s_dropdownRow)+11 && y<rowY(s_dropdownRow)+11+11*dropdownCount()) {
+                        s_dropdownChoice=SDL_clamp((int)(y-rowY(s_dropdownRow)-11)/11,0,dropdownCount()-1);
                         if(event.type==SDL_EVENT_MOUSE_BUTTON_DOWN) {
                             ENGINE_Set(s_dropdownRow,dropdownValue(s_dropdownChoice));changed=true;s_dropdownChoice=-1;
                         }

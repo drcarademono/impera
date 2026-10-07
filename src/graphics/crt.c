@@ -16,9 +16,10 @@ static const float displayBrightness=1.04f,displayContrast=1.02f;
 static float averageBeam;
 static bool enabled,active;
 static SDL_Renderer* owner;
-static SDL_Texture *frame,*scene,*soft,*glow,*halo,*mask;
+static SDL_Texture *frame,*scene,*scaled,*soft,*glow,*halo,*mask;
 static int width,height;
 void CRT_SetEnabled(bool value) { enabled=value;if(value) SCALEFX_SetEnabled(false);if(!value && SDL_WasInit(SDL_INIT_VIDEO)) SDL_ShowCursor(); }
+void CRT_SetCombinedEnabled(void) { SCALEFX_SetEnabled(true);enabled=true; }
 bool CRT_Enabled(void) { return enabled; }
 void CRT_Cleanup(void)
 {
@@ -26,8 +27,8 @@ void CRT_Cleanup(void)
     MOUSE_ReleaseFilteredCursors();
     if(owner && active) SDL_SetRenderTarget(owner,NULL);
     if(SDL_WasInit(SDL_INIT_VIDEO)) SDL_ShowCursor();
-    SDL_DestroyTexture(scene);SDL_DestroyTexture(frame);SDL_DestroyTexture(soft);SDL_DestroyTexture(glow);SDL_DestroyTexture(halo);SDL_DestroyTexture(mask);
-    frame=scene=soft=glow=halo=mask=NULL;owner=NULL;active=false;width=height=0;
+    SDL_DestroyTexture(scaled);SDL_DestroyTexture(scene);SDL_DestroyTexture(frame);SDL_DestroyTexture(soft);SDL_DestroyTexture(glow);SDL_DestroyTexture(halo);SDL_DestroyTexture(mask);
+    frame=scene=scaled=soft=glow=halo=mask=NULL;owner=NULL;active=false;width=height=0;
 }
 void CRT_BeginFrame(SDL_Renderer* renderer)
 {
@@ -40,6 +41,7 @@ void CRT_BeginFrame(SDL_Renderer* renderer)
         CRT_Cleanup();owner=renderer;width=w;height=h;
         frame=SDL_CreateTexture(renderer,SDL_PIXELFORMAT_ARGB8888,SDL_TEXTUREACCESS_TARGET,w,h);
         scene=SDL_CreateTexture(renderer,SDL_PIXELFORMAT_ARGB8888,SDL_TEXTUREACCESS_TARGET,w,h);
+        scaled=SDL_CreateTexture(renderer,SDL_PIXELFORMAT_ARGB8888,SDL_TEXTUREACCESS_TARGET,w,h);
         soft=SDL_CreateTexture(renderer,SDL_PIXELFORMAT_ARGB8888,SDL_TEXTUREACCESS_TARGET,w,h);
         halo=SDL_CreateTexture(renderer,SDL_PIXELFORMAT_ARGB8888,SDL_TEXTUREACCESS_TARGET,w/8?w/8:1,h/8?h/8:1);
         glow=SDL_CreateTexture(renderer,SDL_PIXELFORMAT_ARGB8888,SDL_TEXTUREACCESS_TARGET,w/4?w/4:1,h/4?h/4:1);
@@ -79,7 +81,7 @@ void CRT_BeginFrame(SDL_Renderer* renderer)
             }
             mask=SDL_CreateTextureFromSurface(renderer,surface);SDL_DestroySurface(surface);
         }
-        if(!frame || !scene || !soft || !glow || !halo || !mask) {
+        if(!frame || !scene || !scaled || !soft || !glow || !halo || !mask) {
             DEBUG_Error("CRT filter unavailable: %s",SDL_GetError());CRT_Cleanup();return;
         }
         SDL_SetTextureBlendMode(frame,SDL_BLENDMODE_NONE);
@@ -132,10 +134,15 @@ void CRT_EndFrame(SDL_Renderer* renderer)
     SDL_RenderTexture(renderer,frame,NULL,NULL);
     MOUSE_DrawFilteredCursor(renderer,enabled?curvatureX:0,enabled?curvatureY:0);
     if(SCALEFX_Enabled()) {
-        SDL_SetRenderTarget(renderer,NULL);
+        SDL_SetRenderTarget(renderer,enabled?scaled:NULL);
         if(!SCALEFX_Apply(renderer,scene,width,height,GRAP_SDL_PixelScale()))
             SDL_RenderTexture(renderer,scene,NULL,NULL);
-        return;
+        if(!enabled) return;
+        /* ScaleFX reconstructs edges first; DOS Monitor processes that image.
+         * Keep the clean frame untouched for movement and cursor refreshes. */
+        SDL_SetRenderTarget(renderer,scene);
+        SDL_SetTextureBlendMode(scaled,SDL_BLENDMODE_NONE);
+        SDL_RenderTexture(renderer,scaled,NULL,NULL);
     }
     SDL_SetRenderTarget(renderer,soft);
     SDL_SetTextureBlendMode(scene,SDL_BLENDMODE_NONE);
