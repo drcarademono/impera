@@ -16,6 +16,7 @@
 #include "key/mouse.h"
 #include "key/key.h"
 #include "graphics/grap_sdl.h"
+#include "graphics/crt.h"
 #include "graphics/grap_buf.h"
 #include "graphics/animate.h"
 #include "graphics/widescreen.h"
@@ -46,7 +47,7 @@ SDL_Cursor* __wrap_SDL_CreateColorCursor(SDL_Surface* surface, int x, int y)
     return NULL; /* SDL dummy driver has no native cursor support. */
 }
 static Uint64 ticks = 2000;
-static Uint32 animationDelay;
+static Uint32 animationDelay,renderCost;
 void __wrap_SDL_Delay(Uint32 ms) { animationDelay += ms; }
 static float cursorX, cursorY;
 static bool sawSleepingNpc, sawFountain, sawDrinkPrompt, sawWell, sawCoinPrompt;
@@ -56,6 +57,7 @@ static bool checkAnimation;
 static bool checkWater;
 static bool checkDarkness;
 static bool checkDither;
+static bool checkCRT;
 static int ditherDx,ditherDy;
 static unsigned ditherPattern;
 static bool checkEdges;
@@ -70,6 +72,7 @@ bool __real_SDL_RenderPresent(SDL_Renderer* renderer);
 bool __wrap_SDL_RenderPresent(SDL_Renderer* renderer)
 {
     presented++;
+    ticks+=renderCost;
     if (checkActor) {
         SDL_Surface* image=SDL_RenderReadPixels(renderer,NULL);
         assert(image);
@@ -94,6 +97,15 @@ bool __wrap_SDL_RenderPresent(SDL_Renderer* renderer)
         Uint8 r,g,b,a;
         assert(SDL_ReadSurfacePixel(image,waterMap.x+1,waterMap.y+1,&r,&g,&b,&a));
         assert(r==0 && g==0 && b==(edgeBright?170:0)); /* completed map retained during UI-only flush */
+        SDL_DestroySurface(image);
+    }
+    if(checkCRT) {
+        SDL_Surface* image=SDL_RenderReadPixels(renderer,NULL);assert(image);
+        Uint8 r,g,b,a;
+        int x=waterMap.x+waterMap.w/2,y=waterMap.y+waterMap.h/2;
+        assert(SDL_ReadSurfacePixel(image,x,y,&r,&g,&b,&a));
+        assert(r==0 && g==0 && b>80 && b<200 && b!=170); /* filtered on every presented frame, with brightness compensation */
+        if(presented==9) assert(SDL_SaveBMP(image,"crt-gameplay.bmp"));
         SDL_DestroySurface(image);
     }
     if(checkDither) {
@@ -155,7 +167,7 @@ bool __wrap_SDL_RenderPresent(SDL_Renderer* renderer)
     bool result=__real_SDL_RenderPresent(renderer);
     /* Present invalidates the SDL backbuffer. Simulate a renderer that discards
      * it, so a second present without a full redraw cannot pass by accident. */
-    if(checkAnimation || checkActor || checkWater || checkDarkness || checkDither) {
+    if(checkAnimation || checkActor || checkWater || checkDarkness || checkDither || checkCRT) {
         SDL_SetRenderDrawColor(renderer,255,0,255,255);
         SDL_RenderClear(renderer);
         SDL_SetRenderDrawColor(renderer,0,0,0,255);
@@ -742,6 +754,18 @@ int main(int argc, char** argv)
     checkDither=false;
     GRAP_BUF_SetTransparentSprites(transparentSprites);
     WIDE_SetDitheredDarkness(false);
+    CRT_SetEnabled(true);GRAP_SDL_MapDrawn();GRAP_SDL_FlushFrame();
+    checkCRT=true;presented=0;D_5896_map_x++;D_5897_map_y++;
+    GRAP_SDL_MapDrawn();GRAP_SDL_FlushFrame();assert(presented==9);
+    checkCRT=false;
+    /* Rendering time is part of each movement interval, not extra delay. */
+    renderCost=6;animationDelay=0;presented=0;D_5896_map_x++;
+    GRAP_SDL_MapDrawn();GRAP_SDL_FlushFrame();
+    assert(presented==9 && animationDelay==70);
+    renderCost=20;animationDelay=0;presented=0;D_5897_map_y++;
+    GRAP_SDL_MapDrawn();GRAP_SDL_FlushFrame();
+    assert(presented==9 && animationDelay==0); /* don't wait when over budget */
+    renderCost=0;CRT_SetEnabled(false);
     D_58a5=50;
     D_5893_map_id=1;D_5896_map_x=16;D_5897_map_y=16;
     memset(D_6608_map.town,1,sizeof(D_6608_map.town));

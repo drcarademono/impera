@@ -71,6 +71,15 @@ static int PollMenu(void)
 
 static SDL_Cursor* s_cursors[9];
 static SDL_Cursor* s_currentCursor;
+static SDL_Surface* s_cursorImages[9];
+static SDL_Texture* s_filteredCursors[9];
+static SDL_Renderer* s_cursorRenderer;
+void MOUSE_ReleaseFilteredCursors(void)
+{
+    for(int i=0;i<9;i++) { SDL_DestroyTexture(s_filteredCursors[i]);s_filteredCursors[i]=NULL; }
+    s_cursorRenderer=NULL;
+}
+static int s_hotspotX[9],s_hotspotY[9],s_cursorIndex;
 static int s_lastCursorDirection = U5_KEY_UP;
 static const int s_cursorDirections[9] = {0, U5_KEY_UP, U5_KEY_PGUP, U5_KEY_RIGHT, U5_KEY_PGDN, U5_KEY_DOWN, U5_KEY_END, U5_KEY_LEFT, U5_KEY_HOME};
 static const char* s_cursorNames[9] = {"pointer", "direction-n", "diag-ne", "direction-e", "diag-se", "direction-s", "diag-sw", "direction-w", "diag-nw"};
@@ -105,16 +114,57 @@ void MOUSE_UpdateCursor(void)
     SDL_GetMouseState(&x, &y);
     int direction = (s_menu || s_pointerMode) ? 0 : MOUSE_CursorDirection(x, y), index = 0;
     for (int i = 1; i < 9; ++i) if (s_cursorDirections[i] == direction) index = i;
+    s_cursorIndex=index;
     SDL_Cursor* cursor = s_cursors[index] ? s_cursors[index] : s_cursors[0];
     if (!cursor) cursor = SDL_GetDefaultCursor();
     if (cursor && cursor != s_currentCursor && SDL_SetCursor(cursor)) s_currentCursor = cursor;
 }
 
+/* Composite the same art/hotspot into the CRT source. Keep the unfiltered
+ * backing frame untouched, so idle refreshes and save thumbnails stay clean. */
+bool MOUSE_DrawFilteredCursor(SDL_Renderer* renderer,float curvatureX,float curvatureY)
+{
+    MOUSE_UpdateCursor();
+    SDL_Window* window=SDL_GetRenderWindow(renderer);
+    if((!s_enabled && !s_pointerMode) || !window || SDL_GetMouseFocus()!=window ||
+       !s_cursorImages[s_cursorIndex]) { SDL_ShowCursor();return false; }
+    int w,h,ow,oh;
+    if(!SDL_GetWindowSize(window,&w,&h) || !SDL_GetRenderOutputSize(renderer,&ow,&oh) || w<=0 || h<=0)
+        return false;
+    if(s_cursorRenderer!=renderer) { MOUSE_ReleaseFilteredCursors();s_cursorRenderer=renderer; }
+    SDL_Texture* texture=s_filteredCursors[s_cursorIndex];
+    if(!texture) {
+        texture=SDL_CreateTextureFromSurface(renderer,s_cursorImages[s_cursorIndex]);
+        s_filteredCursors[s_cursorIndex]=texture;
+    }
+    if(!texture) { SDL_ShowCursor();return false; }
+    float x,y;SDL_GetMouseState(&x,&y);
+    /* Invert the shared CRT warp at the tip so the visible hotspot still
+     * agrees with SDL event coordinates, including directional arrows. */
+    float tipX=x*ow/w,tipY=y*oh/h;
+    float targetX=2*tipX/ow-1,targetY=2*tipY/oh-1,nx=targetX,ny=targetY;
+    for(int i=0;i<5;i++) {
+        nx=targetX/(1-curvatureX*ny*ny);
+        ny=targetY/(1-curvatureY*nx*nx);
+    }
+    tipX=(nx+1)*ow/2;tipY=(ny+1)*oh/2;
+    SDL_FRect dst={tipX-s_hotspotX[s_cursorIndex]*(float)ow/w,tipY-s_hotspotY[s_cursorIndex]*(float)oh/h,
+                  s_cursorWidth*(float)ow/w,s_cursorHeight*(float)oh/h};
+    SDL_SetTextureBlendMode(texture,SDL_BLENDMODE_BLEND);
+    SDL_SetTextureScaleMode(texture,SDL_SCALEMODE_NEAREST);
+    bool drawn=SDL_RenderTexture(renderer,texture,NULL,&dst);
+    if(drawn) SDL_HideCursor();else SDL_ShowCursor();
+    return drawn;
+}
+
 void MOUSE_Cleanup(void)
 {
+    MOUSE_ReleaseFilteredCursors();
     SDL_Cursor* cursor = SDL_GetDefaultCursor();
     if (cursor) SDL_SetCursor(cursor);
     for (int i = 0; i < 9; ++i) { SDL_DestroyCursor(s_cursors[i]); s_cursors[i] = NULL; }
+    for(int i=0;i<9;i++) { SDL_DestroySurface(s_cursorImages[i]);s_cursorImages[i]=NULL; }
+    SDL_ShowCursor();
     s_currentCursor = NULL;
     s_cursorWidth=s_cursorHeight=0;
 }
@@ -148,7 +198,8 @@ static void LoadCursors(void)
                 if(tipX[i]==w-1) hotspotX=s_cursorWidth-1;
                 if(tipY[i]==h-1) hotspotY=s_cursorHeight-1;
                 s_cursors[i] = SDL_CreateColorCursor(scaled, hotspotX, hotspotY);
-                SDL_DestroySurface(scaled);
+                s_hotspotX[i]=hotspotX;s_hotspotY[i]=hotspotY;
+                s_cursorImages[i]=scaled;
             }
             SDL_DestroySurface(surface);
         }

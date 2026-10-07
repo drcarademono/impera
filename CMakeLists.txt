@@ -61,6 +61,7 @@ set(SOURCES
 	src/graphics/image.c
 	src/graphics/grap_buf.c
 	src/graphics/origin.c
+	src/graphics/crt.c
 	src/graphics/grap_sdl.c
 	src/graphics/widescreen.c
 	src/graphics/grap.c
@@ -91,6 +92,15 @@ if(U5D_BUILD_TESTS)
     list(APPEND U5D_TARGETS u5d_pcspeaker_test)
     add_test(NAME pcspeaker_algorithms COMMAND u5d_pcspeaker_test)
     list(REMOVE_ITEM TEST_SOURCES src/ultima.c)
+    add_executable(u5d_crt_test tests/crt_test.c ${TEST_SOURCES})
+    list(APPEND U5D_TARGETS u5d_crt_test)
+    if(UNIX AND NOT APPLE)
+        target_link_options(u5d_crt_test PRIVATE "-Wl,--wrap=MOUSE_DrawFilteredCursor")
+        target_compile_definitions(u5d_crt_test PRIVATE TEST_FILTERED_CURSOR)
+    endif()
+    add_test(NAME crt_filter COMMAND u5d_crt_test)
+    set_tests_properties(crt_filter PROPERTIES TIMEOUT 10
+        ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software")
     add_executable(u5d_savegame_test tests/savegame_test.c ${TEST_SOURCES})
     list(APPEND U5D_TARGETS u5d_savegame_test)
     add_executable(u5d_widescreen_test tests/widescreen_test.c ${TEST_SOURCES})
