@@ -15,6 +15,10 @@ appspec = importlib.util.spec_from_file_location('appimage', Path(__file__).reso
 appimage = importlib.util.module_from_spec(appspec)
 appspec.loader.exec_module(appimage)
 
+assembly_spec = importlib.util.spec_from_file_location('assembly', Path(__file__).resolve().parents[1] / 'scripts/assemble-release.py')
+assembly = importlib.util.module_from_spec(assembly_spec)
+assembly_spec.loader.exec_module(assembly)
+
 
 class PackagingTest(unittest.TestCase):
     def test_platform_archives(self):
@@ -35,6 +39,10 @@ class PackagingTest(unittest.TestCase):
                 # Reproduce Windows chmod behavior even on a Unix runner.
                 with mock.patch.object(Path, 'chmod', return_value=None):
                     archive = packager.package(build, platform, 'v0.1.0', output)
+                if platform == 'windows-x86_64':
+                    staged = packager.package(build, platform, 'v0.1.0', root / 'unpacked', unpacked=True)
+                    self.assertEqual((staged / 'Run Impera.cmd').read_bytes(), b'@echo off\r\ncd /d "%~dp0"\r\nImpera.exe %*\r\n')
+                    self.assertEqual({p.relative_to(staged).as_posix() for p in staged.rglob('*') if p.is_file()}, assembly.WINDOWS_FILES)
                 if archive.suffix == '.zip':
                     with zipfile.ZipFile(archive) as f:
                         names = f.namelist()
@@ -64,6 +72,39 @@ class PackagingTest(unittest.TestCase):
                         file.write(b'corrupt')
                     with self.assertRaisesRegex(ValueError, 'checksum mismatch'):
                         appimage.stage_appdir(archive, root / 'bad-stage')
+
+    def test_release_downloads(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            artifacts = root / 'artifacts'
+            artifacts.mkdir()
+            for platform, suffix in assembly.PLATFORMS.items():
+                directory = artifacts / f'Impera-{platform}'
+                directory.mkdir()
+                name = f'Impera-v0.1.0-{platform}{suffix}'
+                (directory / name).write_bytes(b'package')
+                digest = assembly.hashlib.sha256(b'package').hexdigest()
+                (directory / (name + '.sha256')).write_text(f'{digest}  {name}\n')
+            windows = artifacts / 'Impera-windows-x86_64'
+            for name in assembly.WINDOWS_FILES:
+                file = windows / name
+                file.parent.mkdir(parents=True, exist_ok=True)
+                file.write_bytes(b'package')
+            output = root / 'dist'
+            assembly.assemble(artifacts, 'v0.1.0', output)
+            self.assertEqual(len(list(output.iterdir())), 8)
+            self.assertFalse(list(output.glob('*linux*.tar.gz')))
+            with zipfile.ZipFile(next(output.glob('*.zip'))) as bundle:
+                self.assertTrue(any(n.endswith('/Impera.exe') for n in bundle.namelist()))
+                self.assertFalse(any(n.endswith('.zip') for n in bundle.namelist()))
+            (windows / 'SAVED.GAM').write_bytes(b'private')
+            with self.assertRaisesRegex(ValueError, 'Windows package contents'):
+                assembly.assemble(artifacts, 'v0.1.0', root / 'bad')
+            (windows / 'SAVED.GAM').unlink()
+            linux = artifacts / 'Impera-linux-x86_64'
+            (linux / 'internal.tar.gz').write_bytes(b'internal')
+            with self.assertRaisesRegex(ValueError, 'Unexpected release files'):
+                assembly.assemble(artifacts, 'v0.1.0', root / 'bad')
 
     def test_cached_tool_verification(self):
         with tempfile.TemporaryDirectory() as temp:

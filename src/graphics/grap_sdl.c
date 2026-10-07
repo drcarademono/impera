@@ -276,7 +276,7 @@ void GRAP_SDL_Initialize(void)
         flags |= SDL_WINDOW_FULLSCREEN;
     }
 
-    if (!SDL_CreateWindowAndRenderer("Ultima V: Warriors of Destiny", windowWidth, windowHeight,
+    if (!SDL_CreateWindowAndRenderer("Impera - An Ultima 5 Engine", windowWidth, windowHeight,
                                     flags, &s_sdlWindow, &s_sdlRenderer))
     {
         DEBUG_Error("Cannot create game window: %s\n", SDL_GetError());
