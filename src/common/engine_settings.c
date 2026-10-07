@@ -182,7 +182,7 @@ void ENGINE_DrawSettings(int selected)
 static void adjust(int row,int direction)
 {
     float value=ENGINE_Get(row);
-    if(row==ENGINE_MUSIC && !value) {
+    if(row==ENGINE_MUSIC && !value && !*SETUP_MusicDirectory()) {
         if(FOLDER_SelectMusic(SETUP_MusicDirectory(),SETUP_SetMusicDirectory)) {
             AUDIO_ReloadMusic();ENGINE_Set(ENGINE_MUSIC,1);
             musicStatus="Music folder saved";
