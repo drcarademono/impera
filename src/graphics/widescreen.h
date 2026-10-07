@@ -3,6 +3,7 @@
 #include "common/common.h"
 typedef struct WideLayout {
     int scale, width, height, columns, rows, mapX, mapY, sidebarX;
+    float scaleY; /* DOS pixels are 1.2 times taller than they are wide. */
 } WideLayout;
 WideLayout WIDE_Layout(int width, int height);
 byte WIDE_MapTile(int dx, int dy);

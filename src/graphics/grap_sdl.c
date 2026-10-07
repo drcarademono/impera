@@ -47,7 +47,7 @@ static SDL_FRect NativeRect(int width,int height)
         return (SDL_FRect){(width-w)/2,(height-h)/2+(NativeGameplay()?h*4/200:0),w,h};
     }
     WideLayout l=VideoLayout(width,height);
-    float w=320*l.scale,h=200*l.scale;
+    float w=320*l.scale,h=200*(s_videoMode==GRAP_VIDEO_FULLSCREEN?l.scaleY:l.scale);
     return (SDL_FRect){(width-w)/2,(height-h)/2,w,h};
 }
 static int s_windowedWidth=1280, s_windowedHeight=960;
@@ -144,8 +144,8 @@ void GRAP_SDL_CursorSize(int* width, int* height)
     if ((s_fullscreen || s_pixelUI) && SDL_GetRenderOutputSize(s_sdlRenderer, &outputW, &outputH)) {
         WideLayout l = VideoLayout(outputW, outputH);
         sx = l.scale * (float)w / outputW;
-        sy = l.scale * (float)h / outputH;
-        if(s_videoMode==GRAP_VIDEO_FULLSCREEN_43 && !s_expandedFrame) {
+        sy = l.scaleY * (float)h / outputH;
+        if(!s_expandedFrame) {
             SDL_FRect native=NativeRect(outputW,outputH);
             sx=native.w/320*w/outputW;sy=native.h/200*h/outputH;
         }
@@ -168,7 +168,7 @@ bool GRAP_SDL_MouseUIPoint(float x, float y, float* ux, float* uy)
         *uy=(y*oh/h-native.y)*200/native.h;
     } else {
         *ux = (x * ow / w - (ow - cw * l.scale) / 2) / l.scale;
-        *uy = (y * oh / h - (oh - ch * l.scale) / 2) / l.scale;
+        *uy = (y * oh / h - (oh - ch * l.scaleY) / 2) / l.scaleY;
     }
     if (*ux < 0 || *uy < 0 || *ux >= cw || *uy >= ch) return false;
     /* The original right-hand 128 pixels move to the far edge in widescreen. */
@@ -196,7 +196,7 @@ bool GRAP_SDL_MouseMapPoint(float x, float y, int* dx, int* dy, float* rx, float
             gx=(gx-native.x)*320/native.w;gy=(gy-native.y)*200/native.h;
         } else {
             gx = (gx - (width - canvasW * l.scale) / 2) / l.scale;
-            gy = (gy - (height - canvasH * l.scale) / 2) / l.scale;
+            gy = (gy - (height - canvasH * l.scaleY) / 2) / l.scaleY;
         }
         if (s_expandedFrame) { mapX = l.mapX; mapY = l.mapY; columns = l.columns; rows = l.rows; }
     } else {
@@ -700,8 +700,8 @@ void GRAP_SDL_FlushFrame(void)
             }
             SDL_UpdateTexture(s_wideTexture, NULL, s_wideSurface->pixels, s_wideSurface->pitch);
             SDL_FRect dst = {(width - layout.width * layout.scale) / 2,
-                             (height - layout.height * layout.scale) / 2,
-                             layout.width * layout.scale, layout.height * layout.scale};
+                             (height - layout.height * layout.scaleY) / 2,
+                             layout.width * layout.scale, layout.height * layout.scaleY};
             SDL_RenderTexture(s_sdlRenderer, s_wideTexture, NULL, &dst);
             PrepareDarkness(layout.columns,layout.rows,completedMap);
             SmoothFrame(s_widePixels,layout.width,layout.height,layout.mapX,layout.mapY,

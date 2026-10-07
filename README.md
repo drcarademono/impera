@@ -260,7 +260,9 @@ to fill your display, or **Fullscreen 4:3** for a centered 4:3 map viewport. Men
 Choose **Windowed** to return to a window.
 This detects the desktop resolution, adds overhead map rows and columns, and
 moves the status and command column to the right edge. Tiles and text use the
-same integer scale in both directions, with crisp pixels. Daylight reveals the
+historical DOS pixel proportions (pixels are 1.2 times taller than wide),
+with integer horizontal scaling. Extra width adds map columns while sprites,
+text, and the sidebar keep the proportions of the original 4:3 display. Daylight reveals the
 expanded view; darkness and obstacles still restrict visibility. Combat retains
 its original 11x11 battlefield. Title screens and dungeon perspective views keep
 their original layout, centered without stretching. A few unused edge pixels

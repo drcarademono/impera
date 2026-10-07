@@ -18,11 +18,13 @@ static byte pixel(byte* pixels, WideLayout l, int dx, int dy)
 int main(void)
 {
     WideLayout l = WIDE_Layout(1920, 1080);
-    assert(l.scale == 4 && l.columns == 21 && l.rows == 15);
+    assert(l.scale == 4 && l.columns == 21 && l.rows == 13);
     WideLayout tall = WIDE_Layout(1920, 1200);
-    assert(tall.columns == 15 && tall.rows == 14);
+    assert(tall.columns == 15 && tall.rows == 11);
+    assert(tall.width == 384 && tall.height == 200 && tall.scaleY == 6);
+    assert(l.scaleY / l.scale > 1.199f && l.scaleY / l.scale < 1.201f);
     WideLayout broad = WIDE_Layout(2560, 1080);
-    assert(broad.columns == 31 && broad.rows == 15);
+    assert(broad.columns == 31 && broad.rows == 13);
     assert(WIDE_Layout(320, 200).columns == 11);
     GRAP_Initialize();
     byte* tiles = malloc(512 * 128);

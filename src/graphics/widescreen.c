@@ -14,13 +14,15 @@ int WIDE_ActorTile(int actor) { return s_actorTiles[actor]; }
 WideLayout WIDE_Layout(int width, int height)
 {
     WideLayout l;
-    /* Reserve room for extra rows instead of scaling the old 200px canvas
-     * all the way up to the display height. */
+    /* Integer horizontal scaling, with the historical 6:5 vertical pixel
+     * aspect. Extra logical width becomes map columns, never wider pixels. */
     l.scale = height / 240;
     if (width / 320 < l.scale) l.scale = width / 320;
     if (l.scale < 1) l.scale = 1;
     l.width = width / l.scale;
-    l.height = height / l.scale;
+    l.scaleY = l.scale * 1.2f;
+    l.height = height * 5 / (l.scale * 6);
+    if(l.height < 200) l.height = 200;
     l.sidebarX = l.width - 128;
     l.columns = (l.sidebarX - 16) / 16;
     l.rows = (l.height - 16) / 16;
