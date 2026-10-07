@@ -18,6 +18,7 @@
 #include "common/u4_transfer.h"
 #include "graphics/grap_buf.h"
 #define INTRO_MENU_COUNT 7
+static bool s_titleMenuActive;
 #else
 #define INTRO_MENU_COUNT 6
 #endif
@@ -399,6 +400,7 @@ static void INTRO_0676_WriteMenuOption(int param_4, int param_3, int param_2, ch
 static void INTRO_06bc_BuildMainMenu(int param_1)
 {
 #if defined(TARGET_SDL)
+    if(s_titleMenuActive) MOUSE_MenuSet(64,132,192,INTRO_MENU_COUNT,param_1);
     /* Seven 8-pixel rows centered between the borders at y=127 and y=192. */
     GRAP_BUF_SetTextPixelOffset(-4);
 #endif
@@ -745,6 +747,10 @@ static void INTRO_RunMain(void) // intro_main (initialize video) (8b46)
             // 0d3e
             local_c = 0;
             INTRO_043e(_TEXT(0x31c1, "Copyright 1988 Lord British"));
+#if defined(TARGET_SDL)
+            MOUSE_Cancel();
+            s_titleMenuActive=true;
+#endif
             INTRO_06bc_BuildMainMenu(0);
             do
             {
@@ -761,7 +767,6 @@ static void INTRO_RunMain(void) // intro_main (initialize video) (8b46)
                     // 0d75
                     MOUSE_MenuSet(64, 132, 192, INTRO_MENU_COUNT, local_c);
                     local_10 = ULTIMA_2032_ToUpper(ULTIMA_1b38_PollKeyWithCursor());
-                    MOUSE_MenuEnd();
                     if (local_10 == 0)
                     {
                         INTRO_2090_AnimateWD();
@@ -826,6 +831,11 @@ static void INTRO_RunMain(void) // intro_main (initialize video) (8b46)
                     break;
                 }
             } while (local_10 <= 0x20);
+#if defined(TARGET_SDL)
+            s_titleMenuActive=false;
+#endif
+            MOUSE_MenuEnd();
+            MOUSE_Cancel();
         }
 
         // 0e47

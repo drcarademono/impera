@@ -13,6 +13,7 @@
 #include "combat.h"
 #include "comsubs.h"
 #include "common/movement.h"
+#include "event/event.h"
 #include "key/mouse.h"
 #include "key/key.h"
 #include "graphics/grap_sdl.h"
@@ -364,6 +365,27 @@ int main(int argc, char** argv)
     assert(MOUSE_PollCommand()==0); /* keyboard selection takes priority until mouse moves */
     MOUSE_MenuEnd();
     assert(MOUSE_PollCommand()==0);
+    /* A title click arriving during an animation/event yield must remain queued
+     * while the native highlight walks to the clicked row. */
+    GRAP_SDL_SetPixelUI(true);
+    for(int target=0;target<7;target++) {
+        MOUSE_Cancel();MOUSE_MenuSet(64,132,192,7,0);
+        float clickX=cursorX=100*4,clickY=cursorY=80+(132+target*8+4)*4;
+        SDL_Event titleClick={0};titleClick.type=SDL_EVENT_MOUSE_BUTTON_DOWN;
+        titleClick.button.button=SDL_BUTTON_LEFT;titleClick.button.clicks=1;
+        titleClick.button.x=clickX;titleClick.button.y=clickY;
+        assert(SDL_PushEvent(&titleClick));EVT_Yield();
+        for(int selected=0;selected<target;selected++) {
+            MOUSE_MenuSet(64,132,192,7,selected);
+            assert(MOUSE_PollCommand()==U5_KEY_DOWN);
+            EVT_Yield(); /* Redraw/animation may pump events between selection steps. */
+        }
+        MOUSE_MenuSet(64,132,192,7,target);
+        assert(MOUSE_PollCommand()==U5_KEY_ENTER);
+        assert(MOUSE_PollCommand()==0);
+        MOUSE_MenuEnd();MOUSE_Cancel();
+    }
+    GRAP_SDL_SetPixelUI(false);
     /* Exercise the actual party selector, not only synthetic menu keystrokes. */
     static byte testFont[2048];
     D_5398_currentCharset = testFont;
