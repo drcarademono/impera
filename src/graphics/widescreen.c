@@ -344,8 +344,12 @@ bool WIDE_DarknessMask(byte* mask,int columns,int rows)
     if(!lit || !solid) { free(lit);free(solid);return false; }
     for(int row=-2;row<rows+2;row++) for(int col=-2;col<columns+2;col++) {
         int dx=col-columns/2,dy=row-rows/2;
-        solid[(row+2)*stride+col+2]=SolidMasonry(WIDE_MapTile(dx,dy));
-        lit[(row+2)*stride+col+2]=abs(dx)<=5 && abs(dy)<=5 ? GetMapViewport(dx+5,dy+5)!=255 : WIDE_Visible(dx,dy) && WIDE_MapTile(dx,dy)!=255;
+        byte tile=WIDE_MapTile(dx,dy);
+        /* Space outside a finite location is not unseen terrain. Keep its
+         * hard boundary without fading inward onto the playable map. */
+        solid[(row+2)*stride+col+2]=tile==255 || SolidMasonry(tile);
+        lit[(row+2)*stride+col+2]=tile!=255 &&
+            (abs(dx)<=5 && abs(dy)<=5 ? GetMapViewport(dx+5,dy+5)!=255 : WIDE_Visible(dx,dy));
     }
     for(int row=0;row<rows;row++) for(int col=0;col<columns;col++) {
         bool visible=lit[(row+2)*stride+col+2];

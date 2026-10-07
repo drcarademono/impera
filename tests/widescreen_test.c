@@ -354,6 +354,25 @@ int main(void)
     assert(!WIDE_DitheredDarkness());WIDE_SetDitheredDarkness(true);assert(WIDE_DitheredDarkness());
     assert(WIDE_DarknessMask(mask,11,11));
     for(int i=0;i<176*176;i++) assert(mask[i]==0); /* clear daylight stays clear */
+    /* Finite map boundaries must not darken valid edge tiles, including
+     * fullscreen's extra cells beyond the original viewport. */
+    const int edges[][2]={{0,16},{31,16},{16,0},{16,31},{0,0},{31,31}};
+    for(unsigned edge=0;edge<sizeof(edges)/sizeof(edges[0]);edge++) {
+        D_5896_map_x=edges[edge][0];D_5897_map_y=edges[edge][1];
+        WideLayout views[]={WIDE_Layout(320,200),WIDE_Layout(1600,1200),broad};
+        for(unsigned view=0;view<sizeof(views)/sizeof(views[0]);view++) {
+            int columns=views[view].columns,rows=views[view].rows;
+            byte* boundary=malloc((size_t)columns*rows*256);assert(boundary);
+            assert(WIDE_DarknessMask(boundary,columns,rows));
+            for(int row=0;row<rows;row++) for(int col=0;col<columns;col++) {
+                int expected=WIDE_MapTile(col-columns/2,row-rows/2)==255?16:0;
+                for(int y=0;y<16;y++) for(int x=0;x<16;x++)
+                    assert(boundary[(row*16+y)*columns*16+col*16+x]==expected);
+            }
+            free(boundary);
+        }
+    }
+    D_5896_map_x=D_5897_map_y=16;
     GetMapViewport(8,5)=255;
     assert(WIDE_DarknessMask(mask,11,11));assert(WIDE_DarknessMask(again,11,11));
     assert(!memcmp(mask,again,sizeof(mask))); /* stable pattern input */

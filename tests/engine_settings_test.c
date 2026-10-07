@@ -87,6 +87,23 @@ int main(int argc, char** argv)
     ENGINE_Set(ENGINE_MOVEMENT_SPEED,1);ENGINE_Set(ENGINE_ANIMATION_SPEED,1);
     ENGINE_Set(ENGINE_FULLSCREEN,1);assert(ENGINE_Get(ENGINE_FULLSCREEN)==1);
     ENGINE_Set(ENGINE_FULLSCREEN,0);assert(ENGINE_Get(ENGINE_FULLSCREEN)==0);
+    /* Character creation can leave saved gameplay flags set. A title or
+     * cutscene frame must still be identical with darkness on or off. */
+    memset(g_linearEgaBuffer0,15,320*200);
+    D_58a4=1;D_5893_map_id=0;
+    int previousExit=EVT_SetImmediateExit(1);
+    for(int mode=0;mode<=2;mode++) {
+        GRAP_SDL_SetVideoMode(mode);
+        ENGINE_Set(ENGINE_DITHERED_DARKNESS,0);
+        SDL_Surface* plain=GRAP_SDL_CaptureFrame();assert(plain);
+        ENGINE_Set(ENGINE_DITHERED_DARKNESS,1);
+        SDL_Surface* dark=GRAP_SDL_CaptureFrame();assert(dark);
+        assert(plain->w==dark->w && plain->h==dark->h && plain->pitch==dark->pitch);
+        assert(!memcmp(plain->pixels,dark->pixels,(size_t)plain->pitch*plain->h));
+        SDL_DestroySurface(plain);SDL_DestroySurface(dark);
+    }
+    EVT_SetImmediateExit(previousExit);D_58a4=0;
+    GRAP_SDL_SetVideoMode(0);ENGINE_Set(ENGINE_DITHERED_DARKNESS,0);
     GRAP_SDL_SetPixelUI(true);ENGINE_DrawSettings(ENGINE_MOVEMENT_SPEED);
     for(int y=0;y<8;y++) for(int x=0;x<8;x++)
         assert(g_linearEgaBuffer0[(12+y)*320+104+x]==((font['E'*8+y]&(0x80>>x))?15:0));
