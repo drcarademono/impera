@@ -5,6 +5,7 @@
 #include <SDL3/SDL_opengl.h>
 #include <string.h>
 #include <stdlib.h>
+#include <errno.h>
 
 /* Original five-pass ScaleFX by Sp00kyFox. Shader sources and their MIT
  * notices live in textures/shaders/scalefx; no game data is embedded. */
@@ -24,6 +25,7 @@ X(void,CompileShader,(GLuint s)) X(void,GetShaderiv,(GLuint s,GLenum p,GLint* v)
 X(void,GetShaderInfoLog,(GLuint s,GLsizei n,GLsizei* size,GLchar* log)) X(void,DeleteShader,(GLuint s)) \
 X(GLuint,CreateProgram,(void)) X(void,AttachShader,(GLuint p,GLuint s)) \
 X(void,BindAttribLocation,(GLuint p,GLuint i,const GLchar* name)) X(void,LinkProgram,(GLuint p)) \
+X(void,GetProgramInfoLog,(GLuint p,GLsizei n,GLsizei* size,GLchar* log)) \
 X(void,GetProgramiv,(GLuint p,GLenum k,GLint* v)) X(void,DeleteProgram,(GLuint p)) X(void,UseProgram,(GLuint p)) \
 X(GLint,GetUniformLocation,(GLuint p,const GLchar* name)) \
 X(void,Uniform1i,(GLint l,GLint v)) X(void,Uniform2f,(GLint l,GLfloat x,GLfloat y)) \
@@ -70,29 +72,30 @@ static GLuint compile(const char* source,GLenum type,bool es)
 static bool initialize(SDL_Renderer* renderer)
 {
     const char* backend=SDL_GetRendererName(renderer);
-    if(strcmp(backend,"opengl") && strcmp(backend,"opengles2")) return false;
-#define LOAD(ret,name,args) fx##name=(ret (APIENTRY*) args)SDL_GL_GetProcAddress("gl" #name);if(!fx##name) return false;
+    if(strcmp(backend,"opengl") && strcmp(backend,"opengles2")) { DEBUG_Error("ScaleFX unsupported renderer: %s",backend);return false; }
+#define LOAD(ret,name,args) fx##name=(ret (APIENTRY*) args)SDL_GL_GetProcAddress("gl" #name);if(!fx##name) { DEBUG_Error("ScaleFX missing OpenGL function: gl" #name);return false; }
     FUNCTIONS(LOAD)
 #undef LOAD
     ready=true;owner=renderer;
     const char* version=(const char*)fxGetString(GL_VERSION);
     bool es=version && strstr(version,"OpenGL ES");
+    debug("ScaleFX initializing: renderer=%s OpenGL=%s",backend,version?version:"unknown");
     for(int i=0;i<5;i++) {
         char path[128];SDL_snprintf(path,sizeof(path),"textures/shaders/scalefx/scalefx-pass%d.glsl",i);
-        FILE* file=FILE_Open(path,"rb");if(!file) return false;
+        FILE* file=FILE_Open(path,"rb");if(!file) { DEBUG_Error("ScaleFX cannot open shader %s: %s",path,strerror(errno));return false; }
         fseek(file,0,SEEK_END);long size=ftell(file);rewind(file);
-        if(size<=0 || size>100000) { fclose(file);return false; }
+        if(size<=0 || size>100000) { DEBUG_Error("ScaleFX invalid shader size: %s (%ld bytes)",path,size);fclose(file);return false; }
         char* source=malloc((size_t)size+1);if(!source) { fclose(file);return false; }
         bool read=fread(source,1,(size_t)size,file)==(size_t)size;fclose(file);source[size]=0;
         const char* body=strchr(source,'\n');
         GLuint vs=read && body?compile(body+1,GL_VERTEX_SHADER,es):0;
         GLuint fs=read && body?compile(body+1,GL_FRAGMENT_SHADER,es):0;
         free(source);
-        if(!vs || !fs) { if(vs)fxDeleteShader(vs);if(fs)fxDeleteShader(fs);return false; }
+        if(!vs || !fs) { DEBUG_Error("ScaleFX could not compile shader pass %d (%s)",i,path); if(vs)fxDeleteShader(vs);if(fs)fxDeleteShader(fs);return false; }
         GLuint p=programs[i]=fxCreateProgram();fxAttachShader(p,vs);fxAttachShader(p,fs);
         fxBindAttribLocation(p,0,"VertexCoord");fxBindAttribLocation(p,1,"TexCoord");
         fxLinkProgram(p);fxDeleteShader(vs);fxDeleteShader(fs);
-        GLint ok;fxGetProgramiv(p,GL_LINK_STATUS,&ok);if(!ok) return false;
+        GLint ok;fxGetProgramiv(p,GL_LINK_STATUS,&ok);if(!ok) { char log[1024];fxGetProgramInfoLog(p,sizeof(log),NULL,log);DEBUG_Error("ScaleFX shader pass %d link failed: %s",i,log);return false; }
     }
     fxGenFramebuffers(1,&fbo);fxGenFramebuffers(1,&sourceFbo);fxGenTextures(5,textures);fxGenVertexArrays(1,&vao);fxGenBuffers(1,&vbo);
     return true;

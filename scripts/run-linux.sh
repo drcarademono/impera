@@ -14,6 +14,7 @@ if [[ -n "${U5D_DATA_DIR:-}" ]]; then
 fi
 mkdir -p "$runtime_dir/textures/cursors"
 cp "$repo_dir"/textures/cursors/*.png "$runtime_dir/textures/cursors/"
+cp -R "$repo_dir/textures/shaders" "$runtime_dir/textures/"
 
 cd -- "$runtime_dir"
 exec "$build_dir/ultima5" "$@"
