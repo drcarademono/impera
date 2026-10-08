@@ -5,6 +5,7 @@
 #include "macros.h"
 #include "tiles.h"
 #include "grap_buf.h"
+#include "tileset.h"
 #include "widescreen.h"
 #include <string.h>
 
@@ -144,14 +145,15 @@ byte WIDE_TerrainPixel(int dx, int dy, int x, int y)
 {
     byte color=GRAP_BUF_TilePixel(D_b11e[WIDE_GroundTile(dx,dy)],x,y);
     if(!GRAP_BUF_TransparentSprites()) return color;
+    unsigned ref=TILESET_Sample();
     /* Include outlines from adjacent static objects in restored terrain. */
     for(int oy=-1;oy<=1;oy++) for(int ox=-1;ox<=1;ox++) {
         byte tile=WIDE_MapTile(dx+ox,dy+oy);
         if(WIDE_GroundTile(dx+ox,dy+oy)==tile) continue;
         int pixel=WIDE_SpritePixel(D_b11e[tile],dx+ox,dy+oy,x-ox*16,y-oy*16);
-        if(pixel>=0) color=(byte)pixel;
+        if(pixel>=0) {color=(byte)pixel;ref=TILESET_Sample();}
     }
-    return color;
+    TILESET_SetSample(ref);return color;
 }
 
 static bool Transparent(byte tile, int distance)
@@ -190,15 +192,17 @@ bool WIDE_Visible(int dx, int dy)
 
 static void Copy(byte* dst, int stride, int dx, int dy, int sx, int sy, int w, int h)
 {
-    for (int y = 0; y < h; y++)
-        memcpy(dst + (dy + y) * stride + dx,
-               g_linearEgaBuffer0 + (sy + y) * 320 + sx, w);
+    for (int y = 0; y < h; y++) {
+        TILESET_Copy(dst+(dy+y)*stride+dx,g_linearEgaBuffer0+(sy+y)*320+sx,w);
+        memcpy(dst + (dy + y) * stride + dx,g_linearEgaBuffer0 + (sy + y) * 320 + sx,w);
+    }
 }
 
 bool WIDE_Compose(byte* pixels, WideLayout l)
 {
     if (!D_58a4 || (D_5893_map_id >= 33 && D_5893_map_id < 128) ||
         l.columns < 11 || l.rows < 11 || !GRAP_BUF_HasTileset()) return false;
+    TILESET_Copy(pixels,NULL,(size_t)l.width*l.height);
     memset(pixels, 0, (size_t)l.width * l.height);
     /* Relocate the original status and command column intact. */
     Copy(pixels, l.width, l.sidebarX, 0, 192, 0, 128, 200);
@@ -262,16 +266,17 @@ bool WIDE_Compose(byte* pixels, WideLayout l)
                             for (int y = 0; y < 16; y++)
                                 if(l.mapY+(row-1)*16+y>=8 && l.mapY+(row-1)*16+y<l.height-8)
                                 for (int x = 0; x < 16; x++)
-                                    pixels[(l.mapY + (row - 1) * 16 + y) * l.width + l.mapX + col * 16 + x] =
-                                        GRAP_BUF_TilePixel(D_b11e[TILE_MAP_MIRROR_9E], x, y);
+                                    { byte* pixel=pixels+(l.mapY+(row-1)*16+y)*l.width+l.mapX+col*16+x;
+                                      int color=GRAP_BUF_TilePixel(D_b11e[TILE_MAP_MIRROR_9E],x,y);
+                                      TILESET_Record(pixel,color);*pixel=(byte)color; }
                         }
                     }
                 }
                 for (int y = 0; y < 16; y++)
                     if(l.mapY+row*16+y>=8 && l.mapY+row*16+y<l.height-8)
                     for (int x = 0; x < 16; x++)
-                        pixels[(l.mapY + row * 16 + y) * l.width + l.mapX + col * 16 + x] =
-                            GRAP_BUF_TilePixel(idx, x, y);
+                        { byte* pixel=pixels+(l.mapY+row*16+y)*l.width+l.mapX+col*16+x;
+                          int color=GRAP_BUF_TilePixel(idx,x,y);TILESET_Record(pixel,color);*pixel=(byte)color; }
             }
         }
     }

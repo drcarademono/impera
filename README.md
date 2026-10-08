@@ -33,6 +33,7 @@ executable named `ultima5`, and environment variables retain the `U5D_` prefix.
 - Optional diagonal movement and interactions, including combat and corner sliding.
 - Transparent character and selected static-object sprites, inferred ground beneath
   objects, and foreground occlusion by southern blocking scenery.
+- Optional Amiga, Apple II, Grayscale, Sharp X68000, and custom PNG map/character tilesets.
 - In-game Engine Options with persistent settings and the original font and blue pixel-art frame.
 - Unlimited named save slots, gameplay thumbnails, play time, location labels,
   scrollable save/load browsers, and confirmed deletion.
@@ -40,6 +41,68 @@ executable named `ultima5`, and environment variables retain the `U5D_` prefix.
   PC-speaker effects when recordings are absent.
 - First-launch game/music directory selection, separate writable saves, and
   case-insensitive game-file lookup.
+
+### Alternate tilesets
+
+Choose **Tileset** in Engine Options to change overhead map and character artwork.
+The selection is saved in `ENGINE.CFG`. Game rules, tile IDs, map dimensions,
+mouse targeting, UI font, title screens, and cutscenes retain the DOS engine's behavior.
+The renderer preserves each sheet's colors; Sharp's 32×32 art is drawn inside
+16×16 logical cells, retaining its extra detail during smooth movement. The
+existing display aspect ratio applies to all tilesets. CRT and darkness options
+can be used with them.
+
+Choose **Custom** to browse for a PNG with the game's themed file picker.
+The image must have a **2:1 aspect ratio**, with tiles arranged in the DOS order:
+**32 columns × 16 rows**, covering all 512 tile IDs. For example, 512×256 and
+1024×512 work. Other 2:1 sizes are sampled into the same tile cells with
+nearest-neighbor scaling, retaining up to 32×32 detail per tile. Custom images
+can use full RGB colors. Transparency is detected across the entire PNG:
+if any pixel has alpha below 255, only PNG alpha controls transparency (black
+stays opaque, partial alpha blends, and no sprite outline is added). Otherwise,
+if the sheet contains Sharp gray (`#808080`), that color is the mask, black stays
+opaque, and no sprite outline is added. Sheets with neither use DOS rules:
+black is the background color and transparent sprites receive a black outline.
+The selected file path is saved in `ENGINE.CFG`; keep the PNG at that location.
+Choosing Custom again lets you replace it. Canceling or selecting an invalid
+image keeps the current artwork. An unavailable custom image falls back to DOS
+on startup. No tile-animation artwork is substituted from DOS.
+
+The optional sheets live in `textures/tilesets` in this repository. For an installed
+release, place a `textures/tilesets` folder beside `Impera.exe` or the Linux
+AppImage; on macOS put it under `Impera.app/Contents/Resources`. Keep these names:
+
+| Choice | Required sheets |
+| --- | --- |
+| Amiga | `Ultima_5_Tiles_Amiga.png` |
+| Apple II | `Ultima_5_Tiles_AppleII.png` |
+| Grayscale | `Ultima_5_Tiles_Grayscale.png` |
+| Sharp X68000 | `Ultima_5_Tiles_SharpX68000_World.png` and `Ultima_5_Tiles_SharpX68000_NPC.png` |
+
+Alternatively, set `IMPERA_TILESETS` to the folder containing the sheets. The
+Linux development launcher finds the repository's sheets automatically.
+These original-game artwork sheets are **not bundled into engine release packages**.
+Missing or invalid sheets leave the current tileset active and show a message
+in Engine Options; a saved choice whose sheets are unavailable falls back to DOS
+at startup.
+
+This is an artwork replacement, not emulation of the other platforms. Apple II
+contains all 512 tile positions in a 32-column sheet of 14×16 source tiles. Its
+artwork is sampled with nearest-neighbor scaling into the same logical 16×16
+tile cells, preserving map and input geometry. Amiga and Grayscale also contain
+all 512 tile positions. Sharp's two sheets also
+cover all 512 IDs, but actor/effect slot `0x1F8` is blank; the DOS version has
+artwork there. The blank world tile `0xFF` is intentional in all complete sheets.
+
+Sharp uses its own **static artwork** for procedural effects, including water,
+lava, moongates, clocks, flickering fire, and flags. These bitmaps are neither
+animated nor replaced with DOS artwork. Authored character/object animation
+frames still follow the game's frame selection. For Amiga, Apple II, and
+Grayscale, water/lava scrolling and authored frame animations remain animated
+using their own artwork. Effects constructed by modifying DOS bitmap bits use
+the selected tileset's static image instead. No alternate tileset substitutes
+DOS artwork for tile animations.
+First-person dungeon scenery and other non-tile graphics remain DOS.
 
 ## Keyboard commands
 
@@ -138,6 +201,7 @@ even when Mouse Control is off, so it can be turned back on.
 | Setting | Effect |
 | --- | --- |
 | Video Mode | Dropdown: Windowed, Fullscreen 4:3 (vanilla 11×11 map, scaled to fit vertically with black side bars), or Fullscreen with the detected monitor aspect ratio (for example, 16:9). |
+| Tileset | Dropdown: DOS (default), Amiga, Apple II, Grayscale, Sharp X68000, or Custom. Built-in alternatives require their external PNG sheets; Custom opens the themed PNG picker. |
 | CRT Filter | Subtle DOS monitor scanlines, phosphor softness, glow and nearly flat curvature. |
 | Transparent Sprites | Reveal ground around character and supported object sprites. |
 | Dithered Darkness | Fade visibility edges with an Ultima 6-style ordered pixel pattern. |

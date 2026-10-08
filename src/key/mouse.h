@@ -21,6 +21,7 @@ struct SDL_Renderer;
 bool MOUSE_DrawFilteredCursor(struct SDL_Renderer* renderer,float curvatureX,float curvatureY);
 void MOUSE_UpdateCursor(void);
 void MOUSE_SetPointerMode(bool enabled);
+bool MOUSE_PointerMode(void);
 int MOUSE_CursorDirection(float x, float y);
 void MOUSE_SetEnabled(bool enabled);
 bool MOUSE_Enabled(void);

@@ -15,8 +15,10 @@ else()
 endif()
 
 set(SOURCES
+    src/graphics/tileset.c
     src/common/icon.c
     src/common/folder_picker.c
+    src/common/file_picker.c
     src/common/u4_transfer.c
     src/common/data_setup.c
     src/common/save_slots.c
@@ -105,6 +107,17 @@ if(U5D_BUILD_TESTS)
     list(APPEND U5D_TARGETS u5d_pcspeaker_test)
     add_test(NAME pcspeaker_algorithms COMMAND u5d_pcspeaker_test)
     list(REMOVE_ITEM TEST_SOURCES src/ultima.c)
+    add_executable(impera_tileset_test tests/tileset_test.c ${TEST_SOURCES})
+    list(APPEND U5D_TARGETS impera_tileset_test)
+    if(UNIX AND NOT APPLE)
+        target_link_options(impera_tileset_test PRIVATE "-Wl,--wrap=SDL_RenderPresent")
+        target_compile_definitions(impera_tileset_test PRIVATE TEST_TILESET_PRESENT)
+    endif()
+    add_test(NAME alternate_tilesets COMMAND impera_tileset_test)
+    file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/tileset-runtime")
+    set_tests_properties(alternate_tilesets PROPERTIES TIMEOUT 20
+        WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/tileset-runtime"
+        ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software;IMPERA_TILESETS=${CMAKE_SOURCE_DIR}/textures/tilesets")
     add_executable(u5d_crt_test tests/crt_test.c ${TEST_SOURCES})
     list(APPEND U5D_TARGETS u5d_crt_test)
     if(UNIX AND NOT APPLE)

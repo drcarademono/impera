@@ -12,6 +12,7 @@ fi
 if [[ -n "${U5D_DATA_DIR:-}" ]]; then
     export U5D_DATA_DIR="$(realpath -- "$U5D_DATA_DIR")"
 fi
+export IMPERA_TILESETS="${IMPERA_TILESETS:-$repo_dir/textures/tilesets}"
 mkdir -p "$runtime_dir"
 
 cd -- "$runtime_dir"
