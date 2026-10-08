@@ -154,6 +154,13 @@ static int videoChoice(void)
     return 0;
 }
 static const char* choiceLabel(int choice) { return s_dropdownRow==ENGINE_TILESET?TILESET_Label(choice):videoLabel(choice); }
+/* Center values over the checkbox/status column; long labels meet the
+ * same right margin as the speed values instead of overflowing it. */
+static int choiceTextX(const char* label)
+{
+    int width=(int)strlen(label)*8;
+    return SDL_min(252-width/2,296-width);
+}
 static void acceptChoice(void) { ENGINE_Set(s_dropdownRow,s_dropdownRow==ENGINE_TILESET?s_videoChoice:videoModes[s_videoChoice]);s_videoChoice=-1; }
 static void openChoice(int row) { s_dropdownRow=row;s_videoChoice=row==ENGINE_TILESET?TILESET_Selected():videoChoice(); }
 void ENGINE_DrawSettings(int selected)
@@ -172,7 +179,7 @@ void ENGINE_DrawSettings(int selected)
         float value=ENGINE_Get(row);
         if(row==ENGINE_FULLSCREEN || row==ENGINE_TILESET) {
             const char* label=row==ENGINE_TILESET?TILESET_Label(TILESET_Selected()):videoLabel(videoChoice());
-            ENGINE_UIText(296-(int)strlen(label)*8,y,label,foreground);
+            ENGINE_UIText(choiceTextX(label),y,label,foreground);
         } else if(!isSpeed(row)) {
             ENGINE_UIRect(232,y+1,7,7,7);
             ENGINE_UIRect(233,y+2,5,5,value?10:0);
@@ -192,7 +199,8 @@ void ENGINE_DrawSettings(int selected)
         for(int i=0;i<choices();i++) {
             int y=choiceTop()+2+i*11;
             if(i==s_videoChoice) ENGINE_UIRect(122,y-1,180,10,15);
-            ENGINE_UIText(128,y,choiceLabel(i),i==s_videoChoice?0:15);
+            const char* label=choiceLabel(i);
+            ENGINE_UIText(choiceTextX(label),y,label,i==s_videoChoice?0:15);
         }
     }
     GRAP_BUF_MarkDirty();GRAP_BUF_Present();
