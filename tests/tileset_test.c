@@ -43,12 +43,7 @@ static void verifySheet(SDL_Surface *image, int choice, int first)
             for (int x = 0; x < 16; x++)
             {
                 int color = TILESET_Pixel(tile, x, y);
-                if (color < 0)
-                {
-                    assert(choice != TILESET_SHARP); /* No DOS effect substitutions. */
-                    assert(GRAP_BUF_TilePixel(tile, x, y) == 5);
-                    continue;
-                }
+                assert(color >= 0); /* Every supplied tile uses the selected artwork. */
                 for (int sy = 0; sy < 2; sy++)
                     for (int sx = 0; sx < 2; sx++)
                     {
@@ -353,15 +348,39 @@ int main(void)
     npc = sheet("Ultima_5_Tiles_SharpX68000_NPC.png");
     verifySheet(npc, TILESET_SHARP, 256);
     SDL_DestroySurface(npc);
-    GRAP_BUF_PutTile(4, 4, 0xdc, 0, 0);
-    byte gate[16 * 16];
-    for (int y = 0; y < 16; y++)
-        memcpy(gate + y * 16, g_linearEgaBuffer0 + (64 + y) * 320 + 64, 16);
-    for (int stage = 1; stage <= 15; stage++)
+    for (int choice = TILESET_AMIGA; choice < TILESET_COUNT; choice++)
     {
-        GRAP_BUF_PutAnimatedMoongateTile(4, 4, stage, 7, 0, 0);
+        assert(TILESET_Select(choice));
+        /* DOS procedural updates must never replace alternate effect artwork. */
+        const int effects[] = {0x34, 0x60, 0xe4, 0xfa, 0x116, 0x108, 0x1b4,
+                               0xb0, 0xbc, 0xde, 18, 20, 21, 62, 0x121, 0x123, 0x12d, 0x12f};
+        Uint32 before[sizeof(effects) / sizeof(effects[0])][1024];
+        for (int pass = 0; pass < 2; pass++)
+        {
+            for (size_t i = 0; i < sizeof(effects) / sizeof(effects[0]); i++)
+                for (int y = 0; y < 32; y++)
+                    for (int x = 0; x < 32; x++)
+                    {
+                        int c = GRAP_BUF_TilePixel(effects[i], x / 2, y / 2);
+                        Uint32 value = TILESET_LastColor(c, x % 2, y % 2, ega);
+                        if (!pass)
+                            before[i][y * 32 + x] = value;
+                        else
+                            assert(value == before[i][y * 32 + x]);
+                    }
+            if (!pass)
+                GRAP_BUF_AnimateTileset();
+        }
+        GRAP_BUF_PutTile(4, 4, 0xdc, 0, 0);
+        byte gate[16 * 16];
         for (int y = 0; y < 16; y++)
-            assert(!memcmp(gate + y * 16, g_linearEgaBuffer0 + (64 + y) * 320 + 64, 16));
+            memcpy(gate + y * 16, g_linearEgaBuffer0 + (64 + y) * 320 + 64, 16);
+        for (int stage = 1; stage <= 15; stage++)
+        {
+            GRAP_BUF_PutAnimatedMoongateTile(4, 4, stage, 7, 0, 0);
+            for (int y = 0; y < 16; y++)
+                assert(!memcmp(gate + y * 16, g_linearEgaBuffer0 + (64 + y) * 320 + 64, 16));
+        }
     }
 #ifdef TEST_TILESET_PRESENT
     rendering();

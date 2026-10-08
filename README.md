@@ -82,8 +82,10 @@ Sharp uses its own **static artwork** for procedural effects, including water,
 lava, moongates, clocks, flickering fire, and flags. These bitmaps are neither
 animated nor replaced with DOS artwork. Authored character/object animation
 frames still follow the game's frame selection. For Amiga, Apple II, and
-Grayscale, effects constructed by modifying DOS palette bits retain DOS artwork;
-water/lava scrolling and authored frame animations remain animated.
+Grayscale, water/lava scrolling and authored frame animations remain animated
+using their own artwork. Effects constructed by modifying DOS bitmap bits use
+the selected tileset's static image instead. No alternate tileset substitutes
+DOS artwork for tile animations.
 First-person dungeon scenery and other non-tile graphics remain DOS.
 
 ## Keyboard commands

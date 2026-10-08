@@ -493,8 +493,8 @@ void GRAP_BUF_PutTile(int tileX, int tileY, int tileIdx, int xOffset, int yOffse
 void GRAP_BUF_PutAnimatedMoongateTile(int tileX, int tileY, int visibleRows, byte floorType, int xOffset, int yOffset)
 {
     /* The DOS routine borrows an unrelated actor tile as a scratch buffer.
-     * Sharp has a static moongate: draw its own world tile, not that actor. */
-    if (TILESET_Selected() == TILESET_SHARP) {
+     * Alternate packs draw their own world moongate, not that actor. */
+    if (TILESET_Selected() != TILESET_DOS) {
         GRAP_BUF_PutTile(tileX & 0xff, tileY & 0xff, TILE_MAP_MOONGATE, xOffset, yOffset);
         return;
     }

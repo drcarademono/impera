@@ -329,20 +329,10 @@ bool TILESET_Select(int choice)
     free(oldArt);
     return ok;
 }
-static bool procedural(int tile)
-{
-    /* These DOS effects compose bit masks, noise, clock hands or scratch art. */
-    return (tile >= 0x34 && tile <= 0x37) || (tile >= 0x60 && tile <= 0x6f) ||
-           (tile >= 0xe4 && tile <= 0xe7) || tile == 0xfa || tile == 0xfb || tile == 0x116 ||
-           (tile >= 0x108 && tile <= 0x10b) || tile == 0x1b4 || (tile >= 0xb0 && tile <= 0xb3) ||
-           (tile >= 0xbc && tile <= 0xbf) || tile == 0xde || tile == 18 || tile == 20 || tile == 21 ||
-           tile == 62 || tile == 0x121 || tile == 0x123 || tile == 0x12d || tile == 0x12f;
-}
 int TILESET_Pixel(int tile, int x, int y)
 {
     sample = 0;
-    if (!selected || tile < 0 || tile >= 512 || x < 0 || y < 0 || x >= 16 || y >= 16 || !available[tile] ||
-        (selected != TILESET_SHARP && procedural(tile)))
+    if (!selected || tile < 0 || tile >= 512 || x < 0 || y < 0 || x >= 16 || y >= 16 || !available[tile])
         return -1;
     sample = (unsigned)(tile * 256 + y * 16 + x + 1);
     for (int sy = 0; sy < 2; sy++)
