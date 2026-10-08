@@ -21,9 +21,9 @@
 #include <string.h>
 #include <math.h>
 
-static const char* keys[]={"video_mode","crt_filter","tileset","transparent","dithered_darkness",
+static const char* keys[]={"video_mode","tileset","crt_filter","transparent","dithered_darkness",
     "music","sound","mouse","smooth","diagonal","movement_speed","animation_speed"};
-static const char* labels[]={"Video Mode","CRT Filter","Tileset","Transparent Sprites","Dithered Darkness",
+static const char* labels[]={"Video Mode","Tileset","CRT Filter","Transparent Sprites","Dithered Darkness",
     "Music","Sound Effects","Mouse Control","Smooth Movement","Diagonal Movement","Movement Speed","Animation Speed"};
 static bool isSpeed(int row) { return row==ENGINE_MOVEMENT_SPEED || row==ENGINE_ANIMATION_SPEED; }
 static const char* optionStatus;

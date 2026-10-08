@@ -240,8 +240,8 @@ static Uint32 chooseCustomOption(void *user, SDL_TimerID id, Uint32 interval)
     if (*stage == 0)
     {
         e.key.key = SDLK_DOWN;
-        assert(SDL_PushEvent(&e));
-        assert(SDL_PushEvent(&e)); /* Video -> Tileset */
+        for (int i = 0; i < ENGINE_TILESET; i++)
+            assert(SDL_PushEvent(&e)); /* Video -> Tileset */
         e.key.key = SDLK_RETURN;
         assert(SDL_PushEvent(&e));
         e.key.key = SDLK_DOWN;
