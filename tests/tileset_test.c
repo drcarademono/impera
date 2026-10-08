@@ -51,6 +51,7 @@ static void verifySheet(SDL_Surface *image, int choice, int first)
                 }
                 if (color < 0)
                 {
+                    assert(choice != TILESET_SHARP); /* No DOS effect substitutions. */
                     assert(GRAP_BUF_TilePixel(tile, x, y) == 5);
                     continue;
                 }
@@ -322,21 +323,44 @@ int main(void)
     SDL_free(original);
     remove("bad-pack/Ultima_5_Tiles_AppleII.png");
     assert(SDL_RemovePath("bad-pack"));
-    assert(TILESET_Select(TILESET_SHARP));
-    Uint32 before[32];
+    /* Amiga water still scrolls. Sharp's supplied bitmaps stay static even
+     * while the original DOS animation code mutates its private tile bank. */
+    const int animationChoices[] = {TILESET_AMIGA, TILESET_SHARP};
+    for (int choice = 0; choice < 2; choice++)
+    {
+        assert(TILESET_Select(animationChoices[choice]));
+        Uint32 before[32];
+        for (int y = 0; y < 16; y++)
+            for (int sy = 0; sy < 2; sy++)
+            {
+                int c = GRAP_BUF_TilePixel(3, 8, y);
+                before[y * 2 + sy] = TILESET_LastColor(c, 0, sy, ega);
+            }
+        GRAP_BUF_AnimateTileset();
+        for (int y = 0; y < 16; y++)
+            for (int sy = 0; sy < 2; sy++)
+            {
+                int c = GRAP_BUF_TilePixel(3, 8, y);
+                int source = animationChoices[choice] == TILESET_SHARP ? y * 2 + sy : (y * 2 + sy + 30) % 32;
+                assert(TILESET_LastColor(c, 0, sy, ega) == before[source]);
+            }
+    }
+    SDL_Surface *world = sheet("Ultima_5_Tiles_SharpX68000_World.png");
+    verifySheet(world, TILESET_SHARP, 0);
+    SDL_DestroySurface(world);
+    npc = sheet("Ultima_5_Tiles_SharpX68000_NPC.png");
+    verifySheet(npc, TILESET_SHARP, 256);
+    SDL_DestroySurface(npc);
+    GRAP_BUF_PutTile(4, 4, 0xdc, 0, 0);
+    byte gate[16 * 16];
     for (int y = 0; y < 16; y++)
-        for (int sy = 0; sy < 2; sy++)
-        {
-            int c = GRAP_BUF_TilePixel(3, 8, y);
-            before[y * 2 + sy] = TILESET_LastColor(c, 0, sy, ega);
-        }
-    TILESET_Animate();
-    for (int y = 0; y < 16; y++)
-        for (int sy = 0; sy < 2; sy++)
-        {
-            int c = GRAP_BUF_TilePixel(3, 8, y);
-            assert(TILESET_LastColor(c, 0, sy, ega) == before[(y * 2 + sy + 30) % 32]);
-        }
+        memcpy(gate + y * 16, g_linearEgaBuffer0 + (64 + y) * 320 + 64, 16);
+    for (int stage = 1; stage <= 15; stage++)
+    {
+        GRAP_BUF_PutAnimatedMoongateTile(4, 4, stage, 7, 0, 0);
+        for (int y = 0; y < 16; y++)
+            assert(!memcmp(gate + y * 16, g_linearEgaBuffer0 + (64 + y) * 320 + 64, 16));
+    }
 #ifdef TEST_TILESET_PRESENT
     rendering();
 #endif

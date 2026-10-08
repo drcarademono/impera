@@ -343,7 +343,7 @@ int TILESET_Pixel(int tile, int x, int y)
 {
     sample = 0;
     if (!selected || tile < 0 || tile >= 512 || x < 0 || y < 0 || x >= 16 || y >= 16 || !available[tile] ||
-        procedural(tile))
+        (selected != TILESET_SHARP && procedural(tile)))
         return -1;
     sample = (unsigned)(tile * 256 + y * 16 + x + 1);
     for (int sy = 0; sy < 2; sy++)
@@ -357,7 +357,8 @@ int TILESET_Pixel(int tile, int x, int y)
 }
 void TILESET_Animate(void)
 {
-    if (!selected)
+    /* Sharp supplies static bitmaps for the DOS procedural effects. */
+    if (!selected || selected == TILESET_SHARP)
         return;
     const int water[] = {1, 2, 3, 0x8f};
     for (int i = 0; i < 4; i++)

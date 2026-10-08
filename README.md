@@ -71,11 +71,18 @@ in Engine Options; a saved choice whose sheets are unavailable falls back to DOS
 at startup.
 
 This is an artwork replacement, not emulation of the other platforms. Apple II
-omits four columns of each atlas row; those tile IDs use DOS artwork. Effects
-that construct images by modifying DOS palette bits also use DOS artwork,
-including water composites, moongates, clocks, flickering fire, and some flags.
-Water and lava scrolling and authored character/object animation frames remain
-animated. First-person dungeon scenery and other non-tile graphics remain DOS.
+omits four columns of each atlas row (64 tile IDs); those IDs use DOS artwork.
+Amiga and Grayscale contain all 512 tile positions. Sharp's two sheets also
+cover all 512 IDs, but actor/effect slot `0x1F8` is blank; the DOS version has
+artwork there. The blank world tile `0xFF` is intentional in all complete sheets.
+
+Sharp uses its own **static artwork** for procedural effects, including water,
+lava, moongates, clocks, flickering fire, and flags. These bitmaps are neither
+animated nor replaced with DOS artwork. Authored character/object animation
+frames still follow the game's frame selection. For Amiga, Apple II, and
+Grayscale, effects constructed by modifying DOS palette bits retain DOS artwork;
+water/lava scrolling and authored frame animations remain animated.
+First-person dungeon scenery and other non-tile graphics remain DOS.
 
 ## Keyboard commands
 
