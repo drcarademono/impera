@@ -9,6 +9,7 @@
 #include "animate.h"
 #include "reveal.h"
 #include "widescreen.h"
+#include "tileset.h"
 
 #if defined(ENABLE_GRAP_OVERLAY_DEBUG)
 #include "common/dbg_font_data.h"
@@ -62,6 +63,8 @@ void GRAP_BUF_Initialize(pfGrapFlushFrame* pfFlushFrame)
 
     g_linearEgaBuffer1 = malloc(loresWidth * loresHeight);
     memset(g_linearEgaBuffer1, 0, loresWidth * loresHeight);
+    TILESET_Register(g_linearEgaBuffer0,loresWidth*loresHeight);
+    TILESET_Register(g_linearEgaBuffer1,loresWidth*loresHeight);
 
 #if defined(ENABLE_GRAP_OVERLAY)
     g_linearOverlayBuffer = malloc(hiresWidth * hiresHeight);
@@ -79,6 +82,7 @@ void GRAP_BUF_Cleanup(void)
         s_tileset = NULL;
     }
 
+    TILESET_Unregister(g_linearEgaBuffer0);TILESET_Unregister(g_linearEgaBuffer1);
     free(g_linearEgaBuffer0);
     free(g_linearEgaBuffer1);
 
@@ -117,12 +121,14 @@ static inline void GrPutOverlayPixel(int x, int y, int egaColor) { g_linearOverl
 static inline void GrPutPixel(int page, int x, int y, int egaColor)
 {
     byte* target = GetPage(page);
+    TILESET_SetSample(0);TILESET_Record(target+y*loresWidth+x,egaColor);
     target[y * loresWidth + x] = egaColor;
 }
 
 static inline void GrPutByte(int page, int x, int y, byte egaByte)
 {
     byte* target = GetPage(page);
+    TILESET_SetSample(0);TILESET_Record(target+y*loresWidth+x,egaByte>>4);TILESET_Record(target+y*loresWidth+x+1,egaByte&15);
     target[y * loresWidth + x] = egaByte >> 4;
     target[y * loresWidth + x + 1] = egaByte & 0xf;
 }
@@ -324,11 +330,13 @@ void GRAP_BUF_ScrollWindow(int left, int top, int right, int bottom, int amount)
         amount = -amount;
         for (int y = top; y <= bottom - amount; y++)
         {
+            TILESET_Copy(&g_linearEgaBuffer0[y * loresWidth + left], &g_linearEgaBuffer0[(y + amount) * loresWidth + left], right - left + 1);
             memcpy(&g_linearEgaBuffer0[y * loresWidth + left], &g_linearEgaBuffer0[(y + amount) * loresWidth + left], right - left + 1);
         }
 
         for (int y = bottom - amount + 1; y <= bottom; y++)
         {
+            TILESET_Copy(&g_linearEgaBuffer0[y * loresWidth + left], NULL, right-left+1);
             memset(&g_linearEgaBuffer0[y * loresWidth + left], 0, right - left + 1);
         }
     }
@@ -336,11 +344,13 @@ void GRAP_BUF_ScrollWindow(int left, int top, int right, int bottom, int amount)
     {
         for (int y = bottom; y >= top + amount; y--)
         {
+            TILESET_Copy(&g_linearEgaBuffer0[y * loresWidth + left], &g_linearEgaBuffer0[(y - amount) * loresWidth + left], right-left+1);
             memcpy(&g_linearEgaBuffer0[y * loresWidth + left], &g_linearEgaBuffer0[(y - amount) * loresWidth + left], right - left + 1);
         }
 
         for (int y = top; y < top + amount; y++)
         {
+            TILESET_Copy(&g_linearEgaBuffer0[y * loresWidth + left], NULL, right-left+1);
             memset(&g_linearEgaBuffer0[y * loresWidth + left], 0, right - left + 1);
         }
     }
@@ -362,6 +372,7 @@ void GRAP_BUF_FillWindow(int x1, int y1, int x2, int y2, int xorMode)
     {
         if (!xorMode)
         {
+            TILESET_Copy(&target[y * loresWidth + x1], NULL, x2-x1+1);
             memset(&target[y * loresWidth + x1], s_grapPenColor, x2 - x1 + 1);
         }
         else
@@ -389,7 +400,10 @@ bool GRAP_BUF_HasTileset(void) { return s_tileset != NULL; }
 
 byte GRAP_BUF_TilePixel(int tile, int x, int y)
 {
-    if (!s_tileset || tile < 0 || tile >= 512 || x < 0 || y < 0 || x >= 16 || y >= 16) return 0;
+    if (!s_tileset || tile < 0 || tile >= 512 || x < 0 || y < 0 || x >= 16 || y >= 16) {TILESET_SetSample(0);return 0;}
+    int alternate=TILESET_Pixel(tile,x,y);
+    if(alternate>=0) return (byte)alternate;
+    TILESET_SetSample((unsigned)(tile*256+y*16+x+1));
     byte packed = s_tileset[tile * 128 + y * 8 + x / 2];
     return x & 1 ? packed & 15 : packed >> 4;
 }
@@ -418,7 +432,7 @@ int GRAP_BUF_SpritePixel(int tile, int x, int y)
     if (color) return color;
     for (int dy = -1; dy <= 1; dy++)
         for (int dx = -1; dx <= 1; dx++)
-            if (GRAP_BUF_TilePixel(tile, x + dx, y + dy)) return 0;
+            if (GRAP_BUF_TilePixel(tile, x + dx, y + dy)) {TILESET_SetSample(0);return 0;}
     return -1;
 }
 
@@ -430,7 +444,7 @@ void GRAP_BUF_DrawSprite(byte* pixels, int stride, int x, int y, int tile,
             int px = x + sx, py = y + sy;
             if (px < left || py < top || px >= right || py >= bottom) continue;
             int color = WIDE_SpritePixel(tile, dx, dy, sx, sy);
-            if (color >= 0) pixels[py * stride + px] = (byte)color;
+            if (color >= 0) { TILESET_RecordSprite(pixels+py*stride+px,color,GRAP_BUF_SpriteIsTransparent(tile));pixels[py * stride + px] = (byte)color; }
         }
 }
 
@@ -455,6 +469,7 @@ void GRAP_BUF_UnloadTileset(void)
 void GRAP_BUF_AnimateTileset(void)
 {
     AnimateTileset(s_tileset);
+    TILESET_Animate();
 }
 
 void GRAP_BUF_UpdateTimeTileset(int mode, byte hour, byte minute)
@@ -464,19 +479,12 @@ void GRAP_BUF_UpdateTimeTileset(int mode, byte hour, byte minute)
 
 void GRAP_BUF_PutTile(int tileX, int tileY, int tileIdx, int xOffset, int yOffset)
 {
-    byte* tile = &s_tileset[0x80 * tileIdx];
-
-    int width = 16;
-    int height = 16;
-    int dstX = tileX * width + xOffset;
-    int dstY = tileY * height + yOffset;
-
-    for (int y = dstY; y < dstY + height; y++)
-    {
-        for (int x = dstX; x < dstX + width; x += 2)
-        {
-            GrPutByte(D_52ba_vdp._52d8_page, x, y, *tile++);
-        }
+    int dstX=tileX*16+xOffset,dstY=tileY*16+yOffset;
+    byte* pixels=GetPage(D_52ba_vdp._52d8_page);
+    for(int y=0;y<16;y++) for(int x=0;x<16;x++) {
+        int color=GRAP_BUF_TilePixel(tileIdx,x,y);
+        TILESET_Record(pixels+(dstY+y)*320+dstX+x,color);
+        pixels[(dstY+y)*320+dstX+x]=(byte)color;
     }
 
     s_dirty = true;
@@ -506,23 +514,13 @@ static u16 StepLfsrSeed(u16 seed, u16 mask)
 
 static void PutTileRevealPixel(int tileX, int tileY, int tileIdx, int relX, int relY, int xOffset, int yOffset)
 {
-    byte packed;
     int dstX;
     int dstY;
 
-    packed = s_tileset[0x80 * tileIdx + relY * 8 + (relX >> 1)];
-    dstX = tileX * 16 + xOffset + relX;
-    dstY = tileY * 16 + yOffset + relY;
-
-    if ((relX & 1) == 0)
-    {
-        GrPutPixel(D_52ba_vdp._52d8_page, dstX, dstY, packed >> 4);
-    }
-    else
-    {
-        GrPutPixel(D_52ba_vdp._52d8_page, dstX, dstY, packed & 0x0f);
-    }
-
+    dstX=tileX*16+xOffset+relX;dstY=tileY*16+yOffset+relY;
+    int color=GRAP_BUF_TilePixel(tileIdx,relX,relY);
+    byte* pixel=GetPage(D_52ba_vdp._52d8_page)+dstY*320+dstX;
+    TILESET_Record(pixel,color);*pixel=(byte)color;
     s_dirty = true;
 }
 
@@ -753,6 +751,7 @@ void GRAP_BUF_TransferPage(int srcPage, int dstPage, int x1, int y1, int x2, int
     // TODO: check bounds
     for (int y = 0; y <= y2 - y1; y++)
     {
+        TILESET_Copy(&dstPagePtr[(y+dstY)*loresWidth+dstX],&srcPagePtr[(y+y1)*loresWidth+x1],x2-x1+1);
         memcpy(&dstPagePtr[(y + dstY) * loresWidth + dstX], &srcPagePtr[(y + y1) * loresWidth + x1], x2 - x1 + 1);
     }
 

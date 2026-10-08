@@ -33,6 +33,7 @@ executable named `ultima5`, and environment variables retain the `U5D_` prefix.
 - Optional diagonal movement and interactions, including combat and corner sliding.
 - Transparent character and selected static-object sprites, inferred ground beneath
   objects, and foreground occlusion by southern blocking scenery.
+- Optional Amiga, Apple II, Grayscale, and Sharp X68000 map/character tilesets.
 - In-game Engine Options with persistent settings and the original font and blue pixel-art frame.
 - Unlimited named save slots, gameplay thumbnails, play time, location labels,
   scrollable save/load browsers, and confirmed deletion.
@@ -40,6 +41,41 @@ executable named `ultima5`, and environment variables retain the `U5D_` prefix.
   PC-speaker effects when recordings are absent.
 - First-launch game/music directory selection, separate writable saves, and
   case-insensitive game-file lookup.
+
+### Alternate tilesets
+
+Choose **Tileset** in Engine Options to change overhead map and character artwork.
+The selection is saved in `ENGINE.CFG`. Game rules, tile IDs, map dimensions,
+mouse targeting, UI font, title screens, and cutscenes retain the DOS engine's behavior.
+The renderer preserves each sheet's colors; Sharp's 32×32 art is drawn inside
+16×16 logical cells, retaining its extra detail during smooth movement. The
+existing display aspect ratio applies to all tilesets. CRT and darkness options
+can be used with them.
+
+The optional sheets live in `textures/tilesets` in this repository. For an installed
+release, place a `textures/tilesets` folder beside `Impera.exe` or the Linux
+AppImage; on macOS put it under `Impera.app/Contents/Resources`. Keep these names:
+
+| Choice | Required sheets |
+| --- | --- |
+| Amiga | `Ultima_5_Tiles_Amiga.png` |
+| Apple II | `Ultima_5_Tiles_AppleII.png` |
+| Grayscale | `Ultima_5_Tiles_Grayscale.png` |
+| Sharp X68000 | `Ultima_5_Tiles_SharpX68000_World.png` and `Ultima_5_Tiles_SharpX68000_NPC.png` |
+
+Alternatively, set `IMPERA_TILESETS` to the folder containing the sheets. The
+Linux development launcher finds the repository's sheets automatically.
+These original-game artwork sheets are **not bundled into engine release packages**.
+Missing or invalid sheets leave the current tileset active and show a message
+in Engine Options; a saved choice whose sheets are unavailable falls back to DOS
+at startup.
+
+This is an artwork replacement, not emulation of the other platforms. Apple II
+omits four columns of each atlas row; those tile IDs use DOS artwork. Effects
+that construct images by modifying DOS palette bits also use DOS artwork,
+including water composites, moongates, clocks, flickering fire, and some flags.
+Water and lava scrolling and authored character/object animation frames remain
+animated. First-person dungeon scenery and other non-tile graphics remain DOS.
 
 ## Keyboard commands
 
@@ -139,6 +175,7 @@ even when Mouse Control is off, so it can be turned back on.
 | --- | --- |
 | Video Mode | Dropdown: Windowed, Fullscreen 4:3 (vanilla 11×11 map, scaled to fit vertically with black side bars), or Fullscreen with the detected monitor aspect ratio (for example, 16:9). |
 | CRT Filter | Subtle DOS monitor scanlines, phosphor softness, glow and nearly flat curvature. |
+| Tileset | Dropdown: DOS (default), Amiga, Apple II, Grayscale, or Sharp X68000. Requires the corresponding external PNG sheets. |
 | Transparent Sprites | Reveal ground around character and supported object sprites. |
 | Dithered Darkness | Fade visibility edges with an Ultima 6-style ordered pixel pattern. |
 | Music | Toggle playback. Switching on opens the folder browser only if no music folder is configured. |
