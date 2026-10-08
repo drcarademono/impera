@@ -20,6 +20,7 @@ const char *TILESET_CustomPath(void);
 bool TILESET_SetCustomPath(const char *path);
 bool TILESET_SelectCustom(const char *path);
 void TILESET_Animate(void);
+bool TILESET_SpriteOutline(void);
 int TILESET_Pixel(int tile, int x, int y); /* -1: DOS fallback */
 Uint32 TILESET_Color(int color, const Uint32 *ega);
 Uint32 TILESET_LastColor(int color, int subX, int subY, const Uint32 *ega);

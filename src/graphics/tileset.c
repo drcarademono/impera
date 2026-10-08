@@ -15,6 +15,13 @@
 static int selected;
 static unsigned revision;
 static char customPath[FILE_PATH_SIZE];
+enum
+{
+    CUSTOM_DOS,
+    CUSTOM_SHARP,
+    CUSTOM_ALPHA
+};
+static int customMask;
 static Uint32 art[512][32 * 32], palette[256];
 static byte available[512];
 static unsigned sample;
@@ -70,6 +77,10 @@ bool TILESET_SelectCustom(const char *path)
         return true;
     SDL_strlcpy(customPath, previous, sizeof(customPath));
     return false;
+}
+bool TILESET_SpriteOutline(void)
+{
+    return selected != TILESET_SHARP && (selected != TILESET_CUSTOM || customMask == CUSTOM_DOS);
 }
 unsigned TILESET_Sample(void)
 {
@@ -158,13 +169,28 @@ Uint32 TILESET_Color(int color, const Uint32 *ega)
 {
     return color < 16 ? ega[color & 15] : palette[color & 255];
 }
+static Uint32 over(Uint32 foreground, Uint32 background)
+{
+    unsigned alpha = foreground >> 24;
+    if (alpha == 255)
+        return foreground;
+    if (!alpha)
+        return background;
+    Uint32 result = 0xff000000u;
+    for (int shift = 0; shift <= 16; shift += 8)
+    {
+        unsigned front = (foreground >> shift) & 255, back = (background >> shift) & 255;
+        result |= ((front * alpha + back * (255 - alpha) + 127) / 255) << shift;
+    }
+    return result;
+}
 static Uint32 sampledColor(int color, int subX, int subY, const Uint32 *ega, bool transparent)
 {
     if (color < 16 || !sample || !selected)
         return TILESET_Color(color, ega);
     unsigned p = sample - 1, t = p / 256, x = p % 16, y = p % 256 / 16;
     Uint32 value = art[t][(y * 2 + subY) * 32 + x * 2 + subX];
-    return value ? value : transparent ? 0 : ega[0];
+    return transparent ? value : over(value, ega[0]);
 }
 Uint32 TILESET_LastColor(int color, int subX, int subY, const Uint32 *ega)
 {
@@ -183,7 +209,7 @@ Uint32 TILESET_BufferColor(const byte *pixel, int subX, int subY, const Uint32 *
     unsigned saved = sample;
     sample = ref >> 24 == *pixel ? (ref & TILE_TOKEN_MASK) : 0;
     Uint32 color = sampledColor(*pixel, subX, subY, ega, (ref & TILE_SPRITE_FLAG) != 0);
-    if (!color && l && l->backs)
+    if ((color >> 24) < 255 && l && l->backs)
     {
         unsigned back = l->backs[pixel - l->pixels];
         sample = back & TILE_TOKEN_MASK;
@@ -193,7 +219,7 @@ Uint32 TILESET_BufferColor(const byte *pixel, int subX, int subY, const Uint32 *
             unsigned token = sample - 1;
             index = GRAP_BUF_TilePixel(token / 256, token % 16, token % 256 / 16);
         }
-        color = TILESET_LastColor(index, subX, subY, ega);
+        color = over(color, TILESET_LastColor(index, subX, subY, ega));
     }
     sample = saved;
     return color;
@@ -241,6 +267,28 @@ static int colorIndex(Uint32 value)
             return i;
     return 0;
 }
+static bool detectCustomMask(SDL_Surface *image)
+{
+    int mask = CUSTOM_DOS;
+    /* Scan the source, not just resampled pixels: a single alpha pixel takes
+     * precedence over any gray or black pixels anywhere in the PNG. */
+    for (int y = 0; y < image->h; y++)
+        for (int x = 0; x < image->w; x++)
+        {
+            Uint8 r, g, b, a;
+            if (!SDL_ReadSurfacePixel(image, x, y, &r, &g, &b, &a))
+                return false;
+            if (a < 255)
+            {
+                customMask = CUSTOM_ALPHA;
+                return true;
+            }
+            if (r == 128 && g == 128 && b == 128)
+                mask = CUSTOM_SHARP;
+        }
+    customMask = mask;
+    return true;
+}
 static bool readSheet(SDL_Surface *image, int choice, int first)
 {
     /* Apple II artwork has narrower source pixels, not missing tile columns. */
@@ -253,6 +301,11 @@ static bool readSheet(SDL_Surface *image, int choice, int first)
          * so every 2:1 PNG maps to the same 32-column, 16-row DOS tile IDs. */
         if (image->w <= 0 || image->h <= 0 || (int64_t)image->w != (int64_t)image->h * 2)
             return false;
+        if (!detectCustomMask(image))
+            return false;
+        debug("Custom tileset transparency: %s", customMask == CUSTOM_ALPHA   ? "PNG alpha"
+                                                 : customMask == CUSTOM_SHARP ? "Sharp gray"
+                                                                              : "DOS black");
         palette[16] = 0xffffffffu; /* Provenance marker; native RGB comes from art. */
     }
     else if (image->w != cols * tileWidth || image->h != 16 * tileHeight)
@@ -280,9 +333,17 @@ static bool readSheet(SDL_Surface *image, int choice, int first)
                 /* Sharp's NPC sheet uses gray as its cutout/background mask. */
                 bool background = choice == TILESET_SHARP && first == 256 ? r == 128 && g == 128 && b == 128
                                                                           : r == 0 && g == 0 && b == 0;
-                Uint32 color = background || (choice == TILESET_CUSTOM && !a)
-                                   ? 0
-                                   : 0xff000000u | ((Uint32)r << 16) | ((Uint32)g << 8) | b;
+                if (choice == TILESET_CUSTOM)
+                {
+                    if (customMask == CUSTOM_ALPHA)
+                        background = !a;
+                    else if (customMask == CUSTOM_SHARP)
+                        background = r == 128 && g == 128 && b == 128;
+                    else
+                        background = r == 0 && g == 0 && b == 0;
+                }
+                Uint32 opacity = choice == TILESET_CUSTOM && customMask == CUSTOM_ALPHA ? a : 255;
+                Uint32 color = background ? 0 : (opacity << 24) | ((Uint32)r << 16) | ((Uint32)g << 8) | b;
                 art[t][y * 32 + x] = color;
                 if (choice != TILESET_CUSTOM && color && !colorIndex(color))
                 {
@@ -345,6 +406,7 @@ bool TILESET_Select(int choice)
     if (choice == TILESET_CUSTOM)
         debug("Loaded custom tileset %s (%dx%d)", customPath, world->w, world->h);
     Uint32 *oldArt = malloc(sizeof(art));
+    int oldMask = customMask;
     Uint32 oldPalette[256];
     byte oldAvailable[512];
     if (!oldArt)
@@ -364,6 +426,7 @@ bool TILESET_Select(int choice)
     SDL_DestroySurface(actors);
     if (!ok)
     {
+        customMask = oldMask;
         memcpy(art, oldArt, sizeof(art));
         memcpy(palette, oldPalette, sizeof(palette));
         memcpy(available, oldAvailable, sizeof(available));

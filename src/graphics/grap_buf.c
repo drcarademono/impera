@@ -430,8 +430,8 @@ int GRAP_BUF_SpritePixel(int tile, int x, int y)
         return x < 0 || y < 0 || x >= 16 || y >= 16 ? -1 : GRAP_BUF_TilePixel(tile, x, y);
     byte color = GRAP_BUF_TilePixel(tile, x, y);
     if (color) return color;
-    /* Sharp already supplies native sprite edges and a gray cutout mask. */
-    if (TILESET_Selected() == TILESET_SHARP) return -1;
+    /* Alpha and Sharp cutouts supply their own native sprite edges. */
+    if (!TILESET_SpriteOutline()) return -1;
     for (int dy = -1; dy <= 1; dy++)
         for (int dx = -1; dx <= 1; dx++)
             if (GRAP_BUF_TilePixel(tile, x + dx, y + dy)) {TILESET_SetSample(0);return 0;}

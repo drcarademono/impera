@@ -57,7 +57,12 @@ The image must have a **2:1 aspect ratio**, with tiles arranged in the DOS order
 **32 columns × 16 rows**, covering all 512 tile IDs. For example, 512×256 and
 1024×512 work. Other 2:1 sizes are sampled into the same tile cells with
 nearest-neighbor scaling, retaining up to 32×32 detail per tile. Custom images
-can use full RGB colors; black and fully transparent pixels are background.
+can use full RGB colors. Transparency is detected across the entire PNG:
+if any pixel has alpha below 255, only PNG alpha controls transparency (black
+stays opaque, partial alpha blends, and no sprite outline is added). Otherwise,
+if the sheet contains Sharp gray (`#808080`), that color is the mask, black stays
+opaque, and no sprite outline is added. Sheets with neither use DOS rules:
+black is the background color and transparent sprites receive a black outline.
 The selected file path is saved in `ENGINE.CFG`; keep the PNG at that location.
 Choosing Custom again lets you replace it. Canceling or selecting an invalid
 image keeps the current artwork. An unavailable custom image falls back to DOS

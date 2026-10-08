@@ -271,6 +271,68 @@ static bool acceptCustom(const char *path, void *user)
     (void)user;
     return TILESET_SelectCustom(path);
 }
+static void customTransparency(void)
+{
+    SDL_Surface *image = SDL_CreateSurface(2048, 1024, SDL_PIXELFORMAT_RGBA32);
+    assert(image);
+    int tile = 256 + 18;
+    int left = tile % 32 * 64, top = tile / 32 * 64;
+    SDL_Rect ink = {left + 32, top + 32, 4, 4};
+    bool transparent = GRAP_BUF_TransparentSprites();
+    GRAP_BUF_SetTransparentSprites(true);
+    /* No alpha and no Sharp gray: DOS black mask and outline. */
+    assert(SDL_FillSurfaceRect(image, NULL, SDL_MapSurfaceRGBA(image, 0, 0, 0, 255)));
+    assert(SDL_FillSurfaceRect(image, &ink, SDL_MapSurfaceRGBA(image, 255, 0, 0, 255)));
+    assert(SDL_SavePNG(image, "custom-transparency.png"));
+    assert(TILESET_SelectCustom("custom-transparency.png"));
+    assert(TILESET_SpriteOutline());
+    assert(GRAP_BUF_SpritePixel(tile, 7, 8) == 0);
+    assert(GRAP_BUF_SpritePixel(tile, 6, 8) == -1);
+    /* Gray mask: authored black remains opaque; no added outline. */
+    assert(SDL_FillSurfaceRect(image, NULL, SDL_MapSurfaceRGBA(image, 128, 128, 128, 255)));
+    assert(SDL_FillSurfaceRect(image, &ink, SDL_MapSurfaceRGBA(image, 0, 0, 0, 255)));
+    assert(SDL_SavePNG(image, "custom-transparency.png"));
+    assert(TILESET_SelectCustom("custom-transparency.png"));
+    assert(!TILESET_SpriteOutline());
+    assert(GRAP_BUF_SpritePixel(tile, 7, 8) == -1);
+    int color = GRAP_BUF_SpritePixel(tile, 8, 8);
+    assert(color >= 16);
+    assert(TILESET_LastSpriteColor(color, 0, 0, ega, true) == 0xff000000u);
+    /* This alpha pixel is outside the resampled grid. Detecting it must still
+     * choose alpha rules for the entire sheet, preserving gray and black. */
+    assert(SDL_WriteSurfacePixel(image, 2047, 1023, 0, 0, 0, 0));
+    assert(SDL_SavePNG(image, "custom-transparency.png"));
+    assert(TILESET_SelectCustom("custom-transparency.png"));
+    color = GRAP_BUF_SpritePixel(tile, 7, 8);
+    assert(color >= 16);
+    assert(TILESET_LastSpriteColor(color, 0, 0, ega, true) == 0xff808080u);
+    color = GRAP_BUF_SpritePixel(tile, 8, 8);
+    assert(TILESET_LastSpriteColor(color, 0, 0, ega, true) == 0xff000000u);
+    assert(!TILESET_SpriteOutline());
+    SDL_Rect hole = {left + 28, top + 32, 4, 4};
+    SDL_Rect partial = {left + 36, top + 32, 4, 4};
+    SDL_Rect ground = {0, 0, 64, 64};
+    assert(SDL_FillSurfaceRect(image, &hole, SDL_MapSurfaceRGBA(image, 128, 128, 128, 0)));
+    assert(SDL_FillSurfaceRect(image, &partial, SDL_MapSurfaceRGBA(image, 255, 0, 0, 128)));
+    assert(SDL_FillSurfaceRect(image, &ground, SDL_MapSurfaceRGBA(image, 0, 255, 0, 255)));
+    assert(SDL_SavePNG(image, "custom-transparency.png"));
+    assert(TILESET_SelectCustom("custom-transparency.png"));
+    assert(GRAP_BUF_SpritePixel(tile, 7, 8) == -1);
+    color = GRAP_BUF_SpritePixel(tile, 9, 8);
+    assert(TILESET_LastSpriteColor(color, 0, 0, ega, true) == 0x80ff0000u);
+    assert(TILESET_LastColor(color, 0, 0, ega) == 0xff800000u);
+    byte *dest = g_linearEgaBuffer0;
+    color = GRAP_BUF_TilePixel(0, 0, 0);
+    TILESET_Record(dest, color);
+    *dest = (byte)color;
+    color = GRAP_BUF_SpritePixel(tile, 9, 8);
+    TILESET_RecordSprite(dest, color, true);
+    *dest = (byte)color;
+    assert(TILESET_BufferColor(dest, 0, 0, ega) == 0xff807f00u);
+    SDL_DestroySurface(image);
+    remove("custom-transparency.png");
+    GRAP_BUF_SetTransparentSprites(transparent);
+}
 static void customTileset(void)
 {
     assert(SDL_CreateDirectory("custom-picker"));
@@ -550,6 +612,7 @@ int main(void)
                 assert(!memcmp(gate + y * 16, g_linearEgaBuffer0 + (64 + y) * 320 + 64, 16));
         }
     }
+    customTransparency();
     customTileset();
     assert(TILESET_Select(TILESET_SHARP));
 #ifdef TEST_TILESET_PRESENT
