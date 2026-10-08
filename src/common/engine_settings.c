@@ -130,7 +130,7 @@ static int rowY(int row)
 static bool s_gameplay;
 static int s_videoChoice=-1;
 static int s_dropdownRow=ENGINE_FULLSCREEN;
-static int choiceTop(void) { return rowY(s_dropdownRow)+10; }
+static int choiceTop(void) { return rowY(s_dropdownRow)+12; }
 static int choices(void) { return s_dropdownRow==ENGINE_TILESET?TILESET_COUNT:3; }
 static const char* videoLabel(int choice)
 {
@@ -154,6 +154,13 @@ static int videoChoice(void)
     return 0;
 }
 static const char* choiceLabel(int choice) { return s_dropdownRow==ENGINE_TILESET?TILESET_Label(choice):videoLabel(choice); }
+static int choiceWidth(void)
+{
+    int width=0;
+    for(int i=0;i<choices();i++) width=SDL_max(width,(int)strlen(choiceLabel(i))*8);
+    return width+16;
+}
+static int choiceLeft(void) { return 304-choiceWidth(); }
 /* Center values over the checkbox/status column; long labels meet the
  * same right margin as the speed values instead of overflowing it. */
 static int choiceTextX(const char* label)
@@ -171,7 +178,7 @@ void ENGINE_DrawSettings(int selected)
     ENGINE_UIText(24,26,optionStatus?optionStatus:"Arrows / Enter   Esc: Back",7);
     for(int row=0;row<=ENGINE_SETTING_COUNT;row++) {
         int y=rowY(row);
-        bool highlighted=row==selected;
+        bool highlighted=row==selected && s_videoChoice<0;
         byte foreground=highlighted?0:15;
         if(highlighted) ENGINE_UIRect(16,y-1,288,10,15);
         ENGINE_UIText(24,y,row==ENGINE_SETTING_COUNT?(s_gameplay?"Return to Game":"Return to Menu"):labels[row],foreground);
@@ -195,12 +202,16 @@ void ENGINE_DrawSettings(int selected)
         }
     }
     if(s_videoChoice>=0) {
-        ENGINE_UIRect(120,choiceTop(),184,choices()*11+2,15);ENGINE_UIRect(121,choiceTop()+1,182,choices()*11,0);
+        int left=choiceLeft(),top=choiceTop(),width=choiceWidth(),height=choices()*11+4;
+        /* Black surround separates the popup from partially covered settings. */
+        ENGINE_UIRect(left-2,top-2,width+4,height+4,0);
+        ENGINE_UIRect(left,top,width,height,15);
+        ENGINE_UIRect(left+1,top+1,width-2,height-2,0);
         for(int i=0;i<choices();i++) {
-            int y=choiceTop()+2+i*11;
-            if(i==s_videoChoice) ENGINE_UIRect(122,y-1,180,10,15);
+            int y=top+3+i*11;
+            if(i==s_videoChoice) ENGINE_UIRect(left+2,y-1,width-4,10,15);
             const char* label=choiceLabel(i);
-            ENGINE_UIText(choiceTextX(label),y,label,i==s_videoChoice?0:15);
+            ENGINE_UIText(left+8,y,label,i==s_videoChoice?0:15);
         }
     }
     GRAP_BUF_MarkDirty();GRAP_BUF_Present();
@@ -255,8 +266,8 @@ void ENGINE_ShowOptions(bool gameplay)
                     float x,y;
                     float ex=event.type==SDL_EVENT_MOUSE_MOTION?event.motion.x:event.button.x;
                     float ey=event.type==SDL_EVENT_MOUSE_MOTION?event.motion.y:event.button.y;
-                    if(GRAP_SDL_MouseUIPoint(ex,ey,&x,&y) && x>=120 && x<304 && y>=choiceTop()+1 && y<choiceTop()+1+choices()*11) {
-                        s_videoChoice=SDL_clamp((int)(y-choiceTop()-1)/11,0,choices()-1);
+                    if(GRAP_SDL_MouseUIPoint(ex,ey,&x,&y) && x>=choiceLeft()+2 && x<302 && y>=choiceTop()+2 && y<choiceTop()+2+choices()*11) {
+                        s_videoChoice=SDL_clamp((int)(y-choiceTop()-2)/11,0,choices()-1);
                         if(event.type==SDL_EVENT_MOUSE_BUTTON_DOWN) {
                             acceptChoice();changed=true;
                         }

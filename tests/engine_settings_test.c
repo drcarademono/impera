@@ -284,8 +284,8 @@ int main(int argc, char** argv)
     ENGINE_Set(ENGINE_FULLSCREEN,0);
     /* Mouse opens the dropdown and chooses its second entry. */
     SDL_Event choose={0};choose.type=SDL_EVENT_MOUSE_BUTTON_DOWN;choose.button.button=SDL_BUTTON_LEFT;
-    choose.button.x=160*4;choose.button.y=80+44*4;assert(SDL_PushEvent(&choose));
-    choose.button.y=80+65*4;assert(SDL_PushEvent(&choose));key(SDLK_ESCAPE);
+    choose.button.x=240*4;choose.button.y=80+44*4;assert(SDL_PushEvent(&choose));
+    choose.button.y=80+70*4;assert(SDL_PushEvent(&choose));key(SDLK_ESCAPE);
     ENGINE_ShowOptions(false);assert(GRAP_SDL_VideoMode()==GRAP_VIDEO_FULLSCREEN_43);
     ENGINE_Set(ENGINE_FULLSCREEN,0);
     remove("ENGINE.CFG");D_539c[0]=NULL;GRAP_SDL_Cleanup();SDL_Quit();
