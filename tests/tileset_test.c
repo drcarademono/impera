@@ -235,6 +235,18 @@ int main(void)
             SDL_DestroySurface(image);
         }
     }
+    /* Sharp cutout pixels, including those touching artwork, stay transparent.
+     * Native black ink is an opaque palette entry and must still be drawn. */
+    bool transparent = GRAP_BUF_TransparentSprites();
+    GRAP_BUF_SetTransparentSprites(true);
+    assert(GRAP_BUF_SpriteIsTransparent(256 + 18));
+    for (int y = -1; y <= 16; y++)
+        for (int x = -1; x <= 16; x++)
+        {
+            int pixel = GRAP_BUF_TilePixel(256 + 18, x, y);
+            assert(GRAP_BUF_SpritePixel(256 + 18, x, y) == (pixel ? pixel : -1));
+        }
+    GRAP_BUF_SetTransparentSprites(transparent);
     /* Native gray cutout subpixels reveal the terrain, while black sprite
      * details remain opaque. Exercise actual composited framebuffer reads. */
     SDL_Surface *npc = sheet("Ultima_5_Tiles_SharpX68000_NPC.png");
