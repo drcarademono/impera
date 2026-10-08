@@ -20,6 +20,7 @@
 
 static bool s_enabled;
 static bool s_pointerMode;
+bool MOUSE_PointerMode(void) { return s_pointerMode; }
 void MOUSE_SetPointerMode(bool enabled)
 {
     s_pointerMode = enabled;

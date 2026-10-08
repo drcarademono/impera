@@ -33,7 +33,7 @@ executable named `ultima5`, and environment variables retain the `U5D_` prefix.
 - Optional diagonal movement and interactions, including combat and corner sliding.
 - Transparent character and selected static-object sprites, inferred ground beneath
   objects, and foreground occlusion by southern blocking scenery.
-- Optional Amiga, Apple II, Grayscale, and Sharp X68000 map/character tilesets.
+- Optional Amiga, Apple II, Grayscale, Sharp X68000, and custom PNG map/character tilesets.
 - In-game Engine Options with persistent settings and the original font and blue pixel-art frame.
 - Unlimited named save slots, gameplay thumbnails, play time, location labels,
   scrollable save/load browsers, and confirmed deletion.
@@ -51,6 +51,17 @@ The renderer preserves each sheet's colors; Sharp's 32×32 art is drawn inside
 16×16 logical cells, retaining its extra detail during smooth movement. The
 existing display aspect ratio applies to all tilesets. CRT and darkness options
 can be used with them.
+
+Choose **Custom** to browse for a PNG with the game's themed file picker.
+The image must have a **2:1 aspect ratio**, with tiles arranged in the DOS order:
+**32 columns × 16 rows**, covering all 512 tile IDs. For example, 512×256 and
+1024×512 work. Other 2:1 sizes are sampled into the same tile cells with
+nearest-neighbor scaling, retaining up to 32×32 detail per tile. Custom images
+can use full RGB colors; black and fully transparent pixels are background.
+The selected file path is saved in `ENGINE.CFG`; keep the PNG at that location.
+Choosing Custom again lets you replace it. Canceling or selecting an invalid
+image keeps the current artwork. An unavailable custom image falls back to DOS
+on startup. No tile-animation artwork is substituted from DOS.
 
 The optional sheets live in `textures/tilesets` in this repository. For an installed
 release, place a `textures/tilesets` folder beside `Impera.exe` or the Linux
@@ -186,7 +197,7 @@ even when Mouse Control is off, so it can be turned back on.
 | --- | --- |
 | Video Mode | Dropdown: Windowed, Fullscreen 4:3 (vanilla 11×11 map, scaled to fit vertically with black side bars), or Fullscreen with the detected monitor aspect ratio (for example, 16:9). |
 | CRT Filter | Subtle DOS monitor scanlines, phosphor softness, glow and nearly flat curvature. |
-| Tileset | Dropdown: DOS (default), Amiga, Apple II, Grayscale, or Sharp X68000. Requires the corresponding external PNG sheets. |
+| Tileset | Dropdown: DOS (default), Amiga, Apple II, Grayscale, Sharp X68000, or Custom. Built-in alternatives require their external PNG sheets; Custom opens the themed PNG picker. |
 | Transparent Sprites | Reveal ground around character and supported object sprites. |
 | Dithered Darkness | Fade visibility edges with an Ultima 6-style ordered pixel pattern. |
 | Music | Toggle playback. Switching on opens the folder browser only if no music folder is configured. |

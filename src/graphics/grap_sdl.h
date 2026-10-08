@@ -17,6 +17,7 @@ void GRAP_SDL_SetFullscreen(bool fullscreen);
 bool GRAP_SDL_Fullscreen(void);
 float GRAP_SDL_MovementSpeed(void);
 void GRAP_SDL_SetPixelUI(bool enabled);
+bool GRAP_SDL_PixelUI(void);
 void GRAP_SDL_SetSmoothMovement(bool enabled);
 bool GRAP_SDL_SmoothMovementEnabled(void);
 void GRAP_SDL_SetMovementSpeed(float speed);

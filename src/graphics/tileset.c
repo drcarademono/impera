@@ -13,6 +13,8 @@
 #define TILE_TOKEN_MASK 0x7fffffu
 #define TILE_SPRITE_FLAG 0x800000u
 static int selected;
+static unsigned revision;
+static char customPath[FILE_PATH_SIZE];
 static Uint32 art[512][32 * 32], palette[256];
 static byte available[512];
 static unsigned sample;
@@ -28,16 +30,46 @@ typedef struct Layer
     unsigned *backs;
 } Layer;
 static Layer layers[8];
-static const char *names[] = {"DOS", "Amiga", "Apple II", "Grayscale", "Sharp X68000"};
-static const char *files[] = {NULL, "Ultima_5_Tiles_Amiga.png", "Ultima_5_Tiles_AppleII.png",
-                              "Ultima_5_Tiles_Grayscale.png", "Ultima_5_Tiles_SharpX68000_World.png"};
+static const char *names[] = {"DOS", "Amiga", "Apple II", "Grayscale", "Sharp X68000", "Custom"};
+static const char *files[] = {NULL,
+                              "Ultima_5_Tiles_Amiga.png",
+                              "Ultima_5_Tiles_AppleII.png",
+                              "Ultima_5_Tiles_Grayscale.png",
+                              "Ultima_5_Tiles_SharpX68000_World.png",
+                              NULL};
 int TILESET_Selected(void)
 {
     return selected;
 }
+unsigned TILESET_Revision(void)
+{
+    return revision;
+}
 const char *TILESET_Label(int choice)
 {
     return choice >= 0 && choice < TILESET_COUNT ? names[choice] : "DOS";
+}
+const char *TILESET_CustomPath(void)
+{
+    return customPath;
+}
+bool TILESET_SetCustomPath(const char *path)
+{
+    if (!path || strlen(path) >= sizeof(customPath) || strpbrk(path, "\r\n"))
+        return false;
+    SDL_strlcpy(customPath, path, sizeof(customPath));
+    return true;
+}
+bool TILESET_SelectCustom(const char *path)
+{
+    char previous[FILE_PATH_SIZE];
+    SDL_strlcpy(previous, customPath, sizeof(previous));
+    if (!TILESET_SetCustomPath(path))
+        return false;
+    if (TILESET_Select(TILESET_CUSTOM))
+        return true;
+    SDL_strlcpy(customPath, previous, sizeof(customPath));
+    return false;
 }
 unsigned TILESET_Sample(void)
 {
@@ -215,7 +247,15 @@ static bool readSheet(SDL_Surface *image, int choice, int first)
     int tileWidth = choice == TILESET_APPLE ? 14 : choice == TILESET_SHARP ? 32 : 16;
     int tileHeight = choice == TILESET_SHARP ? 32 : 16;
     int cols = choice == TILESET_SHARP ? 16 : 32;
-    if (image->w != cols * tileWidth || image->h != 16 * tileHeight)
+    if (choice == TILESET_CUSTOM)
+    {
+        /* Fractional source cell widths are valid: use atlas-relative sampling
+         * so every 2:1 PNG maps to the same 32-column, 16-row DOS tile IDs. */
+        if (image->w <= 0 || image->h <= 0 || (int64_t)image->w != (int64_t)image->h * 2)
+            return false;
+        palette[16] = 0xffffffffu; /* Provenance marker; native RGB comes from art. */
+    }
+    else if (image->w != cols * tileWidth || image->h != 16 * tileHeight)
         return false;
     for (int t = first; t < first + (choice == TILESET_SHARP ? 256 : 512); t++)
     {
@@ -230,16 +270,21 @@ static bool readSheet(SDL_Surface *image, int choice, int first)
             for (int x = 0; x < 32; x++)
             {
                 Uint8 r, g, b, a;
-                if (!SDL_ReadSurfacePixel(image, col * tileWidth + x * tileWidth / 32,
-                                          row * tileHeight + y * tileHeight / 32, &r, &g, &b, &a) ||
-                    a != 255)
+                int px = choice == TILESET_CUSTOM ? (int)((int64_t)(col * 32 + x) * image->w / 1024)
+                                                  : col * tileWidth + x * tileWidth / 32;
+                int py = choice == TILESET_CUSTOM ? (int)((int64_t)(row * 32 + y) * image->h / 512)
+                                                  : row * tileHeight + y * tileHeight / 32;
+                if (!SDL_ReadSurfacePixel(image, px, py, &r, &g, &b, &a) ||
+                    (choice != TILESET_CUSTOM && a != 255))
                     return false;
                 /* Sharp's NPC sheet uses gray as its cutout/background mask. */
                 bool background = choice == TILESET_SHARP && first == 256 ? r == 128 && g == 128 && b == 128
                                                                           : r == 0 && g == 0 && b == 0;
-                Uint32 color = background ? 0 : 0xff000000u | ((Uint32)r << 16) | ((Uint32)g << 8) | b;
+                Uint32 color = background || (choice == TILESET_CUSTOM && !a)
+                                   ? 0
+                                   : 0xff000000u | ((Uint32)r << 16) | ((Uint32)g << 8) | b;
                 art[t][y * 32 + x] = color;
-                if (color && !colorIndex(color))
+                if (choice != TILESET_CUSTOM && color && !colorIndex(color))
                 {
                     int index = 16;
                     while (index < 256 && palette[index])
@@ -277,16 +322,18 @@ bool TILESET_Select(int choice)
 {
     if (choice < 0 || choice >= TILESET_COUNT)
         return false;
-    if (choice == selected)
+    if (choice == selected && choice != TILESET_CUSTOM)
         return true;
     if (choice == 0)
     {
         selected = 0;
+        revision++;
         TILESET_Refresh();
         return true;
     }
     /* Load and validate every file before replacing the active pack. */
-    SDL_Surface *world = load(files[choice]);
+    SDL_Surface *world =
+        choice == TILESET_CUSTOM ? (*customPath ? SDL_LoadPNG(customPath) : NULL) : load(files[choice]);
     SDL_Surface *actors = choice == TILESET_SHARP ? load("Ultima_5_Tiles_SharpX68000_NPC.png") : NULL;
     if (!world || (choice == TILESET_SHARP && !actors))
     {
@@ -295,6 +342,8 @@ bool TILESET_Select(int choice)
         DEBUG_Error("Tileset %s unavailable: %s", names[choice], SDL_GetError());
         return false;
     }
+    if (choice == TILESET_CUSTOM)
+        debug("Loaded custom tileset %s (%dx%d)", customPath, world->w, world->h);
     Uint32 *oldArt = malloc(sizeof(art));
     Uint32 oldPalette[256];
     byte oldAvailable[512];
@@ -323,6 +372,7 @@ bool TILESET_Select(int choice)
     else
     {
         selected = choice;
+        revision++;
         TILESET_Refresh();
         debug("Selected %s tileset", names[choice]);
     }
@@ -340,7 +390,7 @@ int TILESET_Pixel(int tile, int x, int y)
         {
             Uint32 color = art[tile][(y * 2 + sy) * 32 + x * 2 + sx];
             if (color)
-                return colorIndex(color);
+                return selected == TILESET_CUSTOM ? 16 : colorIndex(color);
         }
     return 0;
 }

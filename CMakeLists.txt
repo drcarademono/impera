@@ -18,6 +18,7 @@ set(SOURCES
     src/graphics/tileset.c
     src/common/icon.c
     src/common/folder_picker.c
+    src/common/file_picker.c
     src/common/u4_transfer.c
     src/common/data_setup.c
     src/common/save_slots.c

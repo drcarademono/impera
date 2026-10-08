@@ -4,6 +4,7 @@
 #include "file.h"
 #include "data_setup.h"
 #include "folder_picker.h"
+#include "file_picker.h"
 #include "movement.h"
 #include "graphics/grap_sdl.h"
 #include "graphics/grap_buf.h"
@@ -72,13 +73,18 @@ void ENGINE_Load(void)
 {
     FILE* f=FILE_Open("ENGINE.CFG","r");
     if(!f) return;
-    char line[128],key[64],extra;
+    char line[FILE_PATH_SIZE+64],key[64],extra;
     float value;
-    while(fgets(line,sizeof(line),f))
+    while(fgets(line,sizeof(line),f)) {
+        if(!strncmp(line,"custom_tileset ",15)) {
+            char* path=line+15;path[strcspn(path,"\r\n")]=0;
+            TILESET_SetCustomPath(path);continue;
+        }
         if(sscanf(line,"%63s %f %c",key,&value,&extra)==2) {
             if(!strcmp(key,"fullscreen") && (value==0 || value==1)) ENGINE_Set(ENGINE_FULLSCREEN,value);
             for(int i=0;i<ENGINE_SETTING_COUNT;i++) if(!strcmp(key,keys[i])) ENGINE_Set(i,value);
         }
+    }
     fclose(f);
 }
 bool ENGINE_Save(void)
@@ -86,7 +92,7 @@ bool ENGINE_Save(void)
     FILE* f=FILE_Open("ENGINE.CFG.tmp","w");
     if(!f) { DEBUG_Error("Cannot write ENGINE.CFG.tmp");return false; }
     debug("Writing engine settings");
-    bool ok=true;
+    bool ok=fprintf(f,"custom_tileset %s\n",TILESET_CustomPath())>=0;
     for(int i=0;i<ENGINE_SETTING_COUNT;i++) if(fprintf(f,"%s %.6g\n",keys[i],(double)ENGINE_Get(i))<0) ok=false;
     if(fclose(f)!=0) ok=false;
     char path[FILE_PATH_SIZE],temporary[FILE_PATH_SIZE];
@@ -168,7 +174,21 @@ static int choiceTextX(const char* label)
     int width=(int)strlen(label)*8;
     return SDL_min(252-width/2,296-width);
 }
-static void acceptChoice(void) { ENGINE_Set(s_dropdownRow,s_dropdownRow==ENGINE_TILESET?s_videoChoice:videoModes[s_videoChoice]);s_videoChoice=-1; }
+static bool acceptCustomTileset(const char* path,void* user)
+{
+    (void)user;
+    return TILESET_SelectCustom(path);
+}
+static void acceptChoice(void)
+{
+    int row=s_dropdownRow,choice=s_videoChoice;
+    s_videoChoice=-1;
+    if(row==ENGINE_TILESET && choice==TILESET_CUSTOM) {
+        const char* initial=*TILESET_CustomPath()?TILESET_CustomPath():SDL_GetUserFolder(SDL_FOLDER_HOME);
+        FILEPICKER_Select("Custom Tileset","Choose a 2:1 PNG tileset",NULL,".png",initial,
+                           "Return to Engine Options","Cannot load PNG: needs 2:1 aspect",acceptCustomTileset,NULL);
+    } else ENGINE_Set(row,row==ENGINE_TILESET?choice:videoModes[choice]);
+}
 static void openChoice(int row) { s_dropdownRow=row;s_videoChoice=row==ENGINE_TILESET?TILESET_Selected():videoChoice(); }
 void ENGINE_DrawSettings(int selected)
 {
@@ -235,7 +255,7 @@ static void adjust(int row,int direction)
 void ENGINE_ShowOptions(bool gameplay)
 {
     s_gameplay=gameplay;
-    int previousTileset=TILESET_Selected();
+    unsigned previousTileset=TILESET_Revision();
     optionStatus=NULL;
     s_videoChoice=-1;
     byte backup[320*200];TILESET_Register(backup,sizeof(backup));
@@ -329,7 +349,7 @@ void ENGINE_ShowOptions(bool gameplay)
     MOUSE_SetPointerMode(false);
     TILESET_Copy(g_linearEgaBuffer0,backup,sizeof(backup));memcpy(g_linearEgaBuffer0,backup,sizeof(backup));
     TILESET_Unregister(backup);
-    if(gameplay && previousTileset!=TILESET_Selected() && GRAP_BUF_HasTileset() &&
+    if(gameplay && previousTileset!=TILESET_Revision() && GRAP_BUF_HasTileset() &&
        D_58a4 && (D_5893_map_id<=32 || D_5893_map_id>=128)) ULTIMA_56ac_DrawMap();
     GRAP_BUF_MarkDirty();GRAP_BUF_Present();
 }

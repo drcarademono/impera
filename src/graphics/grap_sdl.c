@@ -253,6 +253,7 @@ void GRAP_SDL_SetFullscreen(bool fullscreen)
 { GRAP_SDL_SetVideoMode(fullscreen?GRAP_VIDEO_FULLSCREEN:GRAP_VIDEO_WINDOWED); }
 bool GRAP_SDL_Fullscreen(void) { return s_fullscreen; }
 float GRAP_SDL_MovementSpeed(void) { return s_movementSpeed; }
+bool GRAP_SDL_PixelUI(void) { return s_pixelUI; }
 void GRAP_SDL_SetPixelUI(bool enabled)
 {
     s_pixelUI=enabled;

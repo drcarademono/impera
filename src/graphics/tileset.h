@@ -9,11 +9,16 @@ enum
     TILESET_APPLE,
     TILESET_GRAY,
     TILESET_SHARP,
+    TILESET_CUSTOM,
     TILESET_COUNT
 };
 int TILESET_Selected(void);
+unsigned TILESET_Revision(void);
 const char *TILESET_Label(int choice);
 bool TILESET_Select(int choice);
+const char *TILESET_CustomPath(void);
+bool TILESET_SetCustomPath(const char *path);
+bool TILESET_SelectCustom(const char *path);
 void TILESET_Animate(void);
 int TILESET_Pixel(int tile, int x, int y); /* -1: DOS fallback */
 Uint32 TILESET_Color(int color, const Uint32 *ega);

@@ -1,5 +1,6 @@
 #undef NDEBUG
 #include "common/engine_settings.h"
+#include "common/file_picker.h"
 #include "graphics/grap.h"
 #include "graphics/grap_buf.h"
 #include "graphics/grap_sdl.h"
@@ -210,6 +211,161 @@ static Uint32 chooseTileset(void *data, SDL_TimerID id, Uint32 interval)
     assert(SDL_PushEvent(&event));
     return 0;
 }
+static Uint32 chooseCustom(void *user, SDL_TimerID id, Uint32 interval)
+{
+    (void)id;
+    (void)interval;
+    SDL_Event e = {0};
+    e.type = SDL_EVENT_KEY_DOWN;
+    if (user)
+    {
+        e.key.key = SDLK_DOWN;
+        assert(SDL_PushEvent(&e));
+        e.key.key = SDLK_RETURN;
+        assert(SDL_PushEvent(&e));
+    }
+    else
+    {
+        e.key.key = SDLK_ESCAPE;
+        assert(SDL_PushEvent(&e));
+    }
+    return 0;
+}
+static Uint32 chooseCustomOption(void *user, SDL_TimerID id, Uint32 interval)
+{
+    (void)id;
+    int *stage = user;
+    SDL_Event e = {0};
+    e.type = SDL_EVENT_KEY_DOWN;
+    if (*stage == 0)
+    {
+        e.key.key = SDLK_DOWN;
+        assert(SDL_PushEvent(&e));
+        assert(SDL_PushEvent(&e)); /* Video -> Tileset */
+        e.key.key = SDLK_RETURN;
+        assert(SDL_PushEvent(&e));
+        e.key.key = SDLK_DOWN;
+        for (int i = 0; i < TILESET_CUSTOM; i++)
+            assert(SDL_PushEvent(&e));
+        e.key.key = SDLK_RETURN;
+        assert(SDL_PushEvent(&e));
+    }
+    else if (*stage == 1)
+    {
+        e.key.key = SDLK_DOWN;
+        assert(SDL_PushEvent(&e)); /* First PNG */
+        e.key.key = SDLK_RETURN;
+        assert(SDL_PushEvent(&e));
+    }
+    else
+    {
+        e.key.key = SDLK_ESCAPE;
+        assert(SDL_PushEvent(&e));
+        return 0;
+    }
+    (*stage)++;
+    return interval;
+}
+static bool acceptCustom(const char *path, void *user)
+{
+    (void)user;
+    return TILESET_SelectCustom(path);
+}
+static void customTileset(void)
+{
+    assert(SDL_CreateDirectory("custom-picker"));
+    SDL_Surface *image = SDL_CreateSurface(1000, 500, SDL_PIXELFORMAT_RGBA32);
+    assert(image);
+    for (int y = 0; y < image->h; y++)
+        for (int x = 0; x < image->w; x++)
+            assert(SDL_WriteSurfacePixel(image, x, y, x % 256, y % 256, (x + y) % 256, 255));
+    assert(SDL_SavePNG(image, "custom-picker/Custom atlas.PNG"));
+    assert(TILESET_SelectCustom("custom-picker/Custom atlas.PNG"));
+    assert(TILESET_Selected() == TILESET_CUSTOM);
+    /* A non-integral source cell size and a full RGB gradient must both work. */
+    for (int tile = 0; tile < 512; tile++)
+        for (int y = 0; y < 32; y++)
+            for (int x = 0; x < 32; x++)
+            {
+                int color = TILESET_Pixel(tile, x / 2, y / 2);
+                assert(color >= 0);
+                Uint32 expected =
+                    rgb(image, (tile % 32 * 32 + x) * 1000 / 1024, (tile / 32 * 32 + y) * 500 / 512, false);
+                if (expected == 0xff000000u)
+                    expected = ega[0];
+                assert(TILESET_LastColor(color, x % 2, y % 2, ega) == expected);
+                if (x % 16 == 0 && y % 16 == 0)
+                {
+                    TILESET_Record(g_linearEgaBuffer0, color);
+                    g_linearEgaBuffer0[0] = (byte)color;
+                    assert(TILESET_BufferColor(g_linearEgaBuffer0, x % 2, y % 2, ega) == expected);
+                }
+            }
+    SDL_DestroySurface(image);
+    image = SDL_CreateSurface(2, 1, SDL_PIXELFORMAT_RGBA32);
+    assert(image);
+    assert(SDL_WriteSurfacePixel(image, 0, 0, 123, 45, 67, 255));
+    assert(SDL_WriteSurfacePixel(image, 1, 0, 1, 2, 3, 0));
+    assert(SDL_SavePNG(image, "custom-picker/Replacement.png"));
+    SDL_DestroySurface(image);
+    /* Replacing Custom while already selected must reload its artwork. */
+    assert(TILESET_SelectCustom("custom-picker/Replacement.png"));
+    int color = TILESET_Pixel(0, 0, 0);
+    assert(TILESET_LastColor(color, 0, 0, ega) == 0xff7b2d43u);
+    assert(TILESET_Pixel(31, 0, 0) == 0); /* Alpha-zero source is background. */
+    image = SDL_CreateSurface(3, 2, SDL_PIXELFORMAT_RGBA32);
+    assert(image);
+    assert(SDL_SavePNG(image, "invalid-custom.png"));
+    SDL_DestroySurface(image);
+    assert(!TILESET_SelectCustom("invalid-custom.png"));
+    assert(!TILESET_SelectCustom("missing-custom.png"));
+    assert(!strcmp(TILESET_CustomPath(), "custom-picker/Replacement.png"));
+    assert(TILESET_Selected() == TILESET_CUSTOM);
+    color = TILESET_Pixel(0, 0, 0);
+    assert(TILESET_LastColor(color, 0, 0, ega) == 0xff7b2d43u);
+    assert(!TILESET_SetCustomPath("bad\npath"));
+    assert(ENGINE_Save());
+    assert(TILESET_Select(TILESET_DOS));
+    assert(TILESET_SetCustomPath(""));
+    ENGINE_Load();
+    assert(TILESET_Selected() == TILESET_CUSTOM);
+    assert(!strcmp(TILESET_CustomPath(), "custom-picker/Replacement.png"));
+    assert(TILESET_Select(TILESET_DOS));
+    assert(SDL_AddTimer(50, chooseCustom, NULL));
+    assert(!FILEPICKER_Select("Custom Tileset", "Choose a 2:1 PNG tileset", NULL, ".png", "custom-picker",
+                              "Return to Engine Options", "Invalid PNG", acceptCustom, NULL));
+    assert(TILESET_Selected() == TILESET_DOS);
+    /* Case-insensitive PNG filtering, a filename with spaces, and real acceptance. */
+    assert(SDL_AddTimer(50, chooseCustom, (void *)1));
+    assert(FILEPICKER_Select("Custom Tileset", "Choose a 2:1 PNG tileset", NULL, ".png", "custom-picker",
+                             "Return to Engine Options", "Invalid PNG", acceptCustom, NULL));
+    assert(TILESET_Selected() == TILESET_CUSTOM);
+    assert(strstr(TILESET_CustomPath(), "Custom atlas.PNG"));
+    assert(TILESET_Select(TILESET_DOS));
+    int stage = 0;
+    assert(SDL_AddTimer(50, chooseCustomOption, &stage));
+    ENGINE_ShowOptions(false);
+    assert(stage == 2);
+    assert(TILESET_Selected() == TILESET_CUSTOM);
+    assert(strstr(TILESET_CustomPath(), "Custom atlas.PNG"));
+    assert(!GRAP_SDL_PixelUI());
+    assert(ENGINE_Save());
+    assert(TILESET_Select(TILESET_DOS));
+    assert(TILESET_SetCustomPath(""));
+    ENGINE_Load();
+    assert(TILESET_Selected() == TILESET_CUSTOM);
+    assert(strstr(TILESET_CustomPath(), "Custom atlas.PNG"));
+    assert(TILESET_Select(TILESET_DOS));
+    remove("custom-picker/Custom atlas.PNG");
+    remove("custom-picker/Replacement.png");
+    remove("invalid-custom.png");
+    remove("ENGINE.CFG");
+    assert(SDL_RemovePath("custom-picker"));
+    /* A missing configured PNG at startup leaves DOS active. */
+    assert(!TILESET_Select(TILESET_CUSTOM));
+    assert(TILESET_Selected() == TILESET_DOS);
+    assert(TILESET_SetCustomPath(""));
+}
 int main(void)
 {
     assert(SDL_Init(SDL_INIT_VIDEO));
@@ -222,7 +378,7 @@ int main(void)
         ega[i] = 0xff000000u | i * 0x111111u;
     const char *files[] = {NULL, "Ultima_5_Tiles_Amiga.png", "Ultima_5_Tiles_AppleII.png",
                            "Ultima_5_Tiles_Grayscale.png", "Ultima_5_Tiles_SharpX68000_World.png"};
-    for (int choice = 1; choice < TILESET_COUNT; choice++)
+    for (int choice = 1; choice <= TILESET_SHARP; choice++)
     {
         assert(TILESET_Select(choice));
         SDL_Surface *image = sheet(files[choice]);
@@ -360,12 +516,12 @@ int main(void)
     npc = sheet("Ultima_5_Tiles_SharpX68000_NPC.png");
     verifySheet(npc, TILESET_SHARP, 256);
     SDL_DestroySurface(npc);
-    for (int choice = TILESET_AMIGA; choice < TILESET_COUNT; choice++)
+    for (int choice = TILESET_AMIGA; choice <= TILESET_SHARP; choice++)
     {
         assert(TILESET_Select(choice));
         /* DOS procedural updates must never replace alternate effect artwork. */
-        const int effects[] = {0x34, 0x60, 0xe4, 0xfa, 0x116, 0x108, 0x1b4,
-                               0xb0, 0xbc, 0xde, 18, 20, 21, 62, 0x121, 0x123, 0x12d, 0x12f};
+        const int effects[] = {0x34, 0x60, 0xe4, 0xfa, 0x116, 0x108, 0x1b4, 0xb0,  0xbc,
+                               0xde, 18,   20,   21,   62,    0x121, 0x123, 0x12d, 0x12f};
         Uint32 before[sizeof(effects) / sizeof(effects[0])][1024];
         for (int pass = 0; pass < 2; pass++)
         {
@@ -394,6 +550,8 @@ int main(void)
                 assert(!memcmp(gate + y * 16, g_linearEgaBuffer0 + (64 + y) * 320 + 64, 16));
         }
     }
+    customTileset();
+    assert(TILESET_Select(TILESET_SHARP));
 #ifdef TEST_TILESET_PRESENT
     rendering();
 #endif
