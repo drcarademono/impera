@@ -211,10 +211,11 @@ static int colorIndex(Uint32 value)
 }
 static bool readSheet(SDL_Surface *image, int choice, int first)
 {
-    int size = choice == TILESET_SHARP ? 32 : 16, cols = choice == TILESET_APPLE   ? 28
-                                                         : choice == TILESET_SHARP ? 16
-                                                                                   : 32;
-    if (image->w != cols * size || image->h != 16 * size)
+    /* Apple II artwork has narrower source pixels, not missing tile columns. */
+    int tileWidth = choice == TILESET_APPLE ? 14 : choice == TILESET_SHARP ? 32 : 16;
+    int tileHeight = choice == TILESET_SHARP ? 32 : 16;
+    int cols = choice == TILESET_SHARP ? 16 : 32;
+    if (image->w != cols * tileWidth || image->h != 16 * tileHeight)
         return false;
     for (int t = first; t < first + (choice == TILESET_SHARP ? 256 : 512); t++)
     {
@@ -224,15 +225,13 @@ static bool readSheet(SDL_Surface *image, int choice, int first)
             col = local % 16;
             row = local / 16;
         }
-        if (col >= cols)
-            continue;
         available[t] = 1;
         for (int y = 0; y < 32; y++)
             for (int x = 0; x < 32; x++)
             {
                 Uint8 r, g, b, a;
-                if (!SDL_ReadSurfacePixel(image, col * size + x * size / 32, row * size + y * size / 32, &r,
-                                          &g, &b, &a) ||
+                if (!SDL_ReadSurfacePixel(image, col * tileWidth + x * tileWidth / 32,
+                                          row * tileHeight + y * tileHeight / 32, &r, &g, &b, &a) ||
                     a != 255)
                     return false;
                 /* Sharp's NPC sheet uses gray as its cutout/background mask. */

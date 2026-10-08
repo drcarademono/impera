@@ -71,8 +71,10 @@ in Engine Options; a saved choice whose sheets are unavailable falls back to DOS
 at startup.
 
 This is an artwork replacement, not emulation of the other platforms. Apple II
-omits four columns of each atlas row (64 tile IDs); those IDs use DOS artwork.
-Amiga and Grayscale contain all 512 tile positions. Sharp's two sheets also
+contains all 512 tile positions in a 32-column sheet of 14×16 source tiles. Its
+artwork is sampled with nearest-neighbor scaling into the same logical 16×16
+tile cells, preserving map and input geometry. Amiga and Grayscale also contain
+all 512 tile positions. Sharp's two sheets also
 cover all 512 IDs, but actor/effect slot `0x1F8` is blank; the DOS version has
 artwork there. The blank world tile `0xFF` is intentional in all complete sheets.
 

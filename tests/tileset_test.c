@@ -32,9 +32,9 @@ static Uint32 rgb(SDL_Surface *image, int x, int y, bool npc)
 }
 static void verifySheet(SDL_Surface *image, int choice, int first)
 {
-    int size = choice == TILESET_SHARP ? 32 : 16;
-    int columns = choice == TILESET_APPLE ? 28 : choice == TILESET_SHARP ? 16 : 32;
-    int checked = 0, missing = 0, detail = 0;
+    int tileWidth = choice == TILESET_APPLE ? 14 : choice == TILESET_SHARP ? 32 : 16;
+    int tileHeight = choice == TILESET_SHARP ? 32 : 16;
+    int checked = 0, detail = 0;
     for (int tile = first; tile < first + (choice == TILESET_SHARP ? 256 : 512); tile++)
     {
         int local = tile - first, col = local % (choice == TILESET_SHARP ? 16 : 32),
@@ -43,12 +43,6 @@ static void verifySheet(SDL_Surface *image, int choice, int first)
             for (int x = 0; x < 16; x++)
             {
                 int color = TILESET_Pixel(tile, x, y);
-                if (col >= columns)
-                {
-                    assert(color == -1);
-                    missing++;
-                    continue;
-                }
                 if (color < 0)
                 {
                     assert(choice != TILESET_SHARP); /* No DOS effect substitutions. */
@@ -58,8 +52,9 @@ static void verifySheet(SDL_Surface *image, int choice, int first)
                 for (int sy = 0; sy < 2; sy++)
                     for (int sx = 0; sx < 2; sx++)
                     {
-                        Uint32 expected = rgb(image, col * size + (x * 2 + sx) * size / 32,
-                                              row * size + (y * 2 + sy) * size / 32, first == 256);
+                        Uint32 expected =
+                            rgb(image, col * tileWidth + (x * 2 + sx) * tileWidth / 32,
+                                row * tileHeight + (y * 2 + sy) * tileHeight / 32, first == 256);
                         assert(TILESET_LastColor(color, sx, sy, ega) == (expected ? expected : ega[0]));
                         if (expected != TILESET_LastColor(color, 0, 0, ega))
                             detail++;
@@ -69,7 +64,12 @@ static void verifySheet(SDL_Surface *image, int choice, int first)
     }
     assert(checked > 100000);
     if (choice == TILESET_APPLE)
-        assert(missing == 64 * 256);
+    {
+        /* Last columns of both banks must be available, not treated as omissions.
+         */
+        assert(TILESET_Pixel(0x1f, 0, 0) >= 0);
+        assert(TILESET_Pixel(0x1ff, 0, 0) >= 0);
+    }
     if (choice == TILESET_SHARP)
         assert(detail > 0);
 }
@@ -124,7 +124,9 @@ bool __wrap_SDL_RenderPresent(SDL_Renderer *renderer)
                 assert(SDL_ReadSurfacePixel(frame, px, py, &r, &g, &b, &a));
                 Uint32 actual = 0xff000000u | ((Uint32)r << 16) | ((Uint32)g << 8) | b;
                 if (actual != expected)
-                    fprintf(stderr, "frame %d mode %d source=%d,%d screen=%d,%d expected=%08x actual=%08x\n",
+                    fprintf(stderr,
+                            "frame %d mode %d source=%d,%d screen=%d,%d expected=%08x "
+                            "actual=%08x\n",
                             checkedFrames, mode, x, y, px, py, expected, actual);
                 if (actual != expected)
                     SDL_SavePNG(frame, "failed-sharp-frame.png");
@@ -366,7 +368,8 @@ int main(void)
 #endif
     GRAP_Cleanup();
     SDL_Quit();
-    puts("Alternate tileset mappings, palettes, native detail, transparency, persistence and fallbacks "
+    puts("Alternate tileset mappings, palettes, native detail, transparency, "
+         "persistence and fallbacks "
          "passed.");
     return 0;
 }
