@@ -138,6 +138,9 @@ bool FILEPICKER_Select(const char* title,const char* prompt,const char* filename
                 else if(accept(next,user)) { result=true;done=true; }
                 else error=invalid;
             }
+            /* Return immediately after acceptance/cancellation. Events queued
+             * for the enclosing menu must not be consumed by this closed picker. */
+            if(done) break;
             if(selected<top) top=selected;
             if(selected>=top+7) top=selected-6;
         }
