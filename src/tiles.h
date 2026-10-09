@@ -214,6 +214,7 @@
 #define TILE_MAP_B0 0xb0
 #define TILE_MAP_B1 0xb1
 #define TILE_MAP_BRAZIER 0xb2
+#define TILE_MAP_FLAME 0xb3
 #define TILE_MAP_CANNON_B4 0xb4
 #define TILE_MAP_CANNON_B5 0xb5
 #define TILE_MAP_CANNON_B6 0xb6
