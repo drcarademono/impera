@@ -38,6 +38,11 @@ static Project fixture(const QString &directory) {
 }
 int main(int argc, char **argv) {
     QApplication app(argc, argv);
+    QTemporaryDir settingsDirectory;
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settingsDirectory.path());
+    app.setOrganizationName("ImperaTests");
+    app.setApplicationName("WorkshopTests");
     int count = 0;
     auto test = [&](const char *name, auto fn) {
         fn();
@@ -1191,6 +1196,139 @@ int main(int argc, char **argv) {
             check(!Dialogue::inventoryOptions().value(65).isEmpty() &&
                       Dialogue::inventoryOptions().value(16) == "Dagger",
                   "Engine inventory labels incorrect");
+        });
+        test("Persistent game directory restoration and stale folder fallback", [&] {
+            QTemporaryDir dir;
+            fixture(dir.path());
+            WorkshopWindow first;
+            check(first.openGame(dir.path()), "Remembered folder open");
+            WorkshopWindow second;
+            check(second.restoreGameDirectory(), "Game folder did not restore in new window");
+            check(second.projectForTests().sourceDirectory ==
+                      first.projectForTests().sourceDirectory,
+                  "Restored wrong game folder");
+            QSettings().setValue("paths/game", dir.path() + "/missing");
+            WorkshopWindow missing;
+            check(!missing.restoreGameDirectory() && missing.projectForTests().resources.isEmpty(),
+                  "Stale game folder did not return to welcome screen");
+        });
+        test("Combat encounter coordinates and read-only trigger preview", [&] {
+            QTemporaryDir dir;
+            auto project = fixture(dir.path());
+            QByteArray bytes(352, char(0xee));
+            for (int row = 0; row < 11; ++row)
+                for (int x = 0; x < 11; ++x)
+                    bytes[row * 32 + x] = 1;
+            const int rows[] = {4, 1, 3, 2};
+            for (int row : rows) {
+                bytes[row * 32 + 11] = 2;
+                bytes[row * 32 + 17] = 3;
+            }
+            bytes[6 * 32 + 11] = 2;
+            bytes[7 * 32 + 11] = 3;
+            bytes[8 * 32 + 11] = 2;
+            bytes[8 * 32 + 19] = 3;
+            bytes[11] = 42;
+            bytes[9 * 32 + 11] = 4;
+            bytes[9 * 32 + 19] = 5;
+            bytes[10 * 32 + 11] = 6;
+            bytes[10 * 32 + 19] = 7;
+            file(dir.path() + "/BRIT.CBT", bytes);
+            WorkshopWindow window;
+            check(window.openGame(dir.path()), "Combat fixture open");
+            check(QSettings().value("paths/game").toString() ==
+                      window.projectForTests().sourceDirectory,
+                  "Selected game directory was not persisted");
+            window.selectResource("BRIT.CBT");
+            window.show();
+            app.processEvents();
+            app.processEvents();
+            // QWidget subclasses without Q_OBJECT use dynamic_cast rather than Qt casts.
+            MapCanvas *canvas = nullptr;
+            for (auto widget : window.findChildren<QWidget *>())
+                if (auto candidate = dynamic_cast<MapCanvas *>(widget))
+                    canvas = candidate;
+            check(canvas != nullptr, "Combat canvas missing");
+            window.findChild<QComboBox *>("mapTool")->setCurrentIndex(MapCanvas::InspectNpc);
+            auto entry = window.findChild<QComboBox *>("combatEntry");
+            auto entity = window.findChild<QComboBox *>("combatEntity");
+            check(entry && entity && entity->count() == 30, "Encounter record list missing");
+            auto mouse = [&](QEvent::Type type, QPoint cell, Qt::MouseButtons held) {
+                QPointF point((cell.x() + 0.5) * 16 * canvas->zoom,
+                              (cell.y() + 0.5) * 16 * canvas->zoom);
+                QMouseEvent event(type, point, point, Qt::LeftButton, held, Qt::NoModifier);
+                QApplication::sendEvent(canvas, &event);
+            };
+            for (int direction = 0; direction < 4; ++direction) {
+                entry->setCurrentIndex(direction);
+                entity->setCurrentIndex(0);
+                auto before = window.projectForTests().data("BRIT.CBT");
+                mouse(QEvent::MouseButtonPress, {2, 3}, Qt::LeftButton);
+                mouse(QEvent::MouseMove, {8, 9}, Qt::LeftButton);
+                check(window.projectForTests().data("BRIT.CBT") == before, "Drag committed early");
+                QKeyEvent escape(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
+                QApplication::sendEvent(canvas, &escape);
+                mouse(QEvent::MouseButtonRelease, {8, 9}, Qt::NoButton);
+                check(window.projectForTests().data("BRIT.CBT") == before,
+                      "Cancelled drag mutated data");
+                mouse(QEvent::MouseButtonPress, {2, 3}, Qt::LeftButton);
+                mouse(QEvent::MouseMove, {8, 9}, Qt::LeftButton);
+                mouse(QEvent::MouseButtonRelease, {8, 9}, Qt::NoButton);
+                before[rows[direction] * 32 + 11] = 8;
+                before[rows[direction] * 32 + 17] = 9;
+                check(window.projectForTests().data("BRIT.CBT") == before,
+                      "Party coordinate edit changed unrelated bytes");
+            }
+            for (int id : {6, 22}) {
+                entity->setCurrentIndex(id);
+                auto expected = window.projectForTests().data("BRIT.CBT");
+                mouse(QEvent::MouseButtonPress, {2, 3}, Qt::LeftButton);
+                mouse(QEvent::MouseMove, {8, 9}, Qt::LeftButton);
+                mouse(QEvent::MouseButtonRelease, {8, 9}, Qt::NoButton);
+                int xo = id == 6 ? 6 * 32 + 11 : 8 * 32 + 11;
+                int yo = id == 6 ? 7 * 32 + 11 : 8 * 32 + 19;
+                expected[xo] = 8;
+                expected[yo] = 9;
+                check(window.projectForTests().data("BRIT.CBT") == expected,
+                      "Encounter edit changed unrelated bytes");
+            }
+            auto beforePreview = window.projectForTests().data("BRIT.CBT");
+            window.findChild<QCheckBox *>("combatPreview")->setChecked(true);
+            check(U5::byte(canvas->ids, 5 * 11 + 4) == 42 &&
+                      U5::byte(canvas->ids, 7 * 11 + 6) == 42,
+                  "Trigger preview did not replace both linked cells");
+            check(window.projectForTests().data("BRIT.CBT") == beforePreview,
+                  "Trigger preview mutated stored data");
+            window.findChild<QComboBox *>("mapTool")->setCurrentIndex(MapCanvas::Pencil);
+            check(U5::byte(canvas->ids, 5 * 11 + 4) == 1,
+                  "Trigger preview leaked into terrain tools");
+            window.findChild<QComboBox *>("mapTool")->setCurrentIndex(MapCanvas::InspectNpc);
+            for (auto action : window.findChildren<QAction *>())
+                if (action->text().startsWith("Undo ")) {
+                    action->trigger();
+                    break;
+                }
+            app.processEvents();
+            app.processEvents();
+            auto undone = beforePreview;
+            undone[8 * 32 + 11] = 2;
+            undone[8 * 32 + 19] = 3;
+            check(window.projectForTests().data("BRIT.CBT") == undone,
+                  "Encounter undo changed unrelated bytes");
+            check(window.findChild<QComboBox *>("mapTool")->currentIndex() ==
+                          MapCanvas::InspectNpc &&
+                      window.findChild<QComboBox *>("combatEntity")->currentIndex() == 22 &&
+                      window.findChild<QComboBox *>("combatEntry")->currentIndex() == 3,
+                  "Encounter undo lost selected record, mode or entry direction");
+            for (auto action : window.findChildren<QAction *>())
+                if (action->text().startsWith("Redo ")) {
+                    action->trigger();
+                    break;
+                }
+            app.processEvents();
+            app.processEvents();
+            check(window.projectForTests().data("BRIT.CBT") == beforePreview,
+                  "Encounter redo failed");
         });
         if (qEnvironmentVariableIsSet("U5_GAME_DIR"))
             test("Original resource compatibility and native workspaces", [&] {

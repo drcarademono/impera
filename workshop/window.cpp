@@ -351,9 +351,23 @@ bool WorkshopWindow::saveProject() {
         statusBar()->showMessage("Project saved; original game files were not changed", 6000);
     });
 }
+bool WorkshopWindow::restoreGameDirectory() {
+    const QString remembered = QSettings().value("paths/game").toString();
+    if (remembered.isEmpty())
+        return false;
+    try {
+        Project probe;
+        probe.openGame(remembered);
+        return openGame(remembered);
+    } catch (const std::exception &) {
+        // Stale preferences must not prevent opening the welcome screen.
+        return false;
+    }
+}
 bool WorkshopWindow::openGame(const QString &path) {
     return guard([&] {
         project.openGame(path);
+        QSettings().setValue("paths/game", project.sourceDirectory);
         history.clear();
         savedTitle = project.title;
         current.clear();
@@ -1087,8 +1101,8 @@ QWidget *WorkshopWindow::combatEditor(const QString &name) {
     for (int i = 0; i < 21; i++)
         headers << QString::number(i);
     table->setHorizontalHeaderLabels(headers);
-    table->setVerticalHeaderLabels({"New tiles (8)", "Party N X/Y (6+6)", "Party E X/Y",
-                                    "Party S X/Y", "Party W X/Y", "Monster tiles (16)",
+    table->setVerticalHeaderLabels({"New tiles (8)", "Party E X/Y (6+6)", "Party W X/Y",
+                                    "Party S X/Y", "Party N X/Y", "Monster tiles (16)",
                                     "Monster X (16)", "Monster Y (16)", "Triggers X/Y (8+8)",
                                     "Change 1 X/Y", "Change 2 X/Y"});
     layout->addWidget(table, 1);

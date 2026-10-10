@@ -30,14 +30,18 @@ int main(int argc, char **argv) {
     parser.addOption({"game", "Read original DOS resources from this folder", "directory"});
     parser.addOption({"project", "Open a saved Workshop project", "file"});
     parser.addOption({"resource", "Initially select this resource", "name"});
-    parser.addOption({"smoke-test", "Open every resource editor and exit (uses --game or --project)"});
-    parser.addOption({"screenshot", "Save a UI screenshot before exiting (for development)", "file"});
+    parser.addOption(
+        {"smoke-test", "Open every resource editor and exit (uses --game or --project)"});
+    parser.addOption(
+        {"screenshot", "Save a UI screenshot before exiting (for development)", "file"});
     parser.process(app);
     WorkshopWindow window;
     if (parser.isSet("game") && !window.openGame(parser.value("game")))
         return 1;
     if (parser.isSet("project") && !window.openProject(parser.value("project")))
         return 1;
+    if (!parser.isSet("game") && !parser.isSet("project"))
+        window.restoreGameDirectory();
     if (parser.isSet("resource")) {
         if (!window.projectForTests().resources.contains(parser.value("resource")))
             return 1;

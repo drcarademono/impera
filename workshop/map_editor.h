@@ -70,6 +70,7 @@ class MapCanvas : public QWidget {
     bool grid = false;
     struct Actor {
         int x, y, tile, npc;
+        QString label;
     };
     QVector<Actor> actors, ghosts;
     int selectedNpc = -1;
@@ -199,6 +200,12 @@ class MapWorkspace : public QWidget {
     std::function<bool(const QMap<QString, QByteArray> &, const QString &)> commitResources;
     std::function<void(const QString &)> navigateResource;
     void refreshNpcs();
+    void refreshCombat();
+    void createCombatInspector(QVBoxLayout *layout);
+    QComboBox *combatEntry = nullptr, *combatEntity = nullptr;
+    QCheckBox *combatPreview = nullptr;
+    QLabel *combatInfo = nullptr;
+    bool moveCombat(int entity, QPoint destination);
     void selectNpc(int npc);
     void locateNpc();
     bool moveNpcTo(int npc, int x, int y, int floor);

@@ -210,3 +210,14 @@ QT_QPA_PLATFORM=offscreen U5_GAME_DIR='/path/to/Ultima 5' \
 The engine also has a `mod_packages` CTest covering corrupt/truncated packages,
 all-or-nothing mounting, load order, conflicts, reloads and read/write isolation.
 See [the package format](../docs/mod-packages.md) for the shared engine contract.
+
+
+Combat maps now include **Encounter** mode: choose North/East/South/West entry,
+select party starts, monsters or triggers from the map or record list, and drag
+to move with one undoable edit. Escape cancels a drag. Trigger selection shows
+both linked cells and the replacement tile; **Preview selected trigger result**
+is read-only. **Combat setup** retains raw and unusual metadata values.
+
+The game-files directory is remembered across startups. Explicit `--game` or
+`--project` arguments override that preference. If the remembered folder moves
+or becomes invalid, use **Open game / New mod** to select it again.

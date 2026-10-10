@@ -276,7 +276,7 @@ return. The engine's `NpcScheduleFmt`, `NPC_0000_LoadNpcFile` and `NPC_12e0` con
 the record layout and shared-location mapping. No runtime wandering simulation or
 NPC allocation policy has been introduced.
 
-## Next: Phase 4 — Combat integration
+## Phase 4 — Combat integration (implemented)
 
 Add an Encounter mode beside terrain editing for combat maps:
 
@@ -298,3 +298,35 @@ configurations, overlap/sentinel handling, trigger linkage, cancellation and
 undo/redo while preserving view state. Terrain tools must continue to preserve
 all combat metadata. This remains authoring of stored encounter data, not a
 simulation of combat AI or dynamic object state.
+
+
+### Phase 4 outcome
+
+Combat maps offer Encounter mode with labeled party, monster and trigger markers,
+a complete record selector, all four entry directions, cancellable drag previews
+and atomic coordinate edits. Selecting a trigger displays its replacement tile
+and both linked positions; a read-only result preview never alters stored terrain.
+Unknown, disabled and out-of-bounds records remain available in Combat setup.
+The engine audit corrected the old party-row labels: rows 1/2/3/4 mean
+East/West/South/North. Monster coordinates occupy rows 6/7; trigger coordinates
+row 8; both target sets rows 9/10. Each trigger uses its row-0 replacement tile
+for both valid targets. Runtime encounter overrides and AI are not simulated.
+
+Workshop remembers a successfully opened game-files directory in native user
+settings and restores it on startup. Explicit --game/--project paths take
+precedence. A missing or invalid remembered directory leaves the welcome screen.
+
+## Next: Phase 5 — Polish
+
+1. Audit engine tile properties and provide verified terrain categories and
+   searchable descriptions without guessing at unknown IDs.
+2. Improve keyboard-only navigation, focus indicators, marker legibility and
+   compact-window layouts; retain labels alongside color distinctions.
+3. Refine image exports and diagnostics so terrain, encounter previews and
+   authoring overlays are clearly distinguished.
+4. Consider optional display previews using the engine's presentation settings,
+   while keeping stored resource bytes and runtime simulation separate.
+
+Acceptance: keyboard and small-window workflows remain usable, exports reflect
+what their labels promise, tile labels are backed by engine data, and all existing
+lossless-format, editing, undo and package tests continue to pass.

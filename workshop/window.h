@@ -11,6 +11,7 @@ class WorkshopWindow : public QMainWindow {
   public:
     WorkshopWindow();
     bool openGame(const QString &path);
+    bool restoreGameDirectory();
     bool openProject(const QString &path);
     Project &projectForTests() { return project; }
     void selectResource(const QString &name);

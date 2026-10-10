@@ -129,9 +129,19 @@ void MapCanvas::paintEvent(QPaintEvent *e) {
         }
     for (auto a : actors)
         if (a.x >= 0 && a.y >= 0 && a.x < side && a.y < side && a.tile >= 0 &&
-            a.tile < tiles.size())
+            a.tile < tiles.size() && a.label.isEmpty())
             p.drawImage(QRectF(a.x * cell, a.y * cell, cell, cell), tiles[a.tile]);
     if (tool == InspectNpc) {
+        for (auto actor : actors)
+            if (!actor.label.isEmpty()) {
+                QRectF r(actor.x * cell, actor.y * cell, cell, cell);
+                if (actor.x < 0 || actor.y < 0 || actor.x >= side || actor.y >= side)
+                    continue;
+                p.fillRect(r.adjusted(2, 2, -2, -2), QColor(20, 30, 60, 180));
+                p.setPen(actor.label.startsWith("T") ? QColor("#ffbd55") : QColor("#72caff"));
+                p.drawRect(r.adjusted(2, 2, -2, -2));
+                p.drawText(r, Qt::AlignCenter, actor.label);
+            }
         for (auto actor : ghosts) {
             p.setOpacity(0.35);
             if (actor.tile >= 0 && actor.tile < tiles.size())
@@ -153,6 +163,12 @@ void MapCanvas::paintEvent(QPaintEvent *e) {
                         QRectF(npcDestination.x() * cell, npcDestination.y() * cell, cell, cell),
                         tiles[actor.tile]);
                     p.setOpacity(1);
+                    if (!actor.label.isEmpty()) {
+                        p.setPen(QColor("#72caff"));
+                        p.drawText(QRectF(npcDestination.x() * cell, npcDestination.y() * cell,
+                                          cell, cell),
+                                   Qt::AlignCenter, actor.label);
+                    }
                 }
             }
     }
@@ -817,7 +833,9 @@ MapWorkspace::MapWorkspace(
     tool->addItems({"Pencil (B)", "Eyedropper (I)", "Pan"});
     QString companion = resource.left(resource.size() - 4) + ".NPC";
     tool->addItems({"NPCs", "Select (V)", "Rectangle (R)", "Fill (F)"});
-    if (!project->resources.contains(companion))
+    if (resource.endsWith(".CBT"))
+        tool->setItemText(MapCanvas::InspectNpc, "Encounter");
+    if (!project->resources.contains(companion) && !resource.endsWith(".CBT"))
         qobject_cast<QStandardItemModel *>(tool->model())
             ->item(MapCanvas::InspectNpc)
             ->setEnabled(false);
@@ -943,7 +961,10 @@ MapWorkspace::MapWorkspace(
     npcPanel->setWidgetResizable(true);
     auto npcContent = new QWidget;
     auto npcLayout = new QVBoxLayout(npcContent);
-    createNpcInspector(npcLayout);
+    if (resource.endsWith(".CBT"))
+        createCombatInspector(npcLayout);
+    else
+        createNpcInspector(npcLayout);
     npcPanel->setWidget(npcContent);
     inspector->addWidget(npcPanel);
     right->setMinimumWidth(220);
@@ -1039,6 +1060,8 @@ MapWorkspace::MapWorkspace(
         cancelGesture();
         canvas->tool = i;
         inspector->setCurrentIndex(i == MapCanvas::InspectNpc ? 1 : 0);
+        if (resource.endsWith(".CBT"))
+            refreshCombat();
         findChild<QPushButton *>("mapPaste")->setEnabled(i != MapCanvas::InspectNpc);
         canvas->update();
         canvas->setCursor(i == 2 ? Qt::OpenHandCursor : Qt::CrossCursor);
@@ -1083,7 +1106,9 @@ MapWorkspace::MapWorkspace(
     canvas->chooseActor = [this](const QList<int> &candidates) {
         QStringList names;
         for (int npc : candidates)
-            names.append(QString("Slot %1 · %2").arg(npc).arg(npcName(npc)));
+            names.append(resource.endsWith(".CBT")
+                             ? combatEntity->itemText(npc)
+                             : QString("Slot %1 · %2").arg(npc).arg(npcName(npc)));
         bool ok = false;
         QString selected =
             QInputDialog::getItem(this, "Choose NPC", "Actors on this tile", names, 0, false, &ok);
@@ -1091,6 +1116,8 @@ MapWorkspace::MapWorkspace(
         return ok ? candidates[names.indexOf(selected)] : -1;
     };
     canvas->moveNpc = [this](int npc, QPoint destination) {
+        if (resource.endsWith(".CBT"))
+            return moveCombat(npc, destination);
         return moveNpcTo(npc, destination.x(), destination.y(),
                          document.pages[page->currentIndex()].floor);
     };
@@ -1376,6 +1403,10 @@ void MapWorkspace::createNpcInspector(QVBoxLayout *layout) {
     });
 }
 void MapWorkspace::refreshNpcs() {
+    if (resource.endsWith(".CBT")) {
+        refreshCombat();
+        return;
+    }
     canvas->actors.clear();
     canvas->ghosts.clear();
     const auto &mp = document.pages[page->currentIndex()];
@@ -1470,6 +1501,12 @@ void MapWorkspace::refreshNpcs() {
     canvas->update();
 }
 void MapWorkspace::selectNpc(int npc) {
+    if (resource.endsWith(".CBT")) {
+        canvas->selectedNpc = npc;
+        refreshCombat();
+        saveView();
+        return;
+    }
     canvas->selectedNpc = npc;
     (*navigation)[resource + "/actor/" +
                   QString::number(document.pages[page->currentIndex()].settlement)] = npc;
@@ -1557,4 +1594,132 @@ void MapWorkspace::exportImage(bool ids) {
     } catch (const std::exception &e) {
         QMessageBox::warning(this, "Map export", QString::fromUtf8(e.what()));
     }
+}
+
+// Metadata rows verified against src/macros.h and COMBAT_112e in src/combat.c.
+namespace {
+QPair<int, int> combatOffsets(int base, int entity, int entry) {
+    if (entity < 6) {
+        const int rows[] = {4, 1, 3, 2}; // North, East, South, West
+        return {base + rows[entry] * 32 + 11 + entity, base + rows[entry] * 32 + 17 + entity};
+    }
+    if (entity < 22)
+        return {base + 6 * 32 + 11 + entity - 6, base + 7 * 32 + 11 + entity - 6};
+    return {base + 8 * 32 + 11 + entity - 22, base + 8 * 32 + 19 + entity - 22};
+}
+} // namespace
+void MapWorkspace::createCombatInspector(QVBoxLayout *layout) {
+    layout->addWidget(new QLabel("Encounter authoring"));
+    npcGhosts = new QCheckBox(this);
+    npcGhosts->hide();
+    combatEntry = new QComboBox;
+    combatEntry->setObjectName("combatEntry");
+    combatEntry->addItems({"North entry", "East entry", "South entry", "West entry"});
+    combatEntry->setCurrentIndex(navigation->value(resource + "/entry", 0));
+    layout->addWidget(combatEntry);
+    combatEntity = new QComboBox;
+    combatEntity->setObjectName("combatEntity");
+    combatEntity->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    combatEntity->setMinimumContentsLength(12);
+    combatEntity->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+    layout->addWidget(combatEntity);
+    combatInfo = new QLabel;
+    combatInfo->setWordWrap(true);
+    combatInfo->setTextFormat(Qt::PlainText);
+    layout->addWidget(combatInfo);
+    combatPreview = new QCheckBox("Preview selected trigger result");
+    combatPreview->setObjectName("combatPreview");
+    combatPreview->setChecked(navigation->value(resource + "/preview", 0));
+    layout->addWidget(combatPreview);
+    auto advanced = new QLabel(
+        "Drag markers to move. P = party start, M = monster, T = trigger. Disabled/out-of-bounds "
+        "records stay in the list. Use the Combat setup tab for raw metadata. Trigger preview is "
+        "read-only; runtime AI and special encounters are not simulated.");
+    advanced->setWordWrap(true);
+    layout->addWidget(advanced);
+    layout->addStretch();
+    connect(combatEntry, &QComboBox::currentIndexChanged, this, [this](int value) {
+        canvas->cancelStroke();
+        (*navigation)[resource + "/entry"] = value;
+        refreshCombat();
+    });
+    connect(combatEntity, &QComboBox::currentIndexChanged, this, [this](int value) {
+        canvas->cancelStroke();
+        canvas->selectedNpc = value;
+        refreshCombat();
+        saveView();
+    });
+    connect(combatPreview, &QCheckBox::toggled, this, [this](bool value) {
+        canvas->cancelStroke();
+        (*navigation)[resource + "/preview"] = value;
+        refreshCombat();
+    });
+}
+void MapWorkspace::refreshCombat() {
+    canvas->actors.clear();
+    canvas->ghosts.clear();
+    canvas->ids = document.terrain(page->currentIndex());
+    const auto bytes = project->data(resource);
+    const int base = document.pages[page->currentIndex()].offset;
+    QSignalBlocker blocked(combatEntity);
+    combatEntity->clear();
+    QString info;
+    for (int entity = 0; entity < 30; ++entity) {
+        auto offsets = combatOffsets(base, entity, combatEntry->currentIndex());
+        int x = U5::byte(bytes, offsets.first), y = U5::byte(bytes, offsets.second);
+        QString label = entity < 6    ? QString("P%1").arg(entity + 1)
+                        : entity < 22 ? QString("M%1").arg(entity - 5)
+                                      : QString("T%1").arg(entity - 21);
+        bool enabled =
+            entity < 6 || entity >= 22 || U5::byte(bytes, base + 5 * 32 + 11 + entity - 6) != 0;
+        combatEntity->addItem(QString("%1 · (%2, %3)%4")
+                                  .arg(label)
+                                  .arg(x)
+                                  .arg(y)
+                                  .arg(!enabled           ? " · disabled"
+                                       : x > 10 || y > 10 ? " · outside"
+                                                          : ""));
+        canvas->actors.append({x, y, 0, entity, label});
+        if (entity != canvas->selectedNpc)
+            continue;
+        info = combatEntity->itemText(entity);
+        if (entity >= 22) {
+            int trigger = entity - 22, tile = U5::byte(bytes, base + 11 + trigger);
+            info += QString("\nReplacement tile %1").arg(tile);
+            for (int row : {9, 10}) {
+                int cx = U5::byte(bytes, base + row * 32 + 11 + trigger);
+                int cy = U5::byte(bytes, base + row * 32 + 19 + trigger);
+                info += QString("\nChange %1: (%2, %3)%4")
+                            .arg(row - 8)
+                            .arg(cx)
+                            .arg(cy)
+                            .arg(cx > 10 || cy > 10 ? " (ignored by engine)" : "");
+                if (cx < 11 && cy < 11) {
+                    canvas->ghosts.append({cx, cy, tile, row - 8});
+                    if (combatPreview->isChecked() && canvas->tool == MapCanvas::InspectNpc)
+                        canvas->ids[cy * 11 + cx] = char(tile);
+                }
+            }
+        }
+    }
+    combatEntity->setCurrentIndex(canvas->selectedNpc);
+    combatInfo->setText(info.isEmpty() ? "Select a marker or record." : info);
+    combatPreview->setEnabled(canvas->selectedNpc >= 22);
+    canvas->update();
+}
+bool MapWorkspace::moveCombat(int entity, QPoint destination) {
+    if (entity < 0 || entity >= 30 || destination.x() < 0 || destination.y() < 0 ||
+        destination.x() > 10 || destination.y() > 10)
+        return false;
+    auto bytes = project->data(resource);
+    auto offsets = combatOffsets(document.pages[page->currentIndex()].offset, entity,
+                                 combatEntry->currentIndex());
+    bytes[offsets.first] = char(destination.x());
+    bytes[offsets.second] = char(destination.y());
+    if (bytes != project->data(resource) &&
+        !commitResources({{resource, bytes}}, "Move encounter marker"))
+        return false;
+    refreshCombat();
+    saveView();
+    return true;
 }
