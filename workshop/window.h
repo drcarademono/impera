@@ -1,4 +1,5 @@
 #pragma once
+#include "map_editor.h"
 #include "project.h"
 #include <QLabel>
 #include <QMainWindow>
@@ -23,10 +24,11 @@ class WorkshopWindow : public QMainWindow {
     QTreeWidget *assets;
     QStackedWidget *content;
     QLabel *summary;
-    QString current, savedTitle;
+    QString current, savedTitle, lastMap;
     bool rebuildPending = false;
     std::function<bool()> flushDraft;
     QMap<QString, int> editorState;
+    QMap<QString, MapViewState> mapViewStates;
     bool guard(const std::function<void()> &operation);
     bool canLeave();
     bool saveProject();

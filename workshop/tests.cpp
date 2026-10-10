@@ -269,6 +269,229 @@ int main(int argc, char **argv) {
             f.open(QIODevice::ReadOnly);
             check(f.readAll() == p.resources["INIT.GAM"].original, "Original file mutated");
         });
+        test("Map document edits preserve floor bytes and combat metadata", [&] {
+            QTemporaryDir dir;
+            auto p = fixture(dir.path());
+            QByteArray settlement(16384, 4), combat(704, char(173));
+            p.resources["TOWNE.DAT"] = {settlement, settlement};
+            p.resources["TEST.CBT"] = {combat, combat};
+            MapDocument town(&p, "TOWNE.DAT");
+            auto cells = town.terrain(6);
+            cells[45] = 9;
+            auto changed = town.changes(6, cells)["TOWNE.DAT"];
+            check(changed[6 * 1024 + 45] == 9 &&
+                      changed.left(6 * 1024) == settlement.left(6 * 1024),
+                  "Settlement floor changed unrelated data");
+            MapDocument encounter(&p, "TEST.CBT");
+            auto terrain = encounter.terrain(1);
+            terrain[2 * 11 + 3] = 8;
+            auto after = encounter.changes(1, terrain)["TEST.CBT"];
+            for (int i = 0; i < combat.size(); ++i)
+                check(after[i] == (i == 352 + 2 * 32 + 3 ? char(8) : combat[i]),
+                      "Combat terrain damaged metadata");
+            rejects([&] { encounter.changes(1, QByteArray(120, 0)); });
+            check(p.changed().isEmpty(), "Map proposals mutated project before commitment");
+            QByteArray ovl(0x3986, 0);
+            ovl.replace(0x3886, 256, QByteArray(256, char(255)));
+            p.resources["DATA.OVL"] = {ovl, ovl};
+            p.resources["BRIT.DAT"] = {{}, {}};
+            MapDocument world(&p, "BRIT.DAT");
+            auto water = world.terrain(0);
+            water[0] = 2;
+            auto pair = world.changes(0, water);
+            check(pair.size() == 2 &&
+                      U5::worldMap("BRIT.DAT", pair["BRIT.DAT"], pair["DATA.OVL"]) == water,
+                  "World proposal lost paired-resource edit");
+            auto tooMany = water;
+            for (int i = 0; i < 256; ++i) {
+                int off = (i / 16 * 16) * 256 + (i % 16 * 16);
+                tooMany[off] = char(i);
+                tooMany[off + 1] = char(3);
+            }
+            rejects([&] { world.changes(0, tooMany); });
+            check(p.changed().isEmpty(), "Failed capacity check modified project");
+        });
+        test("Continuous map gestures, boundary picking and cancellation", [&] {
+            MapCanvas canvas;
+            canvas.side = 16;
+            canvas.zoom = 1;
+            canvas.ids = QByteArray(256, 0);
+            canvas.brush = 7;
+            canvas.resizeMap();
+            int commits = 0;
+            canvas.commit = [&](const QByteArray &) {
+                ++commits;
+                return true;
+            };
+            auto mouse = [&](QEvent::Type type, QPointF pos, Qt::MouseButton button,
+                             Qt::MouseButtons buttons) {
+                QMouseEvent event(type, pos, pos, button, buttons, Qt::NoModifier);
+                QApplication::sendEvent(&canvas, &event);
+            };
+            mouse(QEvent::MouseButtonPress, {8, 8}, Qt::LeftButton, Qt::LeftButton);
+            mouse(QEvent::MouseMove, {248, 248}, Qt::NoButton, Qt::LeftButton);
+            mouse(QEvent::MouseButtonRelease, {248, 248}, Qt::LeftButton, Qt::NoButton);
+            check(commits == 1, "Continuous drag committed multiple commands");
+            for (int i = 0; i < 16; ++i)
+                check(canvas.ids[i * 16 + i] == 7, "Fast diagonal stroke has gaps");
+            auto original = canvas.ids;
+            mouse(QEvent::MouseButtonPress, {-0.1, 8}, Qt::LeftButton, Qt::LeftButton);
+            mouse(QEvent::MouseButtonRelease, {-0.1, 8}, Qt::LeftButton, Qt::NoButton);
+            check(canvas.ids == original && commits == 1, "Outside click changed edge cell");
+            mouse(QEvent::MouseButtonPress, {24, 8}, Qt::LeftButton, Qt::LeftButton);
+            QKeyEvent escape(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
+            QApplication::sendEvent(&canvas, &escape);
+            mouse(QEvent::MouseButtonRelease, {24, 8}, Qt::LeftButton, Qt::NoButton);
+            check(canvas.ids == original && commits == 1, "Escape did not discard whole gesture");
+            mouse(QEvent::MouseButtonPress, {24, 8}, Qt::LeftButton, Qt::LeftButton);
+            QFocusEvent lost(QEvent::FocusOut);
+            QApplication::sendEvent(&canvas, &lost);
+            check(canvas.ids == original && !canvas.painting(),
+                  "Lost focus left uncommitted painting");
+            mouse(QEvent::MouseButtonPress, {24, 8}, Qt::LeftButton, Qt::LeftButton);
+            mouse(QEvent::MouseButtonRelease, {500, 500}, Qt::LeftButton, Qt::NoButton);
+            check(commits == 2 && !canvas.painting(), "Release outside did not end stroke");
+            original = canvas.ids;
+            canvas.commit = [&](const QByteArray &) { return false; };
+            mouse(QEvent::MouseButtonPress, {40, 8}, Qt::LeftButton, Qt::LeftButton);
+            mouse(QEvent::MouseButtonRelease, {40, 8}, Qt::LeftButton, Qt::NoButton);
+            check(canvas.ids == original, "Rejected edit left painted cells visible");
+            int picked = -1;
+            canvas.pick = [&](int id) { picked = id; };
+            mouse(QEvent::MouseButtonPress, {8, 8}, Qt::RightButton, Qt::RightButton);
+            check(picked == 7 && canvas.ids == original, "Eyedropper painted terrain");
+            int hovered = -1;
+            canvas.inspect = [&](int x, int, int) { hovered = x; };
+            mouse(QEvent::MouseMove, {40, 8}, Qt::NoButton, Qt::NoButton);
+            check(hovered == 2, "Hover requires a pressed button");
+            canvas.zoom = 0.35;
+            canvas.resizeMap();
+            check(canvas.cellAt({16 * 0.35 * 3 + 0.1, 16 * 0.35 * 5 + 0.1}) == QPoint(3, 5),
+                  "Fractional zoom picking disagrees with canvas");
+        });
+        test("Pointer-anchored map zoom and read-only panning", [&] {
+            auto canvas = new MapCanvas;
+            canvas->side = 32;
+            canvas->zoom = 2;
+            canvas->ids = QByteArray(1024, 0);
+            canvas->resizeMap();
+            MapView view(canvas);
+            view.resize(460, 380);
+            view.show();
+            app.processEvents();
+            view.centerMap({16, 16});
+            QPoint anchor(130, 90);
+            auto before = QPointF(canvas->mapFrom(view.viewport(), anchor)) / (16 * canvas->zoom);
+            view.setZoom(4, anchor);
+            app.processEvents();
+            auto after = QPointF(canvas->mapFrom(view.viewport(), anchor)) / (16 * canvas->zoom);
+            check(QLineF(before, after).length() < 0.03, "Zoom moved map point under pointer");
+            auto original = canvas->ids;
+            int old = view.horizontalScrollBar()->value();
+            auto pan = [&](QEvent::Type type, QPointF pos, Qt::MouseButton button,
+                           Qt::MouseButtons buttons) {
+                QMouseEvent event(type, pos, pos, button, buttons, Qt::NoModifier);
+                QApplication::sendEvent(canvas, &event);
+            };
+            pan(QEvent::MouseButtonPress, {100, 100}, Qt::MiddleButton, Qt::MiddleButton);
+            pan(QEvent::MouseMove, {140, 100}, Qt::NoButton, Qt::MiddleButton);
+            pan(QEvent::MouseButtonRelease, {140, 100}, Qt::MiddleButton, Qt::NoButton);
+            check(view.horizontalScrollBar()->value() == old - 40 && canvas->ids == original,
+                  "Pan painted or failed to move view");
+            view.fitMap();
+            app.processEvents();
+            check(view.fitting && canvas->width() <= view.viewport()->width() &&
+                      canvas->height() <= view.viewport()->height(),
+                  "Fit clipped map");
+        });
+        test("Map workspace brush, navigation and undo preserve view state", [&] {
+            QTemporaryDir dir;
+            fixture(dir.path());
+            file(dir.path() + "/TOWNE.DAT", QByteArray(16384, 0));
+            WorkshopWindow w;
+            check(w.openGame(dir.path()), "Map view fixture load");
+            w.show();
+            w.selectResource("TOWNE.DAT");
+            app.processEvents();
+            auto active = [&] {
+                return w.findChild<QStackedWidget *>("workspaces")->currentWidget();
+            };
+            auto findCanvas = [&] {
+                return dynamic_cast<MapCanvas *>(active()->findChild<QWidget *>("mapCanvas"));
+            };
+            auto palette = active()->findChild<QListWidget *>("mapPalette");
+            palette->setCurrentRow(9);
+            active()->findChild<QCheckBox *>("mapGrid")->setChecked(true);
+            active()->findChild<QComboBox *>("mapZoom")->setCurrentIndex(4);
+            auto view = dynamic_cast<MapView *>(active()->findChild<QScrollArea *>("canvasView"));
+            view->centerMap({12, 13});
+            auto center = view->mapCenter();
+            auto canvas = findCanvas();
+            QMouseEvent down(QEvent::MouseButtonPress, {40, 40}, {40, 40}, Qt::LeftButton,
+                             Qt::LeftButton, Qt::NoModifier);
+            QMouseEvent up(QEvent::MouseButtonRelease, {40, 40}, {40, 40}, Qt::LeftButton,
+                           Qt::NoButton, Qt::NoModifier);
+            QApplication::sendEvent(canvas, &down);
+            QApplication::sendEvent(canvas, &up);
+            check(U5::byte(w.projectForTests().data("TOWNE.DAT"), 0) == 9,
+                  "Selected brush did not paint");
+            for (auto action : w.findChildren<QAction *>())
+                if (action->text().startsWith("Undo ")) {
+                    action->trigger();
+                    break;
+                }
+            app.processEvents();
+            app.processEvents(); // Rebuild and queued viewport restoration use separate event
+                                 // turns.
+            canvas = findCanvas();
+            view = dynamic_cast<MapView *>(active()->findChild<QScrollArea *>("canvasView"));
+            check(canvas->brush == 9 && canvas->grid && canvas->zoom == 4 &&
+                      QLineF(center, view->mapCenter()).length() < 0.1,
+                  "Undo reset view settings");
+            check(w.projectForTests().data("TOWNE.DAT") == QByteArray(16384, 0),
+                  "Undo failed terrain restoration");
+            for (auto action : w.findChildren<QAction *>())
+                if (action->text().startsWith("Redo ")) {
+                    action->trigger();
+                    break;
+                }
+            app.processEvents();
+            app.processEvents();
+            view = dynamic_cast<MapView *>(active()->findChild<QScrollArea *>("canvasView"));
+            check(U5::byte(w.projectForTests().data("TOWNE.DAT"), 0) == 9 &&
+                      QLineF(center, view->mapCenter()).length() < 0.1,
+                  "Redo lost terrain or view center");
+            for (auto action : w.findChildren<QAction *>())
+                if (action->text().startsWith("Undo ")) {
+                    action->trigger();
+                    break;
+                }
+            app.processEvents();
+            app.processEvents();
+            auto page = active()->findChild<QComboBox *>("mapPage");
+            page->setCurrentIndex(6);
+            app.processEvents();
+            active()->findChild<QListWidget *>("mapPalette")->setCurrentRow(11);
+            page->setCurrentIndex(0);
+            app.processEvents();
+            check(findCanvas()->brush == 9, "Floor navigation did not restore per-page brush");
+            QMouseEvent pick(QEvent::MouseButtonPress, {40, 40}, {40, 40}, Qt::RightButton,
+                             Qt::RightButton, Qt::NoModifier);
+            QApplication::sendEvent(findCanvas(), &pick);
+            check(active()->findChild<QListWidget *>("mapPalette")->currentRow() == 0 &&
+                      active()->findChild<QLabel *>("mapBrushLabel")->text().contains("Tile 0"),
+                  "Eyedropper and palette disagree");
+            w.selectResource("TILES.16");
+            app.processEvents();
+            auto back = active()->findChild<QPushButton *>("backToMap");
+            check(back, "Linked workspace lacks return to map");
+            back->click();
+            app.processEvents();
+            check(findCanvas()->grid && findCanvas()->zoom == 4 && findCanvas()->brush == 0,
+                  "Return to map lost view state");
+            check(w.projectForTests().changed().isEmpty(),
+                  "Navigation or view settings changed resources");
+        });
         test("Native widgets are read-only until an edit", [&] {
             QTemporaryDir dir;
             auto p = fixture(dir.path());

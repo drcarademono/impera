@@ -77,82 +77,6 @@ QScrollArea *makeScroll(QWidget *widget, bool resize = false) {
     area->setWidgetResizable(resize);
     return area;
 }
-class MapCanvas : public QWidget {
-  public:
-    QByteArray ids;
-    QVector<QImage> tiles;
-    int side = 32, zoom = 2, brush = 1;
-    bool grid = false;
-    std::function<void(const QByteArray &)> commit;
-    std::function<void(int, int, int)> inspect;
-    QByteArray before;
-    struct Actor {
-        int x, y, tile, npc;
-    };
-    QVector<Actor> actors;
-    bool inspectMode = false;
-    std::function<void(int)> chooseNpc;
-    void size() {
-        setFixedSize(side * 16 * zoom, side * 16 * zoom);
-        update();
-    }
-
-  protected:
-    void paintEvent(QPaintEvent *e) override {
-        QPainter p(this);
-        int cell = 16 * zoom;
-        QRect r = e->rect();
-        p.fillRect(r, QColor("#141b27"));
-        for (int y = qMax(0, r.top() / cell); y <= qMin(side - 1, r.bottom() / cell); y++)
-            for (int x = qMax(0, r.left() / cell); x <= qMin(side - 1, r.right() / cell); x++) {
-                int id = (unsigned char)ids[y * side + x];
-                QRect dest(x * cell, y * cell, cell, cell);
-                if (id < tiles.size())
-                    p.drawImage(dest, tiles[id]);
-                else
-                    p.fillRect(dest, Qt::magenta);
-                if (grid) {
-                    p.setPen(QColor(255, 255, 255, 45));
-                    p.drawRect(dest.adjusted(0, 0, -1, -1));
-                }
-            }
-        for (auto actor : actors)
-            if (actor.tile < tiles.size())
-                p.drawImage(QRect(actor.x * cell, actor.y * cell, cell, cell), tiles[actor.tile]);
-    }
-    void point(QMouseEvent *e) {
-        int x = int(e->position().x()) / (16 * zoom), y = int(e->position().y()) / (16 * zoom);
-        if (x < 0 || y < 0 || x >= side || y >= side)
-            return;
-        if (inspect)
-            inspect(x, y, (unsigned char)ids[y * side + x]);
-        if (inspectMode) {
-            if (e->type() == QEvent::MouseButtonPress && (e->buttons() & Qt::LeftButton) &&
-                chooseNpc)
-                for (auto actor : actors)
-                    if (actor.x == x && actor.y == y) {
-                        chooseNpc(actor.npc);
-                        break;
-                    }
-            return;
-        }
-        if (e->buttons() & Qt::RightButton)
-            brush = (unsigned char)ids[y * side + x];
-        else if (e->buttons() & Qt::LeftButton) {
-            ids[y * side + x] = char(brush);
-            update(QRect(x * 16 * zoom, y * 16 * zoom, 16 * zoom, 16 * zoom));
-        }
-    }
-    void mousePressEvent(QMouseEvent *e) override {
-        before = ids;
-        point(e);
-    }
-    void mouseMoveEvent(QMouseEvent *e) override { point(e); }
-    void mouseReleaseEvent(QMouseEvent *) override {
-        if (ids != before && commit)
-            commit(ids);
-    }
-};
 class PixelCanvas : public QWidget {
   public:
     QImage image;
@@ -434,6 +358,8 @@ bool WorkshopWindow::openGame(const QString &path) {
         savedTitle = project.title;
         current.clear();
         editorState.clear();
+        mapViewStates.clear();
+        lastMap.clear();
         flushDraft = {};
         rebuildTree();
         selectResource("TILES.16");
@@ -447,6 +373,8 @@ bool WorkshopWindow::openProject(const QString &path) {
         savedTitle = project.title;
         current.clear();
         editorState.clear();
+        mapViewStates.clear();
+        lastMap.clear();
         flushDraft = {};
         rebuildTree();
         selectResource("TILES.16");
@@ -511,6 +439,8 @@ void WorkshopWindow::selectResource(const QString &name) {
     }
     flushDraft = {};
     current = name;
+    if (MapDocument::supported(name))
+        lastMap = name;
     rebuildEditor();
 }
 void WorkshopWindow::rebuildEditor() {
@@ -540,7 +470,7 @@ void WorkshopWindow::rebuildEditor() {
     }
     content->addWidget(w);
     content->setCurrentWidget(w);
-    if (oldView)
+    if (oldView && !w->findChild<QWidget *>("mapWorkspace"))
         QTimer::singleShot(0, w, [w, scrollPosition] {
             auto view = w->findChild<QScrollArea *>("canvasView");
             if (view) {
@@ -551,10 +481,16 @@ void WorkshopWindow::rebuildEditor() {
 }
 QWidget *WorkshopWindow::resourceEditor(const QString &name) {
     auto tabs = new QTabWidget;
+    if (!MapDocument::supported(name) && !lastMap.isEmpty()) {
+        auto back = new QPushButton("Back to map");
+        back->setObjectName("backToMap");
+        tabs->setCornerWidget(back);
+        connect(back, &QPushButton::clicked, this, [this] { selectResource(lastMap); });
+    }
     QWidget *editor = nullptr;
     for (auto action : menuBar()->actions())
         if (action->text() == "Resource Library")
-            action->setChecked(!name.endsWith(".TLK"));
+            action->setChecked(!name.endsWith(".TLK") && !MapDocument::supported(name));
     if (name.endsWith(".16"))
         editor = graphicsEditor(name);
     else if (name.endsWith(".TLK"))
@@ -579,175 +515,17 @@ QWidget *WorkshopWindow::resourceEditor(const QString &name) {
     return tabs;
 }
 QWidget *WorkshopWindow::mapEditor(const QString &name) {
-    auto pages = U5::mapPages(name, project.data(name));
-    auto tiles = U5::readGraphics("TILES.16", project.data("TILES.16")).images;
-    QVBoxLayout *layout;
-    auto w = panel(&layout);
-    auto row = new QHBoxLayout;
-    auto page = new QComboBox;
-    for (auto p : pages)
-        page->addItem(p.name);
-    page->setObjectName("mapPage");
-    page->setCurrentIndex(qBound(0, editorState.value(name + "/map"), int(pages.size()) - 1));
-    row->addWidget(page, 1);
-    auto zoom = new QComboBox;
-    zoom->addItems({"1×", "2×", "3×", "4×"});
-    zoom->setCurrentIndex(1);
-    row->addWidget(zoom);
-    auto grid = new QCheckBox("Grid");
-    row->addWidget(grid);
-    QString companion = name.left(name.size() - 4) + ".NPC";
-    auto schedule = new QComboBox;
-    auto inspect = new QCheckBox("Inspect NPCs");
-    if (project.resources.contains(companion)) {
-        schedule->addItems({"NPCs t0", "NPCs t1", "NPCs t2", "NPCs t3"});
-        schedule->setCurrentIndex(editorState.value(name + "/schedule"));
-        row->addWidget(schedule);
-        row->addWidget(inspect);
-    }
-    layout->addLayout(row);
-    auto split = new QSplitter;
-    auto canvas = new MapCanvas;
-    canvas->setObjectName("mapCanvas");
-    canvas->tiles = tiles;
-    auto view = makeScroll(canvas);
-    view->setObjectName("canvasView");
-    split->addWidget(view);
-    auto palette = new QListWidget;
-    palette->setViewMode(QListView::IconMode);
-    palette->setResizeMode(QListView::Adjust);
-    palette->setIconSize({32, 32});
-    palette->setGridSize({58, 58});
-    palette->setMaximumWidth(260);
-    palette->setMinimumWidth(180);
-    for (int i = 0; i < 256; i++) {
-        auto item =
-            new QListWidgetItem(QIcon(QPixmap::fromImage(tiles[i])), QString::number(i), palette);
-        item->setToolTip(QString("Tile %1 (0x%2)").arg(i).arg(i, 2, 16, QChar('0')));
-    }
-    split->addWidget(palette);
-    layout->addWidget(split, 1);
-    auto coord = new QLabel;
-    layout->addWidget(coord);
-    layout->addWidget(hint("Left-drag paints a stroke. Right-click picks a tile. "
-                           "Undo/redo works per stroke. "
-                           "Choose a settlement and floor above; Inspect NPCs "
-                           "lets you click an NPC to open "
-                           "its schedule. Select the four time slots above."));
-    auto load = [=] {
-        const auto &p = pages[page->currentIndex()];
-        canvas->side = p.side;
-        canvas->ids.clear();
-        auto data = project.data(name);
-        if (p.side == 256)
-            canvas->ids = U5::worldMap(
-                name, data, name == "BRIT.DAT" ? project.data("DATA.OVL") : QByteArray());
-        else
-            for (int y = 0; y < p.side; y++)
-                canvas->ids += data.mid(p.offset + y * p.stride, p.side);
-        canvas->actors.clear();
-        if (p.settlement >= 0 && project.resources.contains(companion) &&
-            project.data(companion).size() == 4608) {
-            auto npcs = project.data(companion);
-            int base = p.settlement * 576, location = schedule->currentIndex() == 0   ? 0
-                                                      : schedule->currentIndex() == 2 ? 2
-                                                                                      : 1;
-            for (int i = 0; i < 32; i++) {
-                int offset = base + i * 16;
-                int z = U5::byte(npcs, offset + 9 + location);
-                if (z >= 128)
-                    z -= 256;
-                int x = U5::byte(npcs, offset + 3 + location),
-                    y = U5::byte(npcs, offset + 6 + location);
-                if (z == p.floor && x < 32 && y < 32)
-                    canvas->actors.append({x, y, int(256 + U5::byte(npcs, base + 512 + i)), i});
-            }
-        }
-        canvas->size();
+    auto workspace = new MapWorkspace(
+        &project, name, &mapViewStates, &editorState,
+        [this](const QMap<QString, QByteArray> &changes, const QString &description) {
+            return guard([&] { edit(changes, description); });
+        },
+        [this](const QString &resource) { selectResource(resource); });
+    flushDraft = [workspace] {
+        workspace->cancelGesture();
+        return true;
     };
-    connect(schedule, &QComboBox::currentIndexChanged, w, [=](int i) {
-        editorState[name + "/schedule"] = i;
-        guard(load);
-    });
-    connect(inspect, &QCheckBox::toggled, w, [=](bool on) { canvas->inspectMode = on; });
-    canvas->chooseNpc = [=](int npc) {
-        editorState[companion + "/settlement"] = pages[page->currentIndex()].settlement;
-        editorState[companion + "/npc"] = npc;
-        selectResource(companion);
-    };
-    load();
-    connect(page, &QComboBox::currentIndexChanged, w, [=](int index) {
-        editorState[name + "/map"] = index;
-        guard(load);
-    });
-    connect(zoom, &QComboBox::currentIndexChanged, w, [=](int i) {
-        canvas->zoom = i + 1;
-        canvas->size();
-    });
-    connect(grid, &QCheckBox::toggled, w, [=](bool on) {
-        canvas->grid = on;
-        canvas->update();
-    });
-    connect(palette, &QListWidget::currentRowChanged, w,
-            [=](int index) { canvas->brush = qMax(0, index); });
-    canvas->inspect = [=](int x, int y, int id) {
-        coord->setText(
-            QString("X %1   Y %2   Tile %3   Brush %4").arg(x).arg(y).arg(id).arg(canvas->brush));
-    };
-    canvas->commit = [=](const QByteArray &ids) {
-        if (!guard([&] {
-                auto data = project.data(name);
-                QMap<QString, QByteArray> changes;
-                const auto &p = pages[page->currentIndex()];
-                if (p.side == 256) {
-                    QByteArray ovl = name == "BRIT.DAT" ? project.data("DATA.OVL") : QByteArray();
-                    U5::writeWorld(name, ids, data, ovl);
-                    if (name == "BRIT.DAT")
-                        changes["DATA.OVL"] = ovl;
-                } else
-                    for (int y = 0; y < p.side; y++)
-                        data.replace(p.offset + y * p.stride, p.side, ids.mid(y * p.side, p.side));
-                changes[name] = data;
-                edit(changes, "Paint " + p.name);
-            }))
-            load();
-    };
-    auto exports = new QHBoxLayout;
-    button(exports, "Export map PNG", [=] {
-        guard([&] {
-            QString path =
-                QFileDialog::getSaveFileName(this, "Export rendered map", {}, "PNG (*.png)");
-            if (path.isEmpty())
-                return;
-            require(QFileInfo(path).absolutePath() != project.sourceDirectory,
-                    "Export images outside the original game folder");
-            QImage img(canvas->side * 16, canvas->side * 16, QImage::Format_RGB32);
-            require(!img.isNull(), "Cannot allocate map export");
-            QPainter p(&img);
-            for (int y = 0; y < canvas->side; y++)
-                for (int x = 0; x < canvas->side; x++)
-                    p.drawImage(x * 16, y * 16,
-                                tiles[(unsigned char)canvas->ids[y * canvas->side + x]]);
-            p.end();
-            require(img.save(path, "PNG"), "Cannot export PNG");
-        });
-    });
-    button(exports, "Export tile IDs", [=] {
-        guard([&] {
-            QString path = QFileDialog::getSaveFileName(this, "Export tile IDs", {}, "PNG (*.png)");
-            if (path.isEmpty())
-                return;
-            require(QFileInfo(path).absolutePath() != project.sourceDirectory,
-                    "Export images outside the original game folder");
-            QImage img(canvas->side, canvas->side, QImage::Format_Grayscale8);
-            for (int y = 0; y < canvas->side; y++)
-                memcpy(img.scanLine(y), canvas->ids.constData() + y * canvas->side, canvas->side);
-            require(img.save(path, "PNG"), "Cannot export IDs");
-        });
-    });
-    exports->addStretch();
-    layout->addLayout(exports);
-    return w;
+    return workspace;
 }
 QWidget *WorkshopWindow::graphicsEditor(const QString &name) {
     auto graphics = std::make_shared<U5::Graphics>(U5::readGraphics(name, project.data(name)));

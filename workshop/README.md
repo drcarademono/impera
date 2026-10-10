@@ -63,7 +63,7 @@ drafts rather than silently discarding them. Package imports become undoable edi
 
 | Workspace | Available in this first version |
 | --- | --- |
-| Maps | Paint Britannia, Underworld, all settlement floors and combat maps; tile palette, zoom, grid, right-click eyedropper, per-stroke undo; PNG render and tile-ID exports |
+| Maps | Searchable world/settlement/combat navigation; continuous painting, synchronized eyedropper, hover/brush preview, pan, anchored zoom, fit view, coordinate navigation, per-map view restoration and per-stroke undo; terrain and tile-ID PNG exports |
 | Settlement NPCs | Schedule overlays for all four time slots; click in Inspect NPCs mode to open the appropriate NPC; edit three AI/X/Y/Z locations, four hours, appearance and dialogue ID |
 | Combat setup | Edit starting party positions for four directions, monster tiles/positions, triggers and changed-tile metadata; retain all padding/sentinel bytes |
 | Graphics | All DOS `.16` image containers and 512 tiles; thumbnail gallery, EGA pixel painting, PNG import/export, full tilesheet import/export, one-bit alpha masks |
@@ -71,6 +71,27 @@ drafts rather than silently discarding them. Package imports become undoable edi
 | Story | Twenty fixed-offset text pages; original capacity, offsets, padding and terminators retained |
 | Starting state | Party position, time, supplies, plot items, reagents, moonstones, shrine/dungeon flags, Shadowlord settings; sixteen character records, statistics/equipment, safe party joining/removal |
 | Resource inspector | Paged hex editing, per-edit undo, importing outputs from the Python editors, reverting a resource; other resource types remain available here |
+
+### Map workspace controls
+
+Use the Maps tree or page selector to switch locations/floors. The tile browser
+accepts decimal or hexadecimal IDs and shows the active brush separately. Maps
+use edited project artwork from `TILES.16`; only terrain IDs 0–255 are paintable.
+
+- Left-drag paints one continuous, undoable stroke; right-click picks a tile.
+- **B** selects Pencil and **I** selects Eyedropper while the map has focus.
+- Middle-drag, **Space+left-drag**, or the Pan tool moves the view without editing.
+- **Ctrl+wheel** zooms around the pointer; **+ / −** zoom around the view center.
+- Wheel scrolls vertically; **Shift+wheel** scrolls horizontally. Scrollbars remain available.
+- Choose **Fit** for the whole map, or an integer zoom for detailed work. Fit uses crisp nearest-neighbor rendering.
+- **Escape** or focus loss cancels the entire pending stroke. A failed edit rolls back its preview.
+- **Go** centers the entered X/Y cell. Grid, brush, zoom, tool, schedule slot and view center are remembered separately per map page during the session, including across undo/redo.
+- **Back to map** returns from other resource editors without losing map navigation.
+- **Export** distinguishes terrain PNG from tile-ID PNG; NPC overlays are excluded.
+
+NPC overlays retain the existing schedule-slot inspection behavior. NPC placement
+and graphical combat-setup editing are later phases. View preferences do not
+change game bytes or get exported into a mod package.
 
 Basements use the engine's actual floor numbers. Britannia changes rebuild both
 `BRIT.DAT` and the chunk-index bytes of `DATA.OVL` together; implicit-water and
@@ -111,6 +132,9 @@ Existing saves retain saved state, object lists and NPC data. Initial world
 object overrides seed a fresh runtime save directory; they do not overwrite an
 existing player's object files. Removing a mod does not undo changes already
 captured in a saved game.
+
+See [the map workspace UI plan](../docs/workshop-map-ui.md) for the proposed
+canvas, terrain tools, NPC schedule inspector and combat placement interface.
 
 ## Scope and next work
 
