@@ -765,6 +765,242 @@ int main(int argc, char **argv) {
             check(window.projectForTests().changed().isEmpty(),
                   "Terrain history did not return to original");
         });
+        test("NPC document shared slots, signed floors and exact byte preservation", [&] {
+            QTemporaryDir dir;
+            auto project = fixture(dir.path());
+            QByteArray bytes(4608, char(173));
+            project.resources["TOWNE.NPC"] = {bytes, bytes};
+            MapNpcDocument npc(&project, "TOWNE.NPC");
+            int settlement = 3, actor = 7, base = settlement * 576 + actor * 16;
+            auto moved = npc.move(settlement, actor, 3, {4, 5, -1, 0});
+            for (int i = 0; i < bytes.size(); ++i)
+                check(moved[i] == (i == base + 4    ? char(4)
+                                   : i == base + 7  ? char(5)
+                                   : i == base + 10 ? char(255)
+                                                    : bytes[i]),
+                      "NPC move touched unrelated bytes");
+            project.resources["TOWNE.NPC"].edited = moved;
+            auto first = npc.location(settlement, actor, 1),
+                 third = npc.location(settlement, actor, 3);
+            check(first.x == 4 && third.x == 4 && first.floor == -1 && third.floor == -1 &&
+                      first.ai == 173 && npc.hour(settlement, actor, 3) == 173,
+                  "Shared schedule or unusual values were normalized");
+            rejects([&] { npc.move(settlement, actor, 0, {32, 5, 0, 0}); });
+            rejects([&] { npc.move(settlement, actor, 0, {1, 5, -129, 0}); });
+            rejects([&] { npc.location(8, actor, 0); });
+            rejects([&] { npc.location(settlement, 32, 0); });
+            rejects([&] { npc.location(settlement, actor, 4); });
+        });
+        test("NPC drag preview, overlapping selection and cancellation protect terrain", [&] {
+            MapCanvas canvas;
+            canvas.tool = MapCanvas::InspectNpc;
+            canvas.side = 32;
+            canvas.zoom = 1;
+            canvas.ids = QByteArray(1024, 4);
+            canvas.actors = {{2, 2, 256, 1}, {2, 2, 257, 2}};
+            canvas.resizeMap();
+            QList<int> choices;
+            int moved = 0, selected = -1;
+            QPoint destination;
+            canvas.chooseActor = [&](const QList<int> &actors) {
+                choices = actors;
+                return 2;
+            };
+            canvas.chooseNpc = [&](int npc) { selected = npc; };
+            canvas.moveNpc = [&](int npc, QPoint cell) {
+                check(npc == 2, "Moved wrong overlapping actor");
+                ++moved;
+                destination = cell;
+                return true;
+            };
+            auto mouse = [&](QEvent::Type type, int x, int y, Qt::MouseButtons buttons) {
+                QPointF pos(x * 16 + 8, y * 16 + 8);
+                QMouseEvent event(type, pos, pos,
+                                  type == QEvent::MouseMove ? Qt::NoButton : Qt::LeftButton,
+                                  buttons, Qt::NoModifier);
+                QApplication::sendEvent(&canvas, &event);
+            };
+            mouse(QEvent::MouseButtonPress, 2, 2, Qt::LeftButton);
+            check(!canvas.painting(), "Overlap chooser left a drag active after modal release");
+            mouse(QEvent::MouseButtonPress, 2, 2, Qt::LeftButton);
+            mouse(QEvent::MouseMove, 5, 6, Qt::LeftButton);
+            check(selected == 2 && choices == QList<int>({1, 2}) && moved == 0 &&
+                      canvas.actors[1].x == 2,
+                  "NPC preview changed records or ignored overlap chooser");
+            QKeyEvent escape(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
+            QApplication::sendEvent(&canvas, &escape);
+            mouse(QEvent::MouseButtonRelease, 5, 6, Qt::NoButton);
+            check(moved == 0 && !canvas.painting(), "Escape committed NPC movement");
+            mouse(QEvent::MouseButtonPress, 2, 2, Qt::LeftButton);
+            QFocusEvent focus(QEvent::FocusOut);
+            QApplication::sendEvent(&canvas, &focus);
+            mouse(QEvent::MouseButtonRelease, 5, 6, Qt::NoButton);
+            check(moved == 0, "Focus loss committed NPC movement");
+            mouse(QEvent::MouseButtonPress, 2, 2, Qt::LeftButton);
+            mouse(QEvent::MouseButtonRelease, -1, -1, Qt::NoButton);
+            check(moved == 0, "Outside NPC destination accepted");
+            mouse(QEvent::MouseButtonPress, 2, 2, Qt::LeftButton);
+            mouse(QEvent::MouseButtonRelease, 5, 6, Qt::NoButton);
+            check(moved == 1 && destination == QPoint(5, 6) && canvas.ids == QByteArray(1024, 4),
+                  "NPC move changed terrain or split its transaction");
+            check(!canvas.beginPaste(), "NPC mode permitted terrain paste");
+        });
+        test("Native NPC schedules, floors, undo and conversation return", [&] {
+            QTemporaryDir dir;
+            fixture(dir.path());
+            QByteArray terrain(16384, 4), npcs(4608, char(73));
+            for (int settlement = 0; settlement < 8; ++settlement)
+                for (int npc = 0; npc < 32; ++npc) {
+                    int base = settlement * 576 + npc * 16;
+                    for (int loc = 0; loc < 3; ++loc) {
+                        npcs[base + 3 + loc] = char(255);
+                        npcs[base + 6 + loc] = char(255);
+                        npcs[base + 9 + loc] = 0;
+                    }
+                    npcs[settlement * 576 + 512 + npc] = 1;
+                    npcs[settlement * 576 + 544 + npc] = char(255);
+                }
+            int base = 16;
+            for (int loc = 0; loc < 3; ++loc) {
+                npcs[base + 3 + loc] = char(2 + loc);
+                npcs[base + 6 + loc] = char(2 + loc);
+            }
+            npcs[base + 10] = 1;
+            npcs[544 + 1] = 37;
+            // Yew's basement and shared record are exercised independently.
+            int yew = 3 * 576 + 16;
+            npcs[yew + 5] = 4;
+            npcs[yew + 8] = 5;
+            npcs[yew + 11] = char(255);
+            file(dir.path() + "/TOWNE.DAT", terrain);
+            file(dir.path() + "/TOWNE.NPC", npcs);
+            file(dir.path() + "/TOWNE.TLK",
+                 U5::writeDialogue(
+                     {{37,
+                       U5::encodeText("Chamfort the traveller with an unusually long but valid "
+                                      "character name<Entry>Description<Entry>Greeting<Entry>Job<"
+                                      "Entry>Bye<Entry><Any><Label 15>@")}}));
+            WorkshopWindow window;
+            check(window.openGame(dir.path()), "NPC fixture load failed");
+            window.show();
+            window.selectResource("TOWNE.DAT");
+            app.processEvents();
+            auto active = [&] {
+                return window.findChild<QStackedWidget *>("workspaces")->currentWidget();
+            };
+            auto canvas = [&] {
+                return dynamic_cast<MapCanvas *>(active()->findChild<QWidget *>("mapCanvas"));
+            };
+            active()->findChild<QComboBox *>("mapTool")->setCurrentIndex(MapCanvas::InspectNpc);
+            active()->findChild<QComboBox *>("mapNpcList")->setCurrentIndex(1);
+            check(active()->findChild<QLabel *>("mapNpcInfo")->text().contains("Chamfort"),
+                  "NPC name not resolved through dialogue ID");
+            app.processEvents();
+            for (auto scroll : active()->findChildren<QScrollArea *>())
+                if (scroll->findChild<QLabel *>("mapNpcInfo"))
+                    check(scroll->horizontalScrollBar()->maximum() == 0,
+                          "Long NPC names forced inspector horizontal overflow");
+            active()->findChild<QComboBox *>("mapSchedule")->setCurrentIndex(1);
+            app.processEvents();
+            active()->findChild<QPushButton *>("mapNpcLocate")->click();
+            app.processEvents();
+            app.processEvents();
+            check(active()->findChild<QComboBox *>("mapPage")->currentIndex() == 1 &&
+                      active()->findChild<QComboBox *>("mapSchedule")->currentIndex() == 1 &&
+                      canvas()->selectedNpc == 1,
+                  "Locate reset actor or shared schedule slot");
+            auto drag = [&](int x1, int y1, int x2, int y2) {
+                auto send = [&](QEvent::Type type, int x, int y, Qt::MouseButtons buttons) {
+                    QPointF pos((x + 0.5) * 16 * canvas()->zoom, (y + 0.5) * 16 * canvas()->zoom);
+                    QMouseEvent event(type, pos, pos,
+                                      type == QEvent::MouseMove ? Qt::NoButton : Qt::LeftButton,
+                                      buttons, Qt::NoModifier);
+                    QApplication::sendEvent(canvas(), &event);
+                };
+                send(QEvent::MouseButtonPress, x1, y1, Qt::LeftButton);
+                send(QEvent::MouseMove, x2, y2, Qt::LeftButton);
+                send(QEvent::MouseButtonRelease, x2, y2, Qt::NoButton);
+            };
+            drag(3, 3, 6, 7);
+            auto moved = window.projectForTests().data("TOWNE.NPC");
+            for (int i = 0; i < npcs.size(); ++i)
+                check(moved[i] == (i == base + 4   ? char(6)
+                                   : i == base + 7 ? char(7)
+                                                   : npcs[i]),
+                      "Native drag damaged schedule fields");
+            auto history = [&](QString prefix) {
+                bool found = false;
+                for (auto action : window.findChildren<QAction *>())
+                    if (action->isEnabled() && action->text().startsWith(prefix + " ")) {
+                        action->trigger();
+                        found = true;
+                        break;
+                    }
+                check(found, "NPC move lacked history");
+                app.processEvents();
+                app.processEvents();
+            };
+            history("Undo");
+            check(window.projectForTests().data("TOWNE.NPC") == npcs &&
+                      canvas()->selectedNpc == 1 && canvas()->tool == MapCanvas::InspectNpc,
+                  "Undo lost NPC data or selection");
+            history("Redo");
+            active()->findChild<QComboBox *>("mapSchedule")->setCurrentIndex(3);
+            app.processEvents();
+            check(active()->findChild<QSpinBox *>("mapNpcX")->value() == 6 &&
+                      active()->findChild<QLabel *>("mapNpcInfo")->text().contains("share"),
+                  "Slot 3 failed shared location display");
+            active()->findChild<QComboBox *>("mapPage")->setCurrentIndex(0);
+            app.processEvents();
+            check(canvas()->selectedNpc == 1 && canvas()->tool == MapCanvas::InspectNpc &&
+                      active()->findChild<QComboBox *>("mapSchedule")->currentIndex() == 3,
+                  "Manual floor navigation lost actor or slot");
+            active()->findChild<QPushButton *>("mapNpcLocate")->click();
+            app.processEvents();
+            app.processEvents();
+            active()->findChild<QCheckBox *>("mapNpcGhosts")->setChecked(true);
+            active()->findChild<QPushButton *>("mapNpcConversation")->click();
+            app.processEvents();
+            check(active()->findChild<QWidget *>("conversationEditor"), "Conversation link failed");
+            active()->findChild<QPushButton *>("backToMap")->click();
+            app.processEvents();
+            app.processEvents();
+            check(canvas()->selectedNpc == 1 && canvas()->tool == MapCanvas::InspectNpc &&
+                      active()->findChild<QComboBox *>("mapSchedule")->currentIndex() == 3 &&
+                      active()->findChild<QCheckBox *>("mapNpcGhosts")->isChecked(),
+                  "Dialogue return lost NPC state");
+            active()->findChild<QComboBox *>("mapPage")->setCurrentIndex(6);
+            app.processEvents();
+            active()->findChild<QComboBox *>("mapNpcList")->setCurrentIndex(1);
+            active()->findChild<QComboBox *>("mapSchedule")->setCurrentIndex(2);
+            app.processEvents();
+            active()->findChild<QPushButton *>("mapNpcLocate")->click();
+            app.processEvents();
+            check(active()->findChild<QSpinBox *>("mapNpcFloor")->value() == -1,
+                  "Basement floor was unsigned");
+            active()->findChild<QSpinBox *>("mapNpcX")->setValue(8);
+            active()->findChild<QSpinBox *>("mapNpcFloor")->setValue(0);
+            active()->findChild<QPushButton *>("mapNpcMove")->click();
+            app.processEvents();
+            app.processEvents();
+            check(active()->findChild<QComboBox *>("mapPage")->currentIndex() == 7 &&
+                      active()->findChild<QComboBox *>("mapSchedule")->currentIndex() == 2 &&
+                      U5::byte(window.projectForTests().data("TOWNE.NPC"), yew + 11) == 0,
+                  "Cross-floor move failed");
+            check(window.projectForTests().data("TOWNE.DAT") == terrain, "NPC UI changed terrain");
+            auto finalNpc = window.projectForTests().data("TOWNE.NPC");
+            for (int i = 0; i < npcs.size(); ++i)
+                check(finalNpc[i] == (i == base + 4   ? char(6)
+                                      : i == base + 7 ? char(7)
+                                      : i == yew + 5  ? char(8)
+                                      : i == yew + 11 ? char(0)
+                                                      : npcs[i]),
+                      "Cross-floor movement changed unrelated record bytes");
+            active()->findChild<QComboBox *>("mapNpcList")->setCurrentIndex(2);
+            check(!active()->findChild<QPushButton *>("mapNpcConversation")->isEnabled() &&
+                      active()->findChild<QSpinBox *>("mapNpcX")->value() == 255,
+                  "Missing conversation or unusual position was rewritten");
+        });
         test("Native widgets are read-only until an edit", [&] {
             QTemporaryDir dir;
             auto p = fixture(dir.path());

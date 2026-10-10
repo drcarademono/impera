@@ -1,4 +1,5 @@
 #include "map_editor.h"
+#include "dialogue.h"
 #include <cmath>
 using U5::require;
 
@@ -40,6 +41,48 @@ QMap<QString, QByteArray> MapDocument::changes(int index, const QByteArray &cell
             data.replace(p.offset + y * p.stride, p.side, cells.mid(y * p.side, p.side));
     result[resource] = data;
     return result;
+}
+
+MapNpcDocument::MapNpcDocument(Project *p, QString r) : project(p), resource(r) {
+    require(project->data(resource).size() == 4608, "NPC schedules must be 4608 bytes");
+}
+int MapNpcDocument::locationIndex(int slot) {
+    require(slot >= 0 && slot < 4, "Invalid NPC time slot");
+    return slot == 0 ? 0 : slot == 2 ? 2 : 1;
+}
+int MapNpcDocument::offset(int settlement, int npc) const {
+    require(settlement >= 0 && settlement < 8 && npc >= 0 && npc < 32, "Invalid NPC record");
+    return settlement * 576 + npc * 16;
+}
+NpcLocation MapNpcDocument::location(int settlement, int npc, int slot) const {
+    int base = offset(settlement, npc), loc = locationIndex(slot);
+    auto data = project->data(resource);
+    int z = U5::byte(data, base + 9 + loc);
+    return {int(U5::byte(data, base + 3 + loc)), int(U5::byte(data, base + 6 + loc)),
+            z >= 128 ? z - 256 : z, int(U5::byte(data, base + loc))};
+}
+int MapNpcDocument::hour(int settlement, int npc, int slot) const {
+    locationIndex(slot);
+    return U5::byte(project->data(resource), offset(settlement, npc) + 12 + slot);
+}
+int MapNpcDocument::sprite(int settlement, int npc) const {
+    offset(settlement, npc);
+    return 256 + U5::byte(project->data(resource), settlement * 576 + 512 + npc);
+}
+int MapNpcDocument::dialogue(int settlement, int npc) const {
+    offset(settlement, npc);
+    return U5::byte(project->data(resource), settlement * 576 + 544 + npc);
+}
+QByteArray MapNpcDocument::move(int settlement, int npc, int slot, NpcLocation destination) const {
+    int base = offset(settlement, npc), loc = locationIndex(slot);
+    require(destination.x >= 0 && destination.x < 32 && destination.y >= 0 && destination.y < 32 &&
+                destination.floor >= -128 && destination.floor <= 127,
+            "NPC destination is outside map bounds");
+    auto bytes = project->data(resource);
+    bytes[base + 3 + loc] = char(destination.x);
+    bytes[base + 6 + loc] = char(destination.y);
+    bytes[base + 9 + loc] = char(destination.floor);
+    return bytes;
 }
 
 MapCanvas::MapCanvas(QWidget *parent) : QWidget(parent) {
@@ -88,7 +131,32 @@ void MapCanvas::paintEvent(QPaintEvent *e) {
         if (a.x >= 0 && a.y >= 0 && a.x < side && a.y < side && a.tile >= 0 &&
             a.tile < tiles.size())
             p.drawImage(QRectF(a.x * cell, a.y * cell, cell, cell), tiles[a.tile]);
-    if (!selection.isEmpty()) {
+    if (tool == InspectNpc) {
+        for (auto actor : ghosts) {
+            p.setOpacity(0.35);
+            if (actor.tile >= 0 && actor.tile < tiles.size())
+                p.drawImage(QRectF(actor.x * cell, actor.y * cell, cell, cell), tiles[actor.tile]);
+            p.setOpacity(1);
+            p.setPen(QColor("#72caff"));
+            p.drawText(QRectF(actor.x * cell, actor.y * cell, cell, cell),
+                       Qt::AlignTop | Qt::AlignLeft,
+                       QString::number(actor.npc)); // Ghost labels are schedule slots.
+        }
+        for (auto actor : actors)
+            if (actor.npc == selectedNpc) {
+                p.setPen(QPen(QColor("#72caff"), 2));
+                p.drawRect(
+                    QRectF(actor.x * cell, actor.y * cell, cell, cell).adjusted(1, 1, -1, -1));
+                if (npcDrag && npcDestination.x() >= 0 && actor.tile < tiles.size()) {
+                    p.setOpacity(0.65);
+                    p.drawImage(
+                        QRectF(npcDestination.x() * cell, npcDestination.y() * cell, cell, cell),
+                        tiles[actor.tile]);
+                    p.setOpacity(1);
+                }
+            }
+    }
+    if (tool != InspectNpc && !selection.isEmpty()) {
         QRectF area(selection.x() * cell, selection.y() * cell, selection.width() * cell,
                     selection.height() * cell);
         p.fillRect(area, QColor(80, 170, 255, 35));
@@ -206,13 +274,26 @@ void MapCanvas::mousePressEvent(QMouseEvent *e) {
         pasteAt(cell);
         return;
     }
-    if (tool == 3) {
+    if (tool == InspectNpc) {
+        QList<int> candidates;
         for (auto a : actors)
-            if (a.x == cell.x() && a.y == cell.y()) {
-                if (chooseNpc)
-                    chooseNpc(a.npc);
-                break;
-            }
+            if (a.x == cell.x() && a.y == cell.y())
+                candidates.append(a.npc);
+        bool chooser = candidates.size() > 1 && !candidates.contains(selectedNpc);
+        int npc = candidates.contains(selectedNpc)       ? selectedNpc
+                  : candidates.size() == 1               ? candidates[0]
+                  : candidates.isEmpty() || !chooseActor ? -1
+                                                         : chooseActor(candidates);
+        if (npc >= 0) {
+            selectedNpc = npc;
+            if (chooseNpc)
+                chooseNpc(npc);
+            npcOrigin = npcDestination = cell;
+            // The modal chooser consumes the release that initiated selection.
+            // A subsequent drag moves the chosen actor, without reopening it.
+            npcDrag = !chooser;
+            update();
+        }
         return;
     }
 
@@ -234,9 +315,27 @@ void MapCanvas::mousePressEvent(QMouseEvent *e) {
     point(e->position(), true);
 }
 void MapCanvas::mouseMoveEvent(QMouseEvent *e) {
+    if (npcDrag) {
+        npcDestination = cellAt(e->position());
+        say(npcDestination.x() >= 0
+                ? QString("NPC move preview: X %1 · Y %2 · release to place · Esc cancels")
+                      .arg(npcDestination.x())
+                      .arg(npcDestination.y())
+                : "NPC destination outside map; release cancels");
+        update();
+        return;
+    }
     point(e->position(), stroke && (e->buttons() & Qt::LeftButton));
 }
 void MapCanvas::mouseReleaseEvent(QMouseEvent *e) {
+    if (npcDrag && e->button() == Qt::LeftButton) {
+        npcDestination = cellAt(e->position());
+        npcDrag = false;
+        if (npcDestination.x() >= 0 && npcDestination != npcOrigin && moveNpc)
+            moveNpc(selectedNpc, npcDestination);
+        update();
+        return;
+    }
     if (!stroke || e->button() != Qt::LeftButton)
         return;
     point(e->position(), true);
@@ -250,6 +349,8 @@ void MapCanvas::mouseReleaseEvent(QMouseEvent *e) {
         finishEdit();
 }
 void MapCanvas::cancelStroke() {
+    npcDrag = false;
+    update();
     if (stroke) {
         ids = before;
         if (tool == Select)
@@ -347,6 +448,10 @@ bool MapCanvas::copySelection() {
 }
 bool MapCanvas::beginPaste() {
     cancelStroke();
+    if (tool == InspectNpc) {
+        say("Switch to a terrain tool before pasting");
+        return false;
+    }
     auto mime = QApplication::clipboard()->mimeData();
     auto payload = mime ? mime->data("application/x-impera-terrain") : QByteArray();
     if (payload.size() < 12 || payload.left(8) != "IMPTILE1") {
@@ -401,7 +506,7 @@ void MapCanvas::leaveEvent(QEvent *) {
 }
 void MapCanvas::keyPressEvent(QKeyEvent *e) {
     if (e->key() == Qt::Key_Escape) {
-        bool pending = stroke || pasting();
+        bool pending = stroke || npcDrag || pasting();
         cancelStroke();
         if (!pending)
             clearSelection();
@@ -636,7 +741,8 @@ MapWorkspace::MapWorkspace(
     std::function<bool(const QMap<QString, QByteArray> &, const QString &)> commit,
     std::function<void(const QString &)> navigate, MapBrushState *brushState, QWidget *parent)
     : QWidget(parent), project(p), resource(r), document(p, r), states(s), navigation(n),
-      brushes(brushState ? brushState : &localBrushes) {
+      brushes(brushState ? brushState : &localBrushes), commitResources(commit),
+      navigateResource(navigate) {
     setObjectName("mapWorkspace");
     auto layout = new QVBoxLayout(this);
     layout->setContentsMargins(10, 10, 10, 10);
@@ -710,7 +816,7 @@ MapWorkspace::MapWorkspace(
     tool->setObjectName("mapTool");
     tool->addItems({"Pencil (B)", "Eyedropper (I)", "Pan"});
     QString companion = resource.left(resource.size() - 4) + ".NPC";
-    tool->addItems({"Inspect NPCs", "Select (V)", "Rectangle (R)", "Fill (F)"});
+    tool->addItems({"NPCs", "Select (V)", "Rectangle (R)", "Fill (F)"});
     if (!project->resources.contains(companion))
         qobject_cast<QStandardItemModel *>(tool->model())
             ->item(MapCanvas::InspectNpc)
@@ -781,7 +887,13 @@ MapWorkspace::MapWorkspace(
     centerLayout->addWidget(hints);
     split->addWidget(center);
     auto right = new QWidget;
-    auto rightLayout = new QVBoxLayout(right);
+    auto rightOuter = new QVBoxLayout(right);
+    rightOuter->setContentsMargins(0, 0, 0, 0);
+    inspector = new QStackedWidget;
+    rightOuter->addWidget(inspector);
+    auto terrainInspector = new QWidget;
+    inspector->addWidget(terrainInspector);
+    auto rightLayout = new QVBoxLayout(terrainInspector);
     rightLayout->setContentsMargins(0, 0, 0, 0);
     brushImage = new QLabel;
     brushImage->setFixedHeight(70);
@@ -825,7 +937,16 @@ MapWorkspace::MapWorkspace(
         item->setToolTip(QString("Tile %1 (0x%2)").arg(i).arg(i, 2, 16, QChar('0')));
     }
     rightLayout->addWidget(palette, 1);
-    right->setMinimumWidth(180);
+    npcResource = companion;
+    talkResource = resource.left(resource.size() - 4) + ".TLK";
+    auto npcPanel = new QScrollArea;
+    npcPanel->setWidgetResizable(true);
+    auto npcContent = new QWidget;
+    auto npcLayout = new QVBoxLayout(npcContent);
+    createNpcInspector(npcLayout);
+    npcPanel->setWidget(npcContent);
+    inspector->addWidget(npcPanel);
+    right->setMinimumWidth(220);
     split->addWidget(right);
     split->setStretchFactor(1, 1);
     split->setSizes({190, 780, 220});
@@ -900,6 +1021,15 @@ MapWorkspace::MapWorkspace(
     connect(page, &QComboBox::currentIndexChanged, this, [=] {
         cancelGesture();
         saveView();
+        int oldPage = navigation->value(resource + "/map");
+        if (canvas->tool == MapCanvas::InspectNpc && canvas->selectedNpc >= 0 &&
+            document.pages[oldPage].settlement == document.pages[page->currentIndex()].settlement) {
+            auto &target = (*states)[resource + "/" + QString::number(page->currentIndex())];
+            target.tool = MapCanvas::InspectNpc;
+            target.npc = canvas->selectedNpc;
+            target.schedule = schedule->currentIndex();
+            target.ghosts = npcGhosts->isChecked();
+        }
         (*navigation)[resource + "/map"] = page->currentIndex();
         loadPage();
         x->setRange(0, canvas->side - 1);
@@ -908,6 +1038,9 @@ MapWorkspace::MapWorkspace(
     connect(tool, &QComboBox::currentIndexChanged, this, [=](int i) {
         cancelGesture();
         canvas->tool = i;
+        inspector->setCurrentIndex(i == MapCanvas::InspectNpc ? 1 : 0);
+        findChild<QPushButton *>("mapPaste")->setEnabled(i != MapCanvas::InspectNpc);
+        canvas->update();
         canvas->setCursor(i == 2 ? Qt::OpenHandCursor : Qt::CrossCursor);
         saveView();
     });
@@ -946,11 +1079,20 @@ MapWorkspace::MapWorkspace(
                                 .arg(id)
                                 .arg(tool->currentText()));
     };
-    canvas->chooseNpc = [=](int npc) {
-        saveView();
-        (*navigation)[companion + "/settlement"] = document.pages[page->currentIndex()].settlement;
-        (*navigation)[companion + "/npc"] = npc;
-        navigate(companion);
+    canvas->chooseNpc = [this](int npc) { selectNpc(npc); };
+    canvas->chooseActor = [this](const QList<int> &candidates) {
+        QStringList names;
+        for (int npc : candidates)
+            names.append(QString("Slot %1 · %2").arg(npc).arg(npcName(npc)));
+        bool ok = false;
+        QString selected =
+            QInputDialog::getItem(this, "Choose NPC", "Actors on this tile", names, 0, false, &ok);
+        canvas->setFocus();
+        return ok ? candidates[names.indexOf(selected)] : -1;
+    };
+    canvas->moveNpc = [this](int npc, QPoint destination) {
+        return moveNpcTo(npc, destination.x(), destination.y(),
+                         document.pages[page->currentIndex()].floor);
     };
     canvas->commit = [=](const QByteArray &ids) {
         try {
@@ -1045,6 +1187,8 @@ void MapWorkspace::saveView() {
     s.brush = canvas->brush;
     s.tool = canvas->tool;
     s.schedule = schedule->currentIndex();
+    s.npc = canvas->selectedNpc;
+    s.ghosts = npcGhosts->isChecked();
     if (isVisible())
         s.center = view->mapCenter();
 }
@@ -1083,23 +1227,17 @@ void MapWorkspace::loadPage() {
         QSignalBlocker block(schedule);
         schedule->setCurrentIndex(state.schedule);
     }
-    canvas->actors.clear();
-    QString companion = resource.left(resource.size() - 4) + ".NPC";
-    if (mp.settlement >= 0 && project->resources.contains(companion) &&
-        project->data(companion).size() == 4608) {
-        auto npcs = project->data(companion);
-        int base = mp.settlement * 576;
-        int loc = state.schedule == 0 ? 0 : state.schedule == 2 ? 2 : 1;
-        for (int i = 0; i < 32; ++i) {
-            int off = base + i * 16;
-            int z = U5::byte(npcs, off + 9 + loc);
-            if (z >= 128)
-                z -= 256;
-            int x = U5::byte(npcs, off + 3 + loc), y = U5::byte(npcs, off + 6 + loc);
-            if (z == mp.floor && x < 32 && y < 32)
-                canvas->actors.append({x, y, 256 + int(U5::byte(npcs, base + 512 + i)), i});
-        }
+    canvas->selectedNpc =
+        state.npc >= 0
+            ? state.npc
+            : navigation->value(resource + "/actor/" + QString::number(mp.settlement), -1);
+    {
+        QSignalBlocker block(npcGhosts);
+        npcGhosts->setChecked(state.ghosts);
     }
+    inspector->setCurrentIndex(canvas->tool == MapCanvas::InspectNpc ? 1 : 0);
+    findChild<QPushButton *>("mapPaste")->setEnabled(canvas->tool != MapCanvas::InspectNpc);
+    refreshNpcs();
     setBrush(state.brush);
     canvas->setCursor(canvas->tool == 2 ? Qt::OpenHandCursor : Qt::CrossCursor);
     canvas->resizeMap();
@@ -1137,6 +1275,263 @@ void MapWorkspace::loadPage() {
         saveView();
     });
 }
+QString MapWorkspace::npcName(int npc) const {
+    MapNpcDocument npcs(project, npcResource);
+    int id = npcs.dialogue(document.pages[page->currentIndex()].settlement, npc);
+    return npcNames.value(id, QString("NPC slot %1").arg(npc));
+}
+void MapWorkspace::createNpcInspector(QVBoxLayout *layout) {
+    auto title = new QLabel("NPC schedule");
+    layout->addWidget(title);
+    npcList = new QComboBox;
+    npcList->setObjectName("mapNpcList");
+    npcList->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    npcList->setMinimumContentsLength(12);
+    npcList->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+    layout->addWidget(npcList);
+    npcSprite = new QLabel;
+    npcSprite->setAlignment(Qt::AlignCenter);
+    layout->addWidget(npcSprite);
+    npcInfo = new QLabel;
+    npcInfo->setObjectName("mapNpcInfo");
+    npcInfo->setWordWrap(true);
+    npcInfo->setTextFormat(Qt::PlainText);
+    npcInfo->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    npcInfo->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    layout->addWidget(npcInfo);
+    auto form = new QFormLayout;
+    npcX = new QSpinBox;
+    npcY = new QSpinBox;
+    npcFloor = new QSpinBox;
+    npcX->setObjectName("mapNpcX");
+    npcY->setObjectName("mapNpcY");
+    npcFloor->setObjectName("mapNpcFloor");
+    npcX->setRange(0, 255);
+    npcY->setRange(0, 255);
+    npcFloor->setRange(-128, 127);
+    form->addRow("X", npcX);
+    form->addRow("Y", npcY);
+    form->addRow("Floor", npcFloor);
+    layout->addLayout(form);
+    auto apply = new QPushButton("Move here");
+    apply->setToolTip("Apply the destination X/Y/floor entered above");
+    apply->setObjectName("mapNpcMove");
+    layout->addWidget(apply);
+    auto locate = new QPushButton("Locate on map");
+    locate->setObjectName("mapNpcLocate");
+    layout->addWidget(locate);
+    npcGhosts = new QCheckBox("Other schedule positions");
+    npcGhosts->setObjectName("mapNpcGhosts");
+    layout->addWidget(npcGhosts);
+    npcConversation = new QPushButton("Edit conversation");
+    npcConversation->setObjectName("mapNpcConversation");
+    layout->addWidget(npcConversation);
+    auto advanced = new QPushButton("Advanced NPC record");
+    advanced->setObjectName("mapNpcAdvanced");
+    layout->addWidget(advanced);
+    auto hint =
+        new QLabel("Select an existing actor, then drag to preview its location. Release to move; "
+                   "Esc cancels. Ghost numbers are schedule slots, not simulated positions.");
+    hint->setWordWrap(true);
+    hint->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    layout->addWidget(hint);
+    layout->addStretch();
+    connect(npcList, &QComboBox::currentIndexChanged, this, [this](int npc) {
+        if (!restoring && npc >= 0)
+            selectNpc(npc);
+    });
+    connect(npcGhosts, &QCheckBox::toggled, this, [this] {
+        refreshNpcs();
+        saveView();
+    });
+    connect(locate, &QPushButton::clicked, this, [this] { locateNpc(); });
+    connect(apply, &QPushButton::clicked, this, [this] {
+        if (moveNpcTo(canvas->selectedNpc, npcX->value(), npcY->value(), npcFloor->value()))
+            locateNpc();
+    });
+    connect(advanced, &QPushButton::clicked, this, [this] {
+        if (canvas->selectedNpc < 0)
+            return;
+        saveView();
+        (*navigation)[npcResource + "/settlement"] =
+            document.pages[page->currentIndex()].settlement;
+        (*navigation)[npcResource + "/npc"] = canvas->selectedNpc;
+        navigateResource(npcResource);
+    });
+    connect(npcConversation, &QPushButton::clicked, this, [this] {
+        if (canvas->selectedNpc < 0 || !project->resources.contains(talkResource))
+            return;
+        MapNpcDocument npcs(project, npcResource);
+        int id =
+            npcs.dialogue(document.pages[page->currentIndex()].settlement, canvas->selectedNpc);
+        auto conversations = U5::readDialogue(project->data(talkResource));
+        for (int i = 0; i < conversations.size(); ++i)
+            if (int(conversations[i].id) == id) {
+                saveView();
+                (*navigation)[talkResource + "/conversation"] = i;
+                (*navigation)[talkResource + "/entry"] = 0;
+                navigateResource(talkResource);
+                return;
+            }
+    });
+}
+void MapWorkspace::refreshNpcs() {
+    canvas->actors.clear();
+    canvas->ghosts.clear();
+    const auto &mp = document.pages[page->currentIndex()];
+    QSignalBlocker blocked(npcList);
+    npcList->clear();
+    npcConversation->setEnabled(false);
+    for (auto name : {"mapNpcMove", "mapNpcLocate", "mapNpcAdvanced"})
+        findChild<QPushButton *>(name)->setEnabled(canvas->selectedNpc >= 0 && mp.settlement >= 0 &&
+                                                   project->resources.contains(npcResource));
+    if (mp.settlement < 0 || !project->resources.contains(npcResource) ||
+        project->data(npcResource).size() != 4608) {
+        npcInfo->setText("No valid NPC schedule resource for this map");
+        return;
+    }
+    npcNames.clear();
+    conversationIndices.clear();
+    try {
+        if (project->resources.contains(talkResource)) {
+            auto conversations = U5::readDialogue(project->data(talkResource));
+            for (int i = 0; i < conversations.size(); ++i) {
+                int id = conversations[i].id;
+                conversationIndices[id] = i;
+                auto doc = Dialogue::parse(conversations[i].bytes);
+                if (!doc.entries.isEmpty()) {
+                    auto name = Dialogue::plain(doc.entries[0].bytes).simplified();
+                    if (!name.isEmpty())
+                        npcNames[id] = name.left(60);
+                }
+            }
+        }
+    } catch (const std::exception &) {
+    }
+    MapNpcDocument npcs(project, npcResource);
+    int slot = schedule->currentIndex();
+    for (int npc = 0; npc < 32; ++npc) {
+        npcList->addItem(QString("%1 · %2").arg(npc).arg(npcName(npc)));
+        auto loc = npcs.location(mp.settlement, npc, slot);
+        if (loc.floor == mp.floor && loc.x < 32 && loc.y < 32)
+            canvas->actors.append({loc.x, loc.y, npcs.sprite(mp.settlement, npc), npc});
+    }
+    int npc = canvas->selectedNpc;
+    npcList->setCurrentIndex(npc);
+    if (npc < 0 || npc >= 32) {
+        npcInfo->setText("Select an actor on the map or choose its record above");
+        npcSprite->clear();
+        canvas->update();
+        return;
+    }
+    auto loc = npcs.location(mp.settlement, npc, slot);
+    npcX->setValue(loc.x);
+    npcY->setValue(loc.y);
+    npcFloor->setValue(loc.floor);
+    int sprite = npcs.sprite(mp.settlement, npc), id = npcs.dialogue(mp.settlement, npc);
+    npcSprite->setPixmap(QPixmap::fromImage(canvas->tiles[sprite])
+                             .scaled(64, 64, Qt::KeepAspectRatio, Qt::FastTransformation));
+    QString info = QString("NPC slot %1 · %2\nTile %3 · Dialogue ID %4\nSlot %5 → location %6\nAI "
+                           "byte: %7\nTransition hours: %8 / %9 / %10 / %11\n")
+                       .arg(npc)
+                       .arg(npcName(npc))
+                       .arg(sprite)
+                       .arg(id)
+                       .arg(slot)
+                       .arg(MapNpcDocument::locationIndex(slot))
+                       .arg(loc.ai)
+                       .arg(npcs.hour(mp.settlement, npc, 0))
+                       .arg(npcs.hour(mp.settlement, npc, 1))
+                       .arg(npcs.hour(mp.settlement, npc, 2))
+                       .arg(npcs.hour(mp.settlement, npc, 3));
+    info += QString("Selected slot transition hour: %1\n").arg(npcs.hour(mp.settlement, npc, slot));
+    if (slot == 1 || slot == 3)
+        info += "Slots 1 and 3 share this location. Moving either affects both.\n";
+    if (loc.x >= 32 || loc.y >= 32)
+        info += "Stored position is outside map bounds; it is preserved.\n";
+    if (loc.floor != mp.floor)
+        info += QString("On floor %1; use Locate to change floors.\n").arg(loc.floor);
+    QStringList positions;
+    for (int s = 0; s < 4; ++s) {
+        auto other = npcs.location(mp.settlement, npc, s);
+        positions.append(
+            QString("%1: (%2,%3) floor %4").arg(s).arg(other.x).arg(other.y).arg(other.floor));
+        if (npcGhosts->isChecked() && s != slot && other.floor == mp.floor && other.x < 32 &&
+            other.y < 32)
+            canvas->ghosts.append({other.x, other.y, sprite, s});
+    }
+    info += "Stored positions:\n" + positions.join("\n");
+    npcConversation->setEnabled(conversationIndices.contains(id));
+    if (!npcConversation->isEnabled())
+        info += "\nConversation unavailable; record is preserved.";
+    if (id >= 128)
+        info += "\nThe engine uses special/merchant dialogue routing for IDs 128–255.";
+    npcInfo->setText(info);
+    canvas->update();
+}
+void MapWorkspace::selectNpc(int npc) {
+    canvas->selectedNpc = npc;
+    (*navigation)[resource + "/actor/" +
+                  QString::number(document.pages[page->currentIndex()].settlement)] = npc;
+    refreshNpcs();
+    saveView();
+}
+bool MapWorkspace::moveNpcTo(int npc, int x, int y, int floor) {
+    try {
+        require(npc >= 0 && npc < 32, "Select an NPC before moving");
+        int settlement = document.pages[page->currentIndex()].settlement;
+        bool available = false;
+        for (auto mp : document.pages)
+            if (mp.settlement == settlement && mp.floor == floor)
+                available = true;
+        require(available, "That floor does not exist in this settlement");
+        MapNpcDocument npcs(project, npcResource);
+        auto destination = npcs.location(settlement, npc, schedule->currentIndex());
+        destination.x = x;
+        destination.y = y;
+        destination.floor = floor;
+        auto bytes = npcs.move(settlement, npc, schedule->currentIndex(), destination);
+        if (bytes != project->data(npcResource) &&
+            !commitResources({{npcResource, bytes}}, "Move NPC " + npcName(npc)))
+            return false;
+        refreshNpcs();
+        saveView();
+        return true;
+    } catch (const std::exception &e) {
+        QMessageBox::warning(this, "NPC move rejected", QString::fromUtf8(e.what()));
+        return false;
+    }
+}
+void MapWorkspace::locateNpc() {
+    if (canvas->selectedNpc < 0 || !project->resources.contains(npcResource))
+        return;
+    int npc = canvas->selectedNpc;
+    auto current = document.pages[page->currentIndex()];
+    MapNpcDocument npcs(project, npcResource);
+    auto loc = npcs.location(current.settlement, npc, schedule->currentIndex());
+    if (loc.x >= 32 || loc.y >= 32) {
+        coordinate->setText("Stored NPC position is outside map bounds");
+        return;
+    }
+    for (int i = 0; i < document.pages.size(); ++i)
+        if (document.pages[i].settlement == current.settlement &&
+            document.pages[i].floor == loc.floor) {
+            if (page->currentIndex() != i) {
+                auto &target = (*states)[resource + "/" + QString::number(i)];
+                target.schedule = schedule->currentIndex();
+                target.npc = npc;
+                target.ghosts = npcGhosts->isChecked();
+                target.tool = MapCanvas::InspectNpc;
+                page->setCurrentIndex(i);
+            }
+            selectNpc(npc);
+            QTimer::singleShot(0, this,
+                               [this, loc] { view->centerMap({loc.x + 0.5, loc.y + 0.5}); });
+            return;
+        }
+    coordinate->setText("Stored NPC floor has no map page; record is preserved");
+}
+
 void MapWorkspace::exportImage(bool ids) {
     try {
         auto path = QFileDialog::getSaveFileName(this, ids ? "Export tile IDs" : "Export terrain",

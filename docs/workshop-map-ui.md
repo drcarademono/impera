@@ -1,6 +1,6 @@
 # Impera Workshop map editor — UI plan
 
-Status: Phases 1 and 2 implemented; subsequent phases remain proposals. The original
+Status: Phases 1–3 implemented; subsequent phases remain proposals. The original
 implementation audit below describes the baseline before this change.
 
 ## Recommendation
@@ -234,7 +234,7 @@ capacity rollback, untouched combat metadata, comparison baselines, minimap
 navigation and state restoration. Platform visual review remains appropriate
 before shipping; the cloud validation uses Qt's offscreen Linux renderer.
 
-## Next: Phase 3 — NPC integration
+## Phase 3 — NPC integration (implemented)
 
 Replace the current Inspect NPCs action with an NPC mode on the same canvas:
 
@@ -257,3 +257,44 @@ fields, shared-slot behavior, basement-floor correctness, overlapping actors,
 missing dialogue, and undo/redo without view or selection loss. Creation/deletion
 of NPCs requires a separate audited allocation policy; Phase 3 begins with
 existing actors. Combat-marker editing remains Phase 4.
+
+### Phase 3 outcome
+
+The NPC inspector and canvas now select existing records, resolve dialogue names,
+choose among overlapping actors, preview dragging, and commit atomic X/Y/Z
+moves. The inspector shows real transition hours, raw AI, sprite and dialogue ID,
+shared-slot semantics, signed floors and optional numbered position ghosts.
+Locate and explicit Move here navigation preserve the selected actor and slot
+across floors; conversation/advanced-record links retain map view on return.
+Terrain paste is disabled in NPC mode. Missing dialogue and unusual positions
+are preserved rather than silently rewritten.
+
+Tests verify whole-resource byte preservation, shared slots 1/3, signed basement
+floors, valid destination bounds, overlap selection, drag/focus/Escape cancellation,
+atomic undo/redo, floor changes, missing conversation fallback and conversation
+return. The engine's `NpcScheduleFmt`, `NPC_0000_LoadNpcFile` and `NPC_12e0` confirm
+the record layout and shared-location mapping. No runtime wandering simulation or
+NPC allocation policy has been introduced.
+
+## Next: Phase 4 — Combat integration
+
+Add an Encounter mode beside terrain editing for combat maps:
+
+1. Audit the engine and editor metadata mappings before exposing controls,
+   especially trigger records, the eight replacement tiles and both changed-cell
+   position sets. Keep sentinel/disabled and unknown records in Advanced.
+2. Show typed, selectable markers for six party starts, monsters and triggers.
+   Support all four North/East/South/West party-entry configurations. Provide an
+   entity list for overlapping markers and records outside drawable bounds.
+3. Drag markers with previews and cancellation, committing only the verified
+   coordinate bytes as one undoable edit. Preserve terrain, unrelated metadata,
+   row padding and unusual values exactly.
+4. Selecting a trigger highlights its linked cells and replacement tiles. Add a
+   read-only trigger-result preview that shows the outcome without mutating the
+   base terrain. Keep labels and marker shapes alongside colors.
+
+Acceptance requires exact byte comparisons for every edit kind, all entry
+configurations, overlap/sentinel handling, trigger linkage, cancellation and
+undo/redo while preserving view state. Terrain tools must continue to preserve
+all combat metadata. This remains authoring of stored encounter data, not a
+simulation of combat AI or dynamic object state.

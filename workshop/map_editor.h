@@ -8,7 +8,8 @@ struct MapViewState {
     double zoom = 2;
     bool fit = false, grid = false, comparison = false, outline = false;
     QRect selection;
-    int brush = 1, tool = 0, schedule = 0;
+    int brush = 1, tool = 0, schedule = 0, npc = -1;
+    bool ghosts = false;
     QPointF center = {-1, -1}; // Map cells, independent of display scale.
 };
 
@@ -23,6 +24,25 @@ class MapDocument {
   private:
     Project *project;
     QString resource;
+};
+
+struct NpcLocation {
+    int x, y, floor, ai;
+};
+class MapNpcDocument {
+  public:
+    MapNpcDocument(Project *project, QString resource);
+    static int locationIndex(int slot);
+    NpcLocation location(int settlement, int npc, int slot) const;
+    int hour(int settlement, int npc, int slot) const;
+    int sprite(int settlement, int npc) const;
+    int dialogue(int settlement, int npc) const;
+    QByteArray move(int settlement, int npc, int slot, NpcLocation destination) const;
+
+  private:
+    Project *project;
+    QString resource;
+    int offset(int settlement, int npc) const;
 };
 
 struct MapBrushState {
@@ -51,14 +71,17 @@ class MapCanvas : public QWidget {
     struct Actor {
         int x, y, tile, npc;
     };
-    QVector<Actor> actors;
+    QVector<Actor> actors, ghosts;
+    int selectedNpc = -1;
+    std::function<int(const QList<int> &)> chooseActor;
+    std::function<bool(int, QPoint)> moveNpc;
     std::function<bool(const QByteArray &)> commit;
     std::function<void(int, int, int)> inspect;
     std::function<void(int)> pick, chooseNpc;
     std::function<void(int)> chooseTool;
     void resizeMap();
     QPoint cellAt(QPointF position) const;
-    bool painting() const { return stroke; }
+    bool painting() const { return stroke || npcDrag; }
     void cancelStroke();
 
   protected:
@@ -72,7 +95,8 @@ class MapCanvas : public QWidget {
     bool event(QEvent *) override;
 
   private:
-    bool stroke = false;
+    bool stroke = false, npcDrag = false;
+    QPoint npcOrigin, npcDestination;
     QByteArray before, stamp;
     QSize stampSize;
     QPoint start = {-1, -1};
@@ -163,4 +187,21 @@ class MapWorkspace : public QWidget {
     void setBrush(int id);
     void updateZoom();
     void exportImage(bool ids);
+    QStackedWidget *inspector;
+    QComboBox *npcList;
+    QLabel *npcInfo, *npcSprite;
+    QSpinBox *npcX, *npcY, *npcFloor;
+    QCheckBox *npcGhosts;
+    QPushButton *npcConversation;
+    QString npcResource, talkResource;
+    QMap<int, QString> npcNames;
+    QMap<int, int> conversationIndices;
+    std::function<bool(const QMap<QString, QByteArray> &, const QString &)> commitResources;
+    std::function<void(const QString &)> navigateResource;
+    void refreshNpcs();
+    void selectNpc(int npc);
+    void locateNpc();
+    bool moveNpcTo(int npc, int x, int y, int floor);
+    QString npcName(int npc) const;
+    void createNpcInspector(QVBoxLayout *layout);
 };

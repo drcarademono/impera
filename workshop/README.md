@@ -64,7 +64,7 @@ drafts rather than silently discarding them. Package imports become undoable edi
 | Workspace | Available in this first version |
 | --- | --- |
 | Maps | Searchable world/settlement/combat navigation; continuous painting, synchronized eyedropper, hover/brush preview, pan, anchored zoom, fit view, coordinate navigation, per-map view restoration and per-stroke undo; terrain selection, solid/outline rectangles, bounded flood fill, typed copy/paste previews, minimap, favorite/recent brushes, original-change highlighting; terrain and tile-ID PNG exports |
-| Settlement NPCs | Schedule overlays for all four time slots; click in Inspect NPCs mode to open the appropriate NPC; edit three AI/X/Y/Z locations, four hours, appearance and dialogue ID |
+| Settlement NPCs | NPC mode with actor selection, overlap chooser, drag previews and atomic moves; schedule inspector, signed floors, other-position ghosts, conversation links and advanced record editing |
 | Combat setup | Edit starting party positions for four directions, monster tiles/positions, triggers and changed-tile metadata; retain all padding/sentinel bytes |
 | Graphics | All DOS `.16` image containers and 512 tiles; thumbnail gallery, EGA pixel painting, PNG import/export, full tilesheet import/export, one-bit alpha masks |
 | Conversations | Searchable NPCs, Basics/Topics/Questions outline, shared keyword aliases, ordered text/action forms, reference-safe question deletion, byte budgets, diagnostics, Advanced source, conversation sandbox and DOS font preview |
@@ -110,9 +110,35 @@ can show **All tiles / Favorites / Recent** (the last 16 brushes used). Favorite
 and recent brushes last for the current project session and are not mod content.
 Selection, comparison and rectangle mode also survive map navigation and undo.
 
-NPC overlays retain the existing schedule-slot inspection behavior. NPC placement
-and graphical combat-setup editing are later phases. View preferences do not
-change game bytes or get exported into a mod package.
+### NPC mode
+
+Choose **NPCs** in the map tool selector to work with existing NPC records. Click
+an actor or select its slot in the inspector. Overlapping actors open a chooser
+when none is selected; subsequent drags move the selected actor. The record list
+also lets you select another actor sharing that tile.
+
+Drag previews a destination; release commits one undoable move. **Escape**, focus
+loss or releasing outside the map cancels it. NPC mode protects terrain, including
+paste. Moves change only the selected location's X/Y/Z, preserving other
+positions, AI, hours, appearance, dialogue linkage and unknown bytes.
+
+The inspector resolves names from the companion conversation file, displays all
+four real transition hours, and shows raw AI values. **Slots 1 and 3 share location
+record 1**: moving either changes both. Floors are signed; **−1** is a basement.
+**Locate on map** navigates to the selected position's floor. Enter X/Y/floor and
+use **Move here** to relocate, including between a settlement's existing floors.
+**Other schedule positions** shows numbered slot ghosts on the current floor,
+with other-floor positions listed in the inspector. These are stored positions,
+not a simulation of wandering NPCs.
+
+**Edit conversation** opens the linked dialogue by its ID; **Back to map** restores
+actor, schedule slot and viewport. **Advanced NPC record** opens the existing
+record editor for AI, transition hours, appearance and dialogue ID. Missing
+conversations disable the link; unusual stored positions remain visible in the
+inspector without being clamped. No NPC creation/deletion is added in this phase.
+
+Graphical combat-setup editing is the next phase. View preferences do not change
+game bytes or get exported into a mod package.
 
 Basements use the engine's actual floor numbers. Britannia changes rebuild both
 `BRIT.DAT` and the chunk-index bytes of `DATA.OVL` together; implicit-water and
