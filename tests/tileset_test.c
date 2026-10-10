@@ -191,11 +191,8 @@ static void rendering(void)
     GRAP_SDL_SetSmoothMovement(false);
 }
 #endif
-static Uint32 chooseTileset(void *data, SDL_TimerID id, Uint32 interval)
+static void chooseTileset(void)
 {
-    (void)data;
-    (void)id;
-    (void)interval;
     SDL_Event event = {0};
     event.type = SDL_EVENT_KEY_DOWN;
     event.key.key = SDLK_DOWN;
@@ -209,15 +206,12 @@ static Uint32 chooseTileset(void *data, SDL_TimerID id, Uint32 interval)
     assert(SDL_PushEvent(&event));
     event.key.key = SDLK_ESCAPE;
     assert(SDL_PushEvent(&event));
-    return 0;
 }
-static Uint32 chooseCustom(void *user, SDL_TimerID id, Uint32 interval)
+static void chooseCustom(bool select)
 {
-    (void)id;
-    (void)interval;
     SDL_Event e = {0};
     e.type = SDL_EVENT_KEY_DOWN;
-    if (user)
+    if (select)
     {
         e.key.key = SDLK_DOWN;
         assert(SDL_PushEvent(&e));
@@ -229,42 +223,27 @@ static Uint32 chooseCustom(void *user, SDL_TimerID id, Uint32 interval)
         e.key.key = SDLK_ESCAPE;
         assert(SDL_PushEvent(&e));
     }
-    return 0;
 }
-static Uint32 chooseCustomOption(void *user, SDL_TimerID id, Uint32 interval)
+static void chooseCustomOption(void)
 {
-    (void)id;
-    int *stage = user;
     SDL_Event e = {0};
     e.type = SDL_EVENT_KEY_DOWN;
-    if (*stage == 0)
-    {
-        e.key.key = SDLK_DOWN;
-        for (int i = 0; i < ENGINE_TILESET; i++)
-            assert(SDL_PushEvent(&e)); /* Video -> Tileset */
-        e.key.key = SDLK_RETURN;
+    e.key.key = SDLK_DOWN;
+    for (int i = 0; i < ENGINE_TILESET; i++)
         assert(SDL_PushEvent(&e));
-        e.key.key = SDLK_DOWN;
-        for (int i = 0; i < TILESET_CUSTOM; i++)
-            assert(SDL_PushEvent(&e));
-        e.key.key = SDLK_RETURN;
+    e.key.key = SDLK_RETURN;
+    assert(SDL_PushEvent(&e));
+    e.key.key = SDLK_DOWN;
+    for (int i = 0; i < TILESET_CUSTOM; i++)
         assert(SDL_PushEvent(&e));
-    }
-    else if (*stage == 1)
-    {
-        e.key.key = SDLK_DOWN;
-        assert(SDL_PushEvent(&e)); /* First PNG */
-        e.key.key = SDLK_RETURN;
-        assert(SDL_PushEvent(&e));
-    }
-    else
-    {
-        e.key.key = SDLK_ESCAPE;
-        assert(SDL_PushEvent(&e));
-        return 0;
-    }
-    (*stage)++;
-    return interval;
+    e.key.key = SDLK_RETURN;
+    assert(SDL_PushEvent(&e));
+    e.key.key = SDLK_DOWN;
+    assert(SDL_PushEvent(&e)); /* First PNG */
+    e.key.key = SDLK_RETURN;
+    assert(SDL_PushEvent(&e));
+    e.key.key = SDLK_ESCAPE;
+    assert(SDL_PushEvent(&e)); /* Enclosing options */
 }
 static bool acceptCustom(const char *path, void *user)
 {
@@ -393,21 +372,19 @@ static void customTileset(void)
     assert(TILESET_Selected() == TILESET_CUSTOM);
     assert(!strcmp(TILESET_CustomPath(), "custom-picker/Replacement.png"));
     assert(TILESET_Select(TILESET_DOS));
-    assert(SDL_AddTimer(50, chooseCustom, NULL));
+    chooseCustom(false);
     assert(!FILEPICKER_Select("Custom Tileset", "Choose a 2:1 PNG tileset", NULL, ".png", "custom-picker",
                               "Return to Engine Options", "Invalid PNG", acceptCustom, NULL));
     assert(TILESET_Selected() == TILESET_DOS);
     /* Case-insensitive PNG filtering, a filename with spaces, and real acceptance. */
-    assert(SDL_AddTimer(50, chooseCustom, (void *)1));
+    chooseCustom(true);
     assert(FILEPICKER_Select("Custom Tileset", "Choose a 2:1 PNG tileset", NULL, ".png", "custom-picker",
                              "Return to Engine Options", "Invalid PNG", acceptCustom, NULL));
     assert(TILESET_Selected() == TILESET_CUSTOM);
     assert(strstr(TILESET_CustomPath(), "Custom atlas.PNG"));
     assert(TILESET_Select(TILESET_DOS));
-    int stage = 0;
-    assert(SDL_AddTimer(50, chooseCustomOption, &stage));
+    chooseCustomOption();
     ENGINE_ShowOptions(false);
-    assert(stage == 2);
     assert(TILESET_Selected() == TILESET_CUSTOM);
     assert(strstr(TILESET_CustomPath(), "Custom atlas.PNG"));
     assert(!GRAP_SDL_PixelUI());
@@ -522,7 +499,7 @@ int main(void)
     assert(g_linearEgaBuffer0[16 * 320 + 16] == 5);
     byte font[1024] = {0};
     D_539c[0] = font;
-    assert(SDL_AddTimer(30, chooseTileset, NULL));
+    chooseTileset();
     ENGINE_ShowOptions(false);
     assert(TILESET_Selected() == TILESET_AMIGA);
     assert(g_linearEgaBuffer0[16 * 320 + 16] == GRAP_BUF_TilePixel(17, 0, 0));
