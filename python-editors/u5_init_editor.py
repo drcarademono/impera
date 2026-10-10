@@ -27,7 +27,7 @@ LOCATION_NAMES = {
     0x01: "Moonglow", 0x02: "Britain", 0x03: "Jhelom", 0x04: "Yew",
     0x05: "Minoc", 0x06: "Trinsic", 0x07: "Skara Brae", 0x08: "New Magincia",
     0x09: "Fogsbane", 0x0A: "Stormcrow", 0x0B: "Greyhaven", 0x0C: "Waveguide",
-    0x0D: "Iolo's hut", 0x0E: "Sutek's hut", 0x0F: "Sin'Vraal's hut",
+    0x0D: "Iolo's hut", 0x0E: "Spektran", 0x0F: "Sin'Vraal's hut",
     0x10: "Grendel's hut",
     0x11: "Castle British", 0x12: "Castle Blackthorn",
     0x13: "West Britanny", 0x14: "North Britanny", 0x15: "East Britanny",
@@ -105,7 +105,10 @@ class InitGamModel(QtCore.QObject):
             self.load(path)
 
     def load(self, path: Path):
-        self.bytes = bytearray(path.read_bytes())
+        data = path.read_bytes()
+        if len(data) != DEFAULT_SIZE:
+            raise ValueError("Expected a 4192-byte DOS INIT.GAM/SAVED.GAM, not a modern save container")
+        self.bytes = bytearray(data)
         self.path = path
         self.data_changed.emit()
 
@@ -115,6 +118,7 @@ class InitGamModel(QtCore.QObject):
                 raise ValueError("No file path specified")
             path = self.path
         Path(path).write_bytes(self.bytes)
+        self.path = Path(path)
 
     def _ensure_len(self, size:int):
         if size > len(self.bytes):
@@ -126,18 +130,54 @@ class InitGamModel(QtCore.QObject):
         return 0
 
     def u16(self, off:int) -> int:
-        if 0 <= off+1 < len(self.bytes):
+        if 0 <= off and off+1 < len(self.bytes):
             return struct.unpack_from(LE+"H", self.bytes, off)[0]
         return 0
 
     def set_u8(self, off:int, val:int):
+        if off < 0 or not 0 <= val <= 255:
+            raise ValueError("Invalid byte offset/value")
         self._ensure_len(off+1)
         self.bytes[off] = val & 0xFF
         self.data_changed.emit()
 
     def set_u16(self, off:int, val:int):
+        if off < 0 or not 0 <= val <= 65535:
+            raise ValueError("Invalid word offset/value")
         self._ensure_len(off+2)
         struct.pack_into(LE+"H", self.bytes, off, val & 0xFFFF)
+        self.data_changed.emit()
+
+    def set_party_member(self, row, joined, home_map=None):
+        count = self.u8(FIELDS["num_party"].offset)
+        if not 1 <= count <= 6 or not 0 <= row < 16:
+            raise ValueError("Invalid party size or character index")
+        if (row < count) == joined:
+            return
+        records = [bytearray(self.bytes[2+i*32:2+(i+1)*32]) for i in range(16)]
+        order = list(range(16))
+        if joined:
+            if count == 6 or not records[row][0]:
+                raise ValueError("Party is full or the character slot is empty")
+            records[row][31] = 0
+            records[row], records[count] = records[count], records[row]
+            order[row], order[count] = order[count], order[row]
+            count += 1
+        else:
+            if row == 0:
+                raise ValueError("The Avatar cannot leave the party")
+            if home_map is None or not 1 <= home_map <= 32:
+                raise ValueError("Choose a settlement for the dismissed companion")
+            records[row][31] = home_map
+            records[row][23] = 0  # inn counter, as in SHOPPES3
+            records.append(records.pop(row))
+            order.append(order.pop(row))
+            count -= 1
+        active = self.u8(FIELDS["active_char"].offset)
+        self.bytes[2:514] = b"".join(records)
+        self.bytes[FIELDS["num_party"].offset] = count
+        self.bytes[FIELDS["active_char"].offset] = (order.index(active)
+            if active in order and order.index(active) < count else 255)
         self.data_changed.emit()
 
 # --------------------------- Widgets ---------------------------
@@ -168,6 +208,7 @@ class LabeledSpin(QtWidgets.QWidget):
 
     def setValue(self, v:int):
         """Class: LabeledSpin"""
+        blocker = QtCore.QSignalBlocker(self._spin)
         self._spin.setValue(v)
 
     def value(self) -> int:
@@ -224,10 +265,7 @@ class PartyTab(QtWidgets.QWidget):
             cb = QtWidgets.QCheckBox()
             self.members_tbl.setCellWidget(i, 2, cb)
             self._member_inparty.append(cb)
-            cb.stateChanged.connect(lambda _=None, r=i: (
-                self.model.set_u8(0x02 + r*32 + 0x1F, 0x00 if self._member_inparty[r].isChecked() else 0xFF),
-                self.model.set_u8(FIELDS["num_party"].offset, sum(1 for k in range(16) if self._member_inparty[k].isChecked()))
-            ))
+            cb.stateChanged.connect(lambda _, row=i: self.change_membership(row))
 
             # status combo
             combo = QtWidgets.QComboBox()
@@ -265,7 +303,8 @@ class PartyTab(QtWidgets.QWidget):
 
         self.transport.valueChanged.connect(self.on_apply)
         self.active_char.valueChanged.connect(self.on_apply)
-        self.num_party.valueChanged.connect(self.on_apply)
+        self.num_party._spin.setReadOnly(True)
+        self.num_party._spin.setButtonSymbols(QtWidgets.QAbstractSpinBox.ButtonSymbols.NoButtons)
         self.model.data_changed.connect(self.refresh_from_model)
 
         # Help text (kept as in your current build)
@@ -317,13 +356,14 @@ class PartyTab(QtWidgets.QWidget):
         for i in range(16):
             base = 0x02 + i*32
             # name preview
-            raw = bytes(self.model.bytes[base:base+8])
+            raw = bytes(self.model.bytes[base:base+9])
             name = raw.split(b'\x00', 1)[0].decode('ascii', errors='ignore')
             self.members_tbl.item(i, 1).setText(name if name else f"Char {i+1}")
             # in-party
-            in_party = (self.model.u8(base + 0x1F) == 0x00)
+            in_party = i < self.model.u8(FIELDS["num_party"].offset)
             self._member_inparty[i].blockSignals(True)
             self._member_inparty[i].setChecked(in_party)
+            self._member_inparty[i].setEnabled(i != 0 and bool(raw[0]))
             self._member_inparty[i].blockSignals(False)
             if in_party:
                 counted += 1
@@ -349,19 +389,41 @@ class PartyTab(QtWidgets.QWidget):
 
         if not self.num_party._spin.hasFocus():
             self.num_party.blockSignals(True)
-            self.num_party.setValue(counted if 1 <= counted <= 6 else self.model.u8(FIELDS["num_party"].offset))
+            self.num_party.setValue(self.model.u8(FIELDS["num_party"].offset))
             self.num_party.blockSignals(False)
 
+    def change_membership(self, row):
+        joined = self._member_inparty[row].isChecked()
+        home_map = None
+        if not joined:
+            homes = [(key, value) for key, value in LOCATION_NAMES.items() if 1 <= key <= 32]
+            current = self.model.u8(FIELDS["party_location"].offset)
+            default = next((i for i, (key, _) in enumerate(homes) if key == current), 0)
+            selected, ok = QtWidgets.QInputDialog.getItem(self, "Companion home",
+                "Where should the companion return?", [name for _, name in homes], default, False)
+            if not ok:
+                self.refresh_from_model()
+                return
+            home_map = next(key for key, name in homes if name == selected)
+        try:
+            self.model.set_party_member(row, joined, home_map)
+        except ValueError as error:
+            QtWidgets.QMessageBox.warning(self, "Cannot change party", str(error))
+            self.refresh_from_model()
+
     def on_apply(self, *args):
-        # Push current UI values into the model (and thus the bytearray)
-        self.model.set_u8(FIELDS["party_location"].offset, int(self.loc_combo.currentData()))
-        self.model.set_u8(FIELDS["party_z"].offset, self.z_spin.value())
-        self.model.set_u8(FIELDS["party_x"].offset, self.x_spin.value())
-        self.model.set_u8(FIELDS["party_y"].offset, self.y_spin.value())
-        self.model.set_u8(FIELDS["transport_mode"].offset, self.transport.value())
-        self.model.set_u8(FIELDS["active_char"].offset, self.active_char.value())
-        # Keep member count coherent if user adjusted "In Party" checkboxes separately
-        self.model.set_u8(FIELDS["num_party"].offset, self.num_party.value())
+        # Update only the control the user changed, preserving raw values in others.
+        source = self.sender()
+        if source is self.loc_combo:
+            self.model.set_u8(FIELDS["party_location"].offset, int(self.loc_combo.currentData()))
+            return
+        for key, widget in [("party_z", self.z_spin), ("party_x", self.x_spin),
+                            ("party_y", self.y_spin), ("transport_mode", self.transport),
+                            ("active_char", self.active_char)]:
+            if source is widget or source is widget._spin:
+                self.model.set_u8(FIELDS[key].offset, widget.value())
+                return
+
 
 
 class TimeTab(QtWidgets.QWidget):
@@ -434,7 +496,9 @@ class InventoryTab(QtWidgets.QWidget):
     def refresh_from_model(self):
         self.food.setValue(self.model.u16(FIELDS["food"].offset)); self.gold.setValue(self.model.u16(FIELDS["gold"].offset))
         self.keys.setValue(self.model.u8(0x206)); self.gems.setValue(self.model.u8(0x207)); self.torches.setValue(self.model.u8(0x208))
-        for key, fld in PLOT_FLAGS.items(): self.flag_widgets[key].setCurrentIndex(1 if self.model.u8(fld.offset)==0xFF else 0)
+        for key, fld in PLOT_FLAGS.items():
+            blocker = QtCore.QSignalBlocker(self.flag_widgets[key])
+            self.flag_widgets[key].setCurrentIndex(1 if self.model.u8(fld.offset)==0xFF else 0)
         for name, off in REAGENTS: self.reagent_spins[name].setValue(self.model.u8(off))
 
 class MoonstoneTab(QtWidgets.QWidget):
@@ -618,20 +682,29 @@ class RawBytesTab(QtWidgets.QWidget):
         self.view.setPlainText("\n".join(lines))
 
     def apply_text(self):
-        text = self.view.toPlainText(); raw = []
-        for line in text.splitlines():
-            parts = line.strip().split()
-            if not parts: continue
-            try: int(parts[0], 16); hexparts = parts[1:]
-            except ValueError: hexparts = parts
-            for tok in hexparts:
-                tok = tok.strip().rstrip(",")
-                if len(tok) != 2: continue
-                try: raw.append(int(tok,16))
-                except ValueError: pass
-        if raw:
-            n = min(len(raw), len(self.model.bytes))
-            self.model.bytes[:n] = bytes(raw[:n]); self.model.data_changed.emit()
+        import re
+        raw = bytearray()
+        try:
+            for line in self.view.toPlainText().splitlines():
+                parts = line.split()
+                if not parts:
+                    continue
+                if len(parts[0]) == 8:
+                    address = int(parts.pop(0), 16)
+                    if address != len(raw):
+                        raise ValueError("Hexdump offsets must be contiguous")
+                for token in parts:
+                    if not re.fullmatch(r"[0-9a-fA-F]{2}", token):
+                        raise ValueError("Use two hex digits per byte")
+                    raw.append(int(token, 16))
+            if len(raw) != len(self.model.bytes):
+                raise ValueError("Hexdump must keep the original file size")
+        except ValueError as error:
+            QtWidgets.QMessageBox.warning(self, "Invalid hex dump", str(error))
+            return
+        self.model.bytes[:] = raw
+        self.model.data_changed.emit()
+
 
 class HexEditorTab(QtWidgets.QWidget):
     def __init__(self, model: InitGamModel):
@@ -652,7 +725,7 @@ class HexEditorTab(QtWidgets.QWidget):
 
     def parse_offset(self)->int:
         s = self.offset_edit.text().strip()
-        try: return int(s, 16) if s.lower().startswith("0x") else int(s)
+        try: return max(0, int(s, 16) if s.lower().startswith("0x") else int(s))
         except ValueError: return 0
 
     def reload_window(self):
@@ -675,7 +748,10 @@ class HexEditorTab(QtWidgets.QWidget):
         try: base_off = int(self.table.item(row, 0).text(), 16)
         except Exception: return
         idx = base_off + (col-1)
-        try: val = int(item.text(), 16) & 0xFF
+        try:
+            val = int(item.text(), 16)
+            if not 0 <= val <= 255:
+                raise ValueError("Byte out of range")
         except ValueError: return
         if idx >= 0:
             self.model.set_u8(idx, val)
@@ -715,7 +791,10 @@ class MainWindow(QtWidgets.QMainWindow):
     def on_open(self):
         path, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Open INIT.GAM", "", "INIT.GAM (INIT.GAM);;All files (*)")
         if not path: return
-        self.model.load(Path(path))
+        try:
+            self.model.load(Path(path))
+        except (OSError, ValueError) as error:
+            QtWidgets.QMessageBox.critical(self, "Open failed", str(error))
 
     def on_save(self):
         try: self.model.save(); QtWidgets.QMessageBox.information(self, "Saved", f"Saved to {self.model.path}")

@@ -1,0 +1,33 @@
+name: Python editors
+
+on:
+  push:
+    paths:
+      - 'python-editors/**'
+      - 'src/common/lzw.c'
+      - 'src/vars.c'
+      - '.github/workflows/python-editors.yml'
+  pull_request:
+    paths:
+      - 'python-editors/**'
+      - 'src/common/lzw.c'
+      - 'src/vars.c'
+      - '.github/workflows/python-editors.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  editors:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: python-editors/requirements.txt
+      - run: python -m pip install -r python-editors/requirements.txt
+      - run: python python-editors/tests/run_tests.py
+        env:
+          QT_QPA_PLATFORM: offscreen

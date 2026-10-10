@@ -19,6 +19,7 @@ Notes
 License: MIT
 """
 from __future__ import annotations
+from u5_formats import lzw_decode, lzw_encode, read_tiles_blob
 import argparse
 import struct
 from pathlib import Path
@@ -28,175 +29,19 @@ from PIL import Image  # pillow
 
 # --- LZW: GIF-like (works for Ultima V TILES.16) -------------------------- #
 
-class BitStream:
-    def __init__(self, data: bytes, msb_first: bool):
-        self.data = data
-        self.msb_first = msb_first
-        self.bitpos = 0
-
-    def read(self, nbits: int) -> int:
-        acc = 0
-        if self.msb_first:  # MSB->LSB in each byte (not used for tiles.16)
-            for _ in range(nbits):
-                if self.bitpos // 8 >= len(self.data):
-                    raise EOFError
-                byte = self.data[self.bitpos // 8]
-                shift = 7 - (self.bitpos % 8)
-                acc = (acc << 1) | ((byte >> shift) & 1)
-                self.bitpos += 1
-        else:               # LSB->MSB in each byte (GIF-style, needed here)
-            for i in range(nbits):
-                if self.bitpos // 8 >= len(self.data):
-                    raise EOFError
-                byte = self.data[self.bitpos // 8]
-                acc |= ((byte >> (self.bitpos % 8)) & 1) << i
-                self.bitpos += 1
-        return acc
-
-
 def lzw_decompress_tiles16_giflsb(comp: bytes, expected_len: int) -> bytes:
-    """
-    GIF-like LZW (no sub-blocks), min_code_size=8 => CLEAR=256, END=257,
-    LSB-first packing, early-change; stops on END or EOF once expected_len is reached.
-    """
-    min_code_size = 8
-    clear = 1 << min_code_size      # 256
-    end   = clear + 1               # 257
-    code_size = min_code_size + 1   # 9 bits to start
-    next_code = end + 1             # 258
-    max_bits = 12
-
-    # dictionary: literal 0..255, placeholders for clear/end
-    dict_seq = [bytes([i]) for i in range(clear)] + [b"", b""]
-    bs = BitStream(comp, msb_first=False)
-    out = bytearray()
-    prev = None
-
-    def reset():
-        nonlocal code_size, next_code, dict_seq, prev
-        code_size = min_code_size + 1
-        next_code = end + 1
-        dict_seq = [bytes([i]) for i in range(clear)] + [b"", b""]
-        prev = None
-
-    try:
-        while True:
-            code = bs.read(code_size)
-            if code == clear:
-                reset()
-                continue
-            if code == end:
-                break
-
-            if code < len(dict_seq) and dict_seq[code] != b"":
-                entry = dict_seq[code]
-            elif prev is not None and code == next_code:
-                # KwKwK case
-                entry = prev + prev[:1]
-            else:
-                # invalid code – treat as EOF
-                break
-
-            out.extend(entry)
-            if expected_len and len(out) >= expected_len:
-                # We've decompressed enough; OK to stop even if stream continues to END
-                out = out[:expected_len]
-                break
-
-            if prev is not None and next_code < (1 << max_bits):
-                dict_seq.append(prev + entry[:1])
-                next_code += 1
-                # early-change: bump size when we *reach* the next power-of-two
-                if next_code == (1 << code_size) and code_size < max_bits:
-                    code_size += 1
-
-            prev = entry
-    except EOFError:
-        pass
-
-    if len(out) != expected_len:
-        raise ValueError(f"LZW decode produced {len(out)} bytes; expected {expected_len}")
-    return bytes(out)
+    return lzw_decode(comp, expected_len)
 
 def lzw_decompress_auto(comp: bytes, expected_len: int) -> bytes:
-    """Try multiple LZW variants (packing + clear/end + bump policy)."""
-    variants = [
-        # Ultima V tiles.16 (most likely):
-        # MSB-first, CLEAR only (no END), late-change, 9→12 bits, dict freezes at 4096
-        dict(name="U5: MSB, CLEAR, no END, late-change",
-             init_bits=9, max_bits=12, msb_first=True, use_clear=True, use_end=False, early_change=False),
-
-        # Classic UNIX 'compress' block mode (many encoders): MSB, CLEAR, no END, early-change
-        dict(name="compress: MSB, CLEAR, no END, early-change",
-             init_bits=9, max_bits=12, msb_first=True, use_clear=True, use_end=False, early_change=True),
-
-        # UNIX w/ END (rare)
-        dict(name="MSB, CLEAR+END, late-change",
-             init_bits=9, max_bits=12, msb_first=True, use_clear=True, use_end=True, early_change=False),
-
-        # GIF-style (LSB, CLEAR+END, early-change)
-        dict(name="GIF: LSB, CLEAR+END, early-change",
-             init_bits=9, max_bits=12, msb_first=False, use_clear=True, use_end=True, early_change=True),
-
-        # No clear/end, MSB, early-change
-        dict(name="MSB, no CLEAR/END, early-change",
-             init_bits=9, max_bits=12, msb_first=True, use_clear=False, use_end=False, early_change=True),
-
-        # No clear/end, MSB, late-change
-        dict(name="MSB, no CLEAR/END, late-change",
-             init_bits=9, max_bits=12, msb_first=True, use_clear=False, use_end=False, early_change=False),
-
-        # Fixed 12-bit, MSB, no clear/end
-        dict(name="MSB, fixed12, no CLEAR/END",
-             init_bits=12, max_bits=12, msb_first=True, use_clear=False, use_end=False, early_change=False),
-    ]
-
-    last_len = None
-    last_name = None
-
-    for v in variants:
-        name = v.pop("name")
-        out = _lzw_decompress_generic(comp, expected_len=expected_len, **v)
-        if out is not None:
-            return out
-        # Probe length (no expected_len check) so we can see what this variant yields
-        out_probe = _lzw_decompress_generic(comp, expected_len=None, **v)
-        if out_probe is not None:
-            print(f"[lzw] variant '{name}' produced {len(out_probe)} bytes (wanted {expected_len})")
-            last_len = len(out_probe)
-            last_name = name
-
-    if last_len is not None:
-        raise ValueError(f"LZW auto-decode failed: closest variant '{last_name}' produced {last_len} bytes, not {expected_len}")
-    raise ValueError("LZW auto-decode failed: no variant produced output")
+    return lzw_decode(comp, expected_len)
 
 def read_lzw_blob_auto(path: Path, fallback_expected_len: Optional[int] = None) -> bytes:
+    if fallback_expected_len == 65536:
+        return read_tiles_blob(path)
     raw = path.read_bytes()
-
-    # If it's already the exact decompressed size, just return it.
-    if fallback_expected_len is not None and len(raw) == fallback_expected_len:
-        return raw
-
-    # Try 4-byte length header (LE then BE)
-    if len(raw) >= 4:
-        for fmt in ('<I', '>I'):
-            expected_len = struct.unpack(fmt, raw[:4])[0]
-            comp = raw[4:]
-            if 0 < expected_len <= 8_388_608:
-                # First, try the GIF-like LZW used by TILES.16
-                try:
-                    return lzw_decompress_tiles16_giflsb(comp, expected_len)
-                except Exception:
-                    pass
-                # (Optional) fallbacks: other LZW variants if you want
-                # try: return lzw_decompress_auto(comp, expected_len)
-                # except Exception: pass
-
-    # Headerless attempt (rare for tiles.16, but keep as a fallback)
-    if fallback_expected_len is not None:
-        return lzw_decompress_tiles16_giflsb(raw, fallback_expected_len)
-
-    raise ValueError("Could not decode LZW blob (headered and headerless attempts failed)")
+    if len(raw) < 4:
+        raise ValueError("Resource header truncated")
+    return lzw_decode(raw[4:], struct.unpack_from("<I", raw)[0])
 
 # --------------------------- Constants & helpers --------------------------- #
 CHUNK_SIDE = 16         # tiles

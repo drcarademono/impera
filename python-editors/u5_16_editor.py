@@ -3,10 +3,11 @@
 # Requires: PySide6
 #
 # • On-disk format: <u32 uncompressed_len_bytes> + LZW (LSB-first)
-# • Decoder tries early-change (GIF standard) then late-change; encoder uses early-change
+# • Compression matches src/common/lzw.c, including dictionary-width transitions
 # • Supports TILES.16 and all multi-image *.16 (TEXT.16, DNG*.16, STORY*.16, ITEMS.16, MON*.16…)
 
 from __future__ import annotations
+from u5_formats import lzw_decode, lzw_encode, read_tiles_blob
 import sys, struct, math, re
 from dataclasses import dataclass
 from pathlib import Path
@@ -36,144 +37,20 @@ def bytes_per_row_16(w: int) -> int:
     return ((w + 7) // 8) * 4
 
 def mask_len(w: int, h: int) -> int:
-    return (w * h + 7) // 8
+    return ((w + 7) // 8) * h
 
-# ================================ Bit I/O =====================================
-
-class BitReaderLSB:
-    def __init__(self, data: bytes):
-        self.data = data
-        self.bitpos = 0
-    def read(self, nbits: int) -> int:
-        acc = 0
-        for i in range(nbits):
-            bi = self.bitpos >> 3
-            if bi >= len(self.data):
-                raise EOFError
-            acc |= ((self.data[bi] >> (self.bitpos & 7)) & 1) << i
-            self.bitpos += 1
-        return acc
-
-class BitWriterLSB:
-    def __init__(self):
-        self.buf = 0
-        self.nbits = 0
-        self.out = bytearray()
-    def write(self, code: int, width: int):
-        self.buf |= (code & ((1 << width) - 1)) << self.nbits
-        self.nbits += width
-        while self.nbits >= 8:
-            self.out.append(self.buf & 0xFF)
-            self.buf >>= 8
-            self.nbits -= 8
-    def finish(self) -> bytes:
-        if self.nbits:
-            self.out.append(self.buf & 0xFF)
-            self.buf = 0
-            self.nbits = 0
-        return bytes(self.out)
-
-# =============================== LZW core =====================================
-
-def _lzw_decode_variant(comp: bytes, expected_len: int, *, early_change: bool) -> bytes:
-    MIN=8; CLEAR=1<<MIN; END=CLEAR+1; MAXBITS=12
-    br = BitReaderLSB(comp)
-    dict_seq = [bytes([i]) for i in range(256)] + [b"", b""]
-    code_size = MIN+1
-    next_code = END+1
-    out = bytearray()
-    prev = None
-
-    def reset():
-        nonlocal code_size, next_code, prev, dict_seq
-        code_size = MIN+1
-        next_code = END+1
-        prev = None
-        dict_seq = [bytes([i]) for i in range(256)] + [b"", b""]
-
-    try:
-        while True:
-            code = br.read(code_size)
-            if code == CLEAR:
-                reset(); continue
-            if code == END:
-                break
-            if code < len(dict_seq) and dict_seq[code] != b"":
-                entry = dict_seq[code]
-            elif prev is not None and code == next_code:
-                entry = prev + prev[:1]
-            else:
-                break
-            out.extend(entry)
-            if len(out) >= expected_len:
-                return bytes(out[:expected_len])
-            if prev is not None and next_code < (1 << MAXBITS):
-                dict_seq.append(prev + entry[:1])
-                next_code += 1
-                if early_change:
-                    if next_code == (1 << code_size) and code_size < MAXBITS:
-                        code_size += 1
-                else:
-                    if next_code > (1 << code_size) and code_size < MAXBITS:
-                        code_size += 1
-            prev = entry
-    except EOFError:
-        pass
-    return bytes(out)
-
+# LZW wrappers retain the utility API; the format is shared with the map tools.
 def lzw_decode_flexible(header_len_bytes: int, comp: bytes) -> bytes:
-    # Try early-change with header length first (matches PC files), then late-change.
-    for ec in (True, False):
-        blob = _lzw_decode_variant(comp, header_len_bytes, early_change=ec)
-        if len(blob) == header_len_bytes:
-            return blob
-    # As a last-resort fallback, try header*256 (old repacks)
-    guess = header_len_bytes * 256
-    for ec in (True, False):
-        blob = _lzw_decode_variant(comp, guess, early_change=ec)
-        if len(blob) == guess:
-            return blob
-    raise ValueError(f"LZW decode failed for both early/late-change (tried {header_len_bytes} and {guess} bytes)")
+    return lzw_decode(comp, header_len_bytes)
 
 def lzw_encode_earlychange(raw: bytes) -> bytes:
-    if not raw:
-        return b""
-    MIN=8; CLEAR=1<<MIN; END=CLEAR+1; MAXBITS=12
-    dict_map = { bytes([i]): i for i in range(256) }
-    next_code = END+1
-    code_size = MIN+1
-    bw = BitWriterLSB()
-    bw.write(CLEAR, code_size)  # initial CLEAR
-    w = b""
-    for b in raw:
-        k = bytes([b])
-        wk = w + k
-        if wk in dict_map:
-            w = wk; continue
-        bw.write(dict_map[w], code_size)
-        if next_code < (1 << MAXBITS):
-            dict_map[wk] = next_code
-            next_code += 1
-            if next_code == (1 << code_size) and code_size < MAXBITS:  # early-change
-                code_size += 1
-        else:
-            bw.write(CLEAR, code_size)  # reset dict
-            dict_map = { bytes([i]): i for i in range(256) }
-            next_code = END+1
-            code_size = MIN+1
-        w = k
-    if w:
-        bw.write(dict_map[w], code_size)
-    bw.write(END, code_size)
-    return bw.finish()
-
-# =========================== In-memory representation ==========================
+    return lzw_encode(raw)
 
 @dataclass
 class ImageSlot:
     width: int
     height: int
-    qimage: QtGui.QImage        # ARGB32 (alpha used as mask in 16-bit-offset files)
+    qimage: QtGui.QImage        # ARGB32; alpha represents the separate one-bit DOS mask
     mask: Optional[bytes] = None
 
 @dataclass
@@ -181,8 +58,10 @@ class U5File:
     path: Optional[Path]
     kind: str                    # "tiles" or "multi"
     count: int = 0
-    offsets_16bit: bool = False  # True for ITEMS/MON* variant with mask
+    offsets_16bit: bool = True  # Compatibility field; all containers have paired uint16 offsets
     slots: List[Optional[ImageSlot]] = None
+    original_blob: Optional[bytes] = None
+    original_signature: Optional[tuple] = None
 
 # =============================== Decode files =================================
 
@@ -190,9 +69,11 @@ def read_any16(path: Path) -> U5File:
     data = path.read_bytes()
     if len(data) < 4:
         raise ValueError("File too small")
-    uncompressed = struct.unpack("<I", data[:4])[0]
-    comp = data[4:]
-    blob = lzw_decode_flexible(uncompressed, comp)
+    if path.name.upper() == "TILES.16":
+        blob = read_tiles_blob(path)
+    else:
+        uncompressed = struct.unpack("<I", data[:4])[0]
+        blob = lzw_decode_flexible(uncompressed, data[4:])
 
     # TILES.16 special-case (size + name)
     if path.name.upper() == "TILES.16" and len(blob) == TILES_RAW:
@@ -211,73 +92,62 @@ def read_any16(path: Path) -> U5File:
             slots.append(ImageSlot(TILE_W, TILE_H, img))
         return U5File(path, "tiles", count=TILES_COUNT, offsets_16bit=False, slots=slots)
 
-    # Otherwise: multi-image container
+    # IMAGE_GetImageView reads two uint16 offsets per image: color and mask.
     if len(blob) < 2:
         raise ValueError("Corrupt container")
-    count = struct.unpack_from("<H", blob, 0)[0]
-
-    # Parse both 32-bit and 16-bit offset tables, prefer the one that looks sane.
-    off32 = [struct.unpack_from("<I", blob, 2+4*i)[0] for i in range(count)] if len(blob) >= 2+4*count else []
-    ok32  = len(off32)==count and all(o==0 or (o < len(blob)) for o in off32)
-
-    off16 = [struct.unpack_from("<H", blob, 2+2*i)[0] for i in range(count)] if len(blob) >= 2+2*count else []
-    ok16  = len(off16)==count and all(o==0 or (o < len(blob)) for o in off16)
-
-    # Heuristic: ITEMS/MON* commonly 16-bit; otherwise 32-bit. But trust "ok" first.
-    name = path.name.upper()
-    prefer16 = bool(re.match(r"(ITEMS|MON[0-9A-Z]).*\.16$", name))
-    use16 = (ok16 and not ok32) or (ok16 and ok32 and prefer16)  # otherwise 32-bit
-
-    offsets = off16 if use16 else off32
-    slots: List[Optional[ImageSlot]] = [None]*count
-
-    def read_image_at(off: int) -> Tuple[ImageSlot, int]:
-        w  = struct.unpack_from("<H", blob, off)[0]
-        h  = struct.unpack_from("<H", blob, off+2)[0]
-        rb = bytes_per_row_16(w)
-        start = off + 4
-        end   = start + rb*h
-        if end > len(blob):
-            raise ValueError("Truncated image data")
-        img = QtGui.QImage(w, h, QtGui.QImage.Format.Format_ARGB32)
-        p = start
-        for y in range(h):
-            row = blob[p:p+rb]; p += rb
-            x = 0
-            for b in row:
-                hi = (b >> 4) & 0xF
-                lo = b & 0xF
-                if x < w: img.setPixelColor(x, y, PAL_Q[hi]); x += 1
-                if x < w: img.setPixelColor(x, y, PAL_Q[lo]); x += 1
+    count = struct.unpack_from("<H", blob)[0]
+    header_size = 2 + count * 4
+    if not count or header_size > len(blob):
+        raise ValueError("Truncated image table")
+    slots = []
+    def dimensions(offset):
+        if offset < header_size or offset + 4 > len(blob):
+            raise ValueError("Image offset outside resource")
+        w, h = struct.unpack_from("<HH", blob, offset)
+        if not w or not h or w*h > 8_388_608:
+            raise ValueError("Invalid image dimensions")
+        return w, h
+    for i in range(count):
+        color_off, mask_off = struct.unpack_from("<HH", blob, 2+i*4)
+        if color_off == 0:
+            if mask_off:
+                raise ValueError("Mask without color image")
+            slots.append(None)
+            continue
+        w, h = dimensions(color_off)
+        stride = bytes_per_row_16(w)
+        if color_off+4+stride*h > len(blob):
+            raise ValueError("Truncated color image")
         mask = None
-        # 16-bit-offset variant may have mask block immediately after pixels
-        if use16 and end + 4 <= len(blob):
-            mw = struct.unpack_from("<H", blob, end)[0]
-            mh = struct.unpack_from("<H", blob, end+2)[0]
-            mbytes = mask_len(mw, mh)
-            ms = end + 4; me = ms + mbytes
-            if mw == w and mh == h and me <= len(blob):
-                mask = blob[ms:me]
-                # apply mask as alpha (1 = masked)
-                bit = 0x80; bi = 0
-                for yy in range(h):
-                    for xx in range(w):
-                        masked = (mask[bi] & bit) != 0
-                        c = QtGui.QColor(img.pixelColor(xx, yy))
-                        c.setAlpha(0 if masked else 255)
-                        img.setPixelColor(xx, yy, c)
-                        bit >>= 1
-                        if bit == 0:
-                            bit = 0x80; bi += 1
-                end = me  # advance consumer pointer
-        return ImageSlot(w,h,img,mask), end
+        if mask_off:
+            mw, mh = dimensions(mask_off)
+            if (mw, mh) != (w, h):
+                raise ValueError("Color/mask dimensions differ")
+            length = mask_len(w, h)
+            if mask_off+4+length > len(blob):
+                raise ValueError("Truncated image mask")
+            mask = blob[mask_off+4:mask_off+4+length]
+        img = QtGui.QImage(w, h, QtGui.QImage.Format.Format_ARGB32)
+        for y in range(h):
+            for x in range(w):
+                byte = blob[color_off+4+y*stride+x//2]
+                value = (byte >> 4) if x % 2 == 0 else (byte & 15)
+                c = QtGui.QColor(PAL_Q[value])
+                if mask and mask[y*((w+7)//8)+x//8] & (128 >> (x%8)):
+                    c.setAlpha(0)
+                img.setPixelColor(x, y, c)
+        slots.append(ImageSlot(w, h, img, mask))
+    result = U5File(path, "multi", count=count, offsets_16bit=True, slots=slots,
+                    original_blob=blob)
+    result.original_signature = image_signature(result)
+    return result
 
-    for i, off in enumerate(offsets):
-        if off == 0: continue
-        slot, _ = read_image_at(off)
-        slots[i] = slot
 
-    return U5File(path, "multi", count=count, offsets_16bit=use16, slots=slots)
+def image_signature(f):
+    return (f.count, tuple(None if s is None else
+            (s.width, s.height, s.qimage.width(), s.qimage.height(),
+             bytes(s.qimage.convertToFormat(QtGui.QImage.Format.Format_ARGB32).constBits()))
+            for s in f.slots))
 
 # =============================== Build blobs ==================================
 
@@ -293,6 +163,8 @@ def build_tiles_blob(f: U5File) -> bytes:
             for x in range(0, TILE_W, 2):
                 c0 = img.pixelColor(x, y);  k0 = (c0.red(), c0.green(), c0.blue())
                 c1 = img.pixelColor(x+1, y);k1 = (c1.red(), c1.green(), c1.blue())
+                if c0.alpha() != 255 or c1.alpha() != 255:
+                    raise ValueError("TILES.16 cannot store PNG transparency")
                 if k0 not in PAL_IDX or k1 not in PAL_IDX:
                     raise ValueError(f"Non-EGA color at ({x},{y})")
                 out[off] = ((PAL_IDX[k0] & 0xF) << 4) | (PAL_IDX[k1] & 0xF)
@@ -300,72 +172,52 @@ def build_tiles_blob(f: U5File) -> bytes:
     return bytes(out)
 
 def build_multi_blob(f: U5File) -> bytes:
-    assert f.kind == "multi"
-    count = f.count
-    # Header area: count + offsets
-    header = bytearray(2 + (2 if f.offsets_16bit else 4)*count)
-    struct.pack_into("<H", header, 0, count)
+    if f.kind != "multi" or len(f.slots) != f.count or not 0 < f.count <= 16383:
+        raise ValueError("Invalid image count")
+    if f.original_blob is not None and image_signature(f) == f.original_signature:
+        return f.original_blob
+    header = bytearray(2+4*f.count)
+    struct.pack_into("<H", header, 0, f.count)
     body = bytearray()
-    offsets = [0]*count
-
-    def append_u16(v: int): body.extend(struct.pack("<H", v))
-
-    def encode_mask_from_alpha(img: QtGui.QImage) -> bytes:
-        w, h = img.width(), img.height()
-        m = bytearray(mask_len(w,h))
-        bit = 0x80; bi = 0
+    def offset():
+        value = len(header)+len(body)
+        if value > 65535:
+            raise ValueError("Image offsets exceed DOS 16-bit limit")
+        return value
+    for i, slot in enumerate(f.slots):
+        if slot is None:
+            continue
+        w, h, img = slot.width, slot.height, slot.qimage
+        if not 0 < w <= 65535 or not 0 < h <= 65535 or (w, h) != (img.width(), img.height()):
+            raise ValueError("Invalid image dimensions")
+        color_off = offset()
+        body.extend(struct.pack("<HH", w, h))
+        pixels = bytearray(bytes_per_row_16(w)*h)
+        mask = bytearray(mask_len(w, h))
+        has_mask = slot.mask is not None
         for y in range(h):
             for x in range(w):
-                if img.pixelColor(x,y).alpha() == 0:
-                    m[bi] |= bit
-                bit >>= 1
-                if bit == 0: bit = 0x80; bi += 1
-        return bytes(m)
-
-    def append_slot(slot: ImageSlot) -> int:
-        start = len(header) + len(body)
-        w, h = slot.width, slot.height
-        rb = bytes_per_row_16(w)
-        append_u16(w); append_u16(h)
-        for y in range(h):
-            x = 0
-            for _ in range(rb):
-                # two pixels per byte, hi nibble then low nibble
-                if x < w:
-                    k0 = slot.qimage.pixelColor(x,y); x0 = (k0.red(),k0.green(),k0.blue())
-                    if x0 not in PAL_IDX: raise ValueError(f"Non-EGA color at ({x},{y})")
-                    hi = PAL_IDX[x0] & 0xF
+                c = img.pixelColor(x, y)
+                if c.alpha() not in (0, 255):
+                    raise ValueError("DOS masks support only fully opaque or transparent pixels")
+                rgb = (c.red(), c.green(), c.blue())
+                if c.alpha() == 0:
+                    has_mask = True
+                    mask[y*((w+7)//8)+x//8] |= 128 >> (x%8)
+                    value = PAL_IDX.get(rgb, 0)
+                elif rgb in PAL_IDX:
+                    value = PAL_IDX[rgb]
                 else:
-                    hi = 0
-                x += 1
-                if x < w:
-                    k1 = slot.qimage.pixelColor(x,y); x1 = (k1.red(),k1.green(),k1.blue())
-                    if x1 not in PAL_IDX: raise ValueError(f"Non-EGA color at ({x-1},{y})")
-                    lo = PAL_IDX[x1] & 0xF
-                else:
-                    lo = 0
-                x += 1
-                body.append((hi<<4)|lo)
-        # Mask block only for 16-bit-offset containers
-        if f.offsets_16bit:
-            m = slot.mask if slot.mask is not None else encode_mask_from_alpha(slot.qimage)
-            append_u16(w); append_u16(h); body.extend(m)
-        return start
-
-    for i, s in enumerate(f.slots):
-        if s is None: continue
-        offsets[i] = append_slot(s)
-
-    if f.offsets_16bit:
-        for i, off in enumerate(offsets):
-            struct.pack_into("<H", header, 2+2*i, off & 0xFFFF)
-    else:
-        for i, off in enumerate(offsets):
-            struct.pack_into("<I", header, 2+4*i, off)
-
-    return bytes(header + body)
-
-# =============================== PNG helpers ==================================
+                    raise ValueError(f"Non-EGA color at ({x},{y})")
+                pixels[y*bytes_per_row_16(w)+x//2] |= value << (4 if x%2 == 0 else 0)
+        body.extend(pixels)
+        mask_off = 0
+        if has_mask:
+            mask_off = offset()
+            body.extend(struct.pack("<HH", w, h))
+            body.extend(mask)
+        struct.pack_into("<HH", header, 2+i*4, color_off, mask_off)
+    return bytes(header+body)
 
 def tiles_to_sheet(f: U5File) -> QtGui.QImage:
     sheet = QtGui.QImage(32*TILE_W, 16*TILE_H, QtGui.QImage.Format.Format_ARGB32)

@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 # tiles16_tool.py — Ultima V TILES.16 <-> PNG spritesheet
-# Writes EXACT DOS format: header = 65536 (bytes), LZW LSB-first, initial CLEAR, LATE-CHANGE.
+# Writes DOS format: 65536-byte length header and engine-compatible LSB-first LZW.
 
 from __future__ import annotations
+from u5_formats import lzw_decode, lzw_encode, read_tiles_blob
 import sys, struct
 from pathlib import Path
 from typing import List, Tuple, Optional
@@ -22,154 +23,19 @@ TILES, TILE_W, TILE_H = 512, 16, 16
 SHEET_COLS, SHEET_ROWS = 32, 16
 RAW_SIZE = 512 * 16 * 8  # 65536
 
-# ---------- Bit IO (LSB-first) ----------
-class BitWriterLSB:
-    def __init__(self):
-        self.buf = 0
-        self.n = 0
-        self.out = bytearray()
-    def write(self, code: int, width: int):
-        self.buf |= (code & ((1 << width) - 1)) << self.n
-        self.n += width
-        while self.n >= 8:
-            self.out.append(self.buf & 0xFF)
-            self.buf >>= 8
-            self.n -= 8
-    def finish(self) -> bytes:
-        if self.n:
-            self.out.append(self.buf & 0xFF)
-        self.buf = 0
-        self.n = 0
-        return bytes(self.out)
-
-class BitReaderLSB:
-    def __init__(self, data: bytes):
-        self.data = data
-        self.bitpos = 0
-    def read(self, nbits: int) -> int:
-        acc = 0
-        for i in range(nbits):
-            byte_index = self.bitpos >> 3
-            if byte_index >= len(self.data):
-                raise EOFError
-            bit_index = self.bitpos & 7
-            acc |= ((self.data[byte_index] >> bit_index) & 1) << i
-            self.bitpos += 1
-        return acc
-
-# ---------- LZW decode (matches what we already used) ----------
+# LZW wrappers use the shared engine-compatible codec.
 def lzw_decode_gif_latechange(comp: bytes, expected_len: int) -> bytes:
-    min_code_size = 8
-    CLEAR = 1 << min_code_size   # 256
-    END   = CLEAR + 1            # 257
-    code_size = min_code_size + 1
-    next_code = END + 1
-    max_bits = 12
+    return lzw_decode(comp, expected_len)
 
-    dict_seq = [bytes([i]) for i in range(256)] + [b"", b""]
-    br = BitReaderLSB(comp)
-    out = bytearray()
-    prev = None
-
-    def reset():
-        nonlocal code_size, next_code, dict_seq, prev
-        code_size = min_code_size + 1
-        next_code = END + 1
-        dict_seq = [bytes([i]) for i in range(256)] + [b"", b""]
-        prev = None
-
-    try:
-        while True:
-            code = br.read(code_size)
-            if code == CLEAR:
-                reset(); continue
-            if code == END:
-                break
-            if code < len(dict_seq) and dict_seq[code] != b"":
-                entry = dict_seq[code]
-            elif prev is not None and code == next_code:
-                entry = prev + prev[:1]
-            else:
-                break
-            out.extend(entry)
-            if expected_len and len(out) >= expected_len:
-                out = out[:expected_len]; break
-            if prev is not None and next_code < (1 << max_bits):
-                dict_seq.append(prev + entry[:1])
-                next_code += 1
-                # LATE-CHANGE: increase width AFTER we PASS the boundary
-                if next_code > (1 << code_size) and code_size < max_bits:
-                    code_size += 1
-            prev = entry
-    except EOFError:
-        pass
-
-    if len(out) != expected_len:
-        raise ValueError(f"LZW decode produced {len(out)} bytes; expected {expected_len}")
-    return bytes(out)
-
-# ---------- LZW encode — GIF style, initial CLEAR, LATE-CHANGE ----------
 def lzw_encode_gif_latechange(raw: bytes) -> bytes:
-    if not raw:
-        return b""
-    min_code_size = 8
-    CLEAR = 1 << min_code_size   # 256
-    END   = CLEAR + 1            # 257
-    max_bits = 12
+    return lzw_encode(raw)
 
-    dict_map = { bytes([i]): i for i in range(256) }
-    next_code = END + 1
-    code_size = min_code_size + 1
-
-    bw = BitWriterLSB()
-    # DOS loader is fine with an initial CLEAR; emit it to sync tables
-    bw.write(CLEAR, code_size)
-
-    w = b""
-    for k in raw:
-        k = bytes([k])
-        wk = w + k
-        if wk in dict_map:
-            w = wk
-            continue
-
-        # output w
-        bw.write(dict_map[w], code_size)
-
-        # add wk if space remains
-        if next_code < (1 << max_bits):
-            dict_map[wk] = next_code
-            next_code += 1
-            # LATE-CHANGE: bump AFTER boundary is crossed
-            if next_code > (1 << code_size) and code_size < max_bits:
-                code_size += 1
-        else:
-            # dictionary full: CLEAR and reset
-            bw.write(CLEAR, code_size)
-            dict_map = { bytes([i]): i for i in range(256) }
-            next_code = END + 1
-            code_size = min_code_size + 1
-
-        w = k
-
-    if w:
-        bw.write(dict_map[w], code_size)
-    bw.write(END, code_size)
-    return bw.finish()
-
-# ---------- Tiles blob <-> QImage ----------
 def read_tiles16_blob(path: Path) -> bytes:
-    raw = path.read_bytes()
-    if len(raw) >= 4:
-        expected = struct.unpack("<I", raw[:4])[0]
-        comp = raw[4:]
-        blob = lzw_decode_gif_latechange(comp, expected_len=expected)
-        return blob
-    if len(raw) != RAW_SIZE:
-        raise ValueError(f"Expected {RAW_SIZE} bytes, got {len(raw)}")
-    return raw
+    return read_tiles_blob(path)
 
 def blob_to_images(blob: bytes) -> List[QtGui.QImage]:
+    if len(blob) != RAW_SIZE:
+        raise ValueError("Tiles blob must contain exactly 65536 bytes")
     imgs: List[QtGui.QImage] = []
     off = 0
     for _ in range(TILES):
@@ -197,6 +63,8 @@ def images_to_blob(imgs: List[QtGui.QImage]) -> bytes:
             for x in range(0, TILE_W, 2):
                 c0 = img.pixelColor(x, y)
                 c1 = img.pixelColor(x+1, y)
+                if c0.alpha() != 255 or c1.alpha() != 255:
+                    raise ValueError("TILES.16 cannot store PNG transparency")
                 k0 = (c0.red(), c0.green(), c0.blue())
                 k1 = (c1.red(), c1.green(), c1.blue())
                 if k0 not in PAL_IDX or k1 not in PAL_IDX:
