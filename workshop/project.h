@@ -8,6 +8,8 @@ class Project {
   public:
     QString sourceDirectory, title = "Untitled mod", projectPath;
     QMap<QString, Resource> resources;
+    QMap<QString, QString> dialogueNames; // Project-only question annotations;
+                                          // never exported as TLK data.
     void openGame(const QString &directory);
     void save(const QString &path);
     void load(const QString &path);

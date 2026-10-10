@@ -67,18 +67,24 @@ def stage_appdir(archive, directory):
 
 
 def build(archive, cache):
+    output = archive.with_name(archive.name.removesuffix('.tar.gz') + '.AppImage')
+    with tempfile.TemporaryDirectory(prefix='impera-stage-') as temp:
+        appdir = stage_appdir(archive, Path(temp))
+        return build_appdir(appdir, output, cache)
+
+
+def build_appdir(appdir, output, cache):
+    """Build an already staged AppDir using the same verified tools/runtime."""
     cache.mkdir(parents=True, exist_ok=True)
     tool = verified_tool(cache, 'appimagetool.AppImage')
     runtime = verified_tool(cache, 'runtime-x86_64')
-    output = archive.with_name(archive.name.removesuffix('.tar.gz') + '.AppImage')
     with tempfile.TemporaryDirectory(prefix='impera-appimage-') as temp:
         temporary = Path(temp)
-        appdir = stage_appdir(archive, temporary / 'package')
         # Extraction avoids requiring /dev/fuse on CI and in cloud environments.
         subprocess.run([str(tool), '--appimage-extract'], cwd=temporary, check=True, stdout=subprocess.DEVNULL)
         subprocess.run([str(temporary / 'squashfs-root/AppRun'), '--no-appstream',
                         '--runtime-file', str(runtime), '--mksquashfs-opt', '-processors',
-                        '--mksquashfs-opt', '2', str(appdir), str(output)],
+                        '--mksquashfs-opt', '2', str(appdir.resolve()), str(output.resolve())],
                        env=dict(os.environ, ARCH='x86_64'), check=True)
     output.chmod(0o755)
     digest = hashlib.sha256(output.read_bytes()).hexdigest()

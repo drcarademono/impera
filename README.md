@@ -538,13 +538,18 @@ The release build pins SDL 3.4.18 and SDL_mixer 3.2.4, links them statically,
 and includes built-in WAV, MP3 and Ogg Vorbis decoding. Linux releases provide
 only an AppImage (plus its checksum). Original Ultima 5 game files,
 music, saves and personal settings are never included in the packages.
+Every platform also includes a separate **Impera Workshop** editor download:
+`ImperaWorkshop-<version>-<platform>`. Workshop bundles its Qt 6 runtime; no
+separate Qt installation is needed. Linux Workshop ships as an AppImage,
+Windows as a portable ZIP (launch `Run Workshop.cmd`), and macOS as an app bundle
+in a `.tar.gz` archive. Neither application includes original game assets.
 ScaleFX is not part of these releases.
 
 To test a build, open **Actions → Build releases → Run workflow**, select the
 branch, and download its platform artifacts when all jobs finish. GitHub wraps
 Actions downloads in a ZIP; the Windows artifact contains the executable
 directly. Release assets have no extra wrapper: one Windows ZIP, one Linux
-AppImage, and one macOS archive per architecture, with checksums. To make a
+AppImage, and one macOS archive per architecture **for each application**, with checksums. To make a
 release after merging, tag the desired commit:
 
 ```sh
@@ -559,7 +564,7 @@ GitHub Release. If none exists, it creates a **draft**; otherwise it reuses the
 existing release, whether draft or published. Reruns replace matching assets
 and their checksums. Download and test each platform before publishing a new
 draft from GitHub's Releases page. A failed platform build prevents release
-creation. Release jobs use GitHub's built-in token; no personal token is needed.
+creation; Workshop builds, tests and packaged startup checks must also succeed. Release jobs use GitHub's built-in token; no personal token is needed.
 Manual workflow runs only upload artifacts and do not create a release.
 
 Tag runs use the workflow and source code recorded in that tag. Rerunning an

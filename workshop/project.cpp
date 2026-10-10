@@ -1,4 +1,5 @@
 #include "project.h"
+#include "dialogue.h"
 #include "mod/package.h"
 #include <QDir>
 #include <QFile>
@@ -57,8 +58,17 @@ void Project::validate() const {
             U5::readGraphics(name, b);
         else if (name.endsWith(".TLK")) {
             auto entries = U5::readDialogue(b);
-            for (auto e : entries)
+            auto originals = U5::readDialogue(resources[name].original);
+            for (auto e : entries) {
                 U5::validateText(e.bytes);
+                bool unchanged = false;
+                for (auto original : originals)
+                    if (original.id == e.id && original.bytes == e.bytes)
+                        unchanged = true;
+                if (!unchanged)
+                    for (auto issue : Dialogue::parse(e.bytes).issues())
+                        require(!issue.error, name + ": " + issue.message);
+            }
             U5::writeDialogue(entries);
         } else if (name.endsWith(".NPC"))
             require(b.size() == 4608, "NPC schedules must be 4608 bytes");
@@ -138,7 +148,8 @@ static int readBase(void *context, const char *name, unsigned char **data, size_
 void Project::importPackage(const QByteArray &bytes) {
     ModPackage decoded;
     char error[256];
-    int ok = MOD_Decode(bytes.constData(), bytes.size(), readBase, this, &decoded, error, sizeof(error));
+    int ok =
+        MOD_Decode(bytes.constData(), bytes.size(), readBase, this, &decoded, error, sizeof(error));
     require(ok, QString::fromUtf8(error));
     Project next = *this;
     next.title = QString::fromUtf8(decoded.title);
@@ -153,16 +164,22 @@ void Project::importPackage(const QByteArray &bytes) {
 }
 void Project::save(const QString &path) {
     validate();
-    QJsonObject root{{"format", "impera-workshop-1"}, {"source", sourceDirectory}, {"title", title}};
+    QJsonObject root{
+        {"format", "impera-workshop-1"}, {"source", sourceDirectory}, {"title", title}};
     QJsonArray edits;
     for (auto name : changed()) {
         const auto &r = resources[name];
-        edits.append(QJsonObject{{"name", name},
-                                 {"baseSize", r.original.size()},
-                                 {"baseCrc", double(MOD_Crc32(r.original.constData(), r.original.size()))},
-                                 {"bytes", QString::fromLatin1(r.edited.toBase64())}});
+        edits.append(
+            QJsonObject{{"name", name},
+                        {"baseSize", r.original.size()},
+                        {"baseCrc", double(MOD_Crc32(r.original.constData(), r.original.size()))},
+                        {"bytes", QString::fromLatin1(r.edited.toBase64())}});
     }
     root["edits"] = edits;
+    QJsonObject annotations;
+    for (auto it = dialogueNames.cbegin(); it != dialogueNames.cend(); ++it)
+        annotations.insert(it.key(), it.value());
+    root["dialogueNames"] = annotations;
     QSaveFile f(path);
     require(f.open(QIODevice::WriteOnly), f.errorString());
     auto json = QJsonDocument(root).toJson();
@@ -173,12 +190,24 @@ void Project::load(const QString &path) {
     auto bytes = readLimited(path, 64 * 1024 * 1024);
     QJsonParseError error;
     auto doc = QJsonDocument::fromJson(bytes, &error);
-    require(error.error == QJsonParseError::NoError && doc.isObject(), "Invalid Workshop project JSON");
+    require(error.error == QJsonParseError::NoError && doc.isObject(),
+            "Invalid Workshop project JSON");
     auto root = doc.object();
     require(root["format"] == "impera-workshop-1", "Unsupported Workshop project version");
     Project next;
     next.openGame(root["source"].toString());
     next.title = root["title"].toString();
+    if (root.contains("dialogueNames")) {
+        require(root["dialogueNames"].isObject(), "Invalid question annotations");
+        auto annotations = root["dialogueNames"].toObject();
+        require(annotations.size() <= 4096, "Too many question annotations");
+        for (auto it = annotations.begin(); it != annotations.end(); ++it) {
+            require(it.key().size() <= 100 && it.value().isString() &&
+                        it.value().toString().size() <= 120,
+                    "Invalid question annotation");
+            next.dialogueNames.insert(it.key(), it.value().toString());
+        }
+    }
     QSet<QString> names;
     require(root["edits"].isArray() && root["edits"].toArray().size() <= MOD_MAX_ENTRIES,
             "Invalid project edit list");
@@ -190,7 +219,8 @@ void Project::load(const QString &path) {
         names.insert(name);
         auto &r = next.resources[name];
         require(edit["baseSize"].toInt(-1) == r.original.size() &&
-                    edit["baseCrc"].toDouble(-1) == MOD_Crc32(r.original.constData(), r.original.size()),
+                    edit["baseCrc"].toDouble(-1) ==
+                        MOD_Crc32(r.original.constData(), r.original.size()),
                 "Original files changed since project creation: " + name);
         auto decoded = QByteArray::fromBase64Encoding(edit["bytes"].toString().toLatin1(),
                                                       QByteArray::AbortOnBase64DecodingErrors);

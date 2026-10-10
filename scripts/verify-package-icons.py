@@ -84,39 +84,40 @@ def verify_windows(executable):
     raise AssertionError('Embedded Windows icon does not match Impera ICO')
 
 
-def verify_mac(archive):
+def verify_mac(archive, bundle='Impera.app'):
     with tarfile.open(archive) as stream:
         names = stream.getnames()
-        plist = next(name for name in names if name.endswith('/Impera.app/Contents/Info.plist'))
+        plist = next(name for name in names if name.endswith(f'/{bundle}/Contents/Info.plist'))
         metadata = plistlib.loads(stream.extractfile(plist).read())
         assert metadata['CFBundleIconFile'] == 'impera.icns', 'Missing bundle icon metadata'
         icon = plist.removesuffix('Info.plist')+'Resources/impera.icns'
         assert stream.extractfile(icon).read() == (ROOT / 'packaging/impera.icns').read_bytes(), 'Incorrect macOS icon'
 
 
-def verify_appdir(appdir):
+def verify_appdir(appdir, desktop='impera.desktop'):
     assert (appdir / 'impera.svg').read_bytes() == (ROOT / 'packaging/impera.svg').read_bytes()
     assert (appdir / '.DirIcon').resolve() == (appdir / 'impera.svg').resolve()
-    assert 'Icon=impera\n' in (appdir / 'impera.desktop').read_text()
+    assert 'Icon=impera\n' in (appdir / desktop).read_text()
 
 
-def verify(platform, directory):
+def verify(platform, directory, workshop=False):
     if platform.startswith('windows-'):
-        verify_windows(next(directory.glob('*/Impera.exe')))
+        verify_windows(next(directory.glob('*/bin/ImperaWorkshop.exe' if workshop else '*/Impera.exe')))
     elif platform.startswith('macos-'):
-        verify_mac(next(directory.glob(f'*-{platform}.tar.gz')))
+        verify_mac(next(directory.glob(f'*-{platform}.tar.gz')), 'ImperaWorkshop.app' if workshop else 'Impera.app')
     else:
         appimage = next(directory.glob('*.AppImage')).resolve()
         with tempfile.TemporaryDirectory() as temporary:
             subprocess.run([str(appimage), '--appimage-extract'], cwd=temporary,
                            check=True, stdout=subprocess.DEVNULL)
-            verify_appdir(Path(temporary) / 'squashfs-root')
+            verify_appdir(Path(temporary) / 'squashfs-root', 'impera-workshop.desktop' if workshop else 'impera.desktop')
     print(f'{platform}: packaged Impera icon verified')
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--workshop', action='store_true')
     parser.add_argument('--platform', required=True, choices=['windows-x86_64', 'macos-x86_64', 'macos-arm64', 'linux-x86_64'])
     parser.add_argument('--package-root', required=True, type=Path)
     args = parser.parse_args()
-    verify(args.platform, args.package_root)
+    verify(args.platform, args.package_root, args.workshop)

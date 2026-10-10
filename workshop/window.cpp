@@ -1,4 +1,5 @@
 #include "window.h"
+#include "dialogue_editor.h"
 #include "mod/package.h"
 #include <QMouseEvent>
 #include <QPainter>
@@ -26,6 +27,30 @@ class Change : public QUndoCommand {
     }
     void undo() override { apply(before); }
     void redo() override { apply(after); }
+};
+class QuestionNameChange : public QUndoCommand {
+    Project *project;
+    QString key, before, after;
+    bool existed;
+    std::function<void()> notify;
+
+  public:
+    QuestionNameChange(Project *p, const QString &k, const QString &value, std::function<void()> fn)
+        : project(p), key(k), before(p->dialogueNames.value(k)), after(value),
+          existed(p->dialogueNames.contains(k)), notify(fn) {
+        setText("Name question");
+    }
+    void redo() override {
+        project->dialogueNames[key] = after;
+        notify();
+    }
+    void undo() override {
+        if (existed)
+            project->dialogueNames[key] = before;
+        else
+            project->dialogueNames.remove(key);
+        notify();
+    }
 };
 QWidget *panel(QVBoxLayout **layout) {
     auto w = new QWidget;
@@ -102,7 +127,8 @@ class MapCanvas : public QWidget {
         if (inspect)
             inspect(x, y, (unsigned char)ids[y * side + x]);
         if (inspectMode) {
-            if (e->type() == QEvent::MouseButtonPress && (e->buttons() & Qt::LeftButton) && chooseNpc)
+            if (e->type() == QEvent::MouseButtonPress && (e->buttons() & Qt::LeftButton) &&
+                chooseNpc)
                 for (auto actor : actors)
                     if (actor.x == x && actor.y == y) {
                         chooseNpc(actor.npc);
@@ -144,7 +170,8 @@ class PixelCanvas : public QWidget {
         QPainter p(this);
         for (int y = e->rect().top() / 12; y <= e->rect().bottom() / 12; y++)
             for (int x = e->rect().left() / 12; x <= e->rect().right() / 12; x++)
-                p.fillRect(x * 12, y * 12, 12, 12, (x + y) % 2 ? QColor("#384254") : QColor("#222b39"));
+                p.fillRect(x * 12, y * 12, 12, 12,
+                           (x + y) % 2 ? QColor("#384254") : QColor("#222b39"));
         p.drawImage(rect(), image);
     }
     void point(QMouseEvent *e) {
@@ -177,7 +204,8 @@ QByteArray readFile(const QString &path) {
 void writeFile(const QString &path, const QByteArray &bytes) {
     QSaveFile f(path);
     require(f.open(QIODevice::WriteOnly), f.errorString());
-    require(f.write(bytes) == bytes.size() && f.commit(), "Cannot write " + path + ": " + f.errorString());
+    require(f.write(bytes) == bytes.size() && f.commit(),
+            "Cannot write " + path + ": " + f.errorString());
 }
 } // namespace
 WorkshopWindow::WorkshopWindow() {
@@ -203,8 +231,8 @@ WorkshopWindow::WorkshopWindow() {
     action("Open Project", QKeySequence::Open, [this] {
         if (!canLeave())
             return;
-        QString p =
-            QFileDialog::getOpenFileName(this, "Open mod project", {}, "Impera project (*.imperaproject)");
+        QString p = QFileDialog::getOpenFileName(this, "Open mod project", {},
+                                                 "Impera project (*.imperaproject)");
         if (!p.isEmpty())
             openProject(p);
     });
@@ -244,17 +272,18 @@ WorkshopWindow::WorkshopWindow() {
             return;
         guard([&] {
             auto bytes = project.package();
-            QString path =
-                QFileDialog::getSaveFileName(this, "Export mod package", {}, "Impera mod (*.imperamod)");
+            QString path = QFileDialog::getSaveFileName(this, "Export mod package", {},
+                                                        "Impera mod (*.imperamod)");
             if (path.isEmpty())
                 return;
             if (!path.endsWith(".imperamod", Qt::CaseInsensitive))
                 path += ".imperamod";
             require(QFileInfo(path).absolutePath() != project.sourceDirectory,
-                    "Place mod packages in the Mods subfolder, or another distribution folder");
+                    "Place mod packages in the Mods subfolder, or another "
+                    "distribution folder");
             writeFile(path, bytes);
-            statusBar()->showMessage("Exported " + path + " — place it in Ultima 5/Mods, then restart Impera",
-                                     12000);
+            statusBar()->showMessage(
+                "Exported " + path + " — place it in Ultima 5/Mods, then restart Impera", 12000);
         });
     });
     action("Import Package", {}, [this] {
@@ -263,7 +292,8 @@ WorkshopWindow::WorkshopWindow() {
         if (project.resources.isEmpty())
             return;
         QString path = QFileDialog::getOpenFileName(
-            this, "Import a package against this game's original files", {}, "Impera mod (*.imperamod)");
+            this, "Import a package against this game's original files", {},
+            "Impera mod (*.imperamod)");
         if (path.isEmpty())
             return;
         guard([&] {
@@ -293,6 +323,11 @@ WorkshopWindow::WorkshopWindow() {
     assets->setMinimumWidth(230);
     lv->addWidget(assets);
     split->addWidget(library);
+    auto showResources = menuBar()->addAction("Resource Library");
+    showResources->setCheckable(true);
+    showResources->setChecked(true);
+    connect(showResources, &QAction::toggled, library, &QWidget::setVisible);
+    library->setObjectName("resourceLibrary");
     content = new QStackedWidget;
     content->setObjectName("workspaces");
     split->addWidget(content);
@@ -322,12 +357,15 @@ WorkshopWindow::WorkshopWindow() {
     auto title = new QLabel("Build your Britannia");
     title->setStyleSheet("font-size:30px;font-weight:600;");
     welcome->addWidget(title);
-    welcome->addWidget(hint("Create a mod from your DOS Ultima 5 folder. Edit maps, artwork, conversations, "
-                            "story and starting state in one workspace. Original game files are read-only; "
+    welcome->addWidget(hint("Create a mod from your DOS Ultima 5 folder. Edit maps, artwork, "
+                            "conversations, "
+                            "story and starting state in one workspace. Original game files are "
+                            "read-only; "
                             "Save stores a project, Export creates a mod package."));
-    welcome->addWidget(
-        hint("Impera loads .imperamod files from the game folder's Mods subfolder at startup. Existing saved "
-             "games keep their saved state; starting-state edits apply to new games."));
+    welcome->addWidget(hint("Impera loads .imperamod files from the game "
+                            "folder's Mods subfolder at startup. Existing saved "
+                            "games keep their saved state; starting-state edits "
+                            "apply to new games."));
     welcome->addStretch();
     content->addWidget(w);
     updateSummary();
@@ -342,10 +380,11 @@ bool WorkshopWindow::guard(const std::function<void()> &operation) {
     }
 }
 void WorkshopWindow::updateSummary() {
-    summary->setText(project.resources.isEmpty()
-                         ? "Impera Workshop"
-                         : project.title +
-                               QString("   ·   %1 modified resources").arg(project.changed().size()));
+    summary->setText(
+        project.resources.isEmpty()
+            ? "Impera Workshop"
+            : project.title +
+                  QString("   ·   %1 modified resources").arg(project.changed().size()));
     setWindowModified(!history.isClean() || project.title != savedTitle);
     setWindowTitle("Impera Workshop — " + project.title + "[*]");
 }
@@ -354,8 +393,9 @@ bool WorkshopWindow::canLeave() {
         return false;
     if (project.resources.isEmpty() || !isWindowModified())
         return true;
-    auto answer = QMessageBox::question(this, "Unsaved project", "Save your project before continuing?",
-                                        QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
+    auto answer =
+        QMessageBox::question(this, "Unsaved project", "Save your project before continuing?",
+                              QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
     if (answer == QMessageBox::Cancel)
         return false;
     return answer != QMessageBox::Save || saveProject();
@@ -373,7 +413,8 @@ bool WorkshopWindow::saveProject() {
         return false;
     QString path = project.projectPath;
     if (path.isEmpty())
-        path = QFileDialog::getSaveFileName(this, "Save mod project", {}, "Impera project (*.imperaproject)");
+        path = QFileDialog::getSaveFileName(this, "Save mod project", {},
+                                            "Impera project (*.imperaproject)");
     if (path.isEmpty())
         return false;
     if (!path.endsWith(".imperaproject"))
@@ -423,16 +464,18 @@ void WorkshopWindow::rebuildTree() {
                         : name.endsWith(".NPC") ? "NPC schedules"
                         : name == "INIT.GAM"    ? "Starting state"
                         : name == "STORY.DAT"   ? "Story"
-                        : name.endsWith(".CBT") || QStringList{"BRIT.DAT",     "UNDER.DAT", "TOWNE.DAT",
-                                                               "DWELLING.DAT", "KEEP.DAT",  "CASTLE.DAT"}
-                                                       .contains(name)
+                        : name.endsWith(".CBT") ||
+                                QStringList{"BRIT.DAT",     "UNDER.DAT", "TOWNE.DAT",
+                                            "DWELLING.DAT", "KEEP.DAT",  "CASTLE.DAT"}
+                                    .contains(name)
                             ? "Maps"
                             : "Other resources";
         if (!groups.contains(group)) {
             groups[group] = new QTreeWidgetItem(assets, {group});
             groups[group]->setExpanded(true);
         }
-        auto item = new QTreeWidgetItem(groups[group], {name + (it->edited != it->original ? "  •" : "")});
+        auto item =
+            new QTreeWidgetItem(groups[group], {name + (it->edited != it->original ? "  •" : "")});
         item->setData(0, Qt::UserRole, name);
         if (name == current)
             assets->setCurrentItem(item);
@@ -475,8 +518,9 @@ void WorkshopWindow::rebuildEditor() {
         return;
     flushDraft = {};
     QPoint scrollPosition;
-    auto oldView =
-        content->currentWidget() ? content->currentWidget()->findChild<QScrollArea *>("canvasView") : nullptr;
+    auto oldView = content->currentWidget()
+                       ? content->currentWidget()->findChild<QScrollArea *>("canvasView")
+                       : nullptr;
     if (oldView)
         scrollPosition =
             QPoint(oldView->horizontalScrollBar()->value(), oldView->verticalScrollBar()->value());
@@ -508,6 +552,9 @@ void WorkshopWindow::rebuildEditor() {
 QWidget *WorkshopWindow::resourceEditor(const QString &name) {
     auto tabs = new QTabWidget;
     QWidget *editor = nullptr;
+    for (auto action : menuBar()->actions())
+        if (action->text() == "Resource Library")
+            action->setChecked(!name.endsWith(".TLK"));
     if (name.endsWith(".16"))
         editor = graphicsEditor(name);
     else if (name.endsWith(".TLK"))
@@ -518,9 +565,9 @@ QWidget *WorkshopWindow::resourceEditor(const QString &name) {
         editor = stateEditor();
     else if (name.endsWith(".NPC"))
         editor = npcEditor(name);
-    else if (name.endsWith(".CBT") ||
-             QStringList{"BRIT.DAT", "UNDER.DAT", "TOWNE.DAT", "CASTLE.DAT", "KEEP.DAT", "DWELLING.DAT"}
-                 .contains(name)) {
+    else if (name.endsWith(".CBT") || QStringList{"BRIT.DAT", "UNDER.DAT", "TOWNE.DAT",
+                                                  "CASTLE.DAT", "KEEP.DAT", "DWELLING.DAT"}
+                                          .contains(name)) {
         editor = mapEditor(name);
         if (name.endsWith(".CBT"))
             tabs->addTab(combatEditor(name), "Combat setup");
@@ -574,15 +621,18 @@ QWidget *WorkshopWindow::mapEditor(const QString &name) {
     palette->setMaximumWidth(260);
     palette->setMinimumWidth(180);
     for (int i = 0; i < 256; i++) {
-        auto item = new QListWidgetItem(QIcon(QPixmap::fromImage(tiles[i])), QString::number(i), palette);
+        auto item =
+            new QListWidgetItem(QIcon(QPixmap::fromImage(tiles[i])), QString::number(i), palette);
         item->setToolTip(QString("Tile %1 (0x%2)").arg(i).arg(i, 2, 16, QChar('0')));
     }
     split->addWidget(palette);
     layout->addWidget(split, 1);
     auto coord = new QLabel;
     layout->addWidget(coord);
-    layout->addWidget(hint("Left-drag paints a stroke. Right-click picks a tile. Undo/redo works per stroke. "
-                           "Choose a settlement and floor above; Inspect NPCs lets you click an NPC to open "
+    layout->addWidget(hint("Left-drag paints a stroke. Right-click picks a tile. "
+                           "Undo/redo works per stroke. "
+                           "Choose a settlement and floor above; Inspect NPCs "
+                           "lets you click an NPC to open "
                            "its schedule. Select the four time slots above."));
     auto load = [=] {
         const auto &p = pages[page->currentIndex()];
@@ -590,8 +640,8 @@ QWidget *WorkshopWindow::mapEditor(const QString &name) {
         canvas->ids.clear();
         auto data = project.data(name);
         if (p.side == 256)
-            canvas->ids =
-                U5::worldMap(name, data, name == "BRIT.DAT" ? project.data("DATA.OVL") : QByteArray());
+            canvas->ids = U5::worldMap(
+                name, data, name == "BRIT.DAT" ? project.data("DATA.OVL") : QByteArray());
         else
             for (int y = 0; y < p.side; y++)
                 canvas->ids += data.mid(p.offset + y * p.stride, p.side);
@@ -607,7 +657,8 @@ QWidget *WorkshopWindow::mapEditor(const QString &name) {
                 int z = U5::byte(npcs, offset + 9 + location);
                 if (z >= 128)
                     z -= 256;
-                int x = U5::byte(npcs, offset + 3 + location), y = U5::byte(npcs, offset + 6 + location);
+                int x = U5::byte(npcs, offset + 3 + location),
+                    y = U5::byte(npcs, offset + 6 + location);
                 if (z == p.floor && x < 32 && y < 32)
                     canvas->actors.append({x, y, int(256 + U5::byte(npcs, base + 512 + i)), i});
             }
@@ -637,9 +688,11 @@ QWidget *WorkshopWindow::mapEditor(const QString &name) {
         canvas->grid = on;
         canvas->update();
     });
-    connect(palette, &QListWidget::currentRowChanged, w, [=](int index) { canvas->brush = qMax(0, index); });
+    connect(palette, &QListWidget::currentRowChanged, w,
+            [=](int index) { canvas->brush = qMax(0, index); });
     canvas->inspect = [=](int x, int y, int id) {
-        coord->setText(QString("X %1   Y %2   Tile %3   Brush %4").arg(x).arg(y).arg(id).arg(canvas->brush));
+        coord->setText(
+            QString("X %1   Y %2   Tile %3   Brush %4").arg(x).arg(y).arg(id).arg(canvas->brush));
     };
     canvas->commit = [=](const QByteArray &ids) {
         if (!guard([&] {
@@ -662,7 +715,8 @@ QWidget *WorkshopWindow::mapEditor(const QString &name) {
     auto exports = new QHBoxLayout;
     button(exports, "Export map PNG", [=] {
         guard([&] {
-            QString path = QFileDialog::getSaveFileName(this, "Export rendered map", {}, "PNG (*.png)");
+            QString path =
+                QFileDialog::getSaveFileName(this, "Export rendered map", {}, "PNG (*.png)");
             if (path.isEmpty())
                 return;
             require(QFileInfo(path).absolutePath() != project.sourceDirectory,
@@ -672,7 +726,8 @@ QWidget *WorkshopWindow::mapEditor(const QString &name) {
             QPainter p(&img);
             for (int y = 0; y < canvas->side; y++)
                 for (int x = 0; x < canvas->side; x++)
-                    p.drawImage(x * 16, y * 16, tiles[(unsigned char)canvas->ids[y * canvas->side + x]]);
+                    p.drawImage(x * 16, y * 16,
+                                tiles[(unsigned char)canvas->ids[y * canvas->side + x]]);
             p.end();
             require(img.save(path, "PNG"), "Cannot export PNG");
         });
@@ -701,12 +756,14 @@ QWidget *WorkshopWindow::graphicsEditor(const QString &name) {
     auto row = new QHBoxLayout;
     auto slot = new QComboBox;
     for (int i = 0; i < graphics->images.size(); i++)
-        slot->addItem(QString("%1 — %2").arg(i).arg(
-            graphics->images[i].isNull()
-                ? "Empty"
-                : QString("%1 × %2").arg(graphics->images[i].width()).arg(graphics->images[i].height())));
+        slot->addItem(QString("%1 — %2").arg(i).arg(graphics->images[i].isNull()
+                                                        ? "Empty"
+                                                        : QString("%1 × %2")
+                                                              .arg(graphics->images[i].width())
+                                                              .arg(graphics->images[i].height())));
     slot->setObjectName("imageSlot");
-    slot->setCurrentIndex(qBound(0, editorState.value(name + "/image"), int(graphics->images.size()) - 1));
+    slot->setCurrentIndex(
+        qBound(0, editorState.value(name + "/image"), int(graphics->images.size()) - 1));
     row->addWidget(slot, 1);
     auto zoom = new QComboBox;
     zoom->addItems({"1×", "2×", "4×", "6×", "8×", "12×"});
@@ -727,8 +784,8 @@ QWidget *WorkshopWindow::graphicsEditor(const QString &name) {
     gallery->setGridSize(QSize(76, 76));
     gallery->setMaximumWidth(280);
     for (int i = 0; i < graphics->images.size(); i++) {
-        auto item =
-            new QListWidgetItem(QIcon(QPixmap::fromImage(graphics->images[i])), QString::number(i), gallery);
+        auto item = new QListWidgetItem(QIcon(QPixmap::fromImage(graphics->images[i])),
+                                        QString::number(i), gallery);
         item->setToolTip(slot->itemText(i));
     }
     gallery->setCurrentRow(slot->currentIndex());
@@ -748,7 +805,8 @@ QWidget *WorkshopWindow::graphicsEditor(const QString &name) {
     for (QRgb color : U5::palette()) {
         auto b = new QPushButton;
         b->setFixedSize(30, 30);
-        b->setStyleSheet(QString("background:%1;border:1px solid #8290a0;").arg(QColor(color).name()));
+        b->setStyleSheet(
+            QString("background:%1;border:1px solid #8290a0;").arg(QColor(color).name()));
         paletteRow->addWidget(b);
         connect(b, &QPushButton::clicked, w, [=] { canvas->brush = color; });
     }
@@ -769,8 +827,9 @@ QWidget *WorkshopWindow::graphicsEditor(const QString &name) {
         int i = slot->currentIndex();
         QImage old = graphics->images[i];
         graphics->images[i] = img;
-        if (!guard(
-                [&] { edit({{name, U5::writeGraphics(*graphics)}}, "Edit image " + QString::number(i)); })) {
+        if (!guard([&] {
+                edit({{name, U5::writeGraphics(*graphics)}}, "Edit image " + QString::number(i));
+            })) {
             graphics->images[i] = old;
             canvas->image = old;
             canvas->update();
@@ -806,8 +865,8 @@ QWidget *WorkshopWindow::graphicsEditor(const QString &name) {
     if (graphics->tiles) {
         button(actions, "Export tilesheet", [=] {
             guard([&] {
-                QString path =
-                    QFileDialog::getSaveFileName(this, "Export 512 × 256 tilesheet", {}, "PNG (*.png)");
+                QString path = QFileDialog::getSaveFileName(this, "Export 512 × 256 tilesheet", {},
+                                                            "PNG (*.png)");
                 if (path.isEmpty())
                     return;
                 require(QFileInfo(path).absolutePath() != project.sourceDirectory,
@@ -822,8 +881,8 @@ QWidget *WorkshopWindow::graphicsEditor(const QString &name) {
             });
         });
         button(actions, "Import tilesheet", [=] {
-            QString path =
-                QFileDialog::getOpenFileName(this, "Import 512 × 256 EGA tilesheet", {}, "PNG (*.png)");
+            QString path = QFileDialog::getOpenFileName(this, "Import 512 × 256 EGA tilesheet", {},
+                                                        "PNG (*.png)");
             if (path.isEmpty())
                 return;
             guard([&] {
@@ -845,117 +904,36 @@ QWidget *WorkshopWindow::graphicsEditor(const QString &name) {
     }
     actions->addStretch();
     layout->addLayout(actions);
-    layout->addWidget(
-        hint("Paint with EGA colors; right-click picks a pixel. Import/export PNG includes the DOS one-bit "
-             "mask. TILES.16 has no alpha. Partial alpha and non-EGA colors are rejected."));
+    layout->addWidget(hint("Paint with EGA colors; right-click picks a pixel. "
+                           "Import/export PNG includes the DOS one-bit "
+                           "mask. TILES.16 has no alpha. Partial alpha and "
+                           "non-EGA colors are rejected."));
     return w;
 }
 QWidget *WorkshopWindow::dialogueEditor(const QString &name) {
-    auto entries = std::make_shared<QVector<U5::Conversation>>(U5::readDialogue(project.data(name)));
-    QVBoxLayout *layout;
-    auto w = panel(&layout);
-    auto row = new QHBoxLayout;
-    auto npc = new QComboBox;
-    for (auto e : *entries)
-        npc->addItem(QString("NPC dialogue ID %1").arg(e.id));
-    npc->setCurrentIndex(qBound(0, editorState.value(name + "/conversation"), int(entries->size()) - 1));
-    row->addWidget(npc, 1);
-    auto tag = new QComboBox;
-    tag->addItems(U5::textTags());
-    row->addWidget(tag);
-    auto text = new QPlainTextEdit;
-    text->setObjectName("dialogueText");
-    button(row, "Insert tag", [=] { text->insertPlainText(tag->currentText()); });
-    layout->addLayout(row);
-    layout->addWidget(text, 1);
-    auto sizeLabel = new QLabel;
-    layout->addWidget(sizeLabel);
-    auto load = [=] {
-        int i = npc->currentIndex();
-        if (i < 0)
-            return;
-        text->setPlainText(U5::decodeText((*entries)[i].bytes));
-        sizeLabel->setText(QString("%1 / 1024 encoded bytes · includes entry terminators and tail")
-                               .arg((*entries)[i].bytes.size()));
-    };
-    load();
-    auto selected = std::make_shared<int>(npc->currentIndex());
-    connect(npc, &QComboBox::currentIndexChanged, w, [=](int next) {
-        int previous = *selected;
-        {
-            QSignalBlocker block(npc);
-            npc->setCurrentIndex(previous);
-        }
-        if (flushDraft && !flushDraft())
-            return;
-        {
-            QSignalBlocker block(npc);
-            npc->setCurrentIndex(next);
-        }
-        *selected = next;
-        editorState[name + "/conversation"] = next;
-        guard(load);
-    });
-    auto actions = new QHBoxLayout;
-    auto applyButton = button(actions, "Apply conversation", [=] {
-        guard([&] {
-            auto next = *entries;
-            int i = npc->currentIndex();
-            require(i >= 0, "No conversation selected");
-            next[i].bytes = U5::encodeText(text->toPlainText());
-            auto bytes = U5::writeDialogue(next);
-            edit({{name, bytes}}, "Edit conversation");
-            *entries = next;
-            text->setPlainText(U5::decodeText(next[i].bytes));
-            sizeLabel->setText(QString("Applied · %1 / 1024 bytes").arg(next[i].bytes.size()));
+    auto editor = new ConversationEditor(
+        &project, name,
+        [this, name](const QByteArray &bytes, const QString &description) {
+            edit({{name, bytes}}, description);
+        },
+        [this](const QString &key, const QString &value) {
+            history.push(
+                new QuestionNameChange(&project, key, value, [this, first = true]() mutable {
+                    updateSummary();
+                    if (first) {
+                        first = false;
+                        return;
+                    }
+                    QTimer::singleShot(0, this, [this] { rebuildEditor(); });
+                }));
+        },
+        editorState.value(name + "/conversation"), editorState.value(name + "/entry"),
+        [this, name](int npc, int entry) {
+            editorState[name + "/conversation"] = npc;
+            editorState[name + "/entry"] = entry;
         });
-    });
-    button(actions, "Append missing tails", [=] {
-        if (flushDraft && !flushDraft())
-            return;
-        guard([&] {
-            auto next = *entries;
-            QByteArray tail = QByteArray::fromHex("909fc0");
-            for (auto &e : next) {
-                QByteArray trimmed = e.bytes;
-                while (trimmed.endsWith(char(0)))
-                    trimmed.chop(1);
-                if (!trimmed.endsWith(tail)) {
-                    if (!e.bytes.endsWith(char(0)))
-                        e.bytes.append(char(0));
-                    e.bytes += tail;
-                }
-            }
-            edit({{name, U5::writeDialogue(next)}}, "Add conversation tails");
-            *entries = next;
-            load();
-        });
-    });
-    flushDraft = [=] {
-        int i = npc->currentIndex();
-        if (i < 0 || text->toPlainText() == U5::decodeText((*entries)[i].bytes))
-            return true;
-        auto answer = QMessageBox::question(this, "Unapplied conversation edit",
-                                            "Apply your conversation edit before continuing?",
-                                            QMessageBox::Apply | QMessageBox::Discard | QMessageBox::Cancel);
-        if (answer == QMessageBox::Cancel)
-            return false;
-        if (answer == QMessageBox::Discard) {
-            load();
-            return true;
-        }
-        applyButton->click();
-        return text->toPlainText() == U5::decodeText((*entries)[i].bytes);
-    };
-    actions->addStretch();
-    layout->addLayout(actions);
-    layout->addWidget(
-        hint("Apply commits the text to your project; unapplied typing is checked when switching NPCs or "
-             "saving. <Entry> separates strings. <New Line> inserts a game line break; editor line breaks "
-             "are just formatting. Word tags preserve compressed tokens. Commands with operands need <Byte "
-             "N> tags: Gold takes 3, Change and Set Flag take 1, Byte 254 takes 2. Label definitions use "
-             "<Any><Label N>. Literal < and > use <Byte 188> and <Byte 190>."));
-    return w;
+    flushDraft = [editor] { return editor->flush(); };
+    return editor;
 }
 QWidget *WorkshopWindow::storyEditor() {
     QVBoxLayout *layout;
@@ -964,8 +942,9 @@ QWidget *WorkshopWindow::storyEditor() {
     auto originalPages = U5::storyPages(project.resources["STORY.DAT"].original);
     auto choice = new QComboBox;
     for (int i = 0; i < pages.size(); i++)
-        choice->addItem(
-            QString("Page %1 — offset 0x%2").arg(i + 1).arg(U5::storyOffsets()[i], 4, 16, QChar('0')));
+        choice->addItem(QString("Page %1 — offset 0x%2")
+                            .arg(i + 1)
+                            .arg(U5::storyOffsets()[i], 4, 16, QChar('0')));
     choice->setCurrentIndex(qBound(0, editorState.value("STORY.DAT/page"), int(pages.size()) - 1));
     layout->addWidget(choice);
     auto text = new QPlainTextEdit;
@@ -978,8 +957,9 @@ QWidget *WorkshopWindow::storyEditor() {
     };
     auto count = [=] {
         int i = choice->currentIndex();
-        budget->setText(
-            QString("%1 / %2 ASCII bytes").arg(text->toPlainText().size()).arg(originalPages[i].size()));
+        budget->setText(QString("%1 / %2 ASCII bytes")
+                            .arg(text->toPlainText().size())
+                            .arg(originalPages[i].size()));
     };
     load();
     count();
@@ -1006,7 +986,8 @@ QWidget *WorkshopWindow::storyEditor() {
     auto applyButton = button(row, "Apply page", [=] {
         guard([&] {
             int i = choice->currentIndex();
-            auto original = project.resources["STORY.DAT"].original, edited = project.data("STORY.DAT");
+            auto original = project.resources["STORY.DAT"].original,
+                 edited = project.data("STORY.DAT");
             QString input = text->toPlainText();
             input.replace("\n", "\r\n"); // DOS story line endings
             auto changed = U5::changeStory(original, i, input);
@@ -1023,9 +1004,9 @@ QWidget *WorkshopWindow::storyEditor() {
         normalized.replace("\r\n", "\n");
         if (text->toPlainText() == normalized)
             return true;
-        auto answer =
-            QMessageBox::question(this, "Unapplied story edit", "Apply your story edit before continuing?",
-                                  QMessageBox::Apply | QMessageBox::Discard | QMessageBox::Cancel);
+        auto answer = QMessageBox::question(
+            this, "Unapplied story edit", "Apply your story edit before continuing?",
+            QMessageBox::Apply | QMessageBox::Discard | QMessageBox::Cancel);
         if (answer == QMessageBox::Cancel)
             return false;
         if (answer == QMessageBox::Discard) {
@@ -1037,16 +1018,18 @@ QWidget *WorkshopWindow::storyEditor() {
         normalized.replace("\r\n", "\n");
         return text->toPlainText() == normalized;
     };
-    layout->addWidget(hint("Apply commits this page. Pages retain the engine's fixed offsets and original "
-                           "capacity. ASCII text only; intro index 6 is dynamic and has no stored page."));
+    layout->addWidget(hint("Apply commits this page. Pages retain the engine's "
+                           "fixed offsets and original "
+                           "capacity. ASCII text only; intro index 6 is dynamic "
+                           "and has no stored page."));
     return w;
 }
 #include "state_fields.h"
 QWidget *WorkshopWindow::stateEditor() {
     require(project.data("INIT.GAM").size() == 4192, "Starting state must be 4192 bytes");
     auto tabs = new QTabWidget;
-    auto numeric = [this](QFormLayout *form, QWidget *owner, const QString &label, int off, int width,
-                          const QString &help) {
+    auto numeric = [this](QFormLayout *form, QWidget *owner, const QString &label, int off,
+                          int width, const QString &help) {
         auto sp = new QSpinBox;
         sp->setRange(0, width == 1 ? 255 : 65535);
         sp->setValue(width == 1 ? U5::byte(project.data("INIT.GAM"), off)
@@ -1076,7 +1059,8 @@ QWidget *WorkshopWindow::stateEditor() {
     auto qform = new QFormLayout(quests);
     QStringList virtues = {"Honesty",   "Compassion", "Valor",        "Justice",
                            "Sacrifice", "Honor",      "Spirituality", "Humility"};
-    QStringList dungeons = {"Deceit", "Despise", "Destard", "Wrong", "Covetous", "Shame", "Hythloth", "Doom"};
+    QStringList dungeons = {"Deceit",   "Despise", "Destard",  "Wrong",
+                            "Covetous", "Shame",   "Hythloth", "Doom"};
     for (int i = 0; i < 8; i++) {
         numeric(qform, quests, QString("Moonstone %1 X").arg(i + 1), 0x28a + i, 1, {});
         numeric(qform, quests, QString("Moonstone %1 Y").arg(i + 1), 0x292 + i, 1, {});
@@ -1125,7 +1109,8 @@ QWidget *WorkshopWindow::stateEditor() {
         selector->addItem(
             QString("%1 — %2%3")
                 .arg(i)
-                .arg(QString::fromLatin1(project.data("INIT.GAM").mid(2 + i * 32, 9).split(char(0)).first()))
+                .arg(QString::fromLatin1(
+                    project.data("INIT.GAM").mid(2 + i * 32, 9).split(char(0)).first()))
                 .arg(i < int(U5::byte(project.data("INIT.GAM"), 0x2b5)) ? " (party)" : ""));
     characterLayout->addWidget(selector);
     auto detail = new QStackedWidget;
@@ -1134,8 +1119,8 @@ QWidget *WorkshopWindow::stateEditor() {
         auto card = new QWidget;
         auto cf = new QFormLayout(card);
         int base = 2 + i * 32;
-        auto name =
-            new QLineEdit(QString::fromLatin1(project.data("INIT.GAM").mid(base, 9).split(char(0)).first()));
+        auto name = new QLineEdit(
+            QString::fromLatin1(project.data("INIT.GAM").mid(base, 9).split(char(0)).first()));
         name->setMaxLength(8);
         cf->addRow("Name (8 ASCII characters)", name);
         connect(name, &QLineEdit::editingFinished, card, [this, name, base] {
@@ -1168,8 +1153,9 @@ QWidget *WorkshopWindow::stateEditor() {
             numeric(cf, card, QString("Equipment slot %1").arg(j + 1), base + 25 + j, 1, {});
         numeric(cf, card, "Home map ID", base + 31, 1,
                 "Party membership is a contiguous prefix, independent of this field");
-        auto membership = new QPushButton(
-            i < int(U5::byte(project.data("INIT.GAM"), 0x2b5)) ? "Remove from party…" : "Add to party");
+        auto membership = new QPushButton(i < int(U5::byte(project.data("INIT.GAM"), 0x2b5))
+                                              ? "Remove from party…"
+                                              : "Add to party");
         membership->setEnabled(i != 0);
         cf->addRow(membership);
         connect(membership, &QPushButton::clicked, card, [this, i] {
@@ -1185,8 +1171,8 @@ QWidget *WorkshopWindow::stateEditor() {
                 }
                 if (i < count) {
                     bool ok;
-                    int home = QInputDialog::getInt(this, "Companion home", "Settlement map ID (1–32)", 1, 1,
-                                                    32, 1, &ok);
+                    int home = QInputDialog::getInt(this, "Companion home",
+                                                    "Settlement map ID (1–32)", 1, 1, 32, 1, &ok);
                     if (!ok)
                         return;
                     require(i != 0, "The Avatar cannot leave");
@@ -1196,7 +1182,8 @@ QWidget *WorkshopWindow::stateEditor() {
                     order.append(order.takeAt(i));
                     --count;
                 } else {
-                    require(count < 6 && records[i][0] != 0, "Party is full or selected record is empty");
+                    require(count < 6 && records[i][0] != 0,
+                            "Party is full or selected record is empty");
                     records[i][31] = 0;
                     records.swapItemsAt(i, count);
                     order.swapItemsAt(i, count);
@@ -1258,8 +1245,9 @@ QWidget *WorkshopWindow::npcEditor(const QString &name) {
             "Z location 1",  "Z location 2",       "Hour t0",       "Hour t1",      "Hour t2",
             "Hour t3",       "Sprite type (+256)", "Dialogue ID"};
         for (int r = 0; r < 18; r++) {
-            int off =
-                r < 16 ? base + r : settlement->currentIndex() * 576 + 512 + (r - 16) * 32 + npc->value();
+            int off = r < 16
+                          ? base + r
+                          : settlement->currentIndex() * 576 + 512 + (r - 16) * 32 + npc->value();
             auto label = new QTableWidgetItem(fields[r]);
             label->setFlags(label->flags() & ~Qt::ItemIsEditable);
             table->setItem(r, 0, label);
@@ -1298,9 +1286,12 @@ QWidget *WorkshopWindow::npcEditor(const QString &name) {
             }))
             load();
     });
-    layout->addWidget(hint("Each NPC has three locations and four transition hours. t0 uses location 0, "
-                           "t1/t3 location 1, and t2 location 2. Z is signed: −1 means basement. Sprite type "
-                           "is added to tile 256. Dialogue IDs link to the companion .TLK resource."));
+    layout->addWidget(hint("Each NPC has three locations and four transition "
+                           "hours. t0 uses location 0, "
+                           "t1/t3 location 1, and t2 location 2. Z is signed: −1 "
+                           "means basement. Sprite type "
+                           "is added to tile 256. Dialogue IDs link to the "
+                           "companion .TLK resource."));
     return w;
 }
 QWidget *WorkshopWindow::combatEditor(const QString &name) {
@@ -1316,9 +1307,10 @@ QWidget *WorkshopWindow::combatEditor(const QString &name) {
     for (int i = 0; i < 21; i++)
         headers << QString::number(i);
     table->setHorizontalHeaderLabels(headers);
-    table->setVerticalHeaderLabels({"New tiles (8)", "Party N X/Y (6+6)", "Party E X/Y", "Party S X/Y",
-                                    "Party W X/Y", "Monster tiles (16)", "Monster X (16)", "Monster Y (16)",
-                                    "Triggers X/Y (8+8)", "Change 1 X/Y", "Change 2 X/Y"});
+    table->setVerticalHeaderLabels({"New tiles (8)", "Party N X/Y (6+6)", "Party E X/Y",
+                                    "Party S X/Y", "Party W X/Y", "Monster tiles (16)",
+                                    "Monster X (16)", "Monster Y (16)", "Triggers X/Y (8+8)",
+                                    "Change 1 X/Y", "Change 2 X/Y"});
     layout->addWidget(table, 1);
     auto load = [=] {
         QSignalBlocker blocked(table);
@@ -1326,7 +1318,8 @@ QWidget *WorkshopWindow::combatEditor(const QString &name) {
         for (int y = 0; y < 11; y++)
             for (int x = 0; x < 21; x++) {
                 int off = base + y * 32 + 11 + x;
-                auto item = new QTableWidgetItem(QString::number(U5::byte(project.data(name), off)));
+                auto item =
+                    new QTableWidgetItem(QString::number(U5::byte(project.data(name), off)));
                 item->setData(Qt::UserRole, off);
                 table->setItem(y, x, item);
             }
@@ -1344,10 +1337,11 @@ QWidget *WorkshopWindow::combatEditor(const QString &name) {
             }))
             load();
     });
-    layout->addWidget(
-        hint("All 21 metadata bytes per row are preserved. Normal coordinates are 0–10; sentinel and unknown "
-             "values remain editable as 0–255. Party rows: six X followed by six Y; trigger/change rows: "
-             "eight X then eight Y. Remaining cells are unknown/padding."));
+    layout->addWidget(hint("All 21 metadata bytes per row are preserved. Normal coordinates "
+                           "are 0–10; sentinel and unknown "
+                           "values remain editable as 0–255. Party rows: six X followed by six "
+                           "Y; trigger/change rows: "
+                           "eight X then eight Y. Remaining cells are unknown/padding."));
     return w;
 }
 QWidget *WorkshopWindow::bytesEditor(const QString &name) {
@@ -1380,7 +1374,9 @@ QWidget *WorkshopWindow::bytesEditor(const QString &name) {
             for (int x = 0; x < 16; x++) {
                 int pos = offset->value() + y * 16 + x;
                 auto item = new QTableWidgetItem(
-                    pos < b.size() ? QString("%1").arg(U5::byte(b, pos), 2, 16, QChar('0')).toUpper() : "");
+                    pos < b.size()
+                        ? QString("%1").arg(U5::byte(b, pos), 2, 16, QChar('0')).toUpper()
+                        : "");
                 item->setData(Qt::UserRole, pos);
                 if (pos >= b.size())
                     item->setFlags(Qt::NoItemFlags);
@@ -1407,8 +1403,8 @@ QWidget *WorkshopWindow::bytesEditor(const QString &name) {
     });
     auto actions = new QHBoxLayout;
     button(actions, "Import edited resource…", [=] {
-        QString path =
-            QFileDialog::getOpenFileName(this, "Import an existing editor's output as a project override");
+        QString path = QFileDialog::getOpenFileName(
+            this, "Import an existing editor's output as a project override");
         if (path.isEmpty())
             return;
         guard([&] {
@@ -1429,9 +1425,11 @@ QWidget *WorkshopWindow::bytesEditor(const QString &name) {
     });
     actions->addStretch();
     layout->addLayout(actions);
-    layout->addWidget(
-        hint("Advanced hexadecimal inspector. Each edit is undoable. Import can bring existing editor "
-             "outputs into a mod without changing the original files. Resource checks run on project save "
-             "and package export; unknown fields still require knowledge of the DOS format."));
+    layout->addWidget(hint("Advanced hexadecimal inspector. Each edit is "
+                           "undoable. Import can bring existing editor "
+                           "outputs into a mod without changing the original "
+                           "files. Resource checks run on project save "
+                           "and package export; unknown fields still require "
+                           "knowledge of the DOS format."));
     return w;
 }

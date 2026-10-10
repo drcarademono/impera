@@ -22,9 +22,12 @@ ctest --test-dir workshop-build -C Release --output-on-failure
 
 The executable is `workshop-build/ImperaWorkshop` on Linux,
 `workshop-build/Release/ImperaWorkshop.exe` on Windows, or
-`workshop-build/ImperaWorkshop.app` on macOS. Qt runtime libraries are required;
-these development builds do not yet have a portable release deployment pipeline.
-Use `windeployqt` / `macdeployqt` when distributing a development build. The
+`workshop-build/ImperaWorkshop.app` on macOS. Development builds require Qt runtime libraries. GitHub releases also provide
+ready-to-run Workshop downloads beside Impera for all four platforms, with Qt
+bundled: Linux AppImage, Windows portable ZIP and macOS app bundles. Launch
+`Run Workshop.cmd` on Windows, `ImperaWorkshop.app` on macOS, or the executable
+AppImage on Linux. Release deployment uses Qt 6.8.3 and
+`-DIMPERA_WORKSHOP_DEPLOY_QT=ON`; normal local builds still support Qt 6.2+. The
 Windows resource, macOS bundle and embedded window icon use Impera's artwork.
 
 Alternatively, add `-DIMPERA_BUILD_WORKSHOP=ON` to the engine's CMake configure
@@ -52,9 +55,9 @@ workshop-build/ImperaWorkshop --project my-mod.imperaproject
 
 Keyboard: **Ctrl+N** new project, **Ctrl+O** open project, **Ctrl+S** save,
 **Ctrl+Z** undo, **Ctrl+Shift+Z** redo, **Ctrl+E** export. Qt uses the usual Command
-shortcuts on macOS for standard editing/project actions. Dialogue and story edits
-have an explicit **Apply** button; navigation, saving and export check unapplied
-text rather than silently discarding it. Package imports become undoable edits.
+shortcuts on macOS for standard editing/project actions. Dialogue edits apply after a brief typing pause; **Apply** commits immediately.
+Story edits use **Apply**. Navigation, saving and export check invalid or unapplied
+drafts rather than silently discarding them. Package imports become undoable edits.
 
 ## Workspaces
 
@@ -64,7 +67,7 @@ text rather than silently discarding it. Package imports become undoable edits.
 | Settlement NPCs | Schedule overlays for all four time slots; click in Inspect NPCs mode to open the appropriate NPC; edit three AI/X/Y/Z locations, four hours, appearance and dialogue ID |
 | Combat setup | Edit starting party positions for four directions, monster tiles/positions, triggers and changed-tile metadata; retain all padding/sentinel bytes |
 | Graphics | All DOS `.16` image containers and 512 tiles; thumbnail gallery, EGA pixel painting, PNG import/export, full tilesheet import/export, one-bit alpha masks |
-| Conversations | NPC selector, lossless word/control tags, all fifteen labels, explicit command operands, Apply, missing-tail repair; enforce header/offset/buffer limits |
+| Conversations | Searchable NPCs, Basics/Topics/Questions outline, shared keyword aliases, ordered text/action forms, reference-safe question deletion, byte budgets, diagnostics, Advanced source, conversation sandbox and DOS font preview |
 | Story | Twenty fixed-offset text pages; original capacity, offsets, padding and terminators retained |
 | Starting state | Party position, time, supplies, plot items, reagents, moonstones, shrine/dungeon flags, Shadowlord settings; sixteen character records, statistics/equipment, safe party joining/removal |
 | Resource inspector | Paged hex editing, per-edit undo, importing outputs from the Python editors, reverting a resource; other resource types remain available here |
@@ -78,12 +81,29 @@ Artwork must use the exact DOS EGA palette. Alpha is binary; `TILES.16` has no
 alpha channel. Alternative-platform/custom PNG tilesets in Engine Options are
 independent of the DOS graphics resources edited here.
 
-Conversation text uses `<Entry>` for NUL separators, `<New Line>` for in-game
-line breaks, `<the>` and other exact word tags for compressed tokens, and
-`<Byte N>` for explicit bytes. Editor newlines are formatting. `<Gold>` needs
-three byte operands, `<Change>` and `<Set Flag>` one, and `<Byte 254>` two.
-Label definitions need `<Any><Label N>`; jumps use `<Label N>` without `<Any>`.
-These expose actual DOS semantics; they are not a new scripting language.
+Conversations use an NPC list, a conversation outline and a detail editor. Edit
+normal text without compression tags; unchanged blocks keep their exact original
+bytes. Actions have explicit amount, inventory and question-destination fields.
+Topics and replies can be reordered, duplicated, added or deleted. Comma-separated
+keywords share one response. Question names are project-only annotations. Deleting
+a referenced question requires retargeting its callers. Undo/redo includes edits
+and annotations.
+
+Diagnostics identify missing destinations, invalid operands, byte limits,
+overlapping keywords and other problems. Existing original oddities remain
+loadable and are retained as raw sections. **Advanced** exposes lossless tagged
+source for the selected entry or explicitly the whole conversation; unknown bytes
+remain available there. `<Entry>` separates entries, `<New Line>` is an in-game
+line break, word tags retain compression and `<Byte N>` exposes exact bytes.
+Labels and action operands retain the original DOS semantics.
+
+**Test Conversation** runs in a bounded sandbox with configurable party names,
+gold, karma and introduction state. Click a trace row to inspect its source.
+Inventory/world effects are traced rather than applied, and recruitment is
+reported rather than fully simulated. The DOS preview uses the selected game's
+original bitmap font, with approximate 18-column wrapping; it is not a complete
+emulation of the game's quotation, pagination or rune rendering. Testing never
+modifies the game or project. See [the dialogue design](../docs/workshop-dialogue-ui.md).
 
 Starting-state mods primarily affect **new games**. The original character-
 creation sequence still overwrites the fields it traditionally initialized.
@@ -96,11 +116,10 @@ captured in a saved game.
 
 This branch establishes native editing and end-to-end package loading. It covers
 the audited formats and supports bringing existing editor outputs into packages.
-The dialogue tree/branch visualization and interactive placement tools for combat
-entities are still to come; corresponding data is currently edited in tagged text
-and tables. There is no flood fill, multi-tile selection, plugin scripting,
-package dependency system, runtime hot reload, mod manager or portable Workshop
-release packaging yet. Unknown resources and fields use the byte inspector.
+An optional graphical dialogue flow diagram and interactive combat-entity
+placement tools remain future work; the conversation outline and combat tables
+provide structured access now. There is no flood fill, multi-tile selection, plugin scripting,
+package dependency system, runtime hot reload, or mod manager yet. Unknown resources and fields use the byte inspector.
 Windows/macOS CI is configured; local interactive validation was on Linux only.
 
 ## Validation

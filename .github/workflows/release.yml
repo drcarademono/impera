@@ -7,6 +7,11 @@ on:
       - '.github/workflows/release.yml'
       - 'cmake/**'
       - 'CMakeLists.txt'
+      - 'workshop/**'
+      - 'src/mod/**'
+      - 'src/vars.c'
+      - 'src/6000.c'
+      - 'scripts/package-workshop.py'
       - 'scripts/package-release.py'
       - 'scripts/assemble-release.py'
       - 'scripts/build-appimage.py'
@@ -32,12 +37,16 @@ jobs:
         include:
           - os: ubuntu-22.04
             platform: linux-x86_64
+            qt_arch: gcc_64
           - os: windows-2022
             platform: windows-x86_64
+            qt_arch: win64_msvc2022_64
           - os: macos-15-intel
             platform: macos-x86_64
+            qt_arch: clang_64
           - os: macos-15
             platform: macos-arm64
+            qt_arch: clang_64
     runs-on: ${{ matrix.os }}
     env:
       MACOSX_DEPLOYMENT_TARGET: "12.0"
@@ -46,6 +55,14 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.3'
+          arch: ${{ matrix.qt_arch }}
+          cache: true
+      - name: Linux Qt deployment dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y patchelf libxcb-cursor0 libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 libxcb-xinerama0 libx11-xcb1 libxcb-xkb1 libfontconfig1
       - name: Linux development libraries
         if: runner.os == 'Linux'
         run: |
@@ -68,6 +85,7 @@ jobs:
         run: |
           python -m pip install PyYAML==6.0.3
           python tests/test_release_workflow.py
+          python tests/test_workshop_release.py
       - name: Package
         env:
           RELEASE_VERSION: ${{ github.ref_name }}
@@ -117,6 +135,60 @@ jobs:
           name: Impera-${{ matrix.platform }}
           path: ${{ runner.os == 'Windows' && 'windows-artifact/' || 'dist/*' }}
           if-no-files-found: error
+      - name: Configure Workshop
+        run: cmake -S workshop -B workshop-release-build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON -DIMPERA_WORKSHOP_DEPLOY_QT=ON
+      - name: Build Workshop
+        run: cmake --build workshop-release-build --config Release --parallel 3
+      - name: Workshop tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: ctest --test-dir workshop-release-build -C Release --output-on-failure
+      - name: Package Workshop with Qt runtime
+        env:
+          RELEASE_VERSION: ${{ github.ref_name }}
+        run: python scripts/package-workshop.py --build workshop-release-build --platform ${{ matrix.platform }}
+      - name: Workshop package startup smoke check
+        shell: python
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          import os, pathlib, subprocess, tarfile, tempfile
+          with tempfile.TemporaryDirectory() as temporary:
+              runtime = pathlib.Path(temporary)
+              if os.name == 'nt':
+                  executable = next(pathlib.Path('workshop-dist').glob('*/bin/ImperaWorkshop.exe')).resolve()
+                  command = [str(executable), '--help']
+              elif '${{ runner.os }}' == 'macOS':
+                  with tarfile.open(next(pathlib.Path('workshop-dist').glob('*.tar.gz'))) as archive:
+                      archive.extractall(runtime, filter='data')
+                  executable = next(runtime.glob('*/ImperaWorkshop.app/Contents/MacOS/ImperaWorkshop'))
+                  command = [str(executable), '--help']
+              else:
+                  executable = next(pathlib.Path('workshop-dist').glob('*.AppImage')).resolve()
+                  command = [str(executable), '--appimage-extract-and-run', '--help']
+              # Do not let the SDK's environment hide missing packaged dependencies.
+              env = {k: v for k, v in os.environ.items() if k not in
+                     {'LD_LIBRARY_PATH', 'DYLD_LIBRARY_PATH', 'DYLD_FRAMEWORK_PATH',
+                      'QT_PLUGIN_PATH', 'QT_QPA_PLATFORM_PLUGIN_PATH'}}
+              if os.name == 'nt':
+                  env['PATH'] = os.pathsep.join(p for p in env['PATH'].split(os.pathsep)
+                                              if 'qt' not in p.lower())
+              result = subprocess.run(command, cwd=runtime, env=env,
+                                      capture_output=True, text=True, check=True, timeout=60)
+              assert 'Native Ultima 5 mod-package authoring' in result.stdout, result.stdout + result.stderr
+      - name: Verify Workshop native icon
+        run: python scripts/verify-package-icons.py --workshop --platform ${{ matrix.platform }} --package-root workshop-dist
+      - name: Stage direct Windows Workshop download
+        if: runner.os == 'Windows'
+        shell: python
+        run: |
+          import pathlib, shutil
+          shutil.move(str(next(pathlib.Path('workshop-dist').glob('ImperaWorkshop-*'))), 'workshop-windows-artifact')
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Impera-Workshop-${{ matrix.platform }}
+          path: ${{ runner.os == 'Windows' && 'workshop-windows-artifact/' || 'workshop-dist/*' }}
+          if-no-files-found: error
   release:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: build
@@ -133,7 +205,7 @@ jobs:
           path: artifacts
           pattern: Impera-*
       - name: Assemble release downloads
-        run: python scripts/assemble-release.py --artifacts artifacts --version "${{ github.ref_name }}"
+        run: python scripts/assemble-release.py --artifacts artifacts --with-workshop --version "${{ github.ref_name }}"
       - name: Create or reuse release and replace assets
         env:
           GH_TOKEN: ${{ github.token }}

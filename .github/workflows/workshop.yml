@@ -1,9 +1,9 @@
 name: Native Impera Workshop
 on:
   push:
-    paths: ['workshop/**', 'src/mod/**', 'src/common/lzw.c', '.github/workflows/workshop.yml']
+    paths: ['workshop/**', 'src/mod/**', 'src/common/lzw.c', 'src/vars.c', 'src/6000.c', '.github/workflows/workshop.yml']
   pull_request:
-    paths: ['workshop/**', 'src/mod/**', 'src/common/lzw.c', '.github/workflows/workshop.yml']
+    paths: ['workshop/**', 'src/mod/**', 'src/common/lzw.c', 'src/vars.c', 'src/6000.c', '.github/workflows/workshop.yml']
   workflow_dispatch:
 permissions:
   contents: read
