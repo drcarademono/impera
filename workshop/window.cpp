@@ -139,9 +139,26 @@ WorkshopWindow::WorkshopWindow() {
     auto toolbar = addToolBar("Project");
     toolbar->setMovable(false);
     toolbar->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    const QMap<QString, QString> help{
+        {"New Mod",
+         "Start a mod using the remembered Ultima 5 game folder, or locate it if unavailable."},
+        {"Open Project", "Open an editable Impera Workshop project."},
+        {"Save Project", "Save your editable project; original game files are left untouched."},
+        {"Name Mod", "Set the name included in the exported mod package."},
+        {"Export Package", "Validate and export a mod package for Impera’s Mods folder."},
+        {"Import Package", "Import a mod package into an editable Workshop project."},
+        {"Change Game Folder", "Locate a different set of original Ultima 5 game files."},
+        {"Validate / Package Preview",
+         "Check resource formats, warnings, package contents, and installed mod conflicts."},
+        {"Test Mod", "Launch Impera with this mod in an isolated copy of the game data."},
+        {"Open Last Test Folder", "Open the last isolated runtime to inspect its files and logs."},
+        {"Stop Mod Tests", "Terminate Impera test processes launched by Workshop."},
+        {"Set Impera Executable",
+         "Choose the Impera executable or AppImage used for mod testing."}};
     auto action = [&](const QString &label, const QKeySequence &key, std::function<void()> fn) {
         auto a = toolbar->addAction(label);
         a->setShortcut(key);
+        a->setToolTip(help.value(label));
         connect(a, &QAction::triggered, this, fn);
         return a;
     };
@@ -155,13 +172,17 @@ WorkshopWindow::WorkshopWindow() {
             openGame(p);
     });
     auto toolsMenu = new QMenu(this);
+    toolsMenu->setToolTipsVisible(true);
     auto toolsButton = new QToolButton;
     toolsButton->setText("Mod Tools");
+    toolsButton->setToolTip(
+        "Validate packages, manage the game folder, and test your mod in Impera.");
     toolsButton->setMenu(toolsMenu);
     toolsButton->setPopupMode(QToolButton::InstantPopup);
     toolbar->addWidget(toolsButton);
-    auto extra = [this, toolsMenu](const QString &label, std::function<void()> fn) {
+    auto extra = [this, toolsMenu, help](const QString &label, std::function<void()> fn) {
         auto item = toolsMenu->addAction(label);
+        item->setToolTip(help.value(label));
         connect(item, &QAction::triggered, this, fn);
     };
     extra("Change Game Folder", [this] {
@@ -204,6 +225,7 @@ WorkshopWindow::WorkshopWindow() {
     toolbar->addSeparator();
     auto undo = history.createUndoAction(this, "Undo");
     undo->setShortcut(QKeySequence::Undo);
+    undo->setToolTip("Undo the last committed edit.");
     toolbar->addAction(undo);
     QObject::disconnect(undo, nullptr, &history, nullptr);
     connect(undo, &QAction::triggered, this, [this] {
@@ -213,6 +235,7 @@ WorkshopWindow::WorkshopWindow() {
     });
     auto redo = history.createRedoAction(this, "Redo");
     redo->setShortcut(QKeySequence::Redo);
+    redo->setToolTip("Reapply the last undone edit.");
     toolbar->addAction(redo);
     QObject::disconnect(redo, nullptr, &history, nullptr);
     connect(redo, &QAction::triggered, this, [this] {

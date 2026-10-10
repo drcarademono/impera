@@ -174,7 +174,8 @@ class MapWorkspace : public QWidget {
     QMap<QString, int> *navigation;
     MapCanvas *canvas;
     MapView *view;
-    QComboBox *page, *zoom, *tool, *schedule;
+    QComboBox *page, *zoom, *schedule;
+    QButtonGroup *tool;
     QCheckBox *grid, *comparison;
     MapMinimap *minimap;
     QLabel *selectionLabel;

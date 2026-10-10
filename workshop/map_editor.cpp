@@ -833,10 +833,12 @@ MapWorkspace::MapWorkspace(
     auto leftLayout = new QVBoxLayout(left);
     leftLayout->setContentsMargins(0, 0, 0, 0);
     auto search = new QLineEdit;
+    search->setToolTip("Filter the map list by location or resource name.");
     search->setObjectName("mapSearch");
     search->setPlaceholderText("Find a map…");
     leftLayout->addWidget(search);
     maps = new QTreeWidget;
+    maps->setToolTip("Choose a world map, settlement floor, or combat map to edit.");
     maps->setObjectName("mapNavigation");
     maps->setHeaderLabel("Maps");
     leftLayout->addWidget(maps);
@@ -879,6 +881,8 @@ MapWorkspace::MapWorkspace(
     centerLayout->setContentsMargins(0, 0, 0, 0);
     auto row = new QHBoxLayout;
     page = new QComboBox;
+    page->setToolTip(
+        "Switch between maps or floors in this resource; edits and view state are preserved.");
     page->setObjectName("mapPage");
     for (auto mp : document.pages)
         page->addItem(mp.name);
@@ -886,9 +890,14 @@ MapWorkspace::MapWorkspace(
         qBound(0, navigation->value(resource + "/map"), int(document.pages.size() - 1)));
     row->addWidget(page, 1);
     auto exportButton = new QPushButton("Export");
+    exportButton->setToolTip("Export terrain, tile IDs, or the visible preview as a PNG.");
     auto exportMenu = new QMenu(exportButton);
-    exportMenu->addAction("Terrain PNG", this, [this] { exportImage(false); });
-    exportMenu->addAction("Tile-ID PNG", this, [this] { exportImage(true); });
+    exportMenu->addAction("Terrain PNG", this, [this] { exportImage(false); })
+        ->setToolTip("Export map terrain artwork without grid or character overlays.");
+    exportMenu->addAction("Tile-ID PNG", this, [this] { exportImage(true); })
+        ->setToolTip(
+            "Export one grayscale pixel per tile containing its ID, for lossless terrain import.");
+    exportMenu->setToolTipsVisible(true);
     auto previewExport = exportMenu->addAction("Visible preview PNG (includes overlays)", this,
                                                [this] { exportImage(false, true); });
     previewExport->setToolTip("Export the visible canvas, including grid, markers and trigger "
@@ -897,58 +906,114 @@ MapWorkspace::MapWorkspace(
     row->addWidget(exportButton);
     centerLayout->addLayout(row);
     auto tools = new QHBoxLayout;
-    tool = new QComboBox;
-    tool->setObjectName("mapTool");
-    tool->setAccessibleName("Map editing tool");
-    tool->addItems({"Pencil (B)", "Eyedropper (I)", "Pan"});
+    tool = new QButtonGroup(this);
+    tool->setObjectName("mapTools");
     QString companion = resource.left(resource.size() - 4) + ".NPC";
-    tool->addItems({"NPCs", "Select (V)", "Rectangle (R)", "Fill (F)"});
-    if (resource.endsWith(".CBT"))
-        tool->setItemText(MapCanvas::InspectNpc, "Encounter");
-    if (!project->resources.contains(companion) && !resource.endsWith(".CBT"))
-        qobject_cast<QStandardItemModel *>(tool->model())
-            ->item(MapCanvas::InspectNpc)
-            ->setEnabled(false);
-    tools->addWidget(tool);
-    zoom = new QComboBox;
-    zoom->setObjectName("mapZoom");
-    zoom->addItems({"Fit", "100%", "200%", "300%", "400%", "800%"});
-    tools->addWidget(zoom);
-    grid = new QCheckBox("Grid");
-    grid->setObjectName("mapGrid");
-    tools->addWidget(grid);
+    const QStringList names{
+        "Pencil", "Eyedropper", "Pan", resource.endsWith(".CBT") ? "Encounter" : "NPCs",
+        "Select", "Rectangle",  "Fill"};
+    const QStringList descriptions{
+        "Pencil (B): paint tiles with the current brush.",
+        "Eyedropper (I): pick a tile from the map as your brush.",
+        "Pan: drag to move the view without changing the map. Space or middle-drag also pans.",
+        "Characters: select and move NPC destinations or encounter markers.",
+        "Select (V): drag a rectangle to copy or replace terrain.",
+        "Rectangle (R): draw a filled rectangle, or an outline when enabled.",
+        "Fill (F): replace connected tiles of the same kind with the current brush."};
+    for (int i = 0; i < names.size(); ++i) {
+        auto button = new QToolButton;
+        button->setObjectName(QString("mapTool%1").arg(i));
+        button->setAccessibleName(names[i]);
+        button->setToolTip(descriptions[i]);
+        button->setCheckable(true);
+        button->setFixedSize(28, 28);
+        button->setStyleSheet("QToolButton:checked { background:#365f8d; border:2px solid #86b9ed; "
+                              "border-radius:3px; }");
+        button->setIconSize({22, 22});
+        QPixmap icon(24, 24);
+        icon.fill(Qt::transparent);
+        QPainter painter(&icon);
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setPen(QPen(QColor("#e0e8f0"), 2));
+        if (i == MapCanvas::Pencil) {
+            painter.drawLine(5, 19, 18, 6);
+            painter.drawLine(8, 21, 21, 8);
+            painter.drawLine(5, 19, 4, 22);
+            painter.drawLine(18, 6, 21, 8);
+        } else if (i == MapCanvas::Eyedropper) {
+            painter.drawLine(5, 19, 17, 7);
+            painter.drawLine(8, 21, 20, 9);
+            painter.drawLine(14, 5, 22, 13);
+            painter.drawLine(5, 19, 8, 21);
+        } else if (i == MapCanvas::Pan) {
+            painter.drawLine(12, 2, 12, 22);
+            painter.drawLine(2, 12, 22, 12);
+            painter.drawPolyline(QPolygon{{8, 6}, {12, 2}, {16, 6}});
+            painter.drawPolyline(QPolygon{{8, 18}, {12, 22}, {16, 18}});
+            painter.drawPolyline(QPolygon{{6, 8}, {2, 12}, {6, 16}});
+            painter.drawPolyline(QPolygon{{18, 8}, {22, 12}, {18, 16}});
+        } else if (i == MapCanvas::InspectNpc) {
+            painter.drawEllipse(8, 2, 8, 8);
+            painter.drawArc(4, 11, 16, 16, 0, 180 * 16);
+            painter.drawLine(4, 19, 20, 19);
+        } else if (i == MapCanvas::Select) {
+            painter.setPen(QPen(QColor("#e0e8f0"), 2, Qt::DashLine));
+            painter.drawRect(3, 3, 18, 18);
+        } else if (i == MapCanvas::Rectangle) {
+            painter.setBrush(QColor("#729ac4"));
+            painter.drawRect(3, 5, 18, 14);
+        } else {
+            painter.drawPolygon(QPolygon{{3, 12}, {12, 3}, {20, 11}, {11, 20}});
+            painter.drawLine(6, 12, 18, 12);
+            painter.setBrush(QColor("#729ac4"));
+            painter.drawEllipse(18, 17, 4, 5);
+        }
+        painter.end();
+        button->setIcon(QIcon(icon));
+        tool->addButton(button, i);
+        if (i == MapCanvas::InspectNpc && !project->resources.contains(companion) &&
+            !resource.endsWith(".CBT")) {
+            button->setEnabled(false);
+            button->setToolTip("Characters: this map has no NPC schedule or encounter data.");
+        }
+        tools->addWidget(button);
+    }
     schedule = new QComboBox;
     schedule->setObjectName("mapSchedule");
     schedule->setAccessibleName("NPC schedule change");
-    schedule->addItems(
-        {"Schedule change 1", "Schedule change 2", "Schedule change 3", "Schedule change 4"});
-    schedule->setToolTip(
-        "Four scheduled changes; changes 2 and 4 share one destination and behavior.");
-    schedule->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
-    schedule->setMinimumContentsLength(14);
+    schedule->addItems({"1", "2", "3", "4"});
+    schedule->setToolTip("Choose which scheduled NPC destinations to show and edit. Hours appear "
+                         "when NPCs on this map agree; otherwise changes are numbered 1–4. Changes "
+                         "2 and 4 share destinations and behavior.");
+    schedule->setSizeAdjustPolicy(QComboBox::AdjustToContents);
     if (project->resources.contains(companion))
         tools->addWidget(schedule);
     else
         schedule->hide();
     tools->addStretch();
     centerLayout->addLayout(tools);
-    if (project->resources.contains(companion)) {
-        tools->removeWidget(schedule);
-        auto scheduleRow = new QHBoxLayout;
-        scheduleRow->addWidget(new QLabel("NPC schedule"));
-        scheduleRow->addWidget(schedule, 1);
-        centerLayout->addLayout(scheduleRow);
-    }
+    zoom = new QComboBox;
+    zoom->setObjectName("mapZoom");
+    zoom->addItems({"Fit", "100%", "200%", "300%", "400%", "800%"});
+    zoom->setToolTip(
+        "Magnify tiles, or fit the whole map in the view. Ctrl+mouse wheel also zooms.");
+    grid = new QCheckBox("Grid");
+    grid->setObjectName("mapGrid");
+    grid->setToolTip("Show tile boundaries without changing the map.");
     auto terrainTools = new QHBoxLayout;
     auto displayTools = new QHBoxLayout;
     auto outline = new QCheckBox("Rectangle outline");
+    outline->setToolTip("Draw only the border when using the Rectangle tool.");
     outline->setObjectName("mapRectangleOutline");
     displayTools->addWidget(outline);
     auto copy = new QPushButton("Copy");
+    copy->setToolTip("Copy the selected rectangle of terrain (Ctrl+C).");
     copy->setObjectName("mapCopy");
     auto paste = new QPushButton("Paste");
+    paste->setToolTip("Place copied terrain on the map; click to apply, Esc to cancel (Ctrl+V).");
     paste->setObjectName("mapPaste");
     auto clear = new QPushButton("Clear selection");
+    clear->setToolTip("Remove the selection boundary without deleting terrain.");
     clear->setObjectName("mapClearSelection");
     terrainTools->addWidget(copy);
     terrainTools->addWidget(paste);
@@ -957,6 +1022,8 @@ MapWorkspace::MapWorkspace(
     comparison->setObjectName("mapComparison");
     comparison->setToolTip("Orange marks terrain that differs from original game files");
     displayTools->addWidget(comparison);
+    terrainTools->addWidget(zoom);
+    terrainTools->addWidget(grid);
     terrainTools->addStretch();
     centerLayout->addLayout(terrainTools);
     displayTools->addStretch();
@@ -964,13 +1031,18 @@ MapWorkspace::MapWorkspace(
     canvas = new MapCanvas;
     canvas->tiles = U5::readGraphics("TILES.16", project->data("TILES.16")).images;
     view = new MapView(canvas);
+    view->setToolTip("Edit terrain or characters with the selected tool. Middle-drag or Space "
+                     "pans; Ctrl+wheel zooms.");
     centerLayout->addWidget(view, 1);
     auto coordinates = new QHBoxLayout;
     coordinate = new QLabel;
+    coordinate->setToolTip("Map coordinates and terrain tile under the pointer.");
     coordinate->setObjectName("mapCoordinates");
     coordinates->addWidget(coordinate, 1);
     auto x = new QSpinBox;
+    x->setToolTip("Horizontal tile coordinate to center on; zero is the left edge.");
     auto y = new QSpinBox;
+    y->setToolTip("Vertical tile coordinate to center on; zero is the top edge.");
     x->setObjectName("mapGoX");
     y->setObjectName("mapGoY");
     coordinates->addWidget(new QLabel("X"));
@@ -978,6 +1050,7 @@ MapWorkspace::MapWorkspace(
     coordinates->addWidget(new QLabel("Y"));
     coordinates->addWidget(y);
     auto go = new QPushButton("Go");
+    go->setToolTip("Center the map on these coordinates without changing any tiles.");
     coordinates->addWidget(go);
     connect(go, &QPushButton::clicked, this, [=] {
         view->centerMap({double(x->value()) + 0.5, double(y->value()) + 0.5});
@@ -1000,52 +1073,67 @@ MapWorkspace::MapWorkspace(
     auto rightLayout = new QVBoxLayout(terrainInspector);
     rightLayout->setContentsMargins(0, 0, 0, 0);
     brushImage = new QLabel;
+    brushImage->setToolTip(
+        "Current terrain brush artwork. Select a palette tile or use the Eyedropper to change it.");
     brushImage->setFixedHeight(70);
     brushImage->setAlignment(Qt::AlignCenter);
     rightLayout->addWidget(brushImage);
     brushLabel = new QLabel;
+    brushLabel->setToolTip("Name and ID of the tile that painting tools will place.");
     brushLabel->setObjectName("mapBrushLabel");
     brushLabel->setAlignment(Qt::AlignCenter);
     brushLabel->setWordWrap(true);
     rightLayout->addWidget(brushLabel);
     selectionLabel = new QLabel;
+    selectionLabel->setToolTip(
+        "Selected rectangle and its size; selection itself does not change terrain.");
     selectionLabel->setObjectName("mapSelectionInfo");
     selectionLabel->setWordWrap(true);
     rightLayout->addWidget(selectionLabel);
     minimap = new MapMinimap(canvas, view);
+    minimap->setToolTip("Click or drag to move the main map view.");
     rightLayout->addWidget(minimap);
     auto brushControls = new QHBoxLayout;
     paletteFilter = new QComboBox;
+    paletteFilter->setToolTip(
+        "Filter tiles by category, your favorites, or recently used brushes.");
     paletteFilter->setObjectName("mapPaletteFilter");
     paletteFilter->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
     paletteFilter->setMinimumContentsLength(8);
     paletteFilter->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
     paletteFilter->addItems({"All tiles", "Favorites", "Recent", "Nature", "Destinations",
-                             "Walls and passages", "Hazards", "Objects", "Uncategorized"});
+                             "Walls and passages", "Hazards", "Objects", "Rendering masks"});
     brushControls->addWidget(paletteFilter, 1);
     favorite = new QPushButton("Favorite");
+    favorite->setToolTip("Add or remove the current brush from your favorites.");
     favorite->setObjectName("mapFavorite");
     favorite->setCheckable(true);
     brushControls->addWidget(favorite);
     rightLayout->addLayout(brushControls);
     tileSearch = new QLineEdit;
+    tileSearch->setToolTip("Find tiles by name, decimal number, or hexadecimal ID.");
     tileSearch->setPlaceholderText("Find tile by name or number");
     tileSearch->setObjectName("mapTileSearch");
     tileSearch->setAccessibleName("Find terrain tile");
     paletteFilter->setAccessibleName("Tile category");
     rightLayout->addWidget(tileSearch);
     palette = new QListWidget;
+    palette->setToolTip(
+        "Select a terrain brush. Hover over a tile for its name, category, and ID.");
     palette->setObjectName("mapPalette");
     palette->setViewMode(QListView::IconMode);
     palette->setResizeMode(QListView::Adjust);
     palette->setIconSize({32, 32});
-    palette->setGridSize({58, 58});
+    palette->setGridSize({40, 40});
+    palette->setSpacing(0);
     for (int i = 0; i < 256; ++i) {
         auto item = new QListWidgetItem(
             QIcon(QPixmap::fromImage(canvas->tiles[i])
                       .scaled(32, 32, Qt::KeepAspectRatio, Qt::FastTransformation)),
-            QString("%1 · %2").arg(i).arg(MapDocument::tileName(i)), palette);
-        item->setToolTip(QString("%1\n%2 · Tile %3 (0x%4)\nDescription from engine tile "
+            QString(), palette);
+        item->setData(Qt::AccessibleTextRole,
+                      QString("%1 · Tile %2").arg(MapDocument::tileName(i)).arg(i));
+        item->setToolTip(QString("%1\n%2 · Tile %3 (0x%4)\nDescription from DOS artwork and engine "
                                  "definitions; appearance may differ with custom artwork.")
                              .arg(MapDocument::tileName(i))
                              .arg(MapDocument::tileCategory(i))
@@ -1154,7 +1242,7 @@ MapWorkspace::MapWorkspace(
         x->setRange(0, canvas->side - 1);
         y->setRange(0, canvas->side - 1);
     });
-    connect(tool, &QComboBox::currentIndexChanged, this, [=](int i) {
+    connect(tool, &QButtonGroup::idClicked, this, [=](int i) {
         cancelGesture();
         canvas->tool = i;
         inspector->setCurrentIndex(i == MapCanvas::InspectNpc ? 1 : 0);
@@ -1192,13 +1280,16 @@ MapWorkspace::MapWorkspace(
         setBrush(id);
         palette->scrollToItem(palette->item(id));
     };
-    canvas->chooseTool = [=](int i) { tool->setCurrentIndex(i); };
+    canvas->chooseTool = [=](int i) {
+        if (auto button = tool->button(i); button && button->isEnabled())
+            button->click();
+    };
     canvas->inspect = [=](int cx, int cy, int id) {
         coordinate->setText(QString("X %1   Y %2   Tile %3   ·   %4")
                                 .arg(cx)
                                 .arg(cy)
                                 .arg(id)
-                                .arg(tool->currentText()));
+                                .arg(tool->checkedButton()->accessibleName()));
     };
     canvas->chooseNpc = [this](int npc) { selectNpc(npc); };
     canvas->chooseActor = [this](const QList<int> &candidates) {
@@ -1348,14 +1439,14 @@ void MapWorkspace::loadPage() {
     }
     canvas->zoom = state.zoom;
     canvas->grid = state.grid;
-    canvas->tool = qBound(0, state.tool, tool->count() - 1);
+    canvas->tool = qBound(0, state.tool, tool->buttons().size() - 1);
     {
         QSignalBlocker block(grid);
         grid->setChecked(state.grid);
     }
     {
         QSignalBlocker block(tool);
-        tool->setCurrentIndex(canvas->tool);
+        tool->button(canvas->tool)->setChecked(true);
     }
     {
         QSignalBlocker block(schedule);
@@ -1418,6 +1509,8 @@ void MapWorkspace::createNpcInspector(QVBoxLayout *layout) {
     auto title = new QLabel("NPC schedule");
     layout->addWidget(title);
     npcList = new QComboBox;
+    npcList->setToolTip(
+        "Select a character, including characters whose current destination is on another floor.");
     npcList->setObjectName("mapNpcList");
     npcList->setAccessibleName("Character");
     npcList->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
@@ -1425,9 +1518,12 @@ void MapWorkspace::createNpcInspector(QVBoxLayout *layout) {
     npcList->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
     layout->addWidget(npcList);
     npcSprite = new QLabel;
+    npcSprite->setToolTip("Artwork used for the selected character.");
     npcSprite->setAlignment(Qt::AlignCenter);
     layout->addWidget(npcSprite);
     npcInfo = new QLabel;
+    npcInfo->setToolTip("Details of the selected character and schedule change; shared "
+                        "destinations are identified here.");
     npcInfo->setObjectName("mapNpcInfo");
     npcInfo->setWordWrap(true);
     npcInfo->setTextFormat(Qt::PlainText);
@@ -1444,8 +1540,14 @@ void MapWorkspace::createNpcInspector(QVBoxLayout *layout) {
     form->setRowWrapPolicy(QFormLayout::WrapLongRows);
     form->addRow("Start hour", npcStartHour);
     npcX = new QSpinBox;
+    npcX->setToolTip("Destination column for the selected schedule change. Changes 2 and 4 share a "
+                     "destination.");
     npcY = new QSpinBox;
+    npcY->setToolTip(
+        "Destination row for the selected schedule change. Changes 2 and 4 share a destination.");
     npcFloor = new QSpinBox;
+    npcFloor->setToolTip(
+        "Destination floor: -1 is basement, 0 is ground floor. Click Move here to apply.");
     npcX->setObjectName("mapNpcX");
     npcY->setObjectName("mapNpcY");
     npcFloor->setObjectName("mapNpcFloor");
@@ -1461,6 +1563,7 @@ void MapWorkspace::createNpcInspector(QVBoxLayout *layout) {
     apply->setObjectName("mapNpcMove");
     layout->addWidget(apply);
     auto locate = new QPushButton("Locate on map");
+    locate->setToolTip("Center the view on the selected destination without moving the character.");
     locate->setObjectName("mapNpcLocate");
     layout->addWidget(locate);
     npcGhosts = new QCheckBox("Other destinations");
@@ -1469,9 +1572,11 @@ void MapWorkspace::createNpcInspector(QVBoxLayout *layout) {
                           "correspond to schedule changes 1–4.");
     layout->addWidget(npcGhosts);
     npcConversation = new QPushButton("Edit conversation");
+    npcConversation->setToolTip("Open this character’s dialogue for editing.");
     npcConversation->setObjectName("mapNpcConversation");
     layout->addWidget(npcConversation);
     auto advanced = new QPushButton("Advanced schedule details");
+    advanced->setToolTip("Edit behavior and other schedule fields; unknown values are preserved.");
     advanced->setObjectName("mapNpcAdvanced");
     layout->addWidget(advanced);
     auto hint =
@@ -1586,30 +1691,39 @@ void MapWorkspace::refreshNpcs() {
         if (loc.floor == mp.floor && loc.x < 32 && loc.y < 32)
             canvas->actors.append({loc.x, loc.y, npcs.sprite(mp.settlement, npc), npc});
     }
+    {
+        int hours[4]{-1, -1, -1, -1};
+        bool consistent = true;
+        for (int actor = 0; actor < 32; ++actor) {
+            bool onMap = false;
+            for (int change = 0; change < 4; ++change) {
+                auto loc = npcs.location(mp.settlement, actor, change);
+                onMap |= loc.floor == mp.floor && loc.x < 32 && loc.y < 32;
+            }
+            if (!onMap)
+                continue;
+            for (int change = 0; change < 4; ++change) {
+                int hour = npcs.hour(mp.settlement, actor, change);
+                if (hour >= 24 || (hours[change] >= 0 && hours[change] != hour))
+                    consistent = false;
+                hours[change] = hour;
+            }
+        }
+        QSignalBlocker block(schedule);
+        for (int change = 0; change < 4; ++change)
+            schedule->setItemText(change,
+                                  consistent && hours[change] >= 0
+                                      ? QString("%1:00").arg(hours[change], 2, 10, QChar('0'))
+                                      : QString::number(change + 1));
+    }
     int npc = canvas->selectedNpc;
     npcList->setCurrentIndex(npc);
     if (npc < 0 || npc >= 32) {
-        QSignalBlocker block(schedule);
-        for (int change = 0; change < 4; ++change)
-            schedule->setItemText(change, QString("Schedule change %1").arg(change + 1));
         npcInfo->setText("Select a character on the map or choose one above");
         npcSprite->clear();
         npcStartHour->setEnabled(false);
         canvas->update();
         return;
-    }
-    {
-        QSignalBlocker block(schedule);
-        for (int change = 0; change < 4; ++change) {
-            int hour = npcs.hour(mp.settlement, npc, change);
-            QString time =
-                hour < 24 ? QString("%1:00").arg(hour, 2, 10, QChar('0')) : "unusual time";
-            schedule->setItemText(
-                change, QString("Change %1 · starts %2%3")
-                            .arg(change + 1)
-                            .arg(time)
-                            .arg(change == 1 || change == 3 ? " · shared destination" : ""));
-        }
     }
     auto loc = npcs.location(mp.settlement, npc, slot);
     npcStartHour->setEnabled(true);
@@ -1773,12 +1887,16 @@ void MapWorkspace::createCombatInspector(QVBoxLayout *layout) {
     npcGhosts = new QCheckBox(this);
     npcGhosts->hide();
     combatEntry = new QComboBox;
+    combatEntry->setToolTip(
+        "Choose the party entry direction whose starting positions are displayed.");
     combatEntry->setObjectName("combatEntry");
     combatEntry->setAccessibleName("Party entry direction");
     combatEntry->addItems({"North entry", "East entry", "South entry", "West entry"});
     combatEntry->setCurrentIndex(navigation->value(resource + "/entry", 0));
     layout->addWidget(combatEntry);
     combatEntity = new QComboBox;
+    combatEntity->setToolTip(
+        "Select a party start, monster start, or trigger to inspect and move.");
     combatEntity->setObjectName("combatEntity");
     combatEntity->setAccessibleName("Encounter character or trigger");
     combatEntity->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
@@ -1786,10 +1904,14 @@ void MapWorkspace::createCombatInspector(QVBoxLayout *layout) {
     combatEntity->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
     layout->addWidget(combatEntity);
     combatInfo = new QLabel;
+    combatInfo->setToolTip(
+        "Details of the selected encounter marker, including disabled or out-of-bounds records.");
     combatInfo->setWordWrap(true);
     combatInfo->setTextFormat(Qt::PlainText);
     layout->addWidget(combatInfo);
     combatPreview = new QCheckBox("Preview trigger result");
+    combatPreview->setToolTip(
+        "Preview terrain changes caused by the selected trigger without modifying the map.");
     combatPreview->setObjectName("combatPreview");
     combatPreview->setChecked(navigation->value(resource + "/preview", 0));
     layout->addWidget(combatPreview);
@@ -1890,7 +2012,8 @@ bool MapWorkspace::moveCombat(int entity, QPoint destination) {
 namespace {
 const QMap<int, QPair<QString, QString>> &tileCatalog() {
     // Descriptions are backed by the engine's named symbols in src/tiles.h.
-    // Unidentified numeric symbols deliberately remain uncategorized.
+    // Numeric symbols are classified from the original DOS artwork, including
+    // animation frames and rendering masks (which are not ordinary terrain).
     static const QMap<int, QPair<QString, QString>> catalog{
         {TILE_MAP_WATER_1, {"Water 1", "Nature"}},
         {TILE_MAP_WATER_2, {"Water 2", "Nature"}},
@@ -1965,6 +2088,189 @@ const QMap<int, QPair<QString, QString>> &tileCatalog() {
         {TILE_MAP_CLOCK, {"Clock", "Objects"}},
         {TILE_MAP_BELLOWS_FC, {"Bellows", "Objects"}},
         {TILE_MAP_BELLOWS_FD, {"Bellows", "Objects"}},
+        {0x00, {"Magic flash", "Hazards"}},
+        {0x06, {"Grass variation", "Nature"}},
+        {0x07, {"Swamp", "Nature"}},
+        {0x08, {"Brush", "Nature"}},
+        {0x09, {"Forest", "Nature"}},
+        {0x0a, {"Dense forest", "Nature"}},
+        {0x0b, {"Hills", "Nature"}},
+        {0x0c, {"Mountains", "Nature"}},
+        {0x0d, {"High mountains", "Nature"}},
+        {0x0e, {"Grass and rocks", "Nature"}},
+        {0x0f, {"Forest and rocks", "Nature"}},
+        {0x1c, {"Banner", "Objects"}},
+        {0x1d, {"Bridge", "Walls and passages"}},
+        {0x1e, {"Swamp and grass", "Nature"}},
+        {0x1f, {"Swamp edge", "Nature"}},
+        {0x20, {"Road", "Nature"}},
+        {0x21, {"Road edge", "Nature"}},
+        {0x22, {"Road corner", "Nature"}},
+        {0x23, {"Road corner", "Nature"}},
+        {0x24, {"Road corner", "Nature"}},
+        {0x25, {"Road corner", "Nature"}},
+        {0x26, {"Road junction", "Nature"}},
+        {0x27, {"Red carpet", "Objects"}},
+        {0x28, {"Red carpet", "Objects"}},
+        {0x29, {"Crystal ball", "Objects"}},
+        {0x2a, {"Emblem", "Objects"}},
+        {0x2f, {"Cactus", "Nature"}},
+        {0x30, {"Grass edge", "Nature"}},
+        {0x31, {"Grass edge", "Nature"}},
+        {0x32, {"Road and grass", "Nature"}},
+        {0x33, {"Road and grass", "Nature"}},
+        {0x34, {"Riverbank", "Nature"}},
+        {0x35, {"Riverbank", "Nature"}},
+        {0x36, {"Riverbank", "Nature"}},
+        {0x37, {"Riverbank", "Nature"}},
+        {0x38, {"Castle emblem", "Objects"}},
+        {0x3a, {"Castle tower", "Walls and passages"}},
+        {0x3b, {"Castle battlements", "Walls and passages"}},
+        {0x3c, {"Castle tower", "Walls and passages"}},
+        {0x3d, {"Castle tower", "Walls and passages"}},
+        {0x3f, {"Castle tower", "Walls and passages"}},
+        {0x40, {"Wood floor", "Objects"}},
+        {0x41, {"Open book", "Objects"}},
+        {0x42, {"Food on counter", "Objects"}},
+        {0x43, {"Wood panel", "Walls and passages"}},
+        {0x44, {"Brick floor", "Objects"}},
+        {0x45, {"Stone floor", "Objects"}},
+        {0x46, {"Boulder", "Nature"}},
+        {0x47, {"Bridge", "Walls and passages"}},
+        {0x48, {"Wood panel", "Walls and passages"}},
+        {0x49, {"Wood panel", "Walls and passages"}},
+        {0x4a, {"Window", "Walls and passages"}},
+        {0x4b, {"Portcullis", "Walls and passages"}},
+        {0x4c, {"Diagonal stone wall", "Walls and passages"}},
+        {0x4d, {"Diagonal stone wall", "Walls and passages"}},
+        {0x50, {"Stone wall corner", "Walls and passages"}},
+        {0x51, {"Stone wall corner", "Walls and passages"}},
+        {0x52, {"Stone wall corner", "Walls and passages"}},
+        {0x53, {"Stone wall corner", "Walls and passages"}},
+        {0x54, {"Stone wall corner", "Walls and passages"}},
+        {0x55, {"Stone wall corner", "Walls and passages"}},
+        {0x56, {"Stone wall", "Walls and passages"}},
+        {0x57, {"Stone wall", "Walls and passages"}},
+        {0x58, {"Skeleton", "Objects"}},
+        {0x59, {"Skeleton", "Objects"}},
+        {0x5b, {"Potted plant", "Objects"}},
+        {0x5d, {"Bookshelf", "Objects"}},
+        {0x5e, {"Stone arch", "Walls and passages"}},
+        {0x5f, {"Stone arch", "Walls and passages"}},
+        {0x60, {"Riverbank", "Nature"}},
+        {0x61, {"Riverbank", "Nature"}},
+        {0x62, {"Riverbank", "Nature"}},
+        {0x63, {"Riverbank", "Nature"}},
+        {0x64, {"Riverbank", "Nature"}},
+        {0x65, {"Riverbank", "Nature"}},
+        {0x66, {"Riverbank", "Nature"}},
+        {0x67, {"Riverbank", "Nature"}},
+        {0x68, {"Riverbank", "Nature"}},
+        {0x69, {"Riverbank", "Nature"}},
+        {0x6a, {"Wooden bridge", "Walls and passages"}},
+        {0x6b, {"Wooden bridge", "Walls and passages"}},
+        {0x6c, {"Riverbank", "Nature"}},
+        {0x6d, {"Riverbank", "Nature"}},
+        {0x6e, {"Riverbank", "Nature"}},
+        {0x6f, {"Riverbank", "Nature"}},
+        {0x70, {"Dungeon corridor mask", "Rendering masks"}},
+        {0x71, {"Dungeon corridor mask", "Rendering masks"}},
+        {0x72, {"Dungeon corridor mask", "Rendering masks"}},
+        {0x73, {"Dungeon corridor mask", "Rendering masks"}},
+        {0x74, {"Dungeon corridor mask", "Rendering masks"}},
+        {0x75, {"Dungeon corridor mask", "Rendering masks"}},
+        {0x76, {"Dungeon corridor mask", "Rendering masks"}},
+        {0x77, {"Dungeon corridor mask", "Rendering masks"}},
+        {0x78, {"Dungeon corridor mask", "Rendering masks"}},
+        {0x79, {"Dungeon corridor mask", "Rendering masks"}},
+        {0x7a, {"Dungeon corridor mask", "Rendering masks"}},
+        {0x7b, {"Dungeon corridor mask", "Rendering masks"}},
+        {0x7c, {"Dungeon corridor mask", "Rendering masks"}},
+        {0x7d, {"Dungeon corridor mask", "Rendering masks"}},
+        {0x7e, {"Dungeon corridor mask", "Rendering masks"}},
+        {0x7f, {"Dungeon corridor mask", "Rendering masks"}},
+        {0x80, {"Forge", "Objects"}},
+        {0x81, {"Forge", "Objects"}},
+        {0x82, {"Forge by water", "Objects"}},
+        {0x83, {"Forge by water", "Objects"}},
+        {0x84, {"Fence", "Walls and passages"}},
+        {0x85, {"Spider web", "Walls and passages"}},
+        {0x86, {"Bars", "Walls and passages"}},
+        {0x87, {"Brick wall", "Walls and passages"}},
+        {0x88, {"Rubble", "Nature"}},
+        {0x89, {"Cross", "Objects"}},
+        {0x8a, {"Gravestone", "Objects"}},
+        {0x8b, {"Dirt mound", "Nature"}},
+        {0x8d, {"Brick floor variation", "Objects"}},
+        {0x8e, {"Hanging cage", "Objects"}},
+        {0x97, {"Portcullis", "Walls and passages"}},
+        {0x98, {"Portcullis", "Walls and passages"}},
+        {0x99, {"Bars", "Walls and passages"}},
+        {0xa0, {"Signpost", "Objects"}},
+        {0xa2, {"Ploughed ground", "Nature"}},
+        {0xa3, {"Bench", "Objects"}},
+        {0xa4, {"Stone cross", "Objects"}},
+        {0xa7, {"Barrel", "Objects"}},
+        {0xa9, {"Chair", "Objects"}},
+        {0xaa, {"Rug", "Objects"}},
+        {0xab, {"Bed", "Objects"}},
+        {0xac, {"Bed", "Objects"}},
+        {0xae, {"Desk", "Objects"}},
+        {0xb0, {"Wall torch", "Objects"}},
+        {0xb1, {"Wall torch", "Objects"}},
+        {0xbd, {"Wall torch", "Objects"}},
+        {0xbf, {"Fireplace", "Objects"}},
+        {0xc0, {"Stone fragment", "Nature"}},
+        {0xc1, {"Stone fragment", "Nature"}},
+        {0xc2, {"Stone fragment", "Nature"}},
+        {0xc3, {"Small flowers", "Nature"}},
+        {0xc5, {"Stairs", "Walls and passages"}},
+        {0xc6, {"Stairs", "Walls and passages"}},
+        {0xc7, {"Stairs", "Walls and passages"}},
+        {0xca, {"Brick floor and grass", "Objects"}},
+        {0xcb, {"Brick floor and grass", "Objects"}},
+        {0xcc, {"Brick fragment", "Objects"}},
+        {0xcd, {"Brick fragment", "Objects"}},
+        {0xce, {"Grass fragment", "Nature"}},
+        {0xcf, {"Grass fragment", "Nature"}},
+        {0xd0, {"Diagonal wall mask", "Rendering masks"}},
+        {0xd1, {"Diagonal wall mask", "Rendering masks"}},
+        {0xd2, {"Diagonal wall mask", "Rendering masks"}},
+        {0xd3, {"Diagonal wall mask", "Rendering masks"}},
+        {0xd5, {"Waterfall animation", "Nature"}},
+        {0xd6, {"Waterfall animation", "Nature"}},
+        {0xd7, {"Waterfall animation", "Nature"}},
+        {0xd9, {"Fountain animation", "Objects"}},
+        {0xda, {"Fountain animation", "Objects"}},
+        {0xdb, {"Fountain animation", "Objects"}},
+        {0xdd, {"Swamp animation", "Nature"}},
+        {0xde, {"Sacred flame", "Objects"}},
+        {0xdf, {"Rocks", "Nature"}},
+        {0xe0, {"Grass detail", "Nature"}},
+        {0xe1, {"Grass detail", "Nature"}},
+        {0xe2, {"Fence", "Walls and passages"}},
+        {0xe3, {"Solid wall mask", "Rendering masks"}},
+        {0xe5, {"Water edge", "Nature"}},
+        {0xe6, {"Water edge", "Nature"}},
+        {0xe8, {"Hourglass animation", "Objects"}},
+        {0xe9, {"Hourglass animation", "Objects"}},
+        {0xea, {"Hourglass animation", "Objects"}},
+        {0xeb, {"Hourglass animation", "Objects"}},
+        {0xec, {"Magic field", "Hazards"}},
+        {0xed, {"Magic field", "Hazards"}},
+        {0xee, {"Magic field", "Hazards"}},
+        {0xef, {"Magic field", "Hazards"}},
+        {0xf1, {"Wall sign", "Objects"}},
+        {0xf2, {"Wall sign", "Objects"}},
+        {0xf3, {"Wall sign", "Objects"}},
+        {0xf4, {"Wall sign", "Objects"}},
+        {0xf5, {"Wall sign", "Objects"}},
+        {0xf6, {"Wall sign", "Objects"}},
+        {0xf7, {"Wall sign", "Objects"}},
+        {0xf9, {"Wall sign", "Objects"}},
+        {0xfb, {"Clock animation", "Objects"}},
+        {0xfe, {"Bellows", "Objects"}},
+        {0xff, {"Bellows", "Objects"}},
     };
     return catalog;
 }

@@ -746,7 +746,7 @@ int main(int argc, char **argv) {
             active()->findChild<QListWidget *>("mapPalette")->setCurrentRow(9);
             canvas()->selection = QRect(1, 1, 2, 2);
             canvas()->selectionChanged();
-            active()->findChild<QComboBox *>("mapTool")->setCurrentIndex(MapCanvas::Fill);
+            active()->findChild<QButtonGroup *>("mapTools")->button(MapCanvas::Fill)->click();
             click(1, 1);
             auto filled = window.projectForTests().data("TOWNE.DAT");
             check(filled.count(char(9)) == 4, "Native fill escaped selection");
@@ -897,7 +897,7 @@ int main(int argc, char **argv) {
             auto canvas = [&] {
                 return dynamic_cast<MapCanvas *>(active()->findChild<QWidget *>("mapCanvas"));
             };
-            active()->findChild<QComboBox *>("mapTool")->setCurrentIndex(MapCanvas::InspectNpc);
+            active()->findChild<QButtonGroup *>("mapTools")->button(MapCanvas::InspectNpc)->click();
             active()->findChild<QComboBox *>("mapNpcList")->setCurrentIndex(1);
             check(active()->findChild<QLabel *>("mapNpcInfo")->text().contains("Chamfort"),
                   "NPC name not resolved through dialogue ID");
@@ -956,15 +956,9 @@ int main(int argc, char **argv) {
             check(active()->findChild<QSpinBox *>("mapNpcX")->value() == 6 &&
                       active()->findChild<QLabel *>("mapNpcInfo")->text().contains("share"),
                   "Slot 3 failed shared location display");
-            check(active()->findChild<QComboBox *>("mapSchedule")
-                          ->currentText()
-                          .contains("Change 4") &&
-                      active()
-                          ->findChild<QComboBox *>("mapSchedule")
-                          ->currentText()
-                          .contains("starts") &&
+            check(active()->findChild<QComboBox *>("mapSchedule")->currentText() == "4" &&
                       !active()->findChild<QLabel *>("mapNpcInfo")->text().contains("AI byte"),
-                  "Schedule UI still exposes internal slot/location terminology");
+                  "Mixed NPC timings should show compact numbered schedule changes");
             active()->findChild<QComboBox *>("mapPage")->setCurrentIndex(0);
             app.processEvents();
             check(canvas()->selectedNpc == 1 && canvas()->tool == MapCanvas::InspectNpc &&
@@ -1310,15 +1304,70 @@ int main(int argc, char **argv) {
             check(QDir(cache.path()).entryList(QDir::Dirs | QDir::NoDotAndDotDot).size() == 2,
                   "Failed test preparation left a partial runtime");
         });
+        test("Compact map-wide schedule hours and icon toolbar alignment", [&] {
+            QTemporaryDir dir;
+            fixture(dir.path());
+            file(dir.path() + "/TOWNE.DAT", QByteArray(16384, 5));
+            QByteArray npcs(4608, 0);
+            for (int actor = 0; actor < 32; ++actor)
+                for (int destination = 0; destination < 3; ++destination) {
+                    npcs[actor * 16 + 3 + destination] = char(255);
+                    npcs[actor * 16 + 6 + destination] = char(255);
+                }
+            for (int destination = 0; destination < 3; ++destination) {
+                npcs[3 + destination] = 2;
+                npcs[6 + destination] = 2;
+            }
+            for (int change = 0; change < 4; ++change)
+                npcs[12 + change] = char(8 + change * 4);
+            file(dir.path() + "/TOWNE.NPC", npcs);
+            auto project = fixture(dir.path());
+            project.openGame(dir.path());
+            QMap<QString, MapViewState> states;
+            QMap<QString, int> navigation;
+            MapWorkspace workspace(
+                &project, "TOWNE.DAT", &states, &navigation,
+                [](const auto &, const auto &) { return true; }, [](const auto &) {});
+            workspace.resize(1024, 720);
+            workspace.show();
+            app.processEvents();
+            auto schedule = workspace.findChild<QComboBox *>("mapSchedule");
+            auto tools = workspace.findChild<QButtonGroup *>("mapTools");
+            check(schedule->itemText(0) == "08:00" && schedule->itemText(3) == "20:00",
+                  "Consistent map-wide hours are not shown");
+            auto button = tools->button(MapCanvas::Pencil);
+            check(qAbs(schedule->mapTo(&workspace, QPoint()).y() -
+                       button->mapTo(&workspace, QPoint()).y()) < 10,
+                  "Schedule selector is not beside the tool buttons");
+            npcs[16 + 3] = 3;
+            npcs[16 + 6] = 3;
+            npcs[16 + 12] = 9;
+            project.resources["TOWNE.NPC"].edited = npcs;
+            MapWorkspace mixed(
+                &project, "TOWNE.DAT", &states, &navigation,
+                [](const auto &, const auto &) { return true; }, [](const auto &) {});
+            auto mixedSchedule = mixed.findChild<QComboBox *>("mapSchedule");
+            for (int change = 0; change < 4; ++change)
+                check(mixedSchedule->itemText(change) == QString::number(change + 1),
+                      "Different NPC hours should produce numbered schedule labels");
+            mixed.findChild<QComboBox *>("mapNpcList")->setCurrentIndex(0);
+            mixed.findChild<QComboBox *>("mapNpcList")->setCurrentIndex(1);
+            check(mixedSchedule->itemText(0) == "1",
+                  "Selected NPC must not redefine map-wide schedule labels");
+        });
         test("Verified tile descriptions, category search and document-only exports", [&] {
             check(MapDocument::tileName(5) == "Grass" && MapDocument::tileCategory(5) == "Nature",
                   "Verified grass label/category missing");
             check(MapDocument::tileName(0x4f) == "Wall" &&
                       MapDocument::tileCategory(0x4f) == "Walls and passages",
                   "Verified wall category missing");
-            check(MapDocument::tileName(6) == "Unidentified tile" &&
-                      MapDocument::tileCategory(6) == "Uncategorized",
-                  "Unknown tile acquired a guessed description");
+            check(MapDocument::tileName(6) == "Grass variation" &&
+                      MapDocument::tileCategory(6) == "Nature",
+                  "Grass variation missing from catalog");
+            for (int id = 0; id < 256; ++id)
+                check(MapDocument::tileCategory(id) != "Uncategorized" &&
+                          MapDocument::tileName(id) != "Unidentified tile",
+                      "Tile catalog is incomplete");
             QTemporaryDir dir;
             auto project = fixture(dir.path());
             QByteArray bytes(352, char(0xee));
@@ -1354,6 +1403,17 @@ int main(int argc, char **argv) {
             auto search = window.findChild<QLineEdit *>("mapTileSearch");
             auto category = window.findChild<QComboBox *>("mapPaletteFilter");
             check(palette && search && category, "Tile browser absent");
+            for (int id = 0; id < 256; ++id)
+                check(palette->item(id)->text().isEmpty() &&
+                          !palette->item(id)->toolTip().isEmpty(),
+                      "Palette tiles must be icon-only with descriptive tooltips");
+            auto tools = window.findChild<QButtonGroup *>("mapTools");
+            check(tools && tools->buttons().size() == 7 &&
+                      !window.findChild<QComboBox *>("mapTool"),
+                  "Icon toolbar missing");
+            for (auto button : tools->buttons())
+                check(!button->toolTip().isEmpty() && !button->accessibleName().isEmpty(),
+                      "Tool is missing help or an accessible name");
             search->setText("grass");
             check(!palette->item(5)->isHidden() && palette->item(0x4f)->isHidden(),
                   "Name search failed");
@@ -1463,7 +1523,7 @@ int main(int argc, char **argv) {
                 if (auto candidate = dynamic_cast<MapCanvas *>(widget))
                     canvas = candidate;
             check(canvas != nullptr, "Combat canvas missing");
-            window.findChild<QComboBox *>("mapTool")->setCurrentIndex(MapCanvas::InspectNpc);
+            window.findChild<QButtonGroup *>("mapTools")->button(MapCanvas::InspectNpc)->click();
             auto entry = window.findChild<QComboBox *>("combatEntry");
             auto entity = window.findChild<QComboBox *>("combatEntity");
             check(entry && entity && entity->count() == 30, "Encounter record list missing");
@@ -1516,10 +1576,10 @@ int main(int argc, char **argv) {
             MapDocument exportDocument(&window.projectForTests(), "BRIT.CBT");
             check(exportDocument.terrainImage(0, canvas->tiles, true).constScanLine(5)[4] == 1,
                   "Terrain export leaked displayed trigger preview");
-            window.findChild<QComboBox *>("mapTool")->setCurrentIndex(MapCanvas::Pencil);
+            window.findChild<QButtonGroup *>("mapTools")->button(MapCanvas::Pencil)->click();
             check(U5::byte(canvas->ids, 5 * 11 + 4) == 1,
                   "Trigger preview leaked into terrain tools");
-            window.findChild<QComboBox *>("mapTool")->setCurrentIndex(MapCanvas::InspectNpc);
+            window.findChild<QButtonGroup *>("mapTools")->button(MapCanvas::InspectNpc)->click();
             for (auto action : window.findChildren<QAction *>())
                 if (action->text().startsWith("Undo ")) {
                     action->trigger();
@@ -1532,7 +1592,7 @@ int main(int argc, char **argv) {
             undone[8 * 32 + 19] = 3;
             check(window.projectForTests().data("BRIT.CBT") == undone,
                   "Encounter undo changed unrelated bytes");
-            check(window.findChild<QComboBox *>("mapTool")->currentIndex() ==
+            check(window.findChild<QButtonGroup *>("mapTools")->checkedId() ==
                           MapCanvas::InspectNpc &&
                       window.findChild<QComboBox *>("combatEntity")->currentIndex() == 22 &&
                       window.findChild<QComboBox *>("combatEntry")->currentIndex() == 3,

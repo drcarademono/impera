@@ -335,8 +335,9 @@ lossless-format, editing, undo and package tests continue to pass.
 ### Phase 5 outcome
 
 The terrain browser offers name/number search and Nature, Destinations, Walls and
-passages, Hazards, Objects and Uncategorized filters. Names use the engine's
-explicit `TILE_MAP_*` definitions; unidentified numeric symbols are not guessed.
+passages, Hazards, Objects and Rendering masks filters. All 256 terrain tiles
+are cataloged using the engine definitions and an audit of the original DOS
+artwork, including animation frames, wall sections, and masks.
 These categories describe the authoring palette, not collision or visibility
 rules, and custom graphics may depict tiles differently.
 
@@ -420,3 +421,15 @@ source-change rejection/cleanup, and Linux/macOS launcher isolation. Native
 engine startup isolation is checked independently. The Windows empty-array
 compile failure is fixed with a standard std::array; full MSVC validation remains
 in the cross-platform release workflow.
+
+### Compact map toolbar and palette
+
+Tools are icon buttons with descriptive hover help and accessible names. The NPC
+schedule selector sits beside them. It shows start hours when characters with
+destinations on the current floor share all four timings; otherwise it shows
+changes 1–4. Selecting a character never changes the meaning of these labels.
+The inspector still shows that character’s exact start hour and shared destinations.
+
+Palette cells contain only tile artwork. Hover for the name, category, and ID;
+search still accepts names or numbers. Map navigation, view controls, terrain
+actions, NPC fields, and encounter controls include explanatory tooltips.
