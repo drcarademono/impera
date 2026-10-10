@@ -2,7 +2,7 @@
 import sys
 from pathlib import Path
 
-from PySide6 import QtWidgets, QtCore
+from PySide6 import QtWidgets, QtCore, QtGui
 
 # ---------- Unicode → ASCII map ----------
 
@@ -22,6 +22,8 @@ def normalize_to_ascii(text: str) -> str:
     """
     out = []
     for ch in text:
+        if ch == "\x00":
+            raise ValueError("Story text cannot contain a NUL terminator")
         code = ord(ch)
         if ch in UNICODE_MAP:
             out.append(UNICODE_MAP[ch])
@@ -57,23 +59,18 @@ def load_story_dat(path: Path):
       - Segment 1: [start_of_segment1, start_of_segment2)
       - etc.
 
-    Segment starts are inferred from NUL positions:
-      first start at 0, then each NUL+1 is a potential start.
+    Segment starts are fixed by the DOS intro's D_3016 table. NUL padding
+    does not define new story pages.
     """
     data = path.read_bytes()
     n = len(data)
 
-    # All NUL positions
-    nul_positions = [i for i, b in enumerate(data) if b == 0x00]
-    if not nul_positions:
-        raise ValueError("No NUL bytes found; not a valid Ultima V STORY.DAT?")
-
-    # Segment starts: 0 and each NUL+1 (if in range)
-    starts = [0]
-    for pos in nul_positions:
-        if pos + 1 < n:
-            starts.append(pos + 1)
-    starts = sorted(set(starts))
+    # Fixed offsets from src/vars.c D_3016; intro index 6 is dynamic text.
+    starts = [0x0000,0x0111,0x03cb,0x0590,0x0803,0x0ac4,0x0d6d,
+              0x0e23,0x0fb6,0x1173,0x132a,0x14be,0x162e,0x192b,0x1b9a,
+              0x1e7b,0x2172,0x244b,0x2780,0x2a97]
+    if n <= starts[-1]:
+        raise ValueError("STORY.DAT is too short for the DOS intro offsets")
 
     segments = []
 
@@ -93,9 +90,7 @@ def load_story_dat(path: Path):
             nul_idx = window.index(0x00)
             payload = window[:nul_idx]
         except ValueError:
-            # No NUL in window, treat full window as payload
-            payload = window
-            nul_idx = len(window)
+            raise ValueError(f"Unterminated story text at {start:#x}")
 
         # Decode payload as ASCII
         try:
@@ -172,6 +167,11 @@ class SegmentEditor(QtWidgets.QWidget):
         try:
             text = self.edit.toPlainText()
             # Normalize to ASCII
+            if "\x00" in text:
+                self.edit.blockSignals(True)
+                self.edit.setPlainText(self._last_good_text)
+                self.edit.blockSignals(False)
+                return
             norm = normalize_to_ascii(text)
             used = len(norm.encode("ascii", errors="replace"))
             maxb = self.segment.max_payload
@@ -199,7 +199,7 @@ class SegmentEditor(QtWidgets.QWidget):
                 self.edit.blockSignals(True)
                 self.edit.setPlainText(self._last_good_text)
                 cursor = self.edit.textCursor()
-                cursor.movePosition(cursor.End)
+                cursor.movePosition(QtGui.QTextCursor.MoveOperation.End)
                 self.edit.setTextCursor(cursor)
                 self.edit.blockSignals(False)
                 # label unchanged
@@ -290,6 +290,8 @@ class StoryEditorWindow(QtWidgets.QMainWindow):
 
         for seg in self.segments:
             text = self.segment_texts.get(seg.index, seg.text)
+            if text == seg.text:
+                continue  # Preserve original bytes, including CR/LF and padding.
             norm = normalize_to_ascii(text)
             payload = norm.encode("ascii", errors="replace")
 

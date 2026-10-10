@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
+from u5_formats import lzw_decode, lzw_encode, read_tiles_blob
 import sys, struct, os
 from dataclasses import dataclass
 from pathlib import Path
@@ -153,65 +154,11 @@ class NPCManager:
 
 # --- LZW (tiles.16) ---
 
-class BitStream:
-    def __init__(self, data: bytes, msb_first: bool):
-        self.data = data; self.msb_first = msb_first; self.bitpos = 0
-    def read(self, nbits: int) -> int:
-        acc = 0
-        if self.msb_first:
-            for _ in range(nbits):
-                if self.bitpos // 8 >= len(self.data): raise EOFError
-                byte = self.data[self.bitpos // 8]
-                shift = 7 - (self.bitpos % 8)
-                acc = (acc << 1) | ((byte >> shift) & 1)
-                self.bitpos += 1
-        else:
-            for i in range(nbits):
-                if self.bitpos // 8 >= len(self.data): raise EOFError
-                byte = self.data[self.bitpos // 8]
-                acc |= ((byte >> (self.bitpos % 8)) & 1) << i
-                self.bitpos += 1
-        return acc
-
 def lzw_decompress_tiles16_giflsb(comp: bytes, expected_len: int) -> bytes:
-    min_code_size = 8; clear = 1 << min_code_size; end = clear + 1
-    code_size = min_code_size + 1; next_code = end + 1; max_bits = 12
-    dict_seq = [bytes([i]) for i in range(clear)] + [b"", b""]
-    bs = BitStream(comp, msb_first=False)
-    out = bytearray(); prev = None
-    def reset():
-        nonlocal code_size, next_code, dict_seq, prev
-        code_size = min_code_size + 1; next_code = end + 1
-        dict_seq = [bytes([i]) for i in range(clear)] + [b"", b""]
-        prev = None
-    try:
-        while True:
-            code = bs.read(code_size)
-            if code == clear: reset(); continue
-            if code == end: break
-            if code < len(dict_seq) and dict_seq[code] != b"": entry = dict_seq[code]
-            elif prev is not None and code == next_code: entry = prev + prev[:1]
-            else: break
-            out.extend(entry)
-            if expected_len and len(out) >= expected_len:
-                out = out[:expected_len]; break
-            if prev is not None and next_code < (1 << max_bits):
-                dict_seq.append(prev + entry[:1]); next_code += 1
-                if next_code == (1 << code_size) and code_size < max_bits: code_size += 1
-            prev = entry
-    except EOFError:
-        pass
-    if len(out) != expected_len:
-        raise ValueError(f"LZW decode produced {len(out)} bytes; expected {expected_len}")
-    return bytes(out)
+    return lzw_decode(comp, expected_len)
 
 def read_tiles16(path: Path) -> List[QtGui.QPixmap]:
-    raw = path.read_bytes()
-    if len(raw) >= 4:
-        exp = struct.unpack('<I', raw[:4])[0]
-        blob = lzw_decompress_tiles16_giflsb(raw[4:], exp) if 0 < exp <= 8_388_608 else raw
-    else:
-        blob = raw
+    blob = read_tiles_blob(path)
     if len(blob) != 512 * 16 * 8:
         raise ValueError(f"tiles.16 decompressed size mismatch: got {len(blob)}, expected 65536")
     palette = [
@@ -318,31 +265,46 @@ class U5World:
     def tile_at(self, x: int, y: int) -> int:
         return self.world[y*WORLD_SIDE + x]
     def save_brit_dat(self, out_path: Optional[Path] = None):
-        used = [v for v in self.chunk_map if v != 0xFF]
-        if not used: raise ValueError("No non-water chunks found in mapping.")
-        max_idx = max(used)
-        idx_to_chunk_xy: List[Tuple[int,int]] = [(-1,-1)] * (max_idx+1)
-        for cy in range(WORLD_CHUNKS):
-            for cx in range(WORLD_CHUNKS):
-                v = self.chunk_map[cy*WORLD_CHUNKS + cx]
-                if v != 0xFF and v <= max_idx: idx_to_chunk_xy[v] = (cx, cy)
-        out = bytearray()
-        for m in range(max_idx+1):
-            cx, cy = idx_to_chunk_xy[m]
-            if cx < 0:
-                chunk_bytes = bytes([WATER_TILE_ID] * (CHUNK_SIDE*CHUNK_SIDE))
+        # Rebuild the compact chunks AND their DATA.OVL index. This handles edits
+        # to implicit-water chunks and splits shared chunks instead of losing edits.
+        chunks = list(self.compact_chunks)
+        mapping = list(self.chunk_map)
+        changed = []
+        water = bytes([WATER_TILE_ID])*256
+        for i, old_index in enumerate(mapping):
+            cx, cy = i % WORLD_CHUNKS, i // WORLD_CHUNKS
+            block = bytes(value for y in range(cy*16, cy*16+16)
+                          for value in self.world[y*WORLD_SIDE+cx*16:y*WORLD_SIDE+cx*16+16])
+            original = water if old_index == 255 else chunks[old_index]
+            if block != original:
+                changed.append((i, block))
+                mapping[i] = 255  # release old references before allocating
+        for i, block in changed:
+            if block == water:
+                continue
+            if block in chunks:
+                mapping[i] = chunks.index(block)
             else:
-                base_x = cx * CHUNK_SIDE; base_y = cy * CHUNK_SIDE
-                chunk = bytearray(256); k = 0
-                for ty in range(CHUNK_SIDE):
-                    row_off = (base_y + ty) * WORLD_SIDE + base_x
-                    for tx in range(CHUNK_SIDE):
-                        chunk[k] = self.world[row_off + tx]; k += 1
-                chunk_bytes = bytes(chunk)
-            out += chunk_bytes
-        target = out_path or self.brit_dat
-        Path(target).write_bytes(out)
+                free = next((j for j in range(len(chunks)) if j not in mapping), None)
+                if free is None:
+                    if len(chunks) >= 255:
+                        raise ValueError("BRIT.DAT cannot contain more than 255 distinct non-water chunks")
+                    free = len(chunks)
+                    chunks.append(block)
+                else:
+                    chunks[free] = block
+                mapping[i] = free
+        target = Path(out_path or self.brit_dat)
+        data_target = self.data_ovl if target == self.brit_dat else target.with_name(self.data_ovl.name)
+        overlay = bytearray(self.data_ovl.read_bytes())
+        overlay[0x3886:0x3886+256] = bytes(mapping)
+        # Prepare both files first and roll back if either replacement fails.
+        from u5_formats import write_map_pair
+        write_map_pair(target, b"".join(chunks), data_target, bytes(overlay))
+        if target == self.brit_dat:
+            self.compact_chunks, self.chunk_map = chunks, mapping
         return target
+
 
 class BritBackend(MapBackend):
     def __init__(self, data_ovl: Path, brit_path: Path, tiles16: Path):
@@ -376,8 +338,10 @@ class BritBackend(MapBackend):
 class UnderBackend(MapBackend):
     def __init__(self, under_path: Path, tiles16: Path):
         self.path = under_path
+        self.tiles16_path = tiles16
         self.tiles = read_tiles16(tiles16)
         chunks = read_brit_like_chunks(under_path)
+        self._tail = b"".join(chunks[256:])
         if len(chunks) < WORLD_CHUNKS * WORLD_CHUNKS:
             raise ValueError("UNDER.DAT does not contain 256 chunks")
         self.world = [0] * (WORLD_SIDE * WORLD_SIDE)
@@ -425,7 +389,7 @@ class UnderBackend(MapBackend):
                         chunk[k] = self.world[row_off + tx]; k += 1
                 out += chunk
         target = out_path or self.path
-        Path(target).write_bytes(out)
+        Path(target).write_bytes(out + self._tail)
         return target
 
 # ---- CBT Backend with structured accessors ----
@@ -433,9 +397,10 @@ class UnderBackend(MapBackend):
 class CBTBackend(MapBackend):
     def __init__(self, path: Path, tiles16: Path):
         self.path = path
+        self.tiles16_path = tiles16
         self.tiles = read_tiles16(tiles16)
         blob = path.read_bytes()
-        if len(blob) % CBT_MAP_SIZE != 0:
+        if not blob or len(blob) % CBT_MAP_SIZE != 0:
             raise ValueError(f"{path.name} size is not a multiple of {CBT_MAP_SIZE} bytes")
         self._blob = bytearray(blob)
         self._map_count = len(self._blob) // CBT_MAP_SIZE
@@ -563,6 +528,7 @@ class CBTBackend(MapBackend):
 class SettlementBackend(MapBackend):
     def __init__(self, path: Path, tiles16: Path):
         self.path = path
+        self.tiles16_path = tiles16
         self.tiles = read_tiles16(tiles16)
         self.basename = path.name.upper()
         if self.basename not in SETTLEMENT_LAYOUT:
@@ -574,7 +540,6 @@ class SettlementBackend(MapBackend):
         expected = levels_total * bytes_per_level
         if len(blob) < expected:
             raise ValueError(f"{self.basename} size mismatch: got {len(blob)} bytes, expected {expected}")
-        blob = blob[:expected]
         self._blob = bytearray(blob)
         self.offsets: List[List[int]] = []
         off = 0
@@ -585,12 +550,18 @@ class SettlementBackend(MapBackend):
             self.offsets.append(levels)
         self._cur_map = 0
         self._cur_level = 0
+        self._first_floors = {"CASTLE.DAT": [-1,-1,0,0,0,0,0,0],
+                              "TOWNE.DAT": [0,0,0,-1,0,0,0,0],
+                              "DWELLING.DAT": [0]*8,
+                              "KEEP.DAT": [0,0,0,0,0,0,0,-1]}[self.basename]
         self._level_views: List[List[memoryview]] = []
         mv = memoryview(self._blob)
         for levels in self.offsets:
             row = [mv[o:o+bytes_per_level] for o in levels]
             self._level_views.append(row)
-        npc_path = path.with_suffix(".NPC")
+        npc_path = next((p for p in path.parent.iterdir()
+                         if p.name.lower() == path.with_suffix(".NPC").name.lower()),
+                        path.with_suffix(".NPC"))
         self.npc_mgr: Optional[NPCManager] = NPCManager(npc_path) if npc_path.exists() else None
 
     @property
@@ -605,7 +576,9 @@ class SettlementBackend(MapBackend):
     def map_names(self) -> List[str]: return [name for name, _ in self.layout]
     @property
     def level_names(self) -> List[str]:
-        return [f"Level {i}" for i in range(len(self.offsets[self._cur_map]))]
+        return ["Basement" if i == -1 else f"Floor {i}"
+                for i in range(self._first_floors[self._cur_map],
+                               self._first_floors[self._cur_map]+len(self.offsets[self._cur_map]))]
     @property
     def current_map_index(self) -> int: return self._cur_map
     @property
@@ -779,16 +752,18 @@ class _PairsEditor(QtWidgets.QWidget):
         grid = QtWidgets.QGridLayout(self); grid.setContentsMargins(0,0,0,0); grid.setHorizontalSpacing(6); grid.setVerticalSpacing(4)
         self.sp_x: List[QtWidgets.QSpinBox] = []; self.sp_y: List[QtWidgets.QSpinBox] = []
         for i in range(count):
-            sx = QtWidgets.QSpinBox(); sx.setRange(0, 10); sx.setFixedWidth(60)
-            sy = QtWidgets.QSpinBox(); sy.setRange(0, 10); sy.setFixedWidth(60)
+            sx = QtWidgets.QSpinBox(); sx.setRange(0, 255); sx.setFixedWidth(60)
+            sy = QtWidgets.QSpinBox(); sy.setRange(0, 255); sy.setFixedWidth(60)
+            sx.setToolTip("Tile coordinates are 0–10; other raw byte values are preserved")
+            sy.setToolTip("Tile coordinates are 0–10; other raw byte values are preserved")
             sx.valueChanged.connect(self._emit); sy.valueChanged.connect(self._emit)
             self.sp_x.append(sx); self.sp_y.append(sy)
             r = i // columns; c = i % columns
-            grid.addWidget(QtWidgets.QLabel(f"{i:02d}"), r*3, c)
-            grid.addWidget(QtWidgets.QLabel("X"), r*3+1, c)
-            grid.addWidget(sx, r*3+2, c)
-            grid.addWidget(QtWidgets.QLabel("Y"), r*3+3, c)
-            grid.addWidget(sy, r*3+4, c)
+            grid.addWidget(QtWidgets.QLabel(f"{i:02d}"), r*5, c)
+            grid.addWidget(QtWidgets.QLabel("X"), r*5+1, c)
+            grid.addWidget(sx, r*5+2, c)
+            grid.addWidget(QtWidgets.QLabel("Y"), r*5+3, c)
+            grid.addWidget(sy, r*5+4, c)
     def set_pairs(self, xs: List[int], ys: List[int]):
         xs = (xs + [0]*self.count)[:self.count]; ys = (ys + [0]*self.count)[:self.count]
         for i in range(self.count):
@@ -1050,7 +1025,7 @@ class MapCanvas(QtWidgets.QGraphicsView):
         npc_mgr = self.settlement_npc_mgr()
         if not npc_mgr or not isinstance(self.backend, SettlementBackend): return
         pm = self.map_pixmap.copy(); p = QtGui.QPainter(pm)
-        map_idx = self.backend.current_map_index; lvl_idx = self.backend.current_level_index
+        map_idx = self.backend.current_map_index; lvl_idx = self.backend.current_level_index + self.backend._first_floors[map_idx]
         info = npc_mgr.infos[map_idx]; li = tslot_to_loc_index(self.tslot)
         def is_empty_slot(nidx: int) -> bool:
             sch = info.schedules[nidx]; t_byte = info.types[nidx] & 0xFF; d_byte = info.dialogs[nidx] & 0xFF
@@ -1338,7 +1313,8 @@ class MainWindow(QtWidgets.QMainWindow):
         if not fname: return
         path = Path(fname)
         try:
-            tiles16_path = Path(TILES16_NAME)
+            tiles16_path = (self.backend.world.tiles16_path if isinstance(self.backend, BritBackend)
+                            else self.backend.tiles16_path)
             backend = self._make_backend_for_path(path, tiles16_path)
         except Exception as e:
             QtWidgets.QMessageBox.critical(self, "Open failed", str(e)); return
@@ -1356,8 +1332,15 @@ class MainWindow(QtWidgets.QMainWindow):
         self.statusBar().showMessage(f"Opened: {path}", 4000)
 
     def _make_backend_for_path(self, path: Path, tiles16: Path) -> MapBackend:
+        def sibling(name):
+            return next((p for p in path.parent.iterdir() if p.name.lower() == name.lower()), path.with_name(name))
+        if not tiles16.exists():
+            tiles16 = sibling(TILES16_NAME)
         name = path.name.upper()
         if name == "BRIT.DAT":
+            candidate = sibling(DATA_OVL_NAME)
+            if candidate.exists():
+                self.data_ovl = candidate
             if not self.data_ovl or not self.data_ovl.exists():
                 candidate = path.with_name(DATA_OVL_NAME)
                 if candidate.exists(): self.data_ovl = candidate

@@ -10,6 +10,8 @@
 # - Byte-perfect round-trip; editor view uses token-aware pretty decode from bytes.
 
 from __future__ import annotations
+from pathlib import Path
+from u5_formats import tlk_header, tlk_segments, build_tlk, TAIL
 import sys, struct, re
 from typing import List, Tuple, Optional, Dict
 from PyQt6 import QtWidgets, QtGui, QtCore
@@ -17,33 +19,21 @@ from PyQt6 import QtWidgets, QtGui, QtCore
 # -------------------------
 # Compat token tables (includes "may" fix)
 # -------------------------
-TOKEN_GROUPS = [
-    (1,  ["the","thou","of","to","and","that","for"]),
-    (9,  ["in","is","have","with","you","this","not","my","it","me","but","dost","know","be","was",
-          "Blackthorn","from","thy","one"]),
-    (29, ["are","here","many","Lord","am","we","they","he","would","art","on","young","what","see",
-          "like","only","by","there","Blackthorn's","good","been"]),
-    (51, ["must","his","British","fine","an","great","thee","our","who","name","heard","as","at","has"]),
-    (66, ["through"]),
-    (68, ["once","can"]),
-    (71, ["him"]),
-    (76, ["ye","Shadowlords","tell","some","believe","all","their","upon","even","'tis","find","if","about",
-          "don't","before","those","just","make","will","when","three","Great","might","those","old","hast",
-          "ask","unto","wish","man","so","knows","still","Mantra","out","help","well","shall","think","where",
-          "named","talking","more","such","very","may","lives","canst","which","since","need","I've","work",
-          "<insert Avatar's name here>"]),
-]
-
-TAIL = b"\x90\x9F\xC0"
-
-WORDMAP: Dict[str,int] = {}
-TOKEN_BY_CODE: Dict[int,str] = {}
-for base, lst in TOKEN_GROUPS:
-    for i, w in enumerate(lst):
-        code = base + i
-        WORDMAP[w.lower()] = code
-        TOKEN_BY_CODE[code] = w
-WORDMAP["<avatar>"] = 129  # convenience
+# Token IDs are one-based indexes into src/vars.c D_24ea.
+TOKEN_WORDS = ['the', 'thou', 'of', 'to', 'and', 'that', 'for', None, 'in', 'is', 'have', 'with', 'thee', 'this',
+ 'not', 'my', 'it', 'me', 'but', 'dost', 'know', 'be', 'was', 'Blackthorn', 'from', 'thy', 'one',
+ None, 'are', 'here', 'many', 'Lord', 'am', 'we', 'they', 'he', 'would', 'art', 'on', 'young',
+ 'what', 'see', 'like', 'only', 'by', 'there', "Blackthorn's", 'good', 'been', None, 'must', 'his',
+ 'British', 'fine', 'an', 'great', 'thee,', 'our', 'who', 'name', 'heard', 'as', 'at', 'has', None,
+ 'through', None, 'once', 'can', None, 'him', None, None, None, None, 'ye', 'Shadowlords', 'tell',
+ 'some', 'believe', 'all', 'their', 'upon', 'even', "'tis", 'find', 'if', 'about', "don't",
+ 'before', 'these', 'just', 'make', 'will', 'when', 'three', 'Great', 'might', 'those', 'old',
+ 'hast', 'ask', 'unto', 'wish', 'man', 'so', 'knows', 'still', 'Mantra', 'out', 'help', 'well',
+ 'shall', 'think', 'where', 'named', 'talking', 'more', 'such', 'very', 'may', 'lives', 'canst',
+ 'which', 'since', 'need', "I've", 'work']
+TOKEN_BY_CODE = {i+1: w for i, w in enumerate(TOKEN_WORDS) if w is not None}
+WORDMAP = {w.lower(): code for code, w in TOKEN_BY_CODE.items()}
+WORDMAP["<avatar>"] = 129
 
 CTRL_TO_BYTE = {
     "<End Conversation>": 130,
@@ -91,7 +81,7 @@ def try_emit_token_word(s: str, pos: int, out: bytearray) -> int:
         return pos + L
     return -1
 
-TAG_RE_LABEL = re.compile(r'^<\s*(?:goto\s+)?label\s+([1-9]|10)\s*>$', re.I)
+TAG_RE_LABEL = re.compile(r'^<\s*(?:goto\s+)?label\s+([1-9]|1[0-5])\s*>$', re.I)
 TAG_RE_GOLD  = re.compile(r'^<\s*gold\s*-\s*([0-9]{3})\s*>$', re.I)
 TAG_RE_ITEM  = re.compile(r'^<\s*item\s*:\s*([0-9]{1,3})\s*>$', re.I)
 TAG_RE_WORD  = re.compile(r'^<\s*word\s*:\s*([0-9]{1,3})\s*>$', re.I)
@@ -105,6 +95,11 @@ def try_emit_tag(s: str, pos: int, out: bytearray) -> int:
         return -1
     tag = s[pos:end+1]
     low = tag.lower()
+    token = next((code for code, word in TOKEN_BY_CODE.items()
+                  if tag[1:-1] == word), None)
+    if token is not None:
+        out.append(token)
+        return end + 1
 
     for k, b in CTRL_TO_BYTE.items():
         if low == k.lower():
@@ -129,58 +124,27 @@ def try_emit_tag(s: str, pos: int, out: bytearray) -> int:
         return end + 1
     m = TAG_RE_ITEM.match(tag)
     if m:
-        out.append(int(m.group(1)) & 0xFF)
+        value = int(m.group(1))
+        if not 1 <= value <= 255:
+            raise ValueError("Dialogue byte must be 1..255; NUL separates entries")
+        out.append(value)
         return end + 1
 
     for rx in (TAG_RE_WORD, TAG_RE_UNK):
         m = rx.match(tag)
         if m:
-            out.append(int(m.group(1)) & 0xFF)
+            value = int(m.group(1))
+            if not 1 <= value <= 255:
+                raise ValueError("Dialogue byte must be 1..255; NUL separates entries")
+            out.append(value)
             return end + 1
 
     return -1
 
 def encode_entry(text: str) -> bytes:
-    # SPECIAL CASE: label header entries must encode as 0x90 <Any> first, then the label byte (145..155)
-    m = re.match(r'^\s*<\s*(?:goto\s+)?label\s+([1-9]|10)\s*>\s*(.*)$', text, flags=re.I | re.S)
-    if m and m.group(2).strip() != "":
-        n = int(m.group(1))
-        body = m.group(2)
-
-        out = bytearray()
-        # vanilla order: <Any> (0x90) first, then the label/goto byte (145..155)
-        out.append(144)
-        out.append(144 + n)
-
-        # encode the body, but skip any <Any> tags the user may have typed
-        i = 0
-        while i < len(body):
-            c = body[i]
-            if c == '<':
-                end = body.find('>', i)
-                if end != -1:
-                    tag = body[i:end+1]
-                    if tag.strip().lower() == "<any>":
-                        i = end + 1
-                        continue
-                    nxt = try_emit_tag(body, i, out)
-                    if nxt != -1:
-                        i = nxt
-                        continue
-            nxt = try_emit_token_word(body, i, out)
-            if nxt != -1:
-                i = nxt
-                continue
-            uc = ord(c)
-            if 32 <= uc <= 126:
-                out.append((uc + 128) & 0xFF)
-            i += 1
-
-        out.append(0)
-        return bytes(out)
-
-    # ---- default path (unchanged) ----
-    out = bytearray()
+    # New label definitions need the Any+label marker used by TALK_0c5c.
+    definition = re.match(r"^<Label ([1-9]|1[0-5])>(.+)$", text, re.S)
+    out = bytearray([144]) if definition else bytearray()
     i = 0
     while i < len(text):
         c = text[i]
@@ -189,322 +153,121 @@ def encode_entry(text: str) -> bytes:
             if nxt != -1:
                 i = nxt
                 continue
-        nxt = try_emit_token_word(text, i, out)
-        if nxt != -1:
-            i = nxt
-            continue
         uc = ord(c)
-        if 32 <= uc <= 126:
-            out.append((uc + 128) & 0xFF)
+        if c == '\n':
+            out.append(141)
+        elif 32 <= uc <= 126:
+            out.append(uc + 128)
+        else:
+            raise ValueError('Dialogue supports ASCII text and explicit control tags')
         i += 1
+    validate_entry(bytes(out))
     out.append(0)
     return bytes(out)
 
-def process_byte_decode(c: int, was_phrase: List[bool], defaultanswer: List[bool]) -> str | None:
-    if c in (159, 255, 162):
-        return ""
-    if 160 <= c < 255:
-        ch = chr(c - 128)
-        if ch == '@':
-            return '\n'
-        was_phrase[0] = False
-        return ch
-    if c < 129:
-        # return token word without spaces (round-trip safety)
-        w = TOKEN_BY_CODE.get(c)
-        if w is not None:
-            was_phrase[0] = True
-            return w
-        was_phrase[0] = True
-        return f"<WORD:{c}>"
-    if c == 129:
-        return "<Avatar>"
-    if c == 144:
-        defaultanswer[0] = True
-        return ""
-    ctrl = {
-        130: "<End Conversation>", 131: "<Pause>", 132: "<Join Party>",
-        133: "<Gold - ", 134: "<Change>", 135: "<Or>", 136: "<Ask Name>",
-        137: "<Karma + 1>", 138: "<Karma - 1>", 139: "<Call Guards>",
-        140: "<Set Flag>", 141: "<New Line>", 142: "<Rune>", 143: "<Key Wait>",
-    }.get(c)
-    if ctrl is not None:
-        was_phrase[0] = False
-        return ctrl
-    return f"<Unknown: {c}>"
+def validate_entry(data: bytes):
+    i = 0
+    while i < len(data):
+        length = {133:3, 134:1, 140:1, 254:2}.get(data[i], 0)
+        if i+length >= len(data) or 0 in data[i:i+length+1]:
+            raise ValueError("Truncated dialogue opcode or embedded NUL")
+        i += 1+length
 
 def count_label_occurrences(entries: List[bytes]) -> Dict[int,int]:
-    counts: Dict[int,int] = {}
-    for e in entries:
-        for b in e:
-            if 145 <= b <= 155:
-                n = b - 144
-                counts[n] = counts.get(n, 0) + 1
+    counts = {}
+    for entry in entries:
+        i = 0
+        while i < len(entry):
+            code = entry[i]
+            if 145 <= code <= 159:
+                counts[code-144] = counts.get(code-144, 0)+1
+            i += 1 + {133: 3, 134: 1, 140: 1, 254: 2}.get(code, 0)
     return counts
 
 def decode_entry(data: bytes, label_remaining: Dict[int,int]) -> str:
-    out: List[str] = []
-    was_phrase = [False]
-    defaultanswer = [False]
-    i = 0
-    writegold = 5
+    out, i = [], 0
+    controls = {value: tag for tag, value in CTRL_TO_BYTE.items()}
     while i < len(data):
-        c = data[i]
-        if c == 0:
+        code = data[i]
+        if code == 0:
             break
-        if 145 <= c <= 155:
-            n = c - 144
-            rem = label_remaining.get(n, 0)
-            if rem > 0:
-                rem -= 1
-                label_remaining[n] = rem
-                tag = f"<Label {n}>" if rem == 0 else f"<Goto Label {n}>"
+        if code in (133, 134, 140, 254):
+            length = {133:3, 134:1, 140:1, 254:2}[code]
+            operands = data[i+1:i+1+length]
+            if len(operands) != length or 0 in operands:
+                raise ValueError("Truncated dialogue opcode operands")
+            if code == 133 and all(176 <= b <= 185 for b in operands):
+                out.append("<Gold - " + ''.join(chr(b-128) for b in operands) + ">")
             else:
-                tag = f"<Label {n}>"
-            out.append(tag); was_phrase[0] = False; i += 1; continue
-        s = process_byte_decode(c, was_phrase, defaultanswer)
-        if s is None:
-            i += 1; continue
-        out.append(s)
-        if s == "<Gold - ":
-            writegold = 0
+                out.append({134:"<Change>",140:"<Set Flag>"}.get(code, f"<Unknown: {code}>"))
+                out.extend(f"<Item: {b}>" if code == 134 else f"<Unknown: {b}>" for b in operands)
+            i += 1+length
+            continue
+        if 145 <= code <= 159:
+            n = code-144
+            remaining = max(0, label_remaining.get(n, 0)-1)
+            label_remaining[n] = remaining
+            out.append(f"<Label {n}>" if i > 0 and data[i-1] == 144 else f"<Goto Label {n}>")
+        elif code in controls:
+            out.append(controls[code])
+        elif code < 129:
+            # Explicit IDs avoid merging adjacent compressed words on re-encode.
+            word = TOKEN_BY_CODE.get(code)
+            out.append(f"<{word}>" if word else f"<Unknown: {code}>")
+        elif 160 <= code <= 253:
+            out.append(chr(code-128))
         else:
-            if writegold < 4:
-                writegold += 1
-                if writegold == 4:
-                    out.append('>')
-                    writegold += 1
-        if s == "<Change>" and i + 1 < len(data):
-            i += 1
-            out.append(f"<Item: {data[i]}>")
+            out.append(f"<Unknown: {code}>")
         i += 1
-    if defaultanswer[0]:
-        out.append("\n<Any>")
-    return "".join(out)
-
-# ---------- Token-aware PRETTY decoder (editor view only) ----------
+    return ''.join(out)
 
 def pretty_decode_bytes(data: bytes, force_label: bool = False) -> str:
-    """Decode bytes like the compat tool, but add human spaces around token words
-       and strip space before punctuation. Never splits inside ASCII words.
-       Additionally, defer the <Any> marker (0x90) to the end of the entry,
-       matching decode_entry()'s normalized form."""
-    out: List[str] = []
-    last = ''  # last emitted character (for simple look-behind)
-    after_token = False
-    default_any = False  # seen 0x90 in this entry
-
-    def emit(s: str):
-        nonlocal last
-        if not s:
-            return
-        out.append(s)
-        last = s[-1]
-
-    def maybe_space_before_next_wordlike():
-        nonlocal last
-        if last and not last.isspace() and last not in "('":
-            emit(' ')
-
-    i = 0
-    writegold = 5
-    while i < len(data):
-        c = data[i]
-        if c == 0:
-            break
-
-        # labels -> textual tag (no extra spacing)
-        if 145 <= c <= 155:
-            n = c - 144
-            tag = f"<Label {n}>" if force_label else f"<Goto Label {n}>"
-            emit(tag)
-            after_token = False
-            i += 1
-            continue
-
-        # compressed word?
-        if c < 129 and c in TOKEN_BY_CODE:
-            w = TOKEN_BY_CODE[c]
-            # leading space if needed
-            if out and not out[-1].endswith((' ', '\t', '\n')) and last not in "('":
-                emit(' ')
-            emit(w)
-            after_token = True
-            i += 1
-            continue
-
-        # swallow odd
-        if c in (159, 255, 162):
-            i += 1
-            continue
-
-        # controls & mapped ASCII
-        if 160 <= c < 255:
-            ch = chr(c - 128)
-            if ch == '@':
-                emit('\n'); after_token = False; i += 1; continue
-            # punctuation: strip preceding space
-            if ch in ".,;:!?')":
-                if out and out[-1].endswith(' '):
-                    out[-1] = out[-1][:-1]
-                emit(ch)
-                after_token = False
-            else:
-                if after_token and ch not in " )]\t\r\n":
-                    maybe_space_before_next_wordlike()
-                emit(ch)
-                after_token = False
-            i += 1
-            continue
-
-        # specials mapped to tags
-        if c == 129:
-            if out and not out[-1].endswith((' ', '\t', '\n')) and last not in "('":
-                emit(' ')
-            emit("<Avatar>")
-            after_token = True
-            i += 1
-            continue
-        if c == 144:
-            # Defer <Any> to the end, don't emit inline
-            default_any = True
-            after_token = False
-            i += 1
-            continue
-
-        ctrl = {
-            130: "<End Conversation>",
-            131: "<Pause>",
-            132: "<Join Party>",
-            133: "<Gold - ",
-            134: "<Change>",
-            135: "<Or>",
-            136: "<Ask Name>",
-            137: "<Karma + 1>",
-            138: "<Karma - 1>",
-            139: "<Call Guards>",
-            140: "<Set Flag>",
-            141: "<New Line>",
-            142: "<Rune>",
-            143: "<Key Wait>",
-        }.get(c)
-        if ctrl is not None:
-            if out and out[-1].endswith(' ') and not ctrl.startswith("<New Line>"):
-                out[-1] = out[-1][:-1]
-            emit(ctrl)
-            if ctrl == "<Gold - ":
-                writegold = 0
-            else:
-                if writegold < 4:
-                    writegold += 1
-                    if writegold == 4:
-                        emit('>')
-                        writegold += 1
-            after_token = False
-            i += 1
-            if ctrl == "<Change>" and i < len(data):
-                emit(f"<Item: {data[i]}>")
-                i += 1
-            continue
-
-        emit(f"<Unknown: {c}>")
-        after_token = False
-        i += 1
-
-    pretty = "".join(out)
-    if default_any:
-        # Append trailing <Any> if not already present at the end
-        if not re.search(r'(?:\s*\n)?\s*<\s*Any\s*>\s*$', pretty, flags=re.I):
-            if pretty and not pretty.endswith('\n'):
-                pretty += '\n'
-            pretty += "<Any>"
-    return pretty
-
-# -------------------------
-# TLK I/O
-# -------------------------
+    # Keep token boundaries explicit so typing elsewhere cannot change opcode bytes.
+    # The conversation tree expands word tags for readability.
+    remaining = count_label_occurrences([data])
+    if not force_label:
+        remaining = {n: count+1 for n, count in remaining.items()}
+    return decode_entry(data, remaining)
 
 def read_tlk(path: str) -> Tuple[List[Tuple[int,int]], bytes]:
-    with open(path, 'rb') as f:
-        d = f.read()
-    if len(d) < 2:
-        raise ValueError("TLK too small")
-    count = struct.unpack_from('<H', d, 0)[0]
-    need = 2 + count * 4
-    if len(d) < need:
-        raise ValueError("TLK header truncated")
-    headers: List[Tuple[int,int]] = []
-    p = 2
-    for _ in range(count):
-        npc_id, off = struct.unpack_from('<HH', d, p)
-        p += 4
-        headers.append((npc_id, off))
-    return headers, d
+    blob = Path(path).read_bytes()
+    return tlk_header(blob), blob
 
 def extract_npc_entries(headers, blob: bytes) -> List[Tuple[int, List[bytes]]]:
-    entries_all = []
-    for i, (npc_id, off) in enumerate(headers):
-        start = off
-        end = headers[i+1][1] if i+1 < len(headers) else len(blob)
-        segment = bytearray(blob[start:end])
+    result = []
+    for (npc, _), segment in zip(headers, tlk_segments(headers, blob)):
+        # A terminator followed by the final Any/label/@ tail is not an entry.
+        trimmed = segment.rstrip(b"\x00")
+        if trimmed.endswith(TAIL):
+            segment = trimmed[:-len(TAIL)]
+        parts = segment.split(b"\x00")
+        if parts[-1] == b"":
+            parts.pop()
+        result.append((npc, parts))
+    return result
 
-        # Remove trailing 0x90 0x9F 0xC0 if present
-        if len(segment) >= 3 and segment[-3:] == b"\x90\x9F\xC0":
-            segment = segment[:-3]
-
-        one, cur = [], bytearray()
-        for b in segment:
-            if b == 0:
-                one.append(bytes(cur)); cur.clear()
-            else:
-                cur.append(b)
-        entries_all.append((npc_id, one))
-    return entries_all
-
-def write_tlk(path: str, npc_entries: List[Tuple[int, List[bytes]]]) -> None:
-    # Vanilla tail required after each NPC segment
-    TAIL = b"\x90\x9F\xC0"
-
-    count = len(npc_entries)
-    header_size = 2 + count * 4
-
-    # First pass: compute per-segment lengths (entries + 0x00 separators + tail)
-    offsets: List[Tuple[int, int]] = []
-    cur_off = header_size
-    for npc_id, items in npc_entries:
-        seglen = 0
-        for ent in items:
-            seglen += len(ent) + 1  # +1 for the 0x00 terminator after each entry
-        seglen += len(TAIL)        # +3 for the tail
-        offsets.append((npc_id, cur_off))
-        cur_off += seglen
-
-    # Build header
-    out = bytearray()
-    out += struct.pack('<H', count)
-    for npc_id, off in offsets:
-        out += struct.pack('<HH', npc_id, off)
-
-    # Emit segments
-    for npc_id, items in npc_entries:
-        for ent in items:
-            out += ent
-            out.append(0)          # 0x00 between entries (and after the last entry)
-        out += TAIL                # append required tail
-
-    with open(path, 'wb') as f:
-        f.write(out)
-
-# -------------------------
-# Conversation structure parser (for the tree)
-# -------------------------
+def write_tlk(path: str, npc_entries: List[Tuple[int, List[bytes]]], original_npcs=None, original_blob=None) -> None:
+    segments = []
+    originals = tlk_segments(tlk_header(original_blob), original_blob) if original_blob is not None else []
+    for index, (_, entries) in enumerate(npc_entries):
+        if any(b"\x00" in entry for entry in entries):
+            raise ValueError("Embedded NUL in a dialogue entry")
+        segment = (originals[index] if original_npcs is not None and
+                   npc_entries[index] == original_npcs[index] else
+                   b"".join(entry+b"\x00" for entry in entries)+TAIL)
+        if len(segment) > 1024:
+            raise ValueError("An NPC conversation exceeds the engine's 1024-byte read buffer")
+        segments.append(segment)
+    if len(npc_entries) > 127:
+        raise ValueError("TLK header exceeds the engine's 512-byte buffer")
+    Path(path).write_bytes(build_tlk([(npc,0) for npc,_ in npc_entries], segments))
 
 FIRST5 = ["Name", "Description", "Greeting", "Job", "Bye"]
 
 def is_label_start(txt: str) -> Optional[int]:
     # Consider both <Label N> and <Goto Label N> as a "label header" IFF
     # there is body text after the tag. Pure "<Goto Label N>" lines are jumps.
-    m = re.match(r'^\s*<\s*(?:goto\s+)?label\s+([1-9]|10)\s*>\s*(.*)$',
+    m = re.match(r'^\s*(?:<Any>\s*)?<\s*(?:goto\s+)?label\s+([1-9]|1[0-5])\s*>\s*(.*)$',
                  txt, flags=re.I | re.S)
     if not m:
         return None
@@ -512,7 +275,7 @@ def is_label_start(txt: str) -> Optional[int]:
     return int(m.group(1)) if body.strip() != "" else None
 
 def is_goto_label(txt: str) -> Optional[int]:
-    m = re.search(r'<\s*goto\s+label\s+([1-9]|10)\s*>', txt, flags=re.I)
+    m = re.search(r'<\s*goto\s+label\s+([1-9]|1[0-5])\s*>', txt, flags=re.I)
     if m: return int(m.group(1))
     return None
 
@@ -521,6 +284,8 @@ def is_or(txt: str) -> bool:
 
 def looks_like_keyword(txt: str) -> bool:
     s = txt.strip()
+    for code, word in TOKEN_BY_CODE.items():
+        s = s.replace(f"<{word}>", word)
     if not s or '<' in s or '\n' in s or ' ' in s:
         return False
     return all(c.isalnum() or c=="'" for c in s) and len(s) <= 12
@@ -533,6 +298,9 @@ def is_trigger_in_label(txt: str) -> bool:
 
 ANY_TAIL_RE = re.compile(r'(?:\s*\n)?\s*<\s*Any\s*>\s*$', re.I)
 def split_any_marker(txt: str) -> tuple[str, bool]:
+    prefix = re.match(r"^\s*<Any>", txt, re.I)
+    if prefix:
+        return txt[prefix.end():].lstrip(), True
     m = ANY_TAIL_RE.search(txt)
     if not m:
         return txt, False
@@ -564,29 +332,28 @@ class TLKModel(QtCore.QObject):
         self.rendered: List[List[str]] = []             # baseline decoded strings for identity checks
 
     def load(self, path: str):
-        self.path = path
         headers, blob = read_tlk(path)
-        self.headers = headers
-        self.npcs = extract_npc_entries(headers, blob)
-        self.entries_raw = [entries[:] for _, entries in self.npcs]
-
-        self.decoded = []
-        for _npc_id, raw_entries in self.npcs:
-            remaining = count_label_occurrences(raw_entries)
-            texts = [decode_entry(e, remaining) for e in raw_entries]
-            self.decoded.append(texts)
-
-        # keep a baseline copy for unchanged detection
-        self.rendered = []
-        for _npc_id, raw_entries in self.npcs:
-            remaining2 = count_label_occurrences(raw_entries)
-            texts2 = [decode_entry(e, remaining2) for e in raw_entries]
-            self.rendered.append(texts2)
-
+        npcs = extract_npc_entries(headers, blob)
+        decoded = []
+        for _, entries in npcs:
+            remaining = count_label_occurrences(entries)
+            decoded.append([decode_entry(entry, remaining) for entry in entries])
+        # Install only after all parsing succeeds, retaining the previous document on error.
+        self.path, self.headers, self.original_blob = path, headers, blob
+        self.npcs = npcs
+        self.entries_raw = [entries[:] for _, entries in npcs]
+        self.decoded = decoded
+        self.rendered = [texts[:] for texts in decoded]
         self.dataChanged.emit()
 
     def save_as(self, path: str):
-        self.parent().apply_editor_if_dirty()
+        if self.parent() is not None:
+            if not self.parent().apply_editor_if_dirty():
+                raise ValueError("Fix the invalid dialogue entry before saving")
+        if self.decoded == self.rendered:
+            Path(path).write_bytes(self.original_blob)
+            self.path = path
+            return
         new_entries: List[Tuple[int, List[bytes]]] = []
         for npc_idx, ((npc_id, _raw), texts) in enumerate(zip(self.npcs, self.decoded)):
             packed: List[bytes] = []
@@ -597,7 +364,7 @@ class TLKModel(QtCore.QObject):
                 else:
                     packed.append(encode_entry(txt)[:-1])  # omit trailing 0; writer adds it
             new_entries.append((npc_id, packed))
-        write_tlk(path, new_entries)
+        write_tlk(path, new_entries, self.npcs, self.original_blob)
         self.path = path
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -639,19 +406,19 @@ class MainWindow(QtWidgets.QMainWindow):
             "<Join Party>", "<Avatar>"
         ]:
             b = QtWidgets.QPushButton(tag)
-            b.clicked.connect(lambda _, t=tag: self.insert_tag(t))
+            b.clicked.connect(lambda _, t=tag: self.insert_tag(t + "<Unknown: 255>" if t == "<Set Flag>" else t))
             tagLayout.addWidget(b)
 
         goldItemLayout = QtWidgets.QHBoxLayout()
         self.goldSpin = QtWidgets.QSpinBox(); self.goldSpin.setRange(0, 999); self.goldSpin.setValue(3)
-        self.itemSpin = QtWidgets.QSpinBox(); self.itemSpin.setRange(0, 255); self.itemSpin.setValue(65)
+        self.itemSpin = QtWidgets.QSpinBox(); self.itemSpin.setRange(1, 255); self.itemSpin.setValue(65)
         bGold = QtWidgets.QPushButton("Insert <Gold - ###>"); bGold.clicked.connect(self.insert_gold)
         bChange = QtWidgets.QPushButton("Insert <Change><Item:#>"); bChange.clicked.connect(self.insert_change_item)
         goldItemLayout.addWidget(QtWidgets.QLabel("Gold:")); goldItemLayout.addWidget(self.goldSpin); goldItemLayout.addWidget(bGold)
         goldItemLayout.addWidget(QtWidgets.QLabel("Item:")); goldItemLayout.addWidget(self.itemSpin); goldItemLayout.addWidget(bChange)
 
         labelLayout = QtWidgets.QHBoxLayout()
-        self.labelSpin = QtWidgets.QSpinBox(); self.labelSpin.setRange(1, 10); self.labelSpin.setValue(1)
+        self.labelSpin = QtWidgets.QSpinBox(); self.labelSpin.setRange(1, 15); self.labelSpin.setValue(1)
         bGoto = QtWidgets.QPushButton("Insert <Goto Label #>")
         bLab  = QtWidgets.QPushButton("Insert <Label N>")
         bGoto.clicked.connect(lambda: self.insert_tag(f"<Goto Label {self.labelSpin.value()}>"))
@@ -687,11 +454,11 @@ class MainWindow(QtWidgets.QMainWindow):
         if npc_idx < 0 or npc_idx >= len(self.model.decoded):
             return None
         used: set[int] = set()
-        rx = re.compile(r'<\s*(?:goto\s+)?label\s+([1-9]|10)\s*>', flags=re.I)
+        rx = re.compile(r'<\s*(?:goto\s+)?label\s+([1-9]|1[0-5])\s*>', flags=re.I)
         for s in self.model.decoded[npc_idx]:
             for m in rx.finditer(s):
                 used.add(int(m.group(1)))
-        for n in range(1, 11):
+        for n in range(1, 16):
             if n not in used:
                 return n
         return None
@@ -702,16 +469,17 @@ class MainWindow(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.warning(self, "No NPC Selected", "Select an NPC first.")
             return
 
-        self.apply_editor_if_dirty()
+        if not self.apply_editor_if_dirty():
+            return
 
         n = self.next_unused_label(npc_idx)
         if n is None:
-            QtWidgets.QMessageBox.warning(self, "Labels Full", "All label numbers 1–10 are already used.")
+            QtWidgets.QMessageBox.warning(self, "Labels Full", "All label numbers 1–15 are already used.")
             return
 
         # IMPORTANT: include a placeholder body so is_label_start() treats it as a header
         placeholder = "New label text"
-        self.model.decoded[npc_idx].append(f"<Label {n}>{placeholder}")
+        self.model.decoded[npc_idx].append(f"<Any><Label {n}>{placeholder}")
         new_idx = len(self.model.decoded[npc_idx]) - 1
 
         self.populate_tree(npc_idx)
@@ -735,7 +503,9 @@ class MainWindow(QtWidgets.QMainWindow):
         path, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Open TLK", "", "TLK Files (*.TLK *.tlk);;All Files (*)")
         if not path: return
         try:
-            self.apply_editor_if_dirty(); self.model.load(path)
+            if not self.apply_editor_if_dirty():
+                return
+            self.model.load(path)
         except Exception as e:
             QtWidgets.QMessageBox.critical(self, "Error", str(e))
 
@@ -744,7 +514,9 @@ class MainWindow(QtWidgets.QMainWindow):
         path, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Save TLK As", "", "TLK Files (*.TLK *.tlk);;All Files (*)")
         if not path: return
         try:
-            self.apply_editor_if_dirty(); self.model.save_as(path)
+            if not self.apply_editor_if_dirty():
+                return
+            self.model.save_as(path)
             QtWidgets.QMessageBox.information(self, "Saved", f"Saved to:\n{path}")
         except Exception as e:
             QtWidgets.QMessageBox.critical(self, "Error", str(e))
@@ -758,8 +530,8 @@ class MainWindow(QtWidgets.QMainWindow):
         if '"' in raw:
             raw = raw.split('"', 1)[0]
         raw = re.sub(r'<[^>]+>', '', raw)
-        raw = raw.splitlines()[0].strip()
-        return raw
+        lines = raw.splitlines()
+        return lines[0].strip() if lines else ""
 
     def refresh_ui(self):
         self.npcList.clear()
@@ -775,18 +547,21 @@ class MainWindow(QtWidgets.QMainWindow):
         self._editor_dirty = True
 
     def apply_editor_if_dirty(self):
-        """Commit editor text to the selected entry (store as-is; encoder ensures bytes on save)."""
-        if not self._editor_dirty: return
-        if self._current_npc_idx is None or self._current_edit_idx is None:
-            self._editor_dirty = False; return
-        if self._current_npc_idx < 0 or self._current_edit_idx < 0:
-            self._editor_dirty = False; return
+        if not self._editor_dirty:
+            return True
+        if self._current_npc_idx is None or self._current_edit_idx is None or self._current_npc_idx < 0 or self._current_edit_idx < 0:
+            self._editor_dirty = False
+            return True
+        text = self.editor.toPlainText()
         try:
-            self.model.decoded[self._current_npc_idx][self._current_edit_idx] = self.editor.toPlainText()
-        except Exception:
-            pass
+            encode_entry(text)
+        except ValueError as error:
+            QtWidgets.QMessageBox.warning(self, "Invalid dialogue entry", str(error))
+            return False
+        self.model.decoded[self._current_npc_idx][self._current_edit_idx] = text
         self._editor_dirty = False
         self.populate_tree(self._current_npc_idx)
+        return True
 
     # -------- Pretty helpers for Conversation structure --------
     def pretty_display(self, npc_idx: int, entry_idx: int, force_label: bool=False) -> str:
@@ -804,12 +579,13 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def strip_label_heading_pretty(self, pretty: str) -> str:
         """Strip either <Label N> or <Goto Label N> at the start of a pretty string."""
-        m = re.match(r'^\s*<\s*(?:goto\s+)?label\s+[0-9]+\s*>\s*(.*)$', pretty, flags=re.I|re.S)
+        m = re.match(r'^\s*(?:<Any>\s*)?<\s*(?:goto\s+)?label\s+[0-9]+\s*>\s*(.*)$', pretty, flags=re.I|re.S)
         return m.group(1) if m else pretty
 
     # Tree building
     def on_npc_changed(self, npc_idx: int):
-        self.apply_editor_if_dirty()
+        if not self.apply_editor_if_dirty():
+            return
         self._current_npc_idx = npc_idx
         self._current_edit_idx = None
         self.populate_tree(npc_idx)
@@ -916,12 +692,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self.tree.expandAll(); self.tint_nodes()
 
     def strip_label_heading(self, txt: str) -> str:
-        m = re.match(r'^\s*<\s*(?:goto\s+)?label\s+[0-9]+\s*>\s*(.*)$',
+        m = re.match(r'^\s*(?:<Any>\s*)?<\s*(?:goto\s+)?label\s+[0-9]+\s*>\s*(.*)$',
                      txt, flags=re.I | re.S)
         return m.group(1) if m else txt
 
     def one_line(self, s: str, maxlen: int = 120) -> str:
-        s = s.replace("\n", " / ").strip()
+        for code, word in TOKEN_BY_CODE.items():
+            s = s.replace(f"<{word}>", " " + word + " ")
+        s = re.sub(r" +", " ", s.replace("\n", " / ")).strip()
         return s if len(s) <= maxlen else s[:maxlen-1] + "…"
 
     def tint_nodes(self):
@@ -941,7 +719,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
     # Selection & editor
     def on_tree_selection(self):
-        self.apply_editor_if_dirty()
+        if not self.apply_editor_if_dirty():
+            return
         self.editor.blockSignals(True); self.editor.clear()
         items = self.tree.selectedItems()
         if not items:
@@ -1014,12 +793,14 @@ class MainWindow(QtWidgets.QMainWindow):
             return
 
         def insert_entry(at: int, text: str):
-            self.apply_editor_if_dirty()
+            if not self.apply_editor_if_dirty():
+                return
             self.model.decoded[npc_idx].insert(at, text)
             self.populate_tree(npc_idx)
 
         def delete_entry(at: int):
-            self.apply_editor_if_dirty()
+            if not self.apply_editor_if_dirty():
+                return
             if 0 <= at < len(self.model.decoded[npc_idx]):
                 del self.model.decoded[npc_idx][at]
                 self.populate_tree(npc_idx)
@@ -1067,11 +848,11 @@ class MainWindow(QtWidgets.QMainWindow):
             if npc_idx < 0 or npc_idx >= len(self.model.decoded):
                 return None
             used: set[int] = set()
-            rx = re.compile(r'<\s*(?:goto\s+)?label\s+([1-9]|10)\s*>', flags=re.I)
+            rx = re.compile(r'<\s*(?:goto\s+)?label\s+([1-9]|1[0-5])\s*>', flags=re.I)
             for s in self.model.decoded[npc_idx]:
                 for m in rx.finditer(s):
                     used.add(int(m.group(1)))
-            for n in range(1, 11):
+            for n in range(1, 16):
                 if n not in used:
                     return n
             return None
@@ -1082,11 +863,12 @@ class MainWindow(QtWidgets.QMainWindow):
                 QtWidgets.QMessageBox.warning(self, "No NPC Selected", "Select an NPC first.")
                 return
 
-            self.apply_editor_if_dirty()
+            if not self.apply_editor_if_dirty():
+                return
 
             n = self.next_unused_label(npc_idx)
             if n is None:
-                QtWidgets.QMessageBox.warning(self, "Labels Full", "All label numbers 1–10 are already used.")
+                QtWidgets.QMessageBox.warning(self, "Labels Full", "All label numbers 1–15 are already used.")
                 return
 
             # Minimal working block:
@@ -1094,7 +876,7 @@ class MainWindow(QtWidgets.QMainWindow):
             # 2) Default trigger on that label (<Any>)
             # 3) A response line
             entries = self.model.decoded[npc_idx]
-            entries.append(f"<Label {n}>New label text")
+            entries.append(f"<Any><Label {n}>New label text")
             entries.append("<Any>")
             entries.append("New response")
 
