@@ -540,11 +540,16 @@ only an AppImage (plus its checksum). Original Ultima 5 game files,
 music, saves and personal settings are never included in the packages.
 ScaleFX is not part of these releases.
 
-To test a build, open **Actions → Build releases → Run workflow**, select the
-branch, and download its platform artifacts when all jobs finish. GitHub wraps
-Actions downloads in a ZIP; the Windows artifact contains the executable
-directly. Release assets have no extra wrapper: one Windows ZIP, one Linux
-AppImage, and one macOS archive per architecture, with checksums. To make a
+Daily and manual releases check the default branch against the most recent
+published release. If there are new commits, all four platforms are built and
+published automatically with a date-and-commit tag such as
+`v2026.07.01-abcdef123456` and generated release notes. Otherwise the workflow
+skips building and publishing. Daily runs are scheduled for 2:23 a.m. Los Angeles
+time (3:23 a.m. on spring-forward day; GitHub may delay scheduled jobs). To run the same check manually, open
+**Actions → Build releases → Run workflow**.
+
+Release assets have no extra wrapper: one Windows ZIP, one Linux AppImage,
+and one macOS archive per architecture, with checksums. To make a tagged
 release after merging, tag the desired commit:
 
 ```sh
@@ -560,7 +565,8 @@ existing release, whether draft or published. Reruns replace matching assets
 and their checksums. Download and test each platform before publishing a new
 draft from GitHub's Releases page. A failed platform build prevents release
 creation. Release jobs use GitHub's built-in token; no personal token is needed.
-Manual workflow runs only upload artifacts and do not create a release.
+Daily and manual runs publish after uploading every package; tag runs retain
+the draft-and-review flow described above.
 
 Tag runs use the workflow and source code recorded in that tag. Rerunning an
 older tag does not pick up later workflow fixes; use a new tag for a new build,

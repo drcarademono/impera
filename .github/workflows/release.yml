@@ -22,10 +22,81 @@ on:
       - 'packaging/**'
       - 'tests/**'
   workflow_dispatch:
+  # 02:23 Los Angeles is 09:23 UTC in summer and 10:23 in winter.
+  schedule:
+    - cron: '23 9 * * *'
+    - cron: '23 10 * * *'
 permissions:
   contents: read
+# Serialize publication, including manual/tag runs; never cancel a build in flight.
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('release-pr-{0}', github.event.pull_request.number) || 'impera-release' }}
+  cancel-in-progress: false
 jobs:
+  prepare:
+    runs-on: ubuntu-22.04
+    outputs:
+      build: ${{ steps.detect.outputs.build }}
+      sha: ${{ steps.detect.outputs.sha }}
+      version: ${{ steps.detect.outputs.version }}
+      automatic: ${{ steps.detect.outputs.automatic }}
+    steps:
+      - name: Detect unreleased default-branch commits
+        id: detect
+        shell: python
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SCHEDULE: ${{ github.event.schedule }}
+        run: |
+          import datetime, json, os, subprocess
+          from urllib.parse import quote
+          from zoneinfo import ZoneInfo
+
+          def api(path, *options):
+              return json.loads(subprocess.check_output(['gh', 'api', path, *options], text=True))
+
+          def output(**values):
+              with open(os.environ['GITHUB_OUTPUT'], 'a') as stream:
+                  for key, value in values.items():
+                      print(f'{key}={value}', file=stream)
+
+          event = os.environ['GITHUB_EVENT_NAME']
+          automatic = event in ('schedule', 'workflow_dispatch')
+          output(build='false', automatic=str(automatic).lower())
+          if not automatic:
+              output(build='true', sha=os.environ['GITHUB_SHA'], version=os.environ['GITHUB_REF_NAME'])
+          else:
+              now = datetime.datetime.now(ZoneInfo('America/Los_Angeles'))
+              # Select the scheduled slot, rather than the runner's current
+              # hour, so a delayed or queued job can still release that day.
+              utc = now.astimezone(datetime.timezone.utc)
+              slots = [utc.replace(hour=hour, minute=23, second=0, microsecond=0)
+                       for hour in (9, 10)]
+              slot = next((time for time in slots if time.astimezone(now.tzinfo).hour == 2), slots[1])
+              # Spring-forward has no 02:23: use 03:23 on that one day.
+              if event == 'schedule' and os.environ['SCHEDULE'] != f'23 {slot.hour} * * *':
+                  print('Skipping the inactive daylight-saving schedule.')
+              else:
+                  repo = os.environ['GH_REPO']
+                  branch = api(f'repos/{repo}')['default_branch']
+                  sha = api(f'repos/{repo}/commits/{quote(branch, safe="")}')['sha']
+                  pages = api(f'repos/{repo}/releases?per_page=100', '--paginate', '--slurp')
+                  published = [release for page in pages for release in page
+                               if not release['draft'] and release['published_at']]
+                  latest = max(published, key=lambda release: release['published_at'], default=None)
+                  changed = latest is None
+                  if latest:
+                      base = quote(latest['tag_name'], safe='')
+                      changed = api(f'repos/{repo}/compare/{base}...{sha}')['ahead_by'] > 0
+                  if changed:
+                      version = f'v{now:%Y.%m.%d}-{sha[:12]}'
+                      output(build='true', sha=sha, version=version)
+                  else:
+                      print('No unreleased default-branch commits; skipping builds and publication.')
   build:
+    needs: prepare
+    if: needs.prepare.outputs.build == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -43,6 +114,8 @@ jobs:
       MACOSX_DEPLOYMENT_TARGET: "12.0"
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -70,7 +143,7 @@ jobs:
           python tests/test_release_workflow.py
       - name: Package
         env:
-          RELEASE_VERSION: ${{ github.ref_name }}
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
         run: python scripts/package-release.py --build release-build --platform ${{ matrix.platform }} ${{ runner.os == 'Windows' && '--unpacked' || '' }}
       - name: Windows and macOS package startup smoke check
         if: runner.os != 'Linux'
@@ -118,13 +191,15 @@ jobs:
           path: ${{ runner.os == 'Windows' && 'windows-artifact/' || 'dist/*' }}
           if-no-files-found: error
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
+    if: needs.prepare.outputs.build == 'true' && (needs.prepare.outputs.automatic == 'true' || startsWith(github.ref, 'refs/tags/v'))
+    needs: [prepare, build]
     runs-on: ubuntu-22.04
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -133,15 +208,21 @@ jobs:
           path: artifacts
           pattern: Impera-*
       - name: Assemble release downloads
-        run: python scripts/assemble-release.py --artifacts artifacts --version "${{ github.ref_name }}"
+        run: python scripts/assemble-release.py --artifacts artifacts --version "${{ needs.prepare.outputs.version }}"
       - name: Create or reuse release and replace assets
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.version }}
+          RELEASE_SHA: ${{ needs.prepare.outputs.sha }}
+          AUTOMATIC_RELEASE: ${{ needs.prepare.outputs.automatic }}
         run: |
           if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release create "$RELEASE_TAG" --verify-tag --draft --title "Impera $RELEASE_TAG" --generate-notes
+            if [ "${AUTOMATIC_RELEASE:-false}" = true ]; then
+              gh release create "$RELEASE_TAG" --target "$RELEASE_SHA" --draft --title "Impera $RELEASE_TAG" --generate-notes
+            else
+              gh release create "$RELEASE_TAG" --verify-tag --draft --title "Impera $RELEASE_TAG" --generate-notes
+            fi
           fi
           # Older draft runs included an internal Linux archive. Remove those
           # obsolete assets when rerunning this workflow on the same tag.
@@ -151,3 +232,7 @@ jobs:
             fi
           done
           gh release upload "$RELEASE_TAG" dist/* --clobber
+          # Publish only once every package has been attached successfully.
+          if [ "${AUTOMATIC_RELEASE:-false}" = true ]; then
+            gh release edit "$RELEASE_TAG" --draft=false --latest
+          fi
