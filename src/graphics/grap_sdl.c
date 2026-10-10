@@ -443,8 +443,10 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
     }
     int playerX = mapX + columns / 2 * 16, playerY = mapY + rows / 2 * 16;
     bool combat=D_5893_map_id>=128;
-    int mapTop=s_expandedFrame?8:mapY;
-    int mapBottom=s_expandedFrame?h-8:mapY+rows*16;
+    /* Only world maps extend into partial edge rows. Combat's centered
+     * margins must never expose the interpolation texture's padding. */
+    int mapTop=s_expandedFrame && !combat?8:mapY;
+    int mapBottom=s_expandedFrame && !combat?h-8:mapY+rows*16;
     for (int y = -1; !combat && y <= 16; y++) {
         for (int x = -1; x <= 16; x++) {
             if (WIDE_SpritePixel(256+GetActorMap(5,5),0,0,x,y)<0) continue;
@@ -521,7 +523,7 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
             float sx = dst.w / w, sy = dst.h / h;
             SDL_Rect clip = {(int)(dst.x+mapX*sx),(int)(dst.y+mapY*sy),
                              (int)(columns*16*sx),(int)(rows*16*sy)};
-            if(s_expandedFrame) { clip.y=(int)(dst.y+8*sy);clip.h=(int)((h-16)*sy); }
+            if(s_expandedFrame && !combat) { clip.y=(int)(dst.y+8*sy);clip.h=(int)((h-16)*sy); }
             SDL_FRect mapSrc = {0,0,paddedWidth*2,paddedHeight*2};
             SDL_FRect mapDst = {dst.x+mapX*sx,dst.y+mapY*sy,columns*16*sx,rows*16*sy};
             SDL_Texture* playerTexture=NULL;

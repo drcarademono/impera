@@ -67,6 +67,7 @@ static int lightX,lightY,darkX;
 static SDL_Rect waterMap;
 static int animationRow, playerScreenX, previousMarkerX;
 static bool checkActor;
+static bool checkCombatMargins;
 static bool transparentSprites;
 static int actorRow, actorStart, actorEnd, actorMarker;
 bool __real_SDL_RenderPresent(SDL_Renderer* renderer);
@@ -74,6 +75,20 @@ bool __wrap_SDL_RenderPresent(SDL_Renderer* renderer)
 {
     presented++;
     ticks+=renderCost;
+    if(checkCombatMargins) {
+        SDL_Surface* image=SDL_RenderReadPixels(renderer,NULL);
+        assert(image);
+        WideLayout combat=WIDE_Layout(image->w,image->h);
+        int x=(image->w-combat.width*combat.scale)/2+(combat.mapX+combat.columns/2*16+8)*combat.scale;
+        for(int edge=0;edge<2;edge++) {
+            int y=(image->h-combat.height*combat.scaleY)/2+
+                SDL_ceilf((edge?combat.mapY+combat.rows*16:combat.mapY-1)*combat.scaleY);
+            Uint8 r,g,b,a;
+            assert(SDL_ReadSurfacePixel(image,x,y,&r,&g,&b,&a));
+            assert(r==0 && g==0 && b==0);
+        }
+        SDL_DestroySurface(image);
+    }
     if (checkActor) {
         SDL_Surface* image=SDL_RenderReadPixels(renderer,NULL);
         assert(image);
@@ -869,6 +884,24 @@ int main(int argc, char** argv)
     presented=0;
     GRAP_SDL_MapDrawn(); GRAP_SDL_FlushFrame();
     assert(presented==9); /* combat party members animate too */
+    /* Centered combat margins stay black throughout interpolation, rather
+     * than exposing the padded terrain used for world-map scrolling. */
+    int windowCount;
+    SDL_Window** windows=SDL_GetWindows(&windowCount);
+    assert(windows && windowCount==1);
+    SDL_Window* combatWindow=windows[0];SDL_free(windows);
+    assert(SDL_SetWindowFullscreen(combatWindow,false));
+    assert(SDL_SetWindowSize(combatWindow,1024,720));
+    D_5896_map_x=D_5897_map_y=3;
+    for(int y=0;y<11;y++) for(int x=0;x<11;x++) GetCombatMap(x,y)=1;
+    D_b11e[1]=1;memset(tiles+128,0x11,128);
+    GRAP_SDL_SetSmoothMovement(true);
+    paintActor(0,2,3);
+    GRAP_SDL_MapDrawn();GRAP_SDL_FlushFrame();
+    paintActor(0,3,3);presented=0;checkCombatMargins=true;
+    GRAP_SDL_MapDrawn();GRAP_SDL_FlushFrame();
+    checkCombatMargins=false;assert(presented==9);
+    assert(SDL_SetWindowSize(combatWindow,1024,768));
     /* Right-button combat commands use the active fighter, not the map center. */
     GRAP_SDL_SetSmoothMovement(false);
     D_5896_map_x=2; D_5897_map_y=3;
