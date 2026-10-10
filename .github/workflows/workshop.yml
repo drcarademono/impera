@@ -1,0 +1,47 @@
+name: Native Impera Workshop
+on:
+  push:
+    paths: ['workshop/**', 'src/mod/**', 'src/common/lzw.c', '.github/workflows/workshop.yml']
+  pull_request:
+    paths: ['workshop/**', 'src/mod/**', 'src/common/lzw.c', '.github/workflows/workshop.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  workshop:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022, macos-15-intel, macos-15]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.3'
+          cache: true
+      - name: Linux Qt runtime dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libxcb-cursor0
+      - name: Configure native app and tests
+        run: cmake -S workshop -B workshop-build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
+      - name: Build
+        run: cmake --build workshop-build --config Release --parallel 3
+      - name: Format, package and native UI regression tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: ctest --test-dir workshop-build -C Release --output-on-failure
+      - name: Native executable startup
+        if: runner.os != 'macOS'
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = Windows ]; then
+            workshop-build/Release/ImperaWorkshop.exe --help
+          else
+            QT_QPA_PLATFORM=offscreen workshop-build/ImperaWorkshop --help
+          fi
+      - name: macOS bundle startup
+        if: runner.os == 'macOS'
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: workshop-build/ImperaWorkshop.app/Contents/MacOS/ImperaWorkshop --help

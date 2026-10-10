@@ -1,5 +1,6 @@
 #include "common/common.h"
 #include "common/file.h"
+#include "mod/runtime.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -17,6 +18,9 @@ void FILE_SetDataDirectory(const char* directory)
 {
     if(!directory || strlen(directory)>=sizeof(s_dataDirectory)) s_dataDirectory[0]=0;
     else strcpy(s_dataDirectory,directory);
+#if defined(TARGET_SDL)
+    MOD_MountDirectory(s_dataDirectory);
+#endif
 }
 int FILE_DataPath(const char* path,char* resolved,size_t capacity)
 {
@@ -141,6 +145,11 @@ FILE* FILE_Open(const char* path, const char* mode)
 {
     /* Immutable assets come from the selected source; writes stay local. */
     if(mode[0]=='r' && !strchr(mode,'+') && !strchr(path,'/') && !strchr(path,'\\')) {
+#if defined(TARGET_SDL)
+        int overridden=0;
+        FILE *mod=MOD_OpenResource(path,&overridden);
+        if(overridden) return mod;
+#endif
         char asset[FILE_PATH_SIZE];
         if(FILE_DataPath(path,asset,sizeof(asset))==0) return fopen(asset,mode);
     }

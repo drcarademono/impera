@@ -638,6 +638,18 @@ not currently possible. FM-TOWNS disassembly is also used as a reference where
 needed. See upstream for current decompilation progress and its original
 project documentation.
 
+## Modding with Impera Workshop
+
+**Impera Workshop** is a native desktop modding application for maps, NPCs,
+combat setup, DOS graphics, conversations, story and starting state. It edits
+projects and exports `.imperamod` packages while keeping original files untouched.
+See [Workshop build and authoring instructions](workshop/README.md).
+
+Place packages in the **`Mods` subfolder of your selected Ultima 5 game folder**
+and restart Impera. Packages load automatically; incompatible or conflicting
+packages are skipped and explained in `LOG.TXT`. Existing saves retain their
+saved state. See [mod loading and package format](docs/mod-packages.md).
+
 ## Credits
 
 - **[carademono](https://github.com/drcarademono)** — Impera port and enhancements.

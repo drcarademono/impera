@@ -15,6 +15,8 @@ else()
 endif()
 
 set(SOURCES
+    src/mod/package.c
+    src/mod/runtime.c
     src/graphics/tileset.c
     src/common/icon.c
     src/common/folder_picker.c
@@ -96,6 +98,11 @@ option(U5D_BUILD_TESTS "Build native savegame regression tests" OFF)
 set(U5D_TARGETS ultima5)
 if(U5D_BUILD_TESTS)
     enable_testing()
+    add_executable(impera_mod_test tests/mod_test.c src/common/file.c src/common/debug.c src/mod/package.c src/mod/runtime.c)
+    list(APPEND U5D_TARGETS impera_mod_test)
+    file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/mod-runtime/game/Mods" "${CMAKE_BINARY_DIR}/mod-runtime/SAVEGAME")
+    add_test(NAME mod_packages COMMAND impera_mod_test)
+    set_tests_properties(mod_packages PROPERTIES WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/mod-runtime" TIMEOUT 20)
     set(TEST_SOURCES ${SOURCES})
     add_executable(u5d_debug_test tests/debug_test.c src/common/debug.c)
     list(APPEND U5D_TARGETS u5d_debug_test)
@@ -226,7 +233,7 @@ if(U5D_BUILD_TESTS)
             "-Wl,--wrap=DNGLOOK_117e" "-Wl,--wrap=COMBAT_0b94_MainLoop"
             "-Wl,--wrap=AUDIO_PlayBgmPerMap" "-Wl,--wrap=ULTIMA_2900_UpdateVitalsDisplay")
         add_test(NAME combat_return COMMAND u5d_combat_return_test)
-        add_executable(u5d_file_case_test tests/file_case_test.c src/common/file.c src/common/debug.c)
+        add_executable(u5d_file_case_test tests/file_case_test.c src/common/file.c src/common/debug.c src/mod/package.c src/mod/runtime.c)
         list(APPEND U5D_TARGETS u5d_file_case_test)
         target_include_directories(u5d_file_case_test PRIVATE ${CMAKE_SOURCE_DIR}/src)
         file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/case-runtime/MiXeD/SubDir"
@@ -268,3 +275,9 @@ if(UNIX)
     target_link_libraries(${U5D_TARGET} PRIVATE m)
 endif()
 endforeach()
+
+option(IMPERA_BUILD_WORKSHOP "Build the native Qt modding application" OFF)
+if(IMPERA_BUILD_WORKSHOP)
+    enable_language(CXX)
+    add_subdirectory(workshop)
+endif()
