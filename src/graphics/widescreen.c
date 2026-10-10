@@ -27,6 +27,9 @@ WideLayout WIDE_Layout(int width, int height)
     l.sidebarX = l.width - 128;
     l.columns = (l.sidebarX - 16) / 16;
     l.rows = (l.height - 16 + 15) / 16;
+    /* The fixed 11-row combat board needs an odd row count to center its
+     * middle tile. World maps retain partial rows to fill the viewport. */
+    if (D_5893_map_id >= 128 && !(l.rows & 1)) l.rows--;
     l.mapX = 8 + ((l.sidebarX - 16) - l.columns * 16) / 2;
     l.mapY = 8 + ((l.height - 16) - l.rows * 16) / 2;
     return l;

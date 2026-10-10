@@ -508,6 +508,13 @@ int main(void)
     D_5893_map_id = 0x40;
     assert(!WIDE_Compose(pixels, broad)); /* title uses centered original layout */
     D_5893_map_id = 0xff;
+    for (int h=1080;h<=1200;h+=120) {
+        WideLayout combat=WIDE_Layout(1920,h);
+        assert(combat.rows & 1);
+        int boardTop=combat.mapY+(combat.rows/2-5)*16;
+        assert(abs((boardTop-8)-(combat.height-8-(boardTop+176)))<=1);
+        assert(WIDE_Compose(pixels,combat));
+    }
     assert(WIDE_Compose(pixels, broad));
     assert(pixel(pixels, broad, 7, 0) == 0); /* combat never fabricates terrain */
     /* Border strips must reach the final row, with one centered opening and
