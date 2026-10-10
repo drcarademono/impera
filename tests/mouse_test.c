@@ -949,6 +949,32 @@ int main(int argc, char** argv)
     D_ba14[0].x=6;D_ba14[0].y=4;
     MOVEMENT_SetDiagonal(false);
 
+    /* Double-click combat loot uses the off-center active fighter and queues
+     * the direction for the original Open/Get commands. */
+    D_589e=0;D_ba14[0].flags=COMBAT_FLAGS_PLAYER;
+    D_ba14[0].x=6;D_ba14[0].y=4;
+    D_ba14[1].flags=0;
+    D_5c5a[31]=(ActorFmt){0};
+    D_5c5a[31]._2_x=7;D_5c5a[31]._3_y=4;
+    MOUSE_SetCommandInput(true);
+    const byte loot[]={TILE_ACTOR_CHEST,TILE_ACTOR_GOLD,TILE_ACTOR_WEAPON,TILE_ACTOR_FOOD};
+    for(size_t i=0;i<sizeof(loot);i++) {
+        D_5c5a[31]._0_tile=loot[i];
+        int action=i?'G':'O';
+        assert(MOUSE_Action(2,-1,true)==action);
+        MOUSE_Button(centerX+2*16*l.scale,centerY-16*l.scaleY,SDL_BUTTON_LEFT,true,1);
+        MOUSE_Button(centerX+2*16*l.scale,centerY-16*l.scaleY,SDL_BUTTON_LEFT,true,2);
+        assert(MOUSE_PollCommand()==action);
+        int tx,ty;assert(MOUSE_TakeTarget(&tx,&ty));assert(tx==1 && ty==0);
+        D_5c5a[31]._2_x=8;
+        assert(MOUSE_Action(3,-1,true)==0); /* out of reach */
+        D_5c5a[31]._2_x=7;D_5c5a[31]._3_y=5;
+        MOVEMENT_SetDiagonal(false);assert(MOUSE_Action(2,0,true)==0);
+        MOVEMENT_SetDiagonal(true);assert(MOUSE_Action(2,0,true)==action);
+        D_5c5a[31]._3_y=4;
+    }
+    D_5c5a[31]=(ActorFmt){0};MOUSE_SetCommandInput(false);
+    MOVEMENT_SetDiagonal(false);
     /* Real mouse targeting preserves cardinal range rules and requires a separate confirmation. */
     D_589e=0; D_ba14[0].flags=COMBAT_FLAGS_PLAYER;
     D_ba14[0].entityIdx=0; D_5896_map_x=6; D_5897_map_y=4;

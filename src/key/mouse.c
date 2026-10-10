@@ -309,6 +309,19 @@ int MOUSE_Action(int dx, int dy, bool mainAction)
         if (x<0 || y<0 || x>10 || y>10) return 0;
         if (!mainAction) return 0;
         int target=COMSUBS_0748(x,y);
+        int ox=x-D_ba14[D_589e].x, oy=y-D_ba14[D_589e].y;
+        /* Combat loot is stored in the ordinary object list, not the fighter
+         * list. Use the active party member's keyboard interaction range. */
+        if ((D_ba14[D_589e].flags & COMBAT_FLAGS_PLAYER) &&
+            (target<0 || target==D_589e) && ((!ox && !oy) || AdjacentDirection(ox,oy))) {
+            for (int i=1;i<32;i++) {
+                ActorFmt* a=&D_5c5a[i];
+                if (!a->_0_tile || a->_2_x!=x || a->_3_y!=y) continue;
+                if (a->_0_tile==TILE_ACTOR_CHEST) return 'O';
+                if (a->_0_tile<TILE_ACTOR_HORSE || a->_0_tile==TILE_ACTOR_MOONSTONE ||
+                    a->_0_tile==TILE_ACTOR_CARPET || (a->_0_tile&0xfc)==TILE_ACTOR_SHARD) return 'G';
+            }
+        }
         if (target<0 || target==D_589e || ULTIMA_5646(target)==ULTIMA_5646(D_589e) ||
             (D_ba14[target].flags & (COMBAT_FLAGS_DEAD|COMBAT_FLAGS_INVISIBLE|COMBAT_FLAGS_4)) ||
             !MOVEMENT_AttackAllowed(x-D_ba14[D_589e].x,y-D_ba14[D_589e].y) ||
@@ -470,6 +483,12 @@ int MOUSE_PollCommand(void)
         s_right = false;
         if (D_5893_map_id>=128) {
             s_direction=0;
+            if (command=='O' || command=='G') {
+                s_targetDx=s_dx+5-D_ba14[D_589e].x;
+                s_targetDy=s_dy+5-D_ba14[D_589e].y;
+                s_direction=MOUSE_Direction(s_targetDx,s_targetDy);
+                if (!s_direction) s_direction=U5_KEY_SPACE;
+            }
             if (command=='A') {
                 s_combatAttack=true; s_attackEntity=D_589e;
                 s_attackX=s_dx+5; s_attackY=s_dy+5;
