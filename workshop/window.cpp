@@ -359,6 +359,7 @@ bool WorkshopWindow::openGame(const QString &path) {
         current.clear();
         editorState.clear();
         mapViewStates.clear();
+        mapBrushes = {};
         lastMap.clear();
         flushDraft = {};
         rebuildTree();
@@ -374,6 +375,7 @@ bool WorkshopWindow::openProject(const QString &path) {
         current.clear();
         editorState.clear();
         mapViewStates.clear();
+        mapBrushes = {};
         lastMap.clear();
         flushDraft = {};
         rebuildTree();
@@ -520,7 +522,7 @@ QWidget *WorkshopWindow::mapEditor(const QString &name) {
         [this](const QMap<QString, QByteArray> &changes, const QString &description) {
             return guard([&] { edit(changes, description); });
         },
-        [this](const QString &resource) { selectResource(resource); });
+        [this](const QString &resource) { selectResource(resource); }, &mapBrushes);
     flushDraft = [workspace] {
         workspace->cancelGesture();
         return true;

@@ -1,6 +1,6 @@
 # Impera Workshop map editor — UI plan
 
-Status: Phase 1 implemented; subsequent phases remain proposals. The original
+Status: Phases 1 and 2 implemented; subsequent phases remain proposals. The original
 implementation audit below describes the baseline before this change.
 
 ## Recommendation
@@ -211,10 +211,49 @@ anchored zoom, read-only navigation, paired world edits and preservation of
 combat metadata. The workspace still rebuilds on undo, restoring explicit state;
 in-place refresh is an optimization to assess later.
 
-**Next: Phase 2 terrain tools.** Add rectangular selections, rectangle painting,
-four-connected flood fill and terrain-only copy/paste with a placement preview.
-Build these on the same document adapter and cancellation/undo contract. Then
-add the minimap, favorite/recent brushes and original-versus-edited highlighting.
-Each gesture must be one undo command, and a cancelled or over-capacity operation
-must leave every affected resource unchanged. NPC placement and combat markers
-remain separate later phases rather than becoming implicit parts of a paste.
+## Phase 2 outcome
+
+The terrain workspace now supports rectangular selection, solid/outline rectangle
+painting, selection-bounded four-connected iterative fill, and typed terrain
+copy/paste. Paste shows a ghost and changed-cell count, rejects map-edge overflow,
+and copies no NPC, object or combat metadata. Escape/focus loss cancels pending
+previews; each completed edit uses the existing serializer and undo transaction.
+Over-capacity Britannia edits restore the canvas and leave both resources intact.
+
+A cached terrain minimap supports click/drag navigation and shows the visible
+region and selection. The brush browser has session-only Favorites and Recent
+filters. Change highlighting and counts compare edited terrain to the original
+resource, including original Britannia chunk mappings. Selection, comparison and
+rectangle mode survive navigation and undo/redo. These view preferences and
+brush lists never become exported game bytes.
+
+Native tests cover reverse selections, cancelled selection/rectangle/paste,
+outline/no-op rectangles, selected and world-sized fill, diagonal separation,
+cross-map clipboard use, invalid clipboard payloads, edge rejection, world
+capacity rollback, untouched combat metadata, comparison baselines, minimap
+navigation and state restoration. Platform visual review remains appropriate
+before shipping; the cloud validation uses Qt's offscreen Linux renderer.
+
+## Next: Phase 3 — NPC integration
+
+Replace the current Inspect NPCs action with an NPC mode on the same canvas:
+
+1. Select existing actors without changing terrain. Provide a chooser when
+   several actors share a cell, and identify each by NPC slot and resolved
+   conversation name (with a slot fallback).
+2. Add a schedule inspector with the real transition hours, X/Y, signed floor,
+   AI value, appearance and dialogue ID. Clearly show that time slots 1 and 3
+   share location record 1; changing one updates the same stored location.
+3. Drag an actor with a placement preview; release commits a single undoable
+   X/Y/Z edit to the selected location. Escape/focus loss cancels it. Preserve
+   all other locations, AI values, hours, sprite, dialogue linkage and padding.
+4. Add Locate / Move here, floor navigation, optional other-schedule-position
+   ghosts, and Edit conversation / Back to map links that retain selection and
+   viewport. Stored schedule locations must not be presented as a simulation of
+   a wandering actor's position.
+
+The acceptance gate is exact byte preservation outside the intended NPC location
+fields, shared-slot behavior, basement-floor correctness, overlapping actors,
+missing dialogue, and undo/redo without view or selection loss. Creation/deletion
+of NPCs requires a separate audited allocation policy; Phase 3 begins with
+existing actors. Combat-marker editing remains Phase 4.

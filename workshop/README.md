@@ -63,7 +63,7 @@ drafts rather than silently discarding them. Package imports become undoable edi
 
 | Workspace | Available in this first version |
 | --- | --- |
-| Maps | Searchable world/settlement/combat navigation; continuous painting, synchronized eyedropper, hover/brush preview, pan, anchored zoom, fit view, coordinate navigation, per-map view restoration and per-stroke undo; terrain and tile-ID PNG exports |
+| Maps | Searchable world/settlement/combat navigation; continuous painting, synchronized eyedropper, hover/brush preview, pan, anchored zoom, fit view, coordinate navigation, per-map view restoration and per-stroke undo; terrain selection, solid/outline rectangles, bounded flood fill, typed copy/paste previews, minimap, favorite/recent brushes, original-change highlighting; terrain and tile-ID PNG exports |
 | Settlement NPCs | Schedule overlays for all four time slots; click in Inspect NPCs mode to open the appropriate NPC; edit three AI/X/Y/Z locations, four hours, appearance and dialogue ID |
 | Combat setup | Edit starting party positions for four directions, monster tiles/positions, triggers and changed-tile metadata; retain all padding/sentinel bytes |
 | Graphics | All DOS `.16` image containers and 512 tiles; thumbnail gallery, EGA pixel painting, PNG import/export, full tilesheet import/export, one-bit alpha masks |
@@ -88,6 +88,27 @@ use edited project artwork from `TILES.16`; only terrain IDs 0–255 are paintab
 - **Go** centers the entered X/Y cell. Grid, brush, zoom, tool, schedule slot and view center are remembered separately per map page during the session, including across undo/redo.
 - **Back to map** returns from other resource editors without losing map navigation.
 - **Export** distinguishes terrain PNG from tile-ID PNG; NPC overlays are excluded.
+
+Terrain tools are map-local: **V** selects a rectangle, **R** paints a rectangle,
+and **F** fills four-connected cells of the clicked tile ID. Toggle **Rectangle
+outline** for an outline instead of a solid rectangle. A selection constrains
+Pencil, Rectangle and Fill; **Escape** clears it when no gesture is pending.
+Selection bounds and dimensions appear beside the map.
+
+Use platform-standard **Copy / Paste** shortcuts (Ctrl on Windows/Linux, Command
+on macOS) while the map has focus, or the toolbar buttons. Copy includes only
+terrain IDs. Paste previews its changed-cell count and accepts placement with a
+left-click; it rejects placement outside map bounds rather than clipping, and
+**Escape** or focus loss cancels it. Paste can place terrain outside the source
+selection or into another map; it never copies NPCs or combat records. Each
+terrain operation is one undo command; rejected operations leave resources intact.
+
+Click/drag the **minimap** to navigate; the white outline shows the viewport.
+**Highlight changes** marks terrain differing from original game files in orange,
+with a changed-cell count. **Favorite** adds/removes the current brush; the browser
+can show **All tiles / Favorites / Recent** (the last 16 brushes used). Favorites
+and recent brushes last for the current project session and are not mod content.
+Selection, comparison and rectangle mode also survive map navigation and undo.
 
 NPC overlays retain the existing schedule-slot inspection behavior. NPC placement
 and graphical combat-setup editing are later phases. View preferences do not

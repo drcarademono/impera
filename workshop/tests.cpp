@@ -369,6 +369,191 @@ int main(int argc, char **argv) {
             check(canvas.cellAt({16 * 0.35 * 3 + 0.1, 16 * 0.35 * 5 + 0.1}) == QPoint(3, 5),
                   "Fractional zoom picking disagrees with canvas");
         });
+        test("Terrain selection, rectangle previews and bounded iterative fill", [&] {
+            MapCanvas canvas;
+            canvas.side = 8;
+            canvas.zoom = 1;
+            canvas.ids = QByteArray(64, 0);
+            canvas.brush = 7;
+            canvas.resizeMap();
+            int commits = 0;
+            canvas.commit = [&](const QByteArray &) {
+                ++commits;
+                return true;
+            };
+            auto mouse = [&](QEvent::Type type, int x, int y, Qt::MouseButtons buttons) {
+                QPointF pos(x * 16 + 8, y * 16 + 8);
+                QMouseEvent event(type, pos, pos,
+                                  type == QEvent::MouseMove ? Qt::NoButton : Qt::LeftButton,
+                                  buttons, Qt::NoModifier);
+                QApplication::sendEvent(&canvas, &event);
+            };
+            auto drag = [&](int x1, int y1, int x2, int y2) {
+                mouse(QEvent::MouseButtonPress, x1, y1, Qt::LeftButton);
+                mouse(QEvent::MouseMove, x2, y2, Qt::LeftButton);
+                mouse(QEvent::MouseButtonRelease, x2, y2, Qt::NoButton);
+            };
+            canvas.tool = MapCanvas::Select;
+            drag(4, 4, 2, 2);
+            check(canvas.selection == QRect(2, 2, 3, 3) && commits == 0 &&
+                      canvas.ids == QByteArray(64, 0),
+                  "Reverse selection changed terrain or bounds");
+            mouse(QEvent::MouseButtonPress, 0, 0, Qt::LeftButton);
+            QFocusEvent focusOut(QEvent::FocusOut);
+            QApplication::sendEvent(&canvas, &focusOut);
+            check(canvas.selection == QRect(2, 2, 3, 3), "Cancelled selection lost prior bounds");
+            canvas.clearSelection();
+            canvas.tool = MapCanvas::Rectangle;
+            mouse(QEvent::MouseButtonPress, 1, 1, Qt::LeftButton);
+            mouse(QEvent::MouseMove, 4, 4, Qt::LeftButton);
+            check(commits == 0 && canvas.ids[4 * 8 + 4] == 7, "Rectangle committed before release");
+            QKeyEvent escape(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
+            QApplication::sendEvent(&canvas, &escape);
+            check(canvas.ids == QByteArray(64, 0), "Rectangle cancellation did not roll back");
+            canvas.outline = true;
+            drag(4, 4, 1, 1);
+            check(commits == 1 && canvas.ids[2 * 8 + 2] == 0 && canvas.ids[1 * 8 + 2] == 7,
+                  "Outline rectangle filled its interior or split history");
+            drag(4, 4, 1, 1);
+            check(commits == 1, "No-op rectangle added history");
+            canvas.selection = QRect(2, 2, 2, 2);
+            canvas.tool = MapCanvas::Fill;
+            canvas.brush = 9;
+            mouse(QEvent::MouseButtonPress, 2, 2, Qt::LeftButton);
+            check(commits == 2 && canvas.ids[3 * 8 + 3] == 9 && canvas.ids[2 * 8 + 4] == 7 &&
+                      canvas.ids[5 * 8 + 5] == 0,
+                  "Fill escaped selection or crossed a barrier");
+            canvas.clearSelection();
+            canvas.ids = QByteArray(64, 1);
+            canvas.ids[0] = canvas.ids[9] = 0;
+            mouse(QEvent::MouseButtonPress, 0, 0, Qt::LeftButton);
+            check(canvas.ids[0] == 9 && canvas.ids[9] == 0,
+                  "Fill connected diagonal cells or wrapped edges");
+            canvas.side = 256;
+            canvas.ids = QByteArray(65536, 0);
+            mouse(QEvent::MouseButtonPress, 0, 0, Qt::LeftButton);
+            check(canvas.ids == QByteArray(65536, 9), "World-sized fill failed");
+        });
+        test("Typed terrain clipboard, paste preview, cancellation and bounds", [&] {
+            MapCanvas source, target;
+            source.side = 8;
+            source.ids = QByteArray(64, 0);
+            source.ids[9] = 5;
+            source.ids[10] = 6;
+            source.ids[17] = 7;
+            source.ids[18] = 8;
+            source.selection = QRect(1, 1, 2, 2);
+            check(source.copySelection(), "Terrain copy failed");
+            target.side = 11;
+            target.zoom = 1;
+            target.ids = QByteArray(121, 0);
+            target.resizeMap();
+            target.actors.append({3, 3, 256, 2});
+            int commits = 0;
+            target.commit = [&](const QByteArray &) {
+                ++commits;
+                return true;
+            };
+            auto mouse = [&](QEvent::Type type, int x, int y) {
+                QPointF pos(x * 16 + 8, y * 16 + 8);
+                QMouseEvent event(
+                    type, pos, pos, type == QEvent::MouseMove ? Qt::NoButton : Qt::LeftButton,
+                    type == QEvent::MouseMove ? Qt::NoButton : Qt::LeftButton, Qt::NoModifier);
+                QApplication::sendEvent(&target, &event);
+            };
+            check(target.beginPaste(), "Cross-map paste did not read typed clipboard");
+            mouse(QEvent::MouseMove, 3, 3);
+            check(target.pasteChangedCells() == 4 && target.ids == QByteArray(121, 0) &&
+                      commits == 0,
+                  "Paste preview modified destination");
+            mouse(QEvent::MouseButtonPress, 10, 10);
+            check(target.pasting() && commits == 0 && target.ids == QByteArray(121, 0),
+                  "Out-of-bounds paste was silently clipped");
+            QKeyEvent escape(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
+            QApplication::sendEvent(&target, &escape);
+            check(!target.pasting() && target.ids == QByteArray(121, 0),
+                  "Paste cancellation changed data");
+            target.beginPaste();
+            target.tool = MapCanvas::Eyedropper;
+            mouse(QEvent::MouseButtonPress, 3, 3);
+            check(commits == 1 && target.ids[3 * 11 + 3] == 5 && target.ids[4 * 11 + 4] == 8 &&
+                      target.actors.size() == 1 && target.actors[0].npc == 2,
+                  "Paste failed or copied actors");
+            auto previous = target.ids;
+            target.commit = [&](const QByteArray &) { return false; };
+            target.beginPaste();
+            mouse(QEvent::MouseButtonPress, 5, 5);
+            check(target.ids == previous, "Rejected paste left preview terrain behind");
+            auto mime = new QMimeData;
+            mime->setData("application/x-impera-terrain",
+                          QByteArray("IMPTILE1", 8) + QByteArray(4, char(255)));
+            QApplication::clipboard()->setMimeData(mime);
+            check(!target.beginPaste(), "Malformed clipboard dimensions accepted");
+            QApplication::clipboard()->setText("Not terrain");
+            check(!target.beginPaste(), "Plain text mistaken for terrain");
+        });
+        test("World paste capacity failure is atomic and combat paste preserves records", [&] {
+            QTemporaryDir dir;
+            auto project = fixture(dir.path());
+            QByteArray overlay(0x3986, 0);
+            overlay.replace(0x3886, 256, QByteArray(256, char(255)));
+            project.resources["DATA.OVL"] = {overlay, overlay};
+            project.resources["BRIT.DAT"] = {{}, {}};
+            MapDocument world(&project, "BRIT.DAT");
+            MapCanvas stamp;
+            stamp.side = 256;
+            stamp.ids = world.terrain(0);
+            for (int i = 0; i < 256; ++i) {
+                int offset = (i / 16 * 16) * 256 + i % 16 * 16;
+                stamp.ids[offset] = char(i);
+                stamp.ids[offset + 1] = 3;
+            }
+            stamp.selection = QRect(0, 0, 256, 256);
+            stamp.copySelection();
+            MapCanvas target;
+            target.side = 256;
+            target.zoom = 1;
+            target.ids = world.terrain(0);
+            auto before = target.ids;
+            bool rejected = false;
+            target.commit = [&](const QByteArray &cells) {
+                try {
+                    world.changes(0, cells);
+                } catch (const std::exception &) {
+                    rejected = true;
+                    return false;
+                }
+                return true;
+            };
+            target.beginPaste();
+            QMouseEvent place(QEvent::MouseButtonPress, {8, 8}, {8, 8}, Qt::LeftButton,
+                              Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(&target, &place);
+            check(rejected && target.ids == before && project.changed().isEmpty() &&
+                      project.data("DATA.OVL") == overlay,
+                  "Over-capacity paste mutated paired resources");
+            QByteArray combat(352, char(173));
+            project.resources["TEST.CBT"] = {combat, combat};
+            MapDocument encounter(&project, "TEST.CBT");
+            stamp.side = 8;
+            stamp.ids = QByteArray(64, 9);
+            stamp.selection = QRect(0, 0, 2, 2);
+            stamp.copySelection();
+            target.side = 11;
+            target.ids = encounter.terrain(0);
+            target.commit = [&](const QByteArray &cells) {
+                project.resources["TEST.CBT"].edited = encounter.changes(0, cells)["TEST.CBT"];
+                return true;
+            };
+            target.beginPaste();
+            QApplication::sendEvent(&target, &place);
+            auto after = project.data("TEST.CBT");
+            for (int i = 0; i < 352; ++i)
+                check(after[i] == (i == 0 || i == 1 || i == 32 || i == 33 ? char(9) : combat[i]),
+                      "Combat paste touched metadata or padding");
+            check(encounter.terrain(0, true) == QByteArray(121, char(173)),
+                  "Original comparison reads edited terrain");
+        });
         test("Pointer-anchored map zoom and read-only panning", [&] {
             auto canvas = new MapCanvas;
             canvas->side = 32;
@@ -427,6 +612,10 @@ int main(int argc, char **argv) {
             view->centerMap({12, 13});
             auto center = view->mapCenter();
             auto canvas = findCanvas();
+            canvas->selection = QRect(0, 0, 3, 3);
+            canvas->selectionChanged();
+            active()->findChild<QCheckBox *>("mapComparison")->setChecked(true);
+            active()->findChild<QPushButton *>("mapFavorite")->click();
             QMouseEvent down(QEvent::MouseButtonPress, {40, 40}, {40, 40}, Qt::LeftButton,
                              Qt::LeftButton, Qt::NoModifier);
             QMouseEvent up(QEvent::MouseButtonRelease, {40, 40}, {40, 40}, Qt::LeftButton,
@@ -445,7 +634,8 @@ int main(int argc, char **argv) {
                                  // turns.
             canvas = findCanvas();
             view = dynamic_cast<MapView *>(active()->findChild<QScrollArea *>("canvasView"));
-            check(canvas->brush == 9 && canvas->grid && canvas->zoom == 4 &&
+            check(canvas->selection == QRect(0, 0, 3, 3) && canvas->comparison &&
+                      canvas->brush == 9 && canvas->grid && canvas->zoom == 4 &&
                       QLineF(center, view->mapCenter()).length() < 0.1,
                   "Undo reset view settings");
             check(w.projectForTests().data("TOWNE.DAT") == QByteArray(16384, 0),
@@ -475,6 +665,25 @@ int main(int argc, char **argv) {
             page->setCurrentIndex(0);
             app.processEvents();
             check(findCanvas()->brush == 9, "Floor navigation did not restore per-page brush");
+            auto filter = active()->findChild<QComboBox *>("mapPaletteFilter");
+            auto tiles = active()->findChild<QListWidget *>("mapPalette");
+            filter->setCurrentIndex(1);
+            check(!tiles->item(9)->isHidden() && tiles->item(11)->isHidden(),
+                  "Favorites lost across rebuild");
+            filter->setCurrentIndex(2);
+            check(!tiles->item(11)->isHidden(), "Recent brushes lost across navigation");
+            filter->setCurrentIndex(0);
+            auto mini = active()->findChild<QWidget *>("mapMinimap");
+            view = dynamic_cast<MapView *>(active()->findChild<QScrollArea *>("canvasView"));
+            auto oldCenter = view->mapCenter();
+            auto pos = QPointF(mini->width() / 2, mini->height() / 2);
+            QMouseEvent miniClick(QEvent::MouseButtonPress, pos, pos, Qt::LeftButton,
+                                  Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(mini, &miniClick);
+            check(QLineF(oldCenter, view->mapCenter()).length() > 1 &&
+                      w.projectForTests().changed().isEmpty(),
+                  "Minimap failed read-only navigation");
+
             QMouseEvent pick(QEvent::MouseButtonPress, {40, 40}, {40, 40}, Qt::RightButton,
                              Qt::RightButton, Qt::NoModifier);
             QApplication::sendEvent(findCanvas(), &pick);
@@ -491,6 +700,70 @@ int main(int argc, char **argv) {
                   "Return to map lost view state");
             check(w.projectForTests().changed().isEmpty(),
                   "Navigation or view settings changed resources");
+        });
+        test("Native terrain fill and paste each undo as one operation", [&] {
+            QTemporaryDir dir;
+            fixture(dir.path());
+            file(dir.path() + "/TOWNE.DAT", QByteArray(16384, 0));
+            WorkshopWindow window;
+            check(window.openGame(dir.path()), "Native terrain fixture failed");
+            window.show();
+            window.selectResource("TOWNE.DAT");
+            app.processEvents();
+            auto active = [&] {
+                return window.findChild<QStackedWidget *>("workspaces")->currentWidget();
+            };
+            auto canvas = [&] {
+                return dynamic_cast<MapCanvas *>(active()->findChild<QWidget *>("mapCanvas"));
+            };
+            auto click = [&](int x, int y) {
+                QPointF point((x + 0.5) * 16 * canvas()->zoom, (y + 0.5) * 16 * canvas()->zoom);
+                QMouseEvent down(QEvent::MouseButtonPress, point, point, Qt::LeftButton,
+                                 Qt::LeftButton, Qt::NoModifier);
+                QApplication::sendEvent(canvas(), &down);
+                QMouseEvent up(QEvent::MouseButtonRelease, point, point, Qt::LeftButton,
+                               Qt::NoButton, Qt::NoModifier);
+                QApplication::sendEvent(canvas(), &up);
+            };
+            auto history = [&](const QString &prefix) {
+                bool triggered = false;
+                for (auto action : window.findChildren<QAction *>())
+                    if (action->text().startsWith(prefix + " ") && action->isEnabled()) {
+                        action->trigger();
+                        triggered = true;
+                        break;
+                    }
+                check(triggered, "Missing terrain history command");
+                app.processEvents();
+                app.processEvents();
+            };
+            active()->findChild<QListWidget *>("mapPalette")->setCurrentRow(9);
+            canvas()->selection = QRect(1, 1, 2, 2);
+            canvas()->selectionChanged();
+            active()->findChild<QComboBox *>("mapTool")->setCurrentIndex(MapCanvas::Fill);
+            click(1, 1);
+            auto filled = window.projectForTests().data("TOWNE.DAT");
+            check(filled.count(char(9)) == 4, "Native fill escaped selection");
+            history("Undo");
+            check(window.projectForTests().data("TOWNE.DAT") == QByteArray(16384, 0),
+                  "Fill did not undo atomically");
+            history("Redo");
+            check(window.projectForTests().data("TOWNE.DAT") == filled &&
+                      canvas()->selection == QRect(1, 1, 2, 2),
+                  "Fill redo lost data or selection");
+            active()->findChild<QPushButton *>("mapCopy")->click();
+            active()->findChild<QPushButton *>("mapClearSelection")->click();
+            active()->findChild<QPushButton *>("mapPaste")->click();
+            check(canvas()->pasting(), "Toolbar did not start paste");
+            click(6, 6);
+            check(window.projectForTests().data("TOWNE.DAT").count(char(9)) == 8,
+                  "Native paste failed");
+            history("Undo");
+            check(window.projectForTests().data("TOWNE.DAT") == filled,
+                  "Paste did not undo as one operation");
+            history("Undo");
+            check(window.projectForTests().changed().isEmpty(),
+                  "Terrain history did not return to original");
         });
         test("Native widgets are read-only until an edit", [&] {
             QTemporaryDir dir;
