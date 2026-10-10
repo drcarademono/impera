@@ -33,6 +33,7 @@ class WorkshopWindow : public QMainWindow {
     MapBrushState mapBrushes;
     bool guard(const std::function<void()> &operation);
     bool canLeave();
+    bool reviewPackage(bool launch);
     bool saveProject();
     void rebuildTree();
     void updateSummary();

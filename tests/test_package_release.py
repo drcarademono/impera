@@ -1,6 +1,9 @@
 """Packaging regression: private game data can never enter release archives."""
 import importlib.util
 import tempfile
+import os
+import shutil
+import subprocess
 import sys
 from unittest import mock
 import unittest
@@ -65,6 +68,35 @@ def icon_pe_fixture(images):
 
 
 class PackagingTest(unittest.TestCase):
+    @unittest.skipUnless(os.name != 'nt' and shutil.which('sh'), 'Requires a POSIX shell')
+    def test_launchers_honor_private_runtime(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            build = root / 'build'
+            build.mkdir()
+            binary = build / 'ultima5'
+            binary.write_text('#!/bin/sh\npwd > runtime-location.txt\n')
+            binary.chmod(0o755)
+            for name in ['sdl3-src/LICENSE.txt', 'sdl3_mixer-src/LICENSE.txt', 'sdl3_mixer-src/src/dr_libs/LICENSE', 'sdl3_mixer-src/src/stb_vorbis/stb_vorbis.h']:
+                path = build / '_deps' / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text('This software is available under 2 licenses - test notice')
+            caller = root / 'caller'
+            caller.mkdir()
+            for platform in ['linux-x86_64', 'macos-x86_64']:
+                destination = root / platform
+                archive = packager.package(build, platform, 'v-test', destination)
+                with tarfile.open(archive) as contents:
+                    contents.extractall(destination, filter='data')
+                stage = destination / f'Impera-v-test-{platform}'
+                launcher = stage / ('Impera.sh' if platform.startswith('linux') else 'Impera.app/Contents/MacOS/Impera')
+                private = root / ('private runtime ' + platform)
+                environment = os.environ.copy()
+                environment['U5D_RUNTIME_DIR'] = str(private)
+                subprocess.run(['sh', str(launcher)], cwd=caller, env=environment, check=True, timeout=10)
+                self.assertEqual((private / 'runtime-location.txt').read_text().strip(), str(private))
+                self.assertFalse((caller / 'runtime-location.txt').exists())
+
     def test_platform_archives(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

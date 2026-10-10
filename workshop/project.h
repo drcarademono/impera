@@ -19,3 +19,12 @@ class Project {
     const QByteArray &data(const QString &name) const;
     void validate() const;
 };
+
+struct ModDiagnostic {
+    enum Severity { Information, Warning, Error };
+    Severity severity;
+    QString resource, message;
+};
+QVector<ModDiagnostic> validateMod(const Project &project);
+// Produces a new, private runtime. No original data, Mods or saves are written.
+QString prepareModTest(const Project &project, const QString &sessionsDirectory);

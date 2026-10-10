@@ -4,6 +4,7 @@
 #include "window.h"
 #include <QTemporaryDir>
 #include <QtWidgets>
+#include <algorithm>
 #include <cstring>
 #include <iostream>
 #include <random>
@@ -1222,6 +1223,92 @@ int main(int argc, char **argv) {
             check(!Dialogue::inventoryOptions().value(65).isEmpty() &&
                       Dialogue::inventoryOptions().value(16) == "Dagger",
                   "Engine inventory labels incorrect");
+        });
+        test("New Mod reuses the selected game folder without a picker", [&] {
+            QTemporaryDir dir;
+            fixture(dir.path());
+            WorkshopWindow window;
+            check(window.openGame(dir.path()), "New Mod fixture open");
+            for (auto action : window.findChildren<QAction *>())
+                if (action->text() == "New Mod") {
+                    action->trigger();
+                    break;
+                }
+            check(window.projectForTests().sourceDirectory == QDir(dir.path()).absolutePath() &&
+                      window.projectForTests().changed().isEmpty(),
+                  "New Mod did not reuse the remembered source");
+        });
+        test("Mod validation, decoder verification and installed-package conflicts", [&] {
+            QTemporaryDir dir;
+            auto project = fixture(dir.path());
+            project.resources["INIT.GAM"].edited[0] = 1;
+            auto report = validateMod(project);
+            check(std::none_of(report.begin(), report.end(),
+                               [](const auto &d) { return d.severity == ModDiagnostic::Error; }),
+                  "Valid mod failed validation");
+            QDir(dir.path()).mkdir("Mods");
+            file(dir.path() + "/Mods/A.imperamod", project.package());
+            file(dir.path() + "/Mods/B.imperamod", project.package());
+            file(dir.path() + "/Mods/broken.imperamod", "broken");
+            report = validateMod(project);
+            check(std::any_of(report.begin(), report.end(),
+                              [](const auto &d) {
+                                  return d.resource == "INIT.GAM" &&
+                                         d.message.contains("also replaces");
+                              }),
+                  "Installed resource conflict not reported");
+            check(std::any_of(report.begin(), report.end(),
+                              [](const auto &d) {
+                                  return d.message.contains("earlier installed package");
+                              }),
+                  "Installed package rejection order not reported");
+            check(std::any_of(report.begin(), report.end(),
+                              [](const auto &d) { return d.message.contains("cannot load"); }),
+                  "Broken installed package not reported");
+            project.resources["INIT.GAM"].edited.resize(3);
+            report = validateMod(project);
+            check(std::any_of(report.begin(), report.end(),
+                              [](const auto &d) {
+                                  return d.resource == "INIT.GAM" &&
+                                         d.severity == ModDiagnostic::Error;
+                              }),
+                  "Validation error does not link to resource");
+        });
+        test("Isolated test sessions preserve originals and exclude personal data", [&] {
+            QTemporaryDir source, cache;
+            auto project = fixture(source.path());
+            project.resources["INIT.GAM"].edited[0] = 42;
+            QDir(source.path()).mkdir("Mods");
+            QDir(source.path()).mkdir("SAVEGAME");
+            file(source.path() + "/Mods/other.imperamod", "other");
+            file(source.path() + "/SAVEGAME/slot", "personal");
+            file(source.path() + "/DATA.CFG", "personal-config");
+            file(source.path() + "/SAVED.GAM", "personal-save");
+            auto before = project.resources["INIT.GAM"].original;
+            QString first = prepareModTest(project, cache.path());
+            QString second = prepareModTest(project, cache.path());
+            check(first != second && QDir(first).exists(), "Test sessions are not separate");
+            auto read = [](const QString &path) {
+                QFile file(path);
+                check(file.open(QIODevice::ReadOnly), "Cannot read test output");
+                return file.readAll();
+            };
+            check(read(source.path() + "/init.gam") == before &&
+                      read(first + "/INIT.GAM") == before,
+                  "Test creation changed source or applied edits to copied base");
+            Project test;
+            test.openGame(first);
+            test.importPackage(read(first + "/Mods/workshop.imperamod"));
+            check(test.data("INIT.GAM") == project.data("INIT.GAM"),
+                  "Isolated package does not reproduce editor data");
+            check(!QFile::exists(first + "/SAVED.GAM") && !QDir(first + "/SAVEGAME").exists() &&
+                      QDir(first + "/Mods").entryList(QDir::Files).size() == 1 &&
+                      read(first + "/DATA.CFG") == (first + "\n\n").toUtf8(),
+                  "Test session copied personal saves, settings or installed mods");
+            file(source.path() + "/init.gam", QByteArray(4192, 7));
+            rejects([&] { prepareModTest(project, cache.path()); });
+            check(QDir(cache.path()).entryList(QDir::Dirs | QDir::NoDotAndDotDot).size() == 2,
+                  "Failed test preparation left a partial runtime");
         });
         test("Verified tile descriptions, category search and document-only exports", [&] {
             check(MapDocument::tileName(5) == "Grass" && MapDocument::tileCategory(5) == "Nature",

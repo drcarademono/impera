@@ -364,7 +364,7 @@ Optional CRT/display previews were considered and deferred to in-engine testing:
 a Workshop-only approximation could imply that it represents actual runtime
 lighting, animation or encounter behavior.
 
-## Proposed Phase 6 — Package validation and in-engine testing
+## Phase 6 — Package validation and in-engine testing (implemented)
 
 The original map-editor plan ended at Phase 5. A useful next phase would connect
 editing with testing a mod, rather than add more cosmetic editor options:
@@ -380,5 +380,43 @@ editing with testing a mod, rather than add more cosmetic editor options:
 4. Add regression coverage for the export/launch handoff and platform-specific
    paths. Runtime visuals should come from Impera itself.
 
-This phase is proposed, not implemented. The engine/test-package handoff needs a
-confirmed isolation contract before Workshop exposes a one-click test button.
+### Phase 6 outcome
+
+Mod Tools → Validate / Package Preview shows errors, warnings and the exact
+whole-resource replacements in the package. Double-click a resource to inspect
+it. Changed resources are checked against the on-disk originals; structural
+validation and a roundtrip through the engine decoder block invalid exports.
+Unusual NPC hours/destinations are warnings, never silently corrected.
+
+Installed packages are inspected in the engine's bytewise filename order.
+The report shows accepted packages, resource overlaps, invalid packages and the
+engine's 128-package/64-MiB memory limits. Overlap rejects the later package in
+full, rather than merging or choosing the latest resource. Export Package opens
+the report before writing. Warnings permit export; errors block it.
+
+Mod Tools → Set Impera Executable remembers the executable/AppImage. Test Mod
+prepares a unique private cache folder, copies flat DOS runtime resources, checks
+them against the project's original snapshot, and writes exactly one generated
+package. Original Mods, modern saves, legacy saves and personal settings are not
+copied. Native engine startup honors U5D_RUNTIME_DIR before opening logs or
+settings; packaged Linux/macOS launchers honor it too. U5D_DATA_DIR selects the
+private game copy. Existing Linux launchers are additionally isolated through
+XDG_DATA_HOME; macOS app bundles launch their native engine directly.
+
+Test output/error logs and test saves remain in the session folder for debugging.
+Open Last Test Folder provides access; Stop Mod Tests asks the launched processes
+to exit. Workshop owns test processes, so closing Workshop stops remaining tests.
+A new character is needed to exercise modified starting-state data. Test folders
+contain copied game data and are not distribution packages. No runtime AI or
+lighting is simulated by Workshop itself.
+
+New Mod reuses a valid remembered game folder. Change Game Folder explicitly
+opens the picker; invalid/moved folders fall back to it. Successfully opened
+projects also update the remembered source folder.
+
+Validation includes exact package roundtrips, resource-linked failures, installed
+package conflicts, independent session directories, exclusion of personal data,
+source-change rejection/cleanup, and Linux/macOS launcher isolation. Native
+engine startup isolation is checked independently. The Windows empty-array
+compile failure is fixed with a standard std::array; full MSVC validation remains
+in the cross-platform release workflow.

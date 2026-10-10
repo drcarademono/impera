@@ -5,7 +5,7 @@
 #include "config.h"
 #include "version.h"
 
-#if defined(COMPILER_MSVC)
+#if defined(COMPILER_MSVC) && !defined(_CRT_SECURE_NO_WARNINGS)
 #define _CRT_SECURE_NO_WARNINGS
 #endif
 

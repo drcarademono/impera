@@ -148,9 +148,49 @@ WorkshopWindow::WorkshopWindow() {
     action("New Mod", QKeySequence::New, [this] {
         if (!canLeave())
             return;
+        if (restoreGameDirectory())
+            return;
         QString p = QFileDialog::getExistingDirectory(this, "Locate Ultima 5 game files");
         if (!p.isEmpty())
             openGame(p);
+    });
+    auto toolsMenu = new QMenu(this);
+    auto toolsButton = new QToolButton;
+    toolsButton->setText("Mod Tools");
+    toolsButton->setMenu(toolsMenu);
+    toolsButton->setPopupMode(QToolButton::InstantPopup);
+    toolbar->addWidget(toolsButton);
+    auto extra = [this, toolsMenu](const QString &label, std::function<void()> fn) {
+        auto item = toolsMenu->addAction(label);
+        connect(item, &QAction::triggered, this, fn);
+    };
+    extra("Change Game Folder", [this] {
+        if (!canLeave())
+            return;
+        QString path = QFileDialog::getExistingDirectory(this, "Locate Ultima 5 game files",
+                                                         project.sourceDirectory);
+        if (!path.isEmpty())
+            openGame(path);
+    });
+    extra("Validate / Package Preview", [this] { reviewPackage(false); });
+    extra("Test Mod", [this] { reviewPackage(true); });
+    extra("Open Last Test Folder", [this] {
+        const QString path = QSettings().value("paths/testSession").toString();
+        if (QDir(path).exists() && !path.isEmpty())
+            QDesktopServices::openUrl(QUrl::fromLocalFile(path));
+        else
+            statusBar()->showMessage("No test session folder is available yet", 6000);
+    });
+    extra("Stop Mod Tests", [this] {
+        for (auto process : findChildren<QProcess *>())
+            if (process->state() != QProcess::NotRunning)
+                process->terminate();
+    });
+    extra("Set Impera Executable", [this] {
+        QString path = QFileDialog::getOpenFileName(this, "Choose Impera executable or AppImage",
+                                                    QSettings().value("paths/engine").toString());
+        if (!path.isEmpty())
+            QSettings().setValue("paths/engine", path);
     });
     action("Open Project", QKeySequence::Open, [this] {
         if (!canLeave())
@@ -195,6 +235,8 @@ WorkshopWindow::WorkshopWindow() {
         if (flushDraft && !flushDraft())
             return;
         guard([&] {
+            if (!reviewPackage(false))
+                return;
             auto bytes = project.package();
             QString path = QFileDialog::getSaveFileName(this, "Export mod package", {},
                                                         "Impera mod (*.imperamod)");
@@ -384,6 +426,7 @@ bool WorkshopWindow::openGame(const QString &path) {
 bool WorkshopWindow::openProject(const QString &path) {
     return guard([&] {
         project.load(path);
+        QSettings().setValue("paths/game", project.sourceDirectory);
         history.clear();
         savedTitle = project.title;
         current.clear();
@@ -1239,4 +1282,108 @@ QWidget *WorkshopWindow::bytesEditor(const QString &name) {
                            "and package export; unknown fields still require "
                            "knowledge of the DOS format."));
     return w;
+}
+
+bool WorkshopWindow::reviewPackage(bool launch) {
+    if (flushDraft && !flushDraft())
+        return false;
+    if (project.resources.isEmpty())
+        return false;
+    const auto diagnostics = validateMod(project);
+    bool errors = false;
+    QDialog dialog(this);
+    dialog.setWindowTitle(launch ? "Validate and test mod" : "Validation / package preview");
+    dialog.resize(850, 500);
+    auto layout = new QVBoxLayout(&dialog);
+    auto explanation = new QLabel(
+        "Double-click a resource to inspect it. Warnings preserve unusual values; errors block "
+        "export/testing. Overlapping installed packages are rejected, not merged. Test Mod ignores "
+        "installed packages and uses a separate runtime folder.");
+    explanation->setWordWrap(true);
+    layout->addWidget(explanation);
+    auto report = new QTreeWidget;
+    report->setObjectName("modValidationReport");
+    report->setHeaderLabels({"Result", "Resource", "Details"});
+    report->header()->setSectionResizeMode(2, QHeaderView::Stretch);
+    for (const auto &diagnostic : diagnostics) {
+        errors |= diagnostic.severity == ModDiagnostic::Error;
+        auto item =
+            new QTreeWidgetItem(report, {diagnostic.severity == ModDiagnostic::Error     ? "Error"
+                                         : diagnostic.severity == ModDiagnostic::Warning ? "Warning"
+                                                                                         : "Info",
+                                         diagnostic.resource, diagnostic.message});
+        item->setToolTip(2, diagnostic.message);
+    }
+    report->setWordWrap(true);
+    layout->addWidget(report, 1);
+    connect(report, &QTreeWidget::itemDoubleClicked, &dialog,
+            [this, &dialog](QTreeWidgetItem *item) {
+                if (project.resources.contains(item->text(1))) {
+                    selectResource(item->text(1));
+                    dialog.reject();
+                }
+            });
+    auto buttons = new QDialogButtonBox(QDialogButtonBox::Cancel);
+    auto proceed = buttons->addButton(launch ? "Launch isolated test" : "Continue",
+                                      QDialogButtonBox::AcceptRole);
+    proceed->setEnabled(!errors && !project.changed().isEmpty());
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(buttons);
+    if (dialog.exec() != QDialog::Accepted)
+        return false;
+    if (!launch)
+        return true;
+    return guard([&] {
+        QString executable = QSettings().value("paths/engine").toString();
+        if (!QFileInfo(executable).isFile() &&
+            !(QFileInfo(executable).isDir() && executable.endsWith(".app", Qt::CaseInsensitive))) {
+            executable = QFileDialog::getOpenFileName(this, "Choose Impera executable or AppImage",
+                                                      executable);
+            if (executable.isEmpty())
+                return;
+        }
+        if (executable.endsWith(".app", Qt::CaseInsensitive))
+            executable = QDir(executable).filePath("Contents/MacOS/impera-engine");
+        require(QFileInfo(executable).isFile() && QFileInfo(executable).isExecutable(),
+                "Choose an executable Impera file");
+        QSettings().setValue("paths/engine", executable);
+        QString root = QDir(QStandardPaths::writableLocation(QStandardPaths::CacheLocation))
+                           .filePath("test-sessions");
+        QString session = prepareModTest(project, root);
+        QSettings().setValue("paths/testSession", session);
+        auto process = new QProcess(this);
+        process->setProgram(QFileInfo(executable).absoluteFilePath());
+        process->setWorkingDirectory(session);
+        auto environment = QProcessEnvironment::systemEnvironment();
+        environment.insert("U5D_DATA_DIR", session);
+        environment.insert("U5D_RUNTIME_DIR", session);
+        // Existing Linux release launchers use XDG_DATA_HOME; isolate those too.
+        environment.insert("XDG_DATA_HOME", session);
+        environment.insert("XDG_CONFIG_HOME", QDir(session).filePath("config"));
+        environment.insert("XDG_CACHE_HOME", QDir(session).filePath("cache"));
+        process->setProcessEnvironment(environment);
+        process->setStandardOutputFile(QDir(session).filePath("engine-output.log"));
+        process->setStandardErrorFile(QDir(session).filePath("engine-errors.log"));
+        connect(process, &QProcess::errorOccurred, this, [this, process, session] {
+            if (process->error() == QProcess::FailedToStart)
+                process->deleteLater();
+            QMessageBox::warning(this, "Mod test launch failed",
+                                 process->errorString() + "\nTest files/logs: " + session);
+        });
+        connect(process, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), this,
+                [this, process, session](int code, QProcess::ExitStatus status) {
+                    statusBar()->showMessage(
+                        QString("Test finished (%1). Saves and logs: %2")
+                            .arg(status == QProcess::CrashExit ? "crashed" : QString::number(code))
+                            .arg(session),
+                        30000);
+                    process->deleteLater();
+                });
+        process->start();
+        statusBar()->showMessage("Launching an isolated test in " + session +
+                                     ". Start a NEW character to exercise this mod's starting "
+                                     "state. Saves/logs stay in this test folder.",
+                                 30000);
+    });
 }

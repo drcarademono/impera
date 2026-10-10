@@ -21,6 +21,11 @@
 #include "town.h"
 #if defined(TARGET_SDL)
 #include <setjmp.h>
+#if defined(OS_WINDOWS)
+#include <direct.h>
+#else
+#include <unistd.h>
+#endif
 #include "common/save_slots.h"
 #include "common/data_setup.h"
 #include "key/key.h"
@@ -55,6 +60,19 @@ int CDECL main(int argc, char** argv/*, char** envp*/)
     local_4 = 0x20;
 
 #if defined(TARGET_SDL)
+    /* Workshop test sessions must isolate writes before logs/settings are opened. */
+    const char* runtimeDirectory = getenv("U5D_RUNTIME_DIR");
+    if (runtimeDirectory && *runtimeDirectory) {
+#if defined(OS_WINDOWS)
+        int changed = _chdir(runtimeDirectory);
+#else
+        int changed = chdir(runtimeDirectory);
+#endif
+        if (changed != 0) {
+            fprintf(stderr, "Cannot enter Impera runtime directory '%s': %s\n", runtimeDirectory, strerror(errno));
+            return EXIT_FAILURE;
+        }
+    }
     DEBUG_Initialize();
     debug("Startup argc=%d",argc);
     ENGINE_Load();

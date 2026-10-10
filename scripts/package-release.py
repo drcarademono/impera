@@ -39,7 +39,7 @@ def package(build, platform, version, destination, unpacked=False):
         launcher.write_text('''#!/bin/sh
 set -eu
 app_dir="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
-runtime="$HOME/Library/Application Support/Impera"
+runtime="${U5D_RUNTIME_DIR:-$HOME/Library/Application Support/Impera}"
 mkdir -p "$runtime"
 cd "$runtime"
 exec "$app_dir/MacOS/impera-engine" "$@"
@@ -60,7 +60,7 @@ exec "$app_dir/MacOS/impera-engine" "$@"
             launcher.write_text('''#!/bin/sh
 set -eu
 app_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
-runtime="${XDG_DATA_HOME:-$HOME/.local/share}/impera"
+runtime="${U5D_RUNTIME_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/impera}"
 mkdir -p "$runtime"
 cd "$runtime"
 exec "$app_dir/impera" "$@"

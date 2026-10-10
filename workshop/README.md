@@ -244,5 +244,29 @@ shows actual start hours and offers a Start hour field; unusual existing values
 are preserved. Advanced schedule details explain the underlying behavior and
 appearance codes. The editor does not simulate the character's runtime movement.
 
-The original map-editor plan ends at Phase 5. A proposed Phase 6 covers validation
-and safe in-engine mod testing; see [the plan](../docs/workshop-map-ui.md).
+### Validate and test a mod (Phase 6)
+
+Open **Mod Tools → Validate / Package Preview** to review replaced resources,
+format errors, unusual schedules and conflicts with installed packages.
+Double-click a resource to inspect it. Export Package shows this report first;
+errors block export, while warnings preserve unusual values. Impera rejects
+packages that overlap resources in an earlier package; it does not merge them.
+
+Use **Set Impera Executable** once, then **Test Mod → Launch isolated test**.
+Select the native Impera executable, Linux AppImage, or macOS Impera app/native
+engine. Workshop copies game resources into a unique private test folder and
+loads only the generated mod. Normal Mods, saves and settings stay untouched.
+Create a new character to test changes to the starting game state.
+
+**Open Last Test Folder** opens the retained saves and logs (`LOG.TXT`,
+`engine-output.log`, `engine-errors.log`); older Linux launchers may put runtime
+files in its `impera` subfolder. **Stop Mod Tests** requests that test processes
+exit. Closing Workshop also stops remaining tests. Delete old test folders when
+you no longer need their logs/saves. Distribute the `.imperamod` file, not these
+folders containing copied game data.
+
+**New Mod** reuses the remembered game folder. Use **Mod Tools → Change Game
+Folder** when you actually want to select a different installation.
+
+See [the implementation plan](../docs/workshop-map-ui.md) for the isolation and
+validation contracts.

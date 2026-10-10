@@ -8,6 +8,8 @@
 #include <QJsonObject>
 #include <QSaveFile>
 #include <QSet>
+#include <QTemporaryDir>
+#include <algorithm>
 using U5::require;
 static QByteArray readLimited(const QString &path, qint64 cap) {
     QFile f(path);
@@ -231,4 +233,210 @@ void Project::load(const QString &path) {
     next.validate();
     next.projectPath = path;
     *this = next;
+}
+
+QVector<ModDiagnostic> validateMod(const Project &project) {
+    QVector<ModDiagnostic> result;
+    try {
+        project.validate();
+    } catch (const std::exception &error) {
+        result.append({ModDiagnostic::Error, {}, QString::fromUtf8(error.what())});
+    }
+    const auto changes = project.changed();
+    if (changes.isEmpty())
+        result.append({ModDiagnostic::Warning,
+                       {},
+                       "No modified resources; there is no package to export or test."});
+    for (const auto &name : changes) {
+        try {
+            QString actual;
+            QDir source(project.sourceDirectory);
+            for (const auto &file : source.entryList(QDir::Files))
+                if (file.toUpper() == name) {
+                    actual = source.filePath(file);
+                    break;
+                }
+            require(!actual.isEmpty() &&
+                        readLimited(actual, MOD_MAX_RESOURCE) == project.resources[name].original,
+                    "Original game file changed or is missing since this project opened. Reopen "
+                    "the project against the intended base files.");
+        } catch (const std::exception &error) {
+            result.append({ModDiagnostic::Error, name, QString::fromUtf8(error.what())});
+        }
+        try {
+            Project single = project;
+            single.title = "Validation";
+            for (auto it = single.resources.begin(); it != single.resources.end(); ++it)
+                if (it.key() != name)
+                    it->original = it->edited;
+            single.validate();
+        } catch (const std::exception &error) {
+            result.append({ModDiagnostic::Error, name, QString::fromUtf8(error.what())});
+        }
+        result.append({ModDiagnostic::Information, name,
+                       QString("Package replaces this entire resource (%1 bytes → %2 bytes).")
+                           .arg(project.resources[name].original.size())
+                           .arg(project.data(name).size())});
+        const auto &bytes = project.data(name);
+        if (name.endsWith(".NPC") && bytes.size() == 4608) {
+            int unusual = 0;
+            for (int settlement = 0; settlement < 8; ++settlement)
+                for (int actor = 0; actor < 32; ++actor) {
+                    int base = settlement * 576 + actor * 16;
+                    for (int time = 0; time < 4; ++time)
+                        unusual += U5::byte(bytes, base + 12 + time) > 23;
+                    for (int position = 0; position < 3; ++position)
+                        unusual += U5::byte(bytes, base + 3 + position) > 31 ||
+                                   U5::byte(bytes, base + 6 + position) > 31;
+                }
+            if (unusual)
+                result.append({ModDiagnostic::Warning, name,
+                               QString("%1 unusual schedule times or destinations. These values "
+                                       "are preserved; review them in Advanced schedule details.")
+                                   .arg(unusual)});
+        }
+    }
+    // Match the engine: alphabetic scan, packages decoded against original bytes,
+    // and any overlapping resource causes that package to be rejected in full.
+    Project mounted = project;
+    for (auto it = mounted.resources.begin(); it != mounted.resources.end(); ++it)
+        it->edited = it->original;
+    QSet<QString> overrides;
+    unsigned mountedCount = 0;
+    size_t mountedMemory = 0;
+    QDir mods(QDir(project.sourceDirectory).filePath("Mods"));
+    if (!mods.exists()) {
+        QDir source(project.sourceDirectory);
+        for (const auto &folder : source.entryList(QDir::Dirs | QDir::NoDotAndDotDot))
+            if (folder.compare("Mods", Qt::CaseInsensitive) == 0) {
+                mods.setPath(source.filePath(folder));
+                break;
+            }
+    }
+    if (mods.exists()) {
+        auto installed = mods.entryList(QDir::Files, QDir::NoSort);
+        std::sort(installed.begin(), installed.end(),
+                  [](const QString &a, const QString &b) { return a.toUtf8() < b.toUtf8(); });
+        for (const auto &file : installed) {
+            if (!file.endsWith(".imperamod", Qt::CaseInsensitive))
+                continue;
+            try {
+                require(mountedCount < 128, "Engine package limit (128) exceeded");
+                auto bytes = readLimited(mods.filePath(file), MOD_MAX_PACKAGE);
+                ModPackage decoded{};
+                char error[256];
+                require(MOD_Decode(bytes.constData(), bytes.size(), readBase, &mounted, &decoded,
+                                   error, sizeof(error)),
+                        QString::fromUtf8(error));
+                QStringList names;
+                size_t memory = 0;
+                for (unsigned i = 0; i < decoded.count; ++i)
+                    memory += decoded.entries[i].size;
+                for (unsigned i = 0; i < decoded.count; ++i)
+                    names.append(QString::fromLatin1(decoded.entries[i].name));
+                MOD_Free(&decoded);
+                bool conflict = false;
+                for (const auto &name : names)
+                    conflict |= overrides.contains(name);
+                if (conflict) {
+                    result.append(
+                        {ModDiagnostic::Warning,
+                         {},
+                         file + ": overlaps an earlier installed package; the engine rejects it."});
+                    continue;
+                }
+                require(memory <= 64u * 1024u * 1024u - mountedMemory,
+                        "Engine total mod memory limit (64 MiB) exceeded");
+                ++mountedCount;
+                mountedMemory += memory;
+                result.append({ModDiagnostic::Information,
+                               {},
+                               QString("Installed load order %1: %2 — %3")
+                                   .arg(mountedCount)
+                                   .arg(file)
+                                   .arg(names.join(", "))});
+                for (const auto &name : names) {
+                    overrides.insert(name);
+                    if (changes.contains(name))
+                        result.append({ModDiagnostic::Warning, name,
+                                       "Installed package " + file +
+                                           " also replaces this resource. Impera rejects "
+                                           "overlapping packages; remove the conflicting package "
+                                           "when installing this mod."});
+                }
+            } catch (const std::exception &error) {
+                result.append(
+                    {ModDiagnostic::Warning,
+                     {},
+                     file + ": installed package cannot load: " + QString::fromUtf8(error.what())});
+            }
+        }
+    }
+    if (!changes.isEmpty()) {
+        try {
+            auto bytes = project.package();
+            Project roundtrip = mounted;
+            roundtrip.importPackage(bytes);
+            for (const auto &name : changes)
+                require(roundtrip.data(name) == project.data(name),
+                        "Package verification changed " + name);
+            result.append({ModDiagnostic::Information,
+                           {},
+                           QString("Package verified by engine decoder: %1 bytes. Test Mod uses "
+                                   "only this package, not installed mods.")
+                               .arg(bytes.size())});
+        } catch (const std::exception &error) {
+            result.append({ModDiagnostic::Error,
+                           {},
+                           "Package verification: " + QString::fromUtf8(error.what())});
+        }
+    }
+    return result;
+}
+QString prepareModTest(const Project &project, const QString &sessionsDirectory) {
+    const auto package = project.package();
+    require(QDir().mkpath(sessionsDirectory), "Cannot create test-session folder");
+    QTemporaryDir session(QDir(sessionsDirectory).filePath("test-XXXXXX"));
+    require(session.isValid(), "Cannot create isolated test session");
+    QDir source(project.sourceDirectory), destination(session.path());
+    // Flat DOS runtime files only. Never copy personal saves, settings or installed Mods.
+    const QSet<QString> excluded{"DATA.CFG", "ENGINE.CFG", "LOG.TXT", "SAVED.GAM", "SAVED.OOL"};
+    qint64 total = 0;
+    for (const auto &name : source.entryList(QDir::Files, QDir::Name)) {
+        if (excluded.contains(name.toUpper()) || QFileInfo(source.filePath(name)).isSymLink())
+            continue;
+        const QString suffix = QFileInfo(name).suffix().toUpper();
+        if (!QStringList{"DAT", "OVL", "BIT", "PTH", "CH", "16", "OOL", "GAM", "TLK", "NPC", "CBT"}
+                 .contains(suffix))
+            continue;
+        const QString target = name.toUpper();
+        QFileInfo info(source.filePath(name));
+        total += info.size();
+        require(total <= 512 * 1024 * 1024,
+                "Game folder exceeds test-copy limit; choose a clean DOS game folder");
+        require(QFile::copy(source.filePath(name), destination.filePath(target)),
+                "Cannot copy test resource " + name);
+        require(QFile::setPermissions(destination.filePath(target),
+                                      QFile::ReadOwner | QFile::WriteOwner),
+                "Cannot make test file writable");
+    }
+    for (const auto &name : project.resources.keys()) {
+        auto bytes = readLimited(destination.filePath(name), MOD_MAX_RESOURCE);
+        require(bytes == project.resources[name].original,
+                "Original resource changed since this project opened: " + name);
+    }
+    require(destination.mkpath("Mods"), "Cannot create test Mods folder");
+    auto save = [&](const QString &name, const QByteArray &bytes) {
+        QSaveFile file(destination.filePath(name));
+        require(file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size() &&
+                    file.commit(),
+                "Cannot write test file " + name);
+    };
+    save("Mods/workshop.imperamod", package);
+    save("DATA.CFG", (session.path() + "\n\n").toUtf8());
+    save("WORKSHOP-TEST.txt",
+         "Isolated Impera Workshop test session. Game files, Mods, settings, saves and logs here "
+         "are disposable. Original files were not modified.\n");
+    session.setAutoRemove(false); // Keep saves/logs available, including after Workshop exits.
+    return session.path();
 }
