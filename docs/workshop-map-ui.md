@@ -316,7 +316,7 @@ Workshop remembers a successfully opened game-files directory in native user
 settings and restores it on startup. Explicit --game/--project paths take
 precedence. A missing or invalid remembered directory leaves the welcome screen.
 
-## Next: Phase 5 — Polish
+## Phase 5 — Polish (implemented)
 
 1. Audit engine tile properties and provide verified terrain categories and
    searchable descriptions without guessing at unknown IDs.
@@ -330,3 +330,55 @@ precedence. A missing or invalid remembered directory leaves the welcome screen.
 Acceptance: keyboard and small-window workflows remain usable, exports reflect
 what their labels promise, tile labels are backed by engine data, and all existing
 lossless-format, editing, undo and package tests continue to pass.
+
+
+### Phase 5 outcome
+
+The terrain browser offers name/number search and Nature, Destinations, Walls and
+passages, Hazards, Objects and Uncategorized filters. Names use the engine's
+explicit `TILE_MAP_*` definitions; unidentified numeric symbols are not guessed.
+These categories describe the authoring palette, not collision or visibility
+rules, and custom graphics may depict tiles differently.
+
+The canvas supports arrow-key targeting, Enter to apply a tool or move a selected
+character/encounter marker, Shift+arrows to extend terrain selection, standard
+copy/paste, and a visible keyboard focus cursor. Tool shortcuts remain local to
+the canvas, so typing in inspector fields is safe. Toolbar rows are separated to
+reduce minimum width; NPC inspector forms wrap on narrow layouts. Search,
+category and tool controls carry accessible names.
+
+Terrain PNG and Tile-ID PNG now render from the document rather than the current
+preview buffer. Visible preview PNG explicitly includes grid, markers and other
+canvas overlays; it is not a terrain-import image. Whole-map terrain exports
+remain at native tile resolution, independent of zoom.
+
+NPC schedules use four numbered changes with actual start hours, a directly
+editable start-hour field and scheduled destinations. Changes 2 and 4 share a
+destination and behavior, not a start time. This coupling is stated directly.
+Unknown hours and behavior codes remain intact; technical fields are explained
+in Advanced schedule details rather than presented as the normal map inspector.
+The engine selects a destination from the schedule transition times
+(`NPC_12e0`); this view is authoring, not a simulation of walking, wandering or AI.
+
+Optional CRT/display previews were considered and deferred to in-engine testing:
+a Workshop-only approximation could imply that it represents actual runtime
+lighting, animation or encounter behavior.
+
+## Proposed Phase 6 — Package validation and in-engine testing
+
+The original map-editor plan ended at Phase 5. A useful next phase would connect
+editing with testing a mod, rather than add more cosmetic editor options:
+
+1. Add a validation report before export, linking problems to the relevant map,
+   schedule, conversation or resource. Distinguish errors from unusual-but-valid
+   values; never silently repair unknown bytes.
+2. Preview the package contents and override/conflict order, showing exactly what
+   will change without modifying the original game files.
+3. Provide a configurable Impera executable and an explicit Test mod action using
+   an isolated test package/save folder. Preserve the user's normal Mods folder
+   and saves; show launch errors and runtime log locations.
+4. Add regression coverage for the export/launch handoff and platform-specific
+   paths. Runtime visuals should come from Impera itself.
+
+This phase is proposed, not implemented. The engine/test-package handoff needs a
+confirmed isolation contract before Workshop exposes a one-click test button.

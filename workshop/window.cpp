@@ -1033,11 +1033,24 @@ QWidget *WorkshopWindow::npcEditor(const QString &name) {
     auto load = [=] {
         QSignalBlocker blocked(table);
         int base = settlement->currentIndex() * 576 + npc->value() * 16;
-        QStringList fields = {
-            "AI location 0", "AI location 1",      "AI location 2", "X location 0", "X location 1",
-            "X location 2",  "Y location 0",       "Y location 1",  "Y location 2", "Z location 0",
-            "Z location 1",  "Z location 2",       "Hour t0",       "Hour t1",      "Hour t2",
-            "Hour t3",       "Sprite type (+256)", "Dialogue ID"};
+        QStringList fields = {"Behavior: change 1",
+                              "Behavior: changes 2 and 4",
+                              "Behavior: change 3",
+                              "Destination X: change 1",
+                              "Destination X: changes 2 and 4",
+                              "Destination X: change 3",
+                              "Destination Y: change 1",
+                              "Destination Y: changes 2 and 4",
+                              "Destination Y: change 3",
+                              "Floor: change 1",
+                              "Floor: changes 2 and 4",
+                              "Floor: change 3",
+                              "Start hour: change 1",
+                              "Start hour: change 2",
+                              "Start hour: change 3",
+                              "Start hour: change 4",
+                              "Appearance code",
+                              "Conversation number"};
         for (int r = 0; r < 18; r++) {
             int off = r < 16
                           ? base + r
@@ -1080,12 +1093,12 @@ QWidget *WorkshopWindow::npcEditor(const QString &name) {
             }))
             load();
     });
-    layout->addWidget(hint("Each NPC has three locations and four transition "
-                           "hours. t0 uses location 0, "
-                           "t1/t3 location 1, and t2 location 2. Z is signed: −1 "
-                           "means basement. Sprite type "
-                           "is added to tile 256. Dialogue IDs link to the "
-                           "companion .TLK resource."));
+    layout->addWidget(
+        hint("Four schedule changes choose three destinations and behaviors. Changes 2 and 4 share "
+             "a destination: editing either changes both. Start hours normally use 0–23; unusual "
+             "values are preserved. Floor −1 is the basement. Behavior and appearance codes are "
+             "advanced values; appearance code +256 selects the sprite. Conversation numbers link "
+             "to this town's dialogue."));
     return w;
 }
 QWidget *WorkshopWindow::combatEditor(const QString &name) {

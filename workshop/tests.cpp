@@ -955,6 +955,15 @@ int main(int argc, char **argv) {
             check(active()->findChild<QSpinBox *>("mapNpcX")->value() == 6 &&
                       active()->findChild<QLabel *>("mapNpcInfo")->text().contains("share"),
                   "Slot 3 failed shared location display");
+            check(active()->findChild<QComboBox *>("mapSchedule")
+                          ->currentText()
+                          .contains("Change 4") &&
+                      active()
+                          ->findChild<QComboBox *>("mapSchedule")
+                          ->currentText()
+                          .contains("starts") &&
+                      !active()->findChild<QLabel *>("mapNpcInfo")->text().contains("AI byte"),
+                  "Schedule UI still exposes internal slot/location terminology");
             active()->findChild<QComboBox *>("mapPage")->setCurrentIndex(0);
             app.processEvents();
             check(canvas()->selectedNpc == 1 && canvas()->tool == MapCanvas::InspectNpc &&
@@ -1005,6 +1014,23 @@ int main(int argc, char **argv) {
             check(!active()->findChild<QPushButton *>("mapNpcConversation")->isEnabled() &&
                       active()->findChild<QSpinBox *>("mapNpcX")->value() == 255,
                   "Missing conversation or unusual position was rewritten");
+            auto scheduleBefore = window.projectForTests().data("TOWNE.NPC");
+            auto hour = active()->findChild<QSpinBox *>("mapNpcStartHour");
+            check(hour && hour->isEnabled(), "Start hour control missing");
+            hour->setValue(13);
+            QMetaObject::invokeMethod(hour, "editingFinished", Qt::DirectConnection);
+            auto expectedSchedule = scheduleBefore;
+            expectedSchedule[3 * 576 + 2 * 16 + 14] = 13;
+            check(window.projectForTests().data("TOWNE.NPC") == expectedSchedule,
+                  "Start hour edit changed another schedule or destination");
+            hour->setValue(25);
+            QMetaObject::invokeMethod(hour, "editingFinished", Qt::DirectConnection);
+            check(window.projectForTests().data("TOWNE.NPC") == expectedSchedule &&
+                      hour->value() == 13,
+                  "Invalid new start hour was accepted");
+            history("Undo");
+            check(window.projectForTests().data("TOWNE.NPC") == scheduleBefore,
+                  "Start hour undo did not restore exact schedule bytes");
         });
         test("Native widgets are read-only until an edit", [&] {
             QTemporaryDir dir;
@@ -1197,6 +1223,107 @@ int main(int argc, char **argv) {
                       Dialogue::inventoryOptions().value(16) == "Dagger",
                   "Engine inventory labels incorrect");
         });
+        test("Verified tile descriptions, category search and document-only exports", [&] {
+            check(MapDocument::tileName(5) == "Grass" && MapDocument::tileCategory(5) == "Nature",
+                  "Verified grass label/category missing");
+            check(MapDocument::tileName(0x4f) == "Wall" &&
+                      MapDocument::tileCategory(0x4f) == "Walls and passages",
+                  "Verified wall category missing");
+            check(MapDocument::tileName(6) == "Unidentified tile" &&
+                      MapDocument::tileCategory(6) == "Uncategorized",
+                  "Unknown tile acquired a guessed description");
+            QTemporaryDir dir;
+            auto project = fixture(dir.path());
+            QByteArray bytes(352, char(0xee));
+            for (int y = 0; y < 11; ++y)
+                for (int x = 0; x < 11; ++x)
+                    bytes[y * 32 + x] = char((y * 11 + x) % 256);
+            file(dir.path() + "/BRIT.CBT", bytes);
+            project.openGame(dir.path());
+            MapDocument document(&project, "BRIT.CBT");
+            QVector<QImage> tiles;
+            for (int id = 0; id < 256; ++id) {
+                QImage tile(16, 16, QImage::Format_RGB32);
+                tile.fill(QColor(id, 0, 0));
+                tiles.append(tile);
+            }
+            auto image = document.terrainImage(0, tiles, false);
+            auto ids = document.terrainImage(0, tiles, true);
+            check(image.size() == QSize(176, 176) && ids.size() == QSize(11, 11),
+                  "Export dimensions wrong");
+            for (int y = 0; y < 11; ++y)
+                for (int x = 0; x < 11; ++x)
+                    check(ids.constScanLine(y)[x] == y * 11 + x &&
+                              image.pixelColor(x * 16, y * 16).red() == y * 11 + x,
+                          "Exports do not reflect stored terrain");
+            WorkshopWindow window;
+            check(window.openGame(dir.path()), "Palette fixture open");
+            window.selectResource("BRIT.CBT");
+            window.resize(1024, 720);
+            window.show();
+            app.processEvents();
+            app.processEvents();
+            auto palette = window.findChild<QListWidget *>("mapPalette");
+            auto search = window.findChild<QLineEdit *>("mapTileSearch");
+            auto category = window.findChild<QComboBox *>("mapPaletteFilter");
+            check(palette && search && category, "Tile browser absent");
+            search->setText("grass");
+            check(!palette->item(5)->isHidden() && palette->item(0x4f)->isHidden(),
+                  "Name search failed");
+            search->clear();
+            category->setCurrentText("Walls and passages");
+            check(palette->item(5)->isHidden() && !palette->item(0x4f)->isHidden(),
+                  "Category filter failed");
+            check(!search->accessibleName().isEmpty() && !category->accessibleName().isEmpty(),
+                  "Accessible control labels absent");
+        });
+        test("Keyboard canvas editing, selection, paste and character movement", [&] {
+            MapCanvas canvas;
+            canvas.side = 4;
+            canvas.ids = QByteArray(16, 1);
+            canvas.original = canvas.ids;
+            canvas.brush = 5;
+            canvas.resizeMap();
+            canvas.show();
+            canvas.setFocus();
+            app.processEvents();
+            int commits = 0;
+            canvas.commit = [&](const QByteArray &) {
+                ++commits;
+                return true;
+            };
+            auto key = [&](int code, Qt::KeyboardModifiers modifiers = Qt::NoModifier) {
+                QKeyEvent event(QEvent::KeyPress, code, modifiers);
+                QApplication::sendEvent(&canvas, &event);
+            };
+            key(Qt::Key_Right);
+            key(Qt::Key_Down);
+            key(Qt::Key_Return);
+            check(commits == 1 && U5::byte(canvas.ids, 5) == 5 && U5::byte(canvas.ids, 0) == 1,
+                  "Keyboard pencil failed or painted wrong tile");
+            key(Qt::Key_Right, Qt::ShiftModifier);
+            check(canvas.selection == QRect(1, 1, 2, 1), "Keyboard selection not extended");
+            key(Qt::Key_C, Qt::ControlModifier);
+            key(Qt::Key_Down);
+            key(Qt::Key_V, Qt::ControlModifier);
+            check(canvas.pasting(), "Keyboard paste preview missing");
+            key(Qt::Key_Return);
+            check(commits == 2 && !canvas.pasting(), "Enter did not commit paste once");
+            canvas.tool = MapCanvas::InspectNpc;
+            canvas.selectedNpc = 7;
+            QPoint destination;
+            int selected = -1;
+            canvas.moveNpc = [&](int actor, QPoint point) {
+                selected = actor;
+                destination = point;
+                return true;
+            };
+            auto before = canvas.ids;
+            key(Qt::Key_Left);
+            key(Qt::Key_Return);
+            check(selected == 7 && destination == QPoint(1, 2) && canvas.ids == before,
+                  "Keyboard actor movement changed terrain or wrong position");
+        });
         test("Persistent game directory restoration and stale folder fallback", [&] {
             QTemporaryDir dir;
             fixture(dir.path());
@@ -1299,6 +1426,9 @@ int main(int argc, char **argv) {
                   "Trigger preview did not replace both linked cells");
             check(window.projectForTests().data("BRIT.CBT") == beforePreview,
                   "Trigger preview mutated stored data");
+            MapDocument exportDocument(&window.projectForTests(), "BRIT.CBT");
+            check(exportDocument.terrainImage(0, canvas->tiles, true).constScanLine(5)[4] == 1,
+                  "Terrain export leaked displayed trigger preview");
             window.findChild<QComboBox *>("mapTool")->setCurrentIndex(MapCanvas::Pencil);
             check(U5::byte(canvas->ids, 5 * 11 + 4) == 1,
                   "Trigger preview leaked into terrain tools");

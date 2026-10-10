@@ -8,6 +8,7 @@ struct MapViewState {
     double zoom = 2;
     bool fit = false, grid = false, comparison = false, outline = false;
     QRect selection;
+    QPoint keyboardCell = {0, 0};
     int brush = 1, tool = 0, schedule = 0, npc = -1;
     bool ghosts = false;
     QPointF center = {-1, -1}; // Map cells, independent of display scale.
@@ -20,6 +21,9 @@ class MapDocument {
     QByteArray terrain(int page, bool original = false) const;
     QMap<QString, QByteArray> changes(int page, const QByteArray &terrain) const;
     static bool supported(const QString &resource);
+    static QString tileName(int id);
+    static QString tileCategory(int id);
+    QImage terrainImage(int page, const QVector<QImage> &tiles, bool ids) const;
 
   private:
     Project *project;
@@ -74,6 +78,7 @@ class MapCanvas : public QWidget {
     };
     QVector<Actor> actors, ghosts;
     int selectedNpc = -1;
+    QPoint keyboardCell = {0, 0};
     std::function<int(const QList<int> &)> chooseActor;
     std::function<bool(int, QPoint)> moveNpc;
     std::function<bool(const QByteArray &)> commit;
@@ -187,11 +192,11 @@ class MapWorkspace : public QWidget {
     void loadPage();
     void setBrush(int id);
     void updateZoom();
-    void exportImage(bool ids);
+    void exportImage(bool ids, bool preview = false);
     QStackedWidget *inspector;
     QComboBox *npcList;
     QLabel *npcInfo, *npcSprite;
-    QSpinBox *npcX, *npcY, *npcFloor;
+    QSpinBox *npcX, *npcY, *npcFloor, *npcStartHour;
     QCheckBox *npcGhosts;
     QPushButton *npcConversation;
     QString npcResource, talkResource;

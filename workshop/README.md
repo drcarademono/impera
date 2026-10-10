@@ -221,3 +221,28 @@ is read-only. **Combat setup** retains raw and unusual metadata values.
 The game-files directory is remembered across startups. Explicit `--game` or
 `--project` arguments override that preference. If the remembered folder moves
 or becomes invalid, use **Open game / New mod** to select it again.
+
+
+### Map editor polish
+
+Find terrain tiles by name or number and filter by category. Descriptions come
+from named engine definitions; unidentified tiles stay uncategorized.
+On the map canvas, use arrow keys to target a tile and Enter to apply the tool
+(or move the selected character/encounter marker). Shift+arrows extend a terrain
+selection; standard Copy/Paste and Escape work alongside B/I/V/R/F tool shortcuts.
+These shortcuts do not intercept typing in inspector fields.
+
+**Terrain PNG** exports stored terrain artwork; **Tile-ID PNG** exports one
+numeric tile ID per pixel. Both exclude NPCs, markers, grid and trigger previews.
+**Visible preview PNG (includes overlays)** captures only the visible canvas,
+including its current authoring overlays, at the current zoom.
+
+NPC schedules have **four schedule changes** and **three destinations**. Each
+change has its own start hour. Changes **2 and 4 share a destination and behavior**,
+so moving one moves both. Their start hours remain independent. The map inspector
+shows actual start hours and offers a Start hour field; unusual existing values
+are preserved. Advanced schedule details explain the underlying behavior and
+appearance codes. The editor does not simulate the character's runtime movement.
+
+The original map-editor plan ends at Phase 5. A proposed Phase 6 covers validation
+and safe in-engine mod testing; see [the plan](../docs/workshop-map-ui.md).
