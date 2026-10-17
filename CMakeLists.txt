@@ -19,6 +19,7 @@ set(SOURCES
     src/mod/contents_game.c
     src/mod/package.c
     src/mod/runtime.c
+    src/key/dialogue_links.c
     src/graphics/tileset.c
     src/common/icon.c
     src/common/folder_picker.c

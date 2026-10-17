@@ -16,6 +16,11 @@
 #include "common/movement.h"
 #include "event/event.h"
 #include "key/mouse.h"
+#include "key/dialogue_links.h"
+#include "common/engine_settings.h"
+#include "text/dialogue_runtime.h"
+#include "text/text_window.h"
+#include "graphics/tileset.h"
 #include "key/key.h"
 #include "graphics/grap_sdl.h"
 #include "graphics/crt.h"
@@ -229,6 +234,76 @@ static void paintActor(int index,int x,int y)
     GetActorMap(col,row)=0x44;
     GRAP_BUF_PutMapSprite(col,row,256+0x44);
 }
+static void keywordLinks(void)
+{
+    const byte data[]="N\0D\0G\0J\0B\0FLOW\0Flowers!\0MOON\0Moonstones!\0\x90\x91";
+    assert(IMPERA_TalkIsTopic(data,sizeof(data),"flowers"));
+    assert(IMPERA_TalkIsTopic(data,sizeof(data),"MOONSTONES"));
+    assert(IMPERA_TalkIsTopic(data,sizeof(data),"working"));
+    assert(!IMPERA_TalkIsTopic(data,sizeof(data),"sunflowers"));
+    assert(!IMPERA_TalkIsTopic(data,sizeof(data),"unknown"));
+    assert(!IMPERA_TalkIsTopic(data,sizeof(data),"SHIT"));
+    byte font[1024];memset(font,0xf0,sizeof(font));
+    uint advance=D_538e;D_538e=1;
+    memset(g_linearEgaBuffer0,0,320*200);
+    DLINK_Begin(data,sizeof(data));
+    ENGINE_Set(ENGINE_HIGHLIGHT_KEYWORDS,1);
+    const char *text="Flowers, unknown.";
+    for(int i=0;text[i];i++) GRAP_BUF_PrintChar(font,text[i]*8,15,0,24+i%16,11+i/16);
+    DLINK_Flush();DLINK_Refresh();
+    for(int i=0;i<7;i++) {
+        assert(TILESET_UIBufferColor(g_linearEgaBuffer0+88*320+192+i*8,IMPERA_TextPalette)==0xff676fff);
+        assert(g_linearEgaBuffer0[88*320+196+i*8]==0);
+    }
+    assert(g_linearEgaBuffer0[88*320+192+7*8]==15); // punctuation stays white
+    assert(g_linearEgaBuffer0[88*320+192+9*8]==15);
+    assert(!DLINK_Click(780,436.8f)); // Not at an ordinary topic prompt yet.
+    DLINK_Prompt(true);DLINK_Reading(true);
+    bool mouse=MOUSE_Enabled();MOUSE_SetEnabled(false);
+    MOUSE_Button(780,436.8f,SDL_BUTTON_LEFT,true,1);
+    assert(KEY_PollKey()==U5_KEY_ESC); // Replaces a partially typed answer.
+    const char *answer="FLOWERS";
+    for(int i=0;answer[i];i++) assert(KEY_PollKey()==answer[i]);
+    assert(KEY_PollKey()==U5_KEY_ENTER);
+    assert(KEY_PollKey()==0);
+    ENGINE_Set(ENGINE_HIGHLIGHT_KEYWORDS,0);DLINK_Refresh();
+    assert(g_linearEgaBuffer0[88*320+192]==15 && !DLINK_Click(780,436.8f));
+    // Toggling the setting inside a modal screen repaints only after restore.
+    byte screen[320*200];memcpy(screen,g_linearEgaBuffer0,sizeof(screen));
+    GRAP_SDL_SetPixelUI(true);memset(g_linearEgaBuffer0,3,sizeof(screen));
+    ENGINE_Set(ENGINE_HIGHLIGHT_KEYWORDS,1);DLINK_Refresh();
+    assert(g_linearEgaBuffer0[88*320+192]==3);
+    memcpy(g_linearEgaBuffer0,screen,sizeof(screen));GRAP_SDL_SetPixelUI(false);DLINK_Refresh();
+    assert(TILESET_UIBufferColor(g_linearEgaBuffer0+88*320+192,IMPERA_TextPalette)==0xff676fff);
+    DLINK_Prompt(false);assert(!DLINK_Click(780,436.8f)); // Questions never accept topic clicks.
+    DLINK_Reading(false);
+    DLINK_End();DLINK_Begin(data,sizeof(data));
+    // A keyword can wrap onto another row; every letter remains linked.
+    const char *wrapped="Moonstones";
+    for(int i=0;wrapped[i];i++) {
+        int x=38+i,y=11;if(x>=40){x=24+(x-40);y++;}
+        GRAP_BUF_PrintChar(font,wrapped[i]*8,15,0,x,y);
+    }
+    DLINK_Flush();DLINK_Refresh();
+    assert(TILESET_UIBufferColor(g_linearEgaBuffer0+88*320+304,IMPERA_TextPalette)==0xff676fff);
+    assert(TILESET_UIBufferColor(g_linearEgaBuffer0+96*320+192,IMPERA_TextPalette)==0xff676fff);
+    DLINK_Prompt(true);DLINK_Reading(true);
+    GRAP_BUF_ScrollWindow(192,88,319,191,-8);DLINK_Refresh();
+    assert(DLINK_Click(780,436.8f));
+    assert(KEY_PollKey()==U5_KEY_ESC);
+    for(int i=0;wrapped[i];i++) assert(KEY_PollKey()=="MOONSTONES"[i]);
+    assert(KEY_PollKey()==U5_KEY_ENTER);
+    GRAP_BUF_ScrollTextHistory(1);
+    u32 historyColor;
+    assert(GRAP_BUF_TextHistoryColor(304,88,IMPERA_TextPalette,&historyColor));
+    assert(historyColor==0xff676fff);
+    assert(!DLINK_Click(780,436.8f)); // History pixels must not hit current links.
+    GRAP_BUF_EndTextScroll();
+    GRAP_BUF_SetPage(0);GRAP_BUF_SetPenColor(0);GRAP_BUF_FillWindow(192,88,319,191,0);
+    assert(!DLINK_Click(780,436.8f)); // Cleared text has no stale hit targets.
+    DLINK_End();MOUSE_SetEnabled(mouse);ENGINE_Set(ENGINE_HIGHLIGHT_KEYWORDS,0);
+    GRAP_BUF_ResetTextHistory();D_538e=advance;
+}
 int main(int argc, char** argv)
 {
     transparentSprites = !(argc > 1 && strcmp(argv[1], "--opaque") == 0);
@@ -417,6 +492,7 @@ int main(int argc, char** argv)
     D_535e_textWindows[2].right=39;
     GRAP_BUF_ResetTextHistory();
     D_538e = savedAdvance;
+    keywordLinks();
     MOVEMENT_SetDiagonal(false);
     assert(MOUSE_CursorDirection(448,350)==U5_KEY_UP);
     assert(MOUSE_CursorDirection(320,570)==U5_KEY_DOWN);

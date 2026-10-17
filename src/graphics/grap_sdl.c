@@ -365,10 +365,10 @@ static void LinearToRGB(void)
         for (int x = 0; x < loresWidth; x++)
         {
             const byte* source=g_linearEgaBuffer0+y*loresWidth+x;
-            byte history;
-            bool past = showHistory && GRAP_BUF_TextHistoryPixel(x, y, &history);
+            Uint32 history;
+            bool past = showHistory && GRAP_BUF_TextHistoryColor(x,y,s_egaPalette,&history);
             for(int sy=0;sy<2;sy++) for(int sx=0;sx<2;sx++)
-                pixels[(y*2+sy)*pitch+x*2+sx]=past ? s_egaPalette[history & 15] : s_pixelUI || EVT_ImmediateExitEnabled()?
+                pixels[(y*2+sy)*pitch+x*2+sx]=past ? history : s_pixelUI || EVT_ImmediateExitEnabled()?
                     TILESET_UIBufferColor(source,s_egaPalette):TILESET_BufferColor(source,sx,sy,s_egaPalette);
         }
     }
@@ -721,10 +721,10 @@ void GRAP_SDL_FlushFrame(void)
             for(int y=0;y<layout.height;y++) for(int x=0;x<layout.width;x++)
                 for(int sy=0;sy<2;sy++) for(int sx=0;sx<2;sx++) {
                     Uint32* row=(Uint32*)((byte*)s_wideSurface->pixels+(y*2+sy)*s_wideSurface->pitch);
-                    byte history;
+                    Uint32 history;
                     bool past = showHistory && x >= layout.sidebarX &&
-                                GRAP_BUF_TextHistoryPixel(x - layout.sidebarX + 192, y, &history);
-                    row[x*2+sx]=past ? s_egaPalette[history & 15] :
+                                GRAP_BUF_TextHistoryColor(x-layout.sidebarX+192,y,s_egaPalette,&history);
+                    row[x*2+sx]=past ? history :
                         TILESET_BufferColor(s_widePixels+y*layout.width+x,sx,sy,s_egaPalette);
                 }
             SDL_UpdateTexture(s_wideTexture, NULL, s_wideSurface->pixels, s_wideSurface->pitch);

@@ -121,10 +121,12 @@ static ImperaWords nativeWords(ImperaTalk *s) {
 static void TALK_04e2_PrintWord(ImperaTalk *s) {
     ImperaWords w = nativeWords(s);
     IMPERA_WordFlush(&w);
+    if(s->wordBoundary) s->wordBoundary(s->host);
 }
 static void TALK_0574_BuildOrPrintWord(ImperaTalk *s, uint8_t ch) {
     ImperaWords w = nativeWords(s);
     IMPERA_WordAppend(&w, ch);
+    if(s->wordBoundary && ((ch&127)==' ' || (ch&127)=='\n')) s->wordBoundary(s->host);
 }
 static int TALK_0b04(ImperaTalk *s);
 
@@ -284,6 +286,28 @@ static int TALK_099a(ImperaTalk *s, int param_1) {
     return 1;
 }
 
+/* Match exactly what the ordinary topic prompt accepts, without running a
+ * response or changing the live conversation cursor. Question answers and
+ * profanity commands are intentionally not advertised as topic links. */
+int IMPERA_TalkIsTopic(const uint8_t *data,size_t size,const char *word) {
+    if(!data || !size || size>1024 || !word || !*word) return 0;
+    char answer[65];size_t n=0;
+    for(;word[n] && n<64;n++) answer[n]=word[n]>='a'&&word[n]<='z'?word[n]-32:word[n];
+    if(word[n]) return 0;
+    answer[n]=0;
+    for(int i=0;i<34;i++) if(IMPERA_TalkMatch((const uint8_t*)IMPERA_TalkKeywords[i],answer)==0) return i<5;
+    uint8_t *cursor=(uint8_t*)data;
+    ImperaTalk s={0};s.data=(uint8_t*)data;s.size=size;s.cursor=&cursor;
+    for(int topic=0;topic<128 && !s.error;topic++) {
+        if(!TALK_099a(&s,topic) || s.error) break;
+        uint8_t key[10]={0};size_t k=0;
+        while(k<9 && cursor+k<data+size && cursor[k]) {key[k]=cursor[k];++k;}
+        if(!k || cursor+k>=data+size || cursor[k]) return 0;
+        if(IMPERA_TalkMatch(key,answer)==0) return 1;
+    }
+    return 0;
+}
+
 static int TALK_09d8(ImperaTalk *s) {
     int local_4;
 
@@ -393,7 +417,9 @@ static int TALK_0b04(ImperaTalk *s) {
         s->explicitQuotes = 0;
         (*s->questionMode) = 0;
         s->string(s->host, _TEXT(0x9408, "Your interest?\n:"));
+        if(s->topicPrompt) s->topicPrompt(s->host,1);
         TALK_0a2c_GetString(s);
+        if(s->topicPrompt) s->topicPrompt(s->host,0);
         if (s->answer[0] == 0) {
             s->string(s->host, _TEXT(0x941a, "BYE\n\n"));
             return TALK_0a3c(s);

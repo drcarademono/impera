@@ -1,4 +1,5 @@
 #include "mouse.h"
+#include "dialogue_links.h"
 #include "common/common.h"
 #include "common/movement.h"
 #include "comsubs.h"
@@ -484,6 +485,7 @@ void MOUSE_EndDirectionInput(void)
 }
 void MOUSE_Button(float x, float y, int button, bool down, int clicks)
 {
+    if (down && button==SDL_BUTTON_LEFT && DLINK_Click(x,y)) return;
     if (!s_enabled) return;
     if (down) GRAP_BUF_EndTextScroll();
     if(down) debug("Mouse button=%d clicks=%d position=%.1f,%.1f menu=%d direction=%d aim=%d map=%u active=%u",button,clicks,(double)x,(double)y,s_menu,s_directionInput,s_aimInput,D_5893_map_id,D_589e);

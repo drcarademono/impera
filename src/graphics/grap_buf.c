@@ -13,6 +13,7 @@
 #include "text/text_window.h"
 #if defined(TARGET_SDL)
 #include "grap_sdl.h"
+#include "key/dialogue_links.h"
 #include "event/event.h"
 #endif
 
@@ -59,7 +60,7 @@ static u32 s_lastPresentTick = 0;
 static bool s_dirty = false;
 
 #define TEXT_HISTORY_LINES 512
-static byte s_textHistory[TEXT_HISTORY_LINES][8 * 128];
+static u32 s_textHistory[TEXT_HISTORY_LINES][8 * 128];
 static int s_historyNext, s_historyCount, s_historyOffset;
 static int s_historyLeft, s_historyTop, s_historyWidth, s_historyHeight;
 void GRAP_BUF_ResetTextHistory(void)
@@ -110,12 +111,15 @@ void GRAP_BUF_ScrollTextHistory(int lines)
 static void ArchiveTextLine(int y)
 {
     for (int row = 0; row < 8; ++row)
-        memcpy(s_textHistory[s_historyNext] + row * s_historyWidth,
-               g_linearEgaBuffer0 + (y + row) * loresWidth + s_historyLeft, s_historyWidth);
+        for(int x=0;x<s_historyWidth;x++) {
+            const byte *pixel=g_linearEgaBuffer0+(y+row)*loresWidth+s_historyLeft+x;
+            s_textHistory[s_historyNext][row*s_historyWidth+x]=*pixel<16?*pixel:
+                TILESET_UIBufferColor(pixel,IMPERA_TextPalette);
+        }
     s_historyNext = (s_historyNext + 1) % TEXT_HISTORY_LINES;
     if (s_historyCount < TEXT_HISTORY_LINES) ++s_historyCount;
 }
-bool GRAP_BUF_TextHistoryPixel(int x, int y, byte *color)
+static bool TextHistoryValue(int x, int y, u32 *color)
 {
     if (!s_historyOffset) return false;
     // A geometry change can reset the offset while validating the window.
@@ -128,9 +132,25 @@ bool GRAP_BUF_TextHistoryPixel(int x, int y, byte *color)
         int slot = (s_historyNext - s_historyCount + line + TEXT_HISTORY_LINES) % TEXT_HISTORY_LINES;
         *color = s_textHistory[slot][((y - s_historyTop) % 8) * s_historyWidth + x - s_historyLeft];
     } else {
-        *color = g_linearEgaBuffer0[(s_historyTop + (line - s_historyCount) * 8 +
-                                   (y - s_historyTop) % 8) * loresWidth + x];
+        const byte *pixel=g_linearEgaBuffer0+(s_historyTop+(line-s_historyCount)*8+
+                                            (y-s_historyTop)%8)*loresWidth+x;
+        *color=*pixel<16?*pixel:TILESET_UIBufferColor(pixel,IMPERA_TextPalette);
     }
+    return true;
+}
+
+bool GRAP_BUF_TextHistoryPixel(int x,int y,byte *color)
+{
+    u32 value;
+    if(!TextHistoryValue(x,y,&value)) return false;
+    *color=value<16?(byte)value:16;
+    return true;
+}
+bool GRAP_BUF_TextHistoryColor(int x,int y,const u32 *palette,u32 *color)
+{
+    u32 value;
+    if(!TextHistoryValue(x,y,&value)) return false;
+    *color=value<16?palette[value]:value;
     return true;
 }
 
@@ -355,6 +375,9 @@ void GRAP_BUF_Present(void)
     DisplayDebugMessages();
 #endif
 
+#if defined(TARGET_SDL)
+    DLINK_Refresh();
+#endif
     (*s_pfFlushFrame)();
 
     s_dirty = false;
@@ -400,6 +423,9 @@ void GRAP_BUF_PrintChar(byte* ptr, int offset, byte fgColor, byte bgColor, int p
         GRAP_BUF_EndTextScroll();
     IMPERA_TextGlyph(ptr, offset, s_colorTable[fgColor], s_colorTable[bgColor], penX * 8,
                      penY * 8 + s_textPixelOffset, NULL, textPixel);
+#if defined(TARGET_SDL)
+    DLINK_Character(offset/8,ptr+offset,s_colorTable[fgColor],penX,penY);
+#endif
     s_dirty = true;
 }
 static void textCopy(void *host, byte *dst, const byte *src, size_t size) {
@@ -413,6 +439,9 @@ void GRAP_BUF_ScrollWindow(int left, int top, int right, int bottom, int amount)
         ArchiveTextLine(top);
         GRAP_BUF_EndTextScroll();
     }
+#if defined(TARGET_SDL)
+    DLINK_Scroll(left,top,right,bottom,amount);
+#endif
     IMPERA_TextScroll(g_linearEgaBuffer0, loresWidth, left, top, right, bottom, amount, NULL,
                       textCopy);
     s_dirty = true;
@@ -443,6 +472,9 @@ void GRAP_BUF_FillWindow(int x1, int y1, int x2, int y2, int xorMode)
         }
     }
 
+#if defined(TARGET_SDL)
+    if(!xorMode && target==g_linearEgaBuffer0) DLINK_Clear(x1,y1,x2,y2);
+#endif
     for (int y = y1; y <= y2; y++)
     {
         if (!xorMode)
