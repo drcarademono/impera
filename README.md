@@ -262,6 +262,15 @@ slot. Creating or importing a character starts a new clock. Existing DOS saves
 have no historical play-time data, so their clock starts at zero. Menus count
 as time within a loaded session; time while the application is closed does not.
 
+## Dialogue keyword highlights
+
+Enable **Highlight Keywords** in Engine Options to show eligible dialogue words
+in light blue (`#676fff`). It appears immediately above Mouse Control. The entire
+word is highlighted when its prefix matches a topic that the current NPC accepts.
+At the **Your interest?** prompt, click a highlighted word to say it; this replaces
+any partially typed text. Topic clicks also work with Mouse Control switched off.
+Questions and wait-for-key pages keep their normal input behavior.
+
 ## Mouse controls
 
 With Mouse Control enabled, use the wheel over the message box to browse up to

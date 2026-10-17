@@ -11,6 +11,7 @@
 #include "graphics/animate.h"
 #include "graphics/widescreen.h"
 #include "key/mouse.h"
+#include "key/dialogue_links.h"
 #include "audio/audio.h"
 #include "vars.h"
 #include "5000.h"
@@ -22,9 +23,9 @@
 #include <math.h>
 
 static const char* keys[]={"video_mode","tileset","crt_filter","transparent","dithered_darkness",
-    "music","sound","mouse","smooth","diagonal","movement_speed","animation_speed"};
+    "music","sound","highlight_keywords","mouse","smooth","diagonal","movement_speed","animation_speed"};
 static const char* labels[]={"Video Mode","Tileset","CRT Filter","Transparent Sprites","Dithered Darkness",
-    "Music","Sound Effects","Mouse Control","Smooth Movement","Diagonal Movement","Movement Speed","Animation Speed"};
+    "Music","Sound Effects","Highlight Keywords","Mouse Control","Smooth Movement","Diagonal Movement","Movement Speed","Animation Speed"};
 static bool isSpeed(int row) { return row==ENGINE_MOVEMENT_SPEED || row==ENGINE_ANIMATION_SPEED; }
 static const char* optionStatus;
 static const float ticks[]={0.5f,0.75f,1.0f};
@@ -33,6 +34,7 @@ float ENGINE_Get(int row)
     switch(row) {
     case ENGINE_FULLSCREEN:return GRAP_SDL_VideoMode();
     case ENGINE_TILESET:return TILESET_Selected();
+    case ENGINE_HIGHLIGHT_KEYWORDS:return DLINK_Enabled();
     case ENGINE_MOUSE:return MOUSE_Enabled();
     case ENGINE_SMOOTH:return GRAP_SDL_SmoothMovementEnabled();
     case ENGINE_DIAGONAL:return MOVEMENT_Diagonal();
@@ -57,6 +59,7 @@ void ENGINE_Set(int row,float value)
     switch(row) {
     case ENGINE_FULLSCREEN:GRAP_SDL_SetVideoMode((int)value);break;
     case ENGINE_TILESET:optionStatus=TILESET_Select((int)value)?NULL:"Tileset files unavailable";break;
+    case ENGINE_HIGHLIGHT_KEYWORDS:DLINK_Enable(value!=0);break;
     case ENGINE_MOUSE:MOUSE_SetEnabled(value!=0);break;
     case ENGINE_SMOOTH:GRAP_SDL_SetSmoothMovement(value!=0);break;
     case ENGINE_DIAGONAL:MOVEMENT_SetDiagonal(value!=0);break;
@@ -128,9 +131,7 @@ void ENGINE_UIFrame(void)
 }
 static int rowY(int row)
 {
-    if(row<ENGINE_MOVEMENT_SPEED) return 40+row*10;
-    if(row==ENGINE_MOVEMENT_SPEED) return 140;
-    if(row==ENGINE_ANIMATION_SPEED) return 160;
+    if(row<ENGINE_SETTING_COUNT) return 40+row*10;
     return 180;
 }
 static bool s_gameplay;
@@ -218,7 +219,6 @@ void ENGINE_DrawSettings(int selected)
             ENGINE_UIRect(knob-2,y+1,5,7,highlighted?0:14);
             char number[12];SDL_snprintf(number,sizeof(number),"%.2f",(double)value);
             ENGINE_UIText(264,y,number,highlighted?0:14);
-            ENGINE_UIText(172,y+9,"0.5",7);ENGINE_UIText(200,y+9,"0.75",7);ENGINE_UIText(244,y+9,"1",7);
         }
     }
     if(s_videoChoice>=0) {

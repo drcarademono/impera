@@ -60,5 +60,6 @@ void GRAP_BUF_ResetTextHistory(void);
 void GRAP_BUF_EndTextScroll(void);
 void GRAP_BUF_ScrollTextHistory(int lines);
 bool GRAP_BUF_TextHistoryPixel(int x, int y, byte *color);
+bool GRAP_BUF_TextHistoryColor(int x, int y, const u32 *palette, u32 *color);
 
 #endif

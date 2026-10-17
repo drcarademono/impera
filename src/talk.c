@@ -11,6 +11,9 @@
 #include "shoppes2.h"
 #include "shoppes3.h"
 #include "talk.h"
+#if defined(TARGET_SDL)
+#include "key/dialogue_links.h"
+#endif
 #include "text/text_window.h"
 #include "text/dialogue_runtime.h"
 #include "text/dialogue_game.h"
@@ -421,7 +424,13 @@ static void talkPrint(void *host, uint16_t ch) {
 }
 static void talkString(void *host, const char *str) {
     (void)host;
+#if defined(TARGET_SDL)
+    DLINK_Flush();
+#endif
     ULTIMA_1850_PrintString((char *)str);
+#if defined(TARGET_SDL)
+    DLINK_Flush();
+#endif
 }
 static const char *talkText(void *host, uint16_t address, const char *str) {
     (void)host;
@@ -438,11 +447,24 @@ static void talkFont(void *host, int index) {
 }
 static int talkChar(void *host) {
     (void)host;
-    return ULTIMA_266c_GetChar();
+#if defined(TARGET_SDL)
+    DLINK_Reading(true);
+#endif
+    int key=ULTIMA_266c_GetChar();
+#if defined(TARGET_SDL)
+    DLINK_Reading(false);
+#endif
+    return key;
 }
 static void talkInput(void *host, char *str, int size) {
     (void)host;
+#if defined(TARGET_SDL)
+    DLINK_Reading(true);
+#endif
     ULTIMA_3b1c_GetString(str, size);
+#if defined(TARGET_SDL)
+    DLINK_Reading(false);
+#endif
 }
 static int talkPoll(void *host) {
     (void)host;
@@ -562,6 +584,10 @@ static void talkObserve(void *host, const uint8_t *cursor) {
     REFERENCE_TraceOpcode(cursor);
 #endif
 }
+#if defined(TARGET_SDL)
+static void talkBoundary(void *host) { (void)host;DLINK_Flush(); }
+static void talkPrompt(void *host,int active) { (void)host;DLINK_Prompt(active!=0); }
+#endif
 static ImperaTalk nativeTalk(void) {
     ImperaTalk s = {0};
     s.data = D_b21e;
@@ -607,6 +633,10 @@ static ImperaTalk nativeTalk(void) {
     s.join = talkJoin;
     s.guards = talkGuards;
     s.greetingRoll = talkGreeting;
+#if defined(TARGET_SDL)
+    s.wordBoundary=talkBoundary;
+    s.topicPrompt=talkPrompt;
+#endif
     s.observe = talkObserve;
     return s;
 }
@@ -720,7 +750,13 @@ static void TALK_127e_StartTalk(int param_1)
     ULTIMA_256e_ReadFileFromDisk(D_4aa0[local_4], D_b21e, 0x400, local_8);
 
     ImperaTalk session = nativeTalk();
+#if defined(TARGET_SDL)
+    DLINK_Begin(D_b21e,1024);
+#endif
     IMPERA_TalkRun(&session);
+#if defined(TARGET_SDL)
+    DLINK_End();
+#endif
 
     TALK_1180();
 }

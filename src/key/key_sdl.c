@@ -63,6 +63,16 @@ static u16 TakeKey(void)
     --s_keyCount;
     return key;
 }
+void KEY_SDL_ReleaseKey(SDL_Keycode key);
+void KEY_SDL_SubmitText(const char *text)
+{
+    // Replace any partly typed answer, then use the normal text input path.
+    s_keyHead=s_keyCount=0;
+    KEY_SDL_ReleaseKey(0);
+    QueueKey(U5_KEY_ESC);
+    for(int i=0;text[i] && i<15;i++) QueueKey((u16)(unsigned char)text[i]);
+    QueueKey(U5_KEY_ENTER);
+}
 static u16 s_heldMovementKey;
 static SDL_Keycode s_heldSDLKey;
 static Uint64 s_nextMovement;

@@ -117,17 +117,21 @@ int main(int argc, char** argv)
         return 1;
     }
     ENGINE_Set(ENGINE_MOVEMENT_SPEED,0.5f);ENGINE_Set(ENGINE_ANIMATION_SPEED,0.75f);
+    assert(ENGINE_HIGHLIGHT_KEYWORDS+1==ENGINE_MOUSE);
+    ENGINE_Set(ENGINE_HIGHLIGHT_KEYWORDS,1);assert(ENGINE_Get(ENGINE_HIGHLIGHT_KEYWORDS)==1);
     ENGINE_Set(ENGINE_MOUSE,1);assert(ENGINE_Get(ENGINE_MOUSE)==1);
     ENGINE_Set(ENGINE_MOUSE,0);
     ENGINE_Set(ENGINE_DITHERED_DARKNESS,1);
     assert(ENGINE_Get(ENGINE_CRT)==0);ENGINE_Set(ENGINE_CRT,1);
-    assert(ENGINE_Save());ENGINE_Set(ENGINE_CRT,0);ENGINE_Set(ENGINE_DITHERED_DARKNESS,0);ENGINE_Set(ENGINE_MOVEMENT_SPEED,1);ENGINE_Load();
+    assert(ENGINE_Save());ENGINE_Set(ENGINE_HIGHLIGHT_KEYWORDS,0);ENGINE_Set(ENGINE_CRT,0);ENGINE_Set(ENGINE_DITHERED_DARKNESS,0);ENGINE_Set(ENGINE_MOVEMENT_SPEED,1);ENGINE_Load();
+    assert(ENGINE_Get(ENGINE_HIGHLIGHT_KEYWORDS)==1);
     assert(ENGINE_Get(ENGINE_DITHERED_DARKNESS)==1);
     assert(ENGINE_Get(ENGINE_CRT)==1);ENGINE_Set(ENGINE_CRT,0);
     ENGINE_Set(ENGINE_DITHERED_DARKNESS,0);
     assert(ENGINE_Get(ENGINE_MOVEMENT_SPEED)==0.5f);
     f=fopen("ENGINE.CFG","w");assert(f);fputs("movement_speed nan\nanimation_speed 99\nfullscreen 3\n",f);fclose(f);
-    ENGINE_Load();assert(ENGINE_Get(ENGINE_MOVEMENT_SPEED)==0.5f && ENGINE_Get(ENGINE_ANIMATION_SPEED)==0.75f);
+    ENGINE_Load();assert(ENGINE_Get(ENGINE_HIGHLIGHT_KEYWORDS)==1);
+    assert(ENGINE_Get(ENGINE_MOVEMENT_SPEED)==0.5f && ENGINE_Get(ENGINE_ANIMATION_SPEED)==0.75f);
     ENGINE_Set(ENGINE_MOVEMENT_SPEED,1);ENGINE_Set(ENGINE_ANIMATION_SPEED,1);
     ENGINE_Set(ENGINE_FULLSCREEN,1);assert(ENGINE_Get(ENGINE_FULLSCREEN)==1);
     ENGINE_Set(ENGINE_FULLSCREEN,0);assert(ENGINE_Get(ENGINE_FULLSCREEN)==0);
@@ -160,9 +164,9 @@ int main(int argc, char** argv)
     assert(g_linearEgaBuffer0[0*320+8]==1);
     assert(g_linearEgaBuffer0[7*320+7]==15);
     assert(g_linearEgaBuffer0[80*320+0]==1);
-    assert(g_linearEgaBuffer0[139*320+16]==15);
+    assert(g_linearEgaBuffer0[149*320+16]==15);
     for(int y=0;y<8;y++) for(int x=0;x<8;x++)
-        assert(g_linearEgaBuffer0[(140+y)*320+24+x]==((font['M'*8+y]&(0x80>>x))?0:15));
+        assert(g_linearEgaBuffer0[(150+y)*320+24+x]==((font['M'*8+y]&(0x80>>x))?0:15));
     int count;SDL_Window** windows=SDL_GetWindows(&count);assert(count==1);
     SDL_Renderer* renderer=SDL_GetRenderer(windows[0]);SDL_free(windows);
     SDL_Surface* shot=SDL_RenderReadPixels(renderer,NULL);assert(shot);
@@ -202,8 +206,8 @@ int main(int argc, char** argv)
     key(SDLK_LEFT); /* movement 0.75 */
     key(SDLK_DOWN);key(SDLK_LEFT); /* animation 0.75 */
     SDL_Event e={0};e.type=SDL_EVENT_MOUSE_BUTTON_DOWN;e.button.button=SDL_BUTTON_LEFT;
-    e.button.x=184*4;e.button.y=80+144*4;assert(SDL_PushEvent(&e));
-    e.type=SDL_EVENT_MOUSE_MOTION;e.motion.x=248*4;e.motion.y=80+144*4;assert(SDL_PushEvent(&e));
+    e.button.x=184*4;e.button.y=80+154*4;assert(SDL_PushEvent(&e));
+    e.type=SDL_EVENT_MOUSE_MOTION;e.motion.x=248*4;e.motion.y=80+154*4;assert(SDL_PushEvent(&e));
     e.type=SDL_EVENT_MOUSE_BUTTON_UP;assert(SDL_PushEvent(&e));
     key(SDLK_ESCAPE);
     ENGINE_ShowOptions(false);

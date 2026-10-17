@@ -44,6 +44,8 @@ typedef struct ImperaTalk {
     void (*guards)(void *);
     int (*greetingRoll)(void *);
     void (*observe)(void *, const uint8_t *);
+    void (*wordBoundary)(void *);
+    void (*topicPrompt)(void *, int);
 } ImperaTalk;
 typedef struct ImperaTalkStorage {
     uint8_t data[1024], *cursor, operands[4], pending, operandCount, mask;
@@ -62,6 +64,7 @@ void IMPERA_TalkAppend(ImperaTalk *, uint8_t);
 void IMPERA_TalkSelect(ImperaTalk *, int);
 int IMPERA_TalkCompare(const char *, const char *);
 int IMPERA_TalkMatch(const uint8_t *, const char *);
+int IMPERA_TalkIsTopic(const uint8_t *, size_t, const char *);
 extern const char *const IMPERA_TalkDictionary[128];
 extern const char *const IMPERA_TalkKeywords[35];
 #ifdef __cplusplus
