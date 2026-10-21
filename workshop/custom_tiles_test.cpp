@@ -125,6 +125,143 @@ int main(int argc, char **argv) {
             }
             CHECK(rejected);
         }
+        {
+            Project names;
+            names.openGame(TEST_GAME_DIR);
+            auto originalLook = names.data("LOOK2.DAT");
+            auto commitNames = [&](const QMap<QString, QByteArray> &changes, const QString &) {
+                for (auto it = changes.begin(); it != changes.end(); ++it)
+                    names.resources[it.key()].edited = it.value();
+                names.validate();
+                return true;
+            };
+            for (int kind : {1, 2}) {
+                unsigned id = kind == 1 ? 368 : 496; // Guard, mongbat.
+                TypeDef vanilla;
+                TYPES_Vanilla(1, id - 256, &vanilla);
+                const auto look = Workshop::description(originalLook, id);
+                auto initial = CustomTiles::definition(names, id);
+                CHECK(QByteArray(initial.description) == vanilla.description);
+                CHECK(QByteArray(initial.look) == look);
+                // Reproduce both the old copy and its missing-NUL suffix bug.
+                TypeDef old = vanilla;
+                memcpy(old.description, look.constData(), look.size());
+                auto oldRecord = CustomTiles::record(old, {});
+                names.resources["TYPES.OVR"].edited =
+                    CustomTiles::library(names, {{id, oldRecord}});
+                auto oldPackage = names.package();
+                Project migrated;
+                migrated.openGame(TEST_GAME_DIR);
+                migrated.importPackage(oldPackage);
+                TypeDef repaired;
+                auto migratedRecord = CustomTiles::records(migrated).value(id);
+                TYPES_Decode(reinterpret_cast<const unsigned char *>(migratedRecord.constData()),
+                             &repaired);
+                CHECK(QByteArray(repaired.description) == vanilla.description);
+                CHECK(migrated.data("LOOK2.DAT") == names.data("LOOK2.DAT"));
+                QTemporaryDir legacyProject;
+                names.save(legacyProject.path() + "/legacy.imperaproject");
+                Project migratedProject;
+                migratedProject.load(names.projectPath);
+                migratedRecord = CustomTiles::records(migratedProject).value(id);
+                TYPES_Decode(reinterpret_cast<const unsigned char *>(migratedRecord.constData()),
+                             &repaired);
+                CHECK(QByteArray(repaired.description) == vanilla.description);
+
+                names.resources["TYPES.OVR"].edited.clear();
+                QMap<QString, int> state{{"customTiles/kind", kind},
+                                         {QString("customTiles/%1/id").arg(kind), int(id)}};
+                std::unique_ptr<QWidget> ui(CustomTiles::editor(&names, commitNames, &state));
+                auto plural = ui->findChild<QLineEdit *>("customTileDescription");
+                auto lookField = ui->findChild<QLineEdit *>("customActorLookDescription");
+                CHECK(plural && lookField && plural->text() == vanilla.description);
+                CHECK(lookField->text().toLatin1() == look);
+                const QString editedLook = kind == 1 ? "a royal guard" : "a scarlet mongbat";
+                lookField->setText(editedLook);
+                QMetaObject::invokeMethod(lookField, "editingFinished", Qt::DirectConnection);
+                for (unsigned frame = 0; frame < 4; ++frame)
+                    CHECK(Workshop::description(names.data("LOOK2.DAT"), id + frame) ==
+                          editedLook.toLatin1());
+                CHECK(QByteArray(CustomTiles::definition(names, id).description) ==
+                      vanilla.description);
+                plural->setText("Custom combat group");
+                QMetaObject::invokeMethod(plural, "editingFinished", Qt::DirectConnection);
+                CHECK(QByteArray(CustomTiles::definition(names, id).description) ==
+                      "Custom combat group");
+                CHECK(Workshop::description(names.data("LOOK2.DAT"), id) == editedLook.toLatin1());
+                CHECK(!TYPES_RecordLook(CustomTiles::records(names).value(id).constData(),
+                                        CustomTiles::records(names).value(id).size()));
+            }
+            names.resources["TYPES.OVR"].edited.clear();
+            for (unsigned kind : {1u, 2u}) {
+                TypeDef actor;
+                TYPES_Vanilla(1, 80, &actor);
+                actor.id = 61000 + kind;
+                actor.kind = kind;
+                strcpy(actor.name, "Guardian");
+                strcpy(actor.description, "Guardians");
+                strcpy(actor.look, "a towering guardian");
+                QImage art(16, 16, QImage::Format_RGBA8888);
+                art.fill(Qt::black);
+                auto records = CustomTiles::records(names);
+                records[actor.id] = CustomTiles::record(actor, {{art, 150, 0}, {art, 150, 0}});
+                names.resources["TYPES.OVR"].edited = CustomTiles::library(names, records);
+                CHECK(QByteArray(TYPES_RecordLook(records[actor.id].constData(),
+                                                  records[actor.id].size())) == actor.look);
+                CHECK(CustomTiles::frames(records[actor.id]).size() == 2);
+                TYPES_Mount(names.data("TYPES.OVR").constData(), names.data("TYPES.OVR").size(),
+                            nullptr, 0);
+                TypeDef loaded;
+                CHECK(TYPES_Get(actor.id, &loaded) && QByteArray(loaded.look) == actor.look);
+                TYPES_Mount(nullptr, 0, nullptr, 0);
+                QMap<QString, int> state{{"customTiles/kind", int(kind)},
+                                         {QString("customTiles/%1/id").arg(kind), int(actor.id)}};
+                std::unique_ptr<QWidget> ui(CustomTiles::editor(&names, commitNames, &state));
+                auto plural = ui->findChild<QLineEdit *>("customTileDescription");
+                auto look = ui->findChild<QLineEdit *>("customActorLookDescription");
+                CHECK(plural->text() == "Guardians" && look->text() == "a towering guardian");
+                look->setText("a crimson guardian");
+                QMetaObject::invokeMethod(look, "editingFinished", Qt::DirectConnection);
+                auto def = CustomTiles::definition(names, actor.id);
+                CHECK(QByteArray(def.name) == "Guardian" &&
+                      QByteArray(def.description) == "Guardians" &&
+                      QByteArray(def.look) == "a crimson guardian");
+                auto package = names.package();
+                CHECK(package.startsWith("IMOD0018"));
+                Project imported;
+                imported.openGame(TEST_GAME_DIR);
+                imported.importPackage(package);
+                CHECK(QByteArray(CustomTiles::definition(imported, actor.id).look) ==
+                      "a crimson guardian");
+                package.replace(0, 8, "IMOD0017");
+                bool rejected = false;
+                try {
+                    imported.importPackage(package);
+                } catch (const std::exception &) {
+                    rejected = true;
+                }
+                CHECK(rejected);
+                auto damaged = records[actor.id];
+                damaged.replace(damaged.size() - 128, 128, QByteArray(128, 'x'));
+                TYPES_Put32(damaged.data(), damaged.size());
+                CHECK(!TYPES_RecordLook(damaged.constData(), damaged.size()));
+                records[actor.id] = damaged;
+                rejected = false;
+                try {
+                    CustomTiles::library(names, records);
+                } catch (const std::exception &) {
+                    rejected = true;
+                }
+                CHECK(rejected);
+            }
+            QTemporaryDir saved;
+            names.save(saved.path() + "/names.imperaproject");
+            Project restored;
+            restored.load(names.projectPath);
+            CHECK(QByteArray(CustomTiles::definition(restored, 61001).look) ==
+                  "a crimson guardian");
+            CHECK(QByteArray(CustomTiles::definition(restored, 61002).description) == "Guardians");
+        }
         Project p;
         p.openGame(TEST_GAME_DIR);
         QImage tile(16, 16, QImage::Format_RGBA8888);
@@ -539,6 +676,10 @@ int main(int argc, char **argv) {
         // Original actor frames belong to the native sheets, not a timed type override.
         for (int kind : {1, 2}) {
             const unsigned nativeId = kind == 1 ? 336 : 400;
+            const auto beforeNativeLook = p.data("LOOK2.DAT");
+            TypeDef nativeNames;
+            TYPES_Vanilla(1, nativeId - 256, &nativeNames);
+
             QMap<QString, int> nativeState{{"customTiles/kind", kind},
                                            {QString("customTiles/%1/id").arg(kind), int(nativeId)}};
             std::unique_ptr<QWidget> nativeUi(CustomTiles::editor(&p, edit, &nativeState));
@@ -611,6 +752,13 @@ int main(int argc, char **argv) {
                 CHECK(CustomTiles::frames(CustomTiles::records(p).value(nativeId)).size() == 6);
                 CHECK(nativeFrames->count() == 4 && nativeFrames->currentRow() == 2);
             }
+            auto authoredRecord = CustomTiles::records(p).value(nativeId);
+            TypeDef savedNames;
+            TYPES_Decode(reinterpret_cast<const unsigned char *>(authoredRecord.constData()),
+                         &savedNames);
+            CHECK(QByteArray(savedNames.name) == nativeNames.name);
+            CHECK(QByteArray(savedNames.description) == nativeNames.description);
+            CHECK(p.data("LOOK2.DAT") == beforeNativeLook);
             auto alphaPalette = nativeUi->findChild<QWidget *>("customTilePalette");
             for (auto swatch : alphaPalette->findChildren<QToolButton *>())
                 if (swatch->property("rgba").isValid() && swatch->property("rgba").toUInt() == 0)

@@ -217,8 +217,8 @@ bool __wrap_SDL_RenderPresent(SDL_Renderer* renderer)
 }
 void __wrap_ULTIMA_1850_PrintString(char* text)
 {
-    if (!strcmp(text, "a guard") || !strcmp(text, "a royal guard") ||
-        !strcmp(text, "Guard") || !strcmp(text, "Guards"))
+    if (!strcmp(text, "a towering Guardian") || !strcmp(text, "a guard") ||
+        !strcmp(text, "a royal guard") || !strcmp(text, "Guard") || !strcmp(text, "Guards"))
         snprintf(actorLook, sizeof(actorLook), "%s", text);
     if (!strcmp(text, "the Guardian"))
         sawGuardian = true;
@@ -731,6 +731,33 @@ int main(int argc, char** argv)
     MOUSE_SetCommandInput(false);
     LOOKOBJ_099c_LookCmd();
     assert(sawGuardian);
+    assert(!strcmp(ACTORS_Name(60000, 0), "the Guardian"));
+    assert(!strcmp(ACTORS_Name(60000, 1), "Guardians"));
+    /* The independent Look text must work for both actor kinds, through
+     * any cell of their multi-tile footprint, with either sprite setting. */
+    unsigned char authored[sizeof(typeData) + 136];
+    memcpy(authored, typeData, sizeof(typeData));
+    memcpy(authored + sizeof(typeData), "ILOOK001", 8);
+    memset(authored + sizeof(typeData) + 8, 0, 128);
+    strcpy((char *)authored + sizeof(typeData) + 8, "a towering Guardian");
+    TYPES_Put32(authored + 32, sizeof(authored) - 32);
+    for (unsigned kind = 1; kind <= 2; ++kind) {
+        authored[32 + 8] = kind;
+        assert(TYPES_Validate(authored, sizeof(authored)));
+        TYPES_Mount(authored, sizeof(authored), NULL, 0);
+        assert(TYPES_Set(guardianCell, 60000));
+        actorLook[0] = 0;
+        MOUSE_SetCommandInput(true);
+        MOUSE_Button(640, 460.8f, SDL_BUTTON_LEFT, true, 1);
+        ticks += 301;
+        assert(MOUSE_PollCommand() == 'L');
+        MOUSE_SetCommandInput(false);
+        LOOKOBJ_099c_LookCmd();
+        assert(!strcmp(actorLook, "a towering Guardian"));
+        assert(!strcmp(ACTORS_Name(60000, 0), "the Guardian"));
+        assert(!strcmp(ACTORS_Name(60000, 1), "Guardians"));
+    }
+
     D_5c5a[257] = (ActorFmt){0};
     D_5f5e[257] = (NpcFmt){0};
     D_imperaNpcCount = oldNpcCount;

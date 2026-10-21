@@ -10,6 +10,7 @@ struct Frame {
 QSize artworkSize(unsigned variant);
 QMap<unsigned, QByteArray> records(const Project &);
 TypeDef definition(const Project &, unsigned);
+void repairActorNames(Project &);
 QVector<Frame> frames(const QByteArray &);
 QVector<Frame> importedFrames(const QVector<Frame> &, const QVector<Frame> &, unsigned variant,
                               int selected);

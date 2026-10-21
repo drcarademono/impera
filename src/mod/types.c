@@ -226,6 +226,26 @@ const unsigned char *TYPES_Find(const void *v, size_t size, uint32_t id) {
     }
     return NULL;
 }
+const char *TYPES_RecordLook(const void *data, size_t size) {
+    const unsigned char *p = data;
+    if (!p || size < TYPES_RECORD + 136 || TYPES_U32(p) != size ||
+        memcmp(p + size - 136, "ILOOK001", 8))
+        return NULL;
+    size_t off = TYPES_RECORD;
+    unsigned count = word(p + 248);
+    for (unsigned i = 0; i < count; ++i) {
+        if (size - off < 4 || p[off] > 11 ||
+            (p[off + 1] != 14 && p[off + 1] != 16 && p[off + 1] != 32))
+            return NULL;
+        size_t bytes = TYPES_FrameBytes(p, off);
+        if (bytes > size - off)
+            return NULL;
+        off += bytes;
+    }
+    if (size - off != 136 || memcmp(p + off, "ILOOK001", 8) || !memchr(p + off + 8, 0, 128))
+        return NULL;
+    return (const char *)p + off + 8;
+}
 int TYPES_Validate(const void *v, size_t size) {
     const unsigned char *b = v;
     if (!b || size < 32 || size > MOD_MAX_RESOURCE || memcmp(b, "ITYPES01", 8) ||
@@ -280,7 +300,7 @@ int TYPES_Validate(const void *v, size_t size) {
             last = variant;
             f += bytes;
         }
-        if (f != len || (d.frames && !variants[0]))
+        if ((f != len && (!d.kind || !TYPES_RecordLook(p, len))) || (d.frames && !variants[0]))
             return 0;
         for (int k = 1; k < 12; k++)
             if (k != 6 && variants[k] && variants[k] != variants[k < 6 ? 0 : 6])
@@ -451,7 +471,8 @@ const unsigned char *TYPES_FrameAt(const unsigned char *p, unsigned variant, uns
     if (!p || variant > 11)
         return NULL;
     unsigned count = 0;
-    for (size_t off = 256; off < TYPES_U32(p); off += TYPES_FrameBytes(p, off))
+    for (size_t off = 256, frame = 0; frame < word(p + 248);
+         ++frame, off += TYPES_FrameBytes(p, off))
         count += p[off] == variant;
     if (!count && variant % 6)
         return TYPES_FrameAt(p, variant < 6 ? 0 : 6, index, width, height);
@@ -460,7 +481,8 @@ const unsigned char *TYPES_FrameAt(const unsigned char *p, unsigned variant, uns
     if (!count)
         return NULL;
     index %= count;
-    for (size_t off = 256; off < TYPES_U32(p); off += TYPES_FrameBytes(p, off))
+    for (size_t off = 256, frame = 0; frame < word(p + 248);
+         ++frame, off += TYPES_FrameBytes(p, off))
         if (p[off] == variant && !index--) {
             *width = TYPES_FrameWidth(p, variant, p[off + 1]);
             *height = TYPES_FrameRows(p, variant, p[off + 1]);
@@ -561,6 +583,9 @@ int TYPES_Get(uint32_t id, TypeDef *d) {
     const unsigned char *p = id <= TYPES_LAST_CUSTOM && byId[id] ? artRecords[byId[id] - 1] : NULL;
     if (p) {
         TYPES_Decode(p, d);
+        const char *look = TYPES_RecordLook(p, TYPES_U32(p));
+        if (look)
+            memcpy(d->look, look, sizeof(d->look));
         return 1;
     }
     if (id < 512) {
@@ -680,7 +705,8 @@ unsigned TYPES_ArtSlot(uint32_t id) {
 }
 static unsigned actorPoseCount(const unsigned char *record) {
     unsigned local = 0, world = 0;
-    for (size_t off = 256; off < TYPES_U32(record); off += TYPES_FrameBytes(record, off)) {
+    for (size_t off = 256, frame = 0; frame < word(record + 248);
+         ++frame, off += TYPES_FrameBytes(record, off)) {
         local += record[off] == 0;
         world += record[off] == 6;
     }

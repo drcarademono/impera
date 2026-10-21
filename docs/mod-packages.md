@@ -30,7 +30,7 @@ All integers are unsigned little-endian 32-bit values; there is no padding.
 
 | Header | Encoding |
 | --- | --- |
-| Magic/version | Eight ASCII bytes `IMOD0001` through `IMOD0017` |
+| Magic/version | Eight ASCII bytes `IMOD0001` through `IMOD0018` |
 | Title length | 1–256 UTF-8 bytes |
 | Resource count | 1–128 |
 | Title | Length bytes; embedded NUL forbidden |
@@ -429,3 +429,21 @@ project persistence, navigation, NPC location filters, and entrance markers.
 Impera uses overrides for entrance announcements and save-slot location names;
 renamed dungeon entrances also use the new name when Look identifies them.
 Authored dialogue, signs, and other prose are not rewritten.
+
+## Independent actor Look descriptions (version 18)
+
+`IMOD0018` allows a custom actor's `TYPES.OVR` record to append a 136-byte
+trailer after its animation frames: eight ASCII bytes `ILOOK001`, then a
+128-byte NUL-terminated Look description. The record length includes the
+trailer; frame offsets and the fixed 256-byte header remain unchanged. Only
+actor records support this trailer. Older records remain valid. Older engines
+reject packages containing the new trailer rather than confusing it with artwork.
+
+The fixed header's Name remains the singular combat/type name, and its
+Description field remains the plural combat-introduction name for actors.
+The trailer supplies independent Look text. Without it, custom actors retain
+their singular-name fallback. Vanilla actor Look descriptions stay in
+`LOOK2.DAT`; Workshop updates all four animation slots when editing that text.
+Artwork and plural-name edits preserve Look text. Workshop repairs legacy
+vanilla overrides whose plural field exactly matches the old erroneous Look
+copy when loading projects or importing packages.

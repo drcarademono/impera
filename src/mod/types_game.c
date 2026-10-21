@@ -245,7 +245,8 @@ int TYPES_GAME_Look(int x, int y) {
     uint32_t id = TYPES_GAME_At(x, y);
     if (!TYPES_Defined(id) || !TYPES_Get(id, &d))
         return 0;
-    ULTIMA_1850_PrintString(d.description[0] ? d.description : d.name);
+    ULTIMA_1850_PrintString(d.kind ? (d.look[0] ? d.look : d.name)
+                                   : (d.description[0] ? d.description : d.name));
     ULTIMA_16ba_PrintChar('\n');
     return 1;
 }

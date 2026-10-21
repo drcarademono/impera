@@ -117,16 +117,55 @@ TypeDef definition(const Project &p, unsigned id) {
             std::memset(d.name, 0, 64);
             std::memcpy(d.name, label.constData(), qMin(63, int(label.size())));
         }
-        if (id < 512 && p.resources.contains("LOOK2.DAT")) {
-            try {
-                auto look = Workshop::description(p.data("LOOK2.DAT"), id);
-                std::memcpy(d.description, look.constData(), qMin(127, int(look.size())));
-            } catch (const std::exception &) {
-            }
-        }
-    } else
+    } else {
         TYPES_Decode(reinterpret_cast<const unsigned char *>(r.constData()), &d);
+        if (const char *look = TYPES_RecordLook(r.constData(), r.size()))
+            std::memcpy(d.look, look, sizeof(d.look));
+    }
+    if (id < 512 && p.resources.contains("LOOK2.DAT")) {
+        try {
+            const auto look = Workshop::description(p.data("LOOK2.DAT"), id);
+            if (d.kind) {
+                // Older Workshop builds accidentally copied Look into the plural slot.
+                // Repair only an exact match, retaining independently authored plurals.
+                if (!r.isEmpty() && !TYPES_RecordLook(r.constData(), r.size()) &&
+                    look.size() < 128) {
+                    TypeDef original;
+                    TYPES_Vanilla(1, id & 255, &original);
+                    auto copied = original;
+                    std::memcpy(copied.description, look.constData(), look.size());
+                    if (QByteArray(d.description) == look ||
+                        QByteArray(d.description) == QByteArray(copied.description))
+                        std::memcpy(d.description, original.description, sizeof(d.description));
+                }
+                if (!d.look[0])
+                    std::memcpy(d.look, look.constData(), qMin(127, int(look.size())));
+            } else if (r.isEmpty()) {
+                std::memset(d.description, 0, sizeof(d.description));
+                std::memcpy(d.description, look.constData(), qMin(127, int(look.size())));
+            }
+        } catch (const std::exception &) {
+        }
+    }
     return d;
+}
+void repairActorNames(Project &p) {
+    if (!p.resources.contains("LOOK2.DAT"))
+        return;
+    auto r = records(p);
+    bool changed = false;
+    for (auto it = r.begin(); it != r.end(); ++it) {
+        if (it.key() < 256 || it.key() >= 512 || !it.value()[8])
+            continue;
+        const auto repaired = definition(p, it.key());
+        const QByteArray plural(repaired.description, sizeof(repaired.description));
+        if (it.value().mid(120, 128) != plural) {
+            it.value().replace(120, 128, plural);
+            changed = true;
+        }
+    }
+    if (changed)
+        p.resources["TYPES.OVR"].edited = library(p, r);
 }
 QVector<Frame> frames(const QByteArray &r) {
     QVector<Frame> result;
@@ -212,6 +251,12 @@ QByteArray record(TypeDef d, const QVector<Frame> &f) {
         b.append(char(frame.duration >> 8));
         for (int y = 0; y < img.height(); y++)
             b.append(reinterpret_cast<const char *>(img.constScanLine(y)), img.width() * 4);
+    }
+    if (d.kind && d.id >= 512 && d.look[0]) {
+        require(std::memchr(d.look, 0, sizeof(d.look)),
+                "Look description must fit within 127 bytes");
+        b.append("ILOOK001", 8);
+        b.append(d.look, sizeof(d.look));
     }
     TYPES_Put32(b.data(), b.size());
     return b;
@@ -736,6 +781,11 @@ QWidget *editor(Project *p, Workshop::TextCommit commit, QMap<QString, int> *sta
     scroll->setWidgetResizable(true);
     auto props = new QWidget;
     auto name = new QLineEdit, description = new QLineEdit;
+    auto actorLook = new QLineEdit(w);
+    actorLook->setObjectName("customActorLookDescription");
+    actorLook->setToolTip("Text shown by Look for this NPC or monster, including any article, such "
+                          "as ‘a mongbat’. New custom actors use Name when this is empty. Vanilla "
+                          "Look text is shared with the Look descriptions editor.");
     name->setObjectName("customTileName");
     name->setToolTip("Name shown in the tile picker and map inspector.");
     description->setToolTip("Text shown by Impera’s Look command.");
@@ -844,6 +894,10 @@ QWidget *editor(Project *p, Workshop::TextCommit commit, QMap<QString, int> *sta
         details->addRow("Size", actorSize);
     details->addRow("Name", name);
     details->addRow("Look description", description);
+    if (actorKind)
+        details->addRow("Look description", actorLook);
+    else
+        actorLook->hide();
     auto filters = new QHBoxLayout;
     filters->addWidget(world);
     filters->addWidget(location);
@@ -1058,11 +1112,12 @@ QWidget *editor(Project *p, Workshop::TextCommit commit, QMap<QString, int> *sta
         "Import one frame to replace the selected frame, or a grid to replace the animation, read "
         "left to right then top to bottom. Frame sizes must match this tileset. Colors are "
         "converted to its palette; PNG transparency is preserved.");
-    name->setToolTip(actorKind
-                         ? "Name of this NPC or monster type in pickers. Individual NPC names and "
-                           "conversations are edited on the map, separately from this shared type."
-                         : "Name shown in Workshop’s tile picker and map inspector. The Look "
-                           "description below controls what players read in-game.");
+    name->setToolTip(
+        actorKind
+            ? "Singular name used in combat messages and type pickers. Individual NPC names and "
+              "conversations are edited on the map, separately from this shared type."
+            : "Name shown in Workshop’s tile picker and map inspector. The Look "
+              "description below controls what players read in-game.");
     world->setToolTip(
         "Include this new tile in the World picker filter. This does not restrict where it can be "
         "painted. Original tiles are classified automatically from the maps.");
@@ -1290,6 +1345,26 @@ QWidget *editor(Project *p, Workshop::TextCommit commit, QMap<QString, int> *sta
             QMessageBox::warning(w, "Cannot edit " + noun, QString::fromUtf8(e.what()));
         }
     };
+    auto withLook = [=](const QByteArray &types) {
+        QMap<QString, QByteArray> changes{{"TYPES.OVR", types}};
+        if (actorKind && draft->id < 512) {
+            if (!p->resources.contains("LOOK2.DAT")) {
+                require(!draft->def.look[0],
+                        "LOOK2.DAT is required to edit a vanilla actor's Look description");
+            } else {
+                auto bytes = p->data("LOOK2.DAT");
+                const QString look = QString::fromUtf8(draft->def.look);
+                if (Workshop::description(bytes, draft->id) == look.toLatin1())
+                    return changes;
+                for (unsigned frame = 0; frame < 4; ++frame)
+                    bytes =
+                        Workshop::changeDescription(bytes, (draft->id & ~3u) + frame, look, false);
+                if (bytes != p->data("LOOK2.DAT"))
+                    changes["LOOK2.DAT"] = bytes;
+            }
+        }
+        return changes;
+    };
     auto save = [=](const QString &title) {
         auto r = records(*p);
         // Property edits must not replace the original engine animation with a timed override.
@@ -1302,7 +1377,7 @@ QWidget *editor(Project *p, Workshop::TextCommit commit, QMap<QString, int> *sta
         }
         r[draft->id] = record(draft->def, draft->originalAnimation ? frames(r.value(draft->id))
                                                                    : draft->frames);
-        return commit({{"TYPES.OVR", library(*p, r)}}, title);
+        return commit(withLook(library(*p, r)), title);
     };
     auto saveArtwork = [=](const QString &title) {
         if (!draft->originalAnimation)
@@ -1320,7 +1395,7 @@ QWidget *editor(Project *p, Workshop::TextCommit commit, QMap<QString, int> *sta
             }
             r[d.id] = record(d, artwork);
         }
-        return commit({{"TYPES.OVR", library(*p, r)}}, title);
+        return commit(withLook(library(*p, r)), title);
     };
     const auto referenceArt = U5::readGraphics("TILES.16", p->data("TILES.16")).images;
     if (p->resources.contains("BRIT.CBT")) {
@@ -1581,6 +1656,7 @@ QWidget *editor(Project *p, Workshop::TextCommit commit, QMap<QString, int> *sta
                                       ? 1 : 0);
         name->setText(QString::fromUtf8(d.name));
         description->setText(QString::fromUtf8(d.description));
+        actorLook->setText(QString::fromUtf8(d.look));
         world->setEnabled(id >= 512);
         location->setEnabled(id >= 512);
         world->setChecked(id >= 512 ? (d.filters & 1) : worldTiles.contains(id));
@@ -1781,7 +1857,15 @@ QWidget *editor(Project *p, Workshop::TextCommit commit, QMap<QString, int> *sta
             auto n = name->text().trimmed().toUtf8(), desc = description->text().toUtf8();
             require(!n.isEmpty(), "Enter a name for this tile.");
             require(n.size() < 64, "Tile names must fit within 63 UTF-8 bytes.");
-            require(desc.size() < 128, "Look descriptions must fit within 127 UTF-8 bytes.");
+            require(desc.size() < 128, actorKind
+                                           ? "Plural names must fit within 127 UTF-8 bytes."
+                                           : "Look descriptions must fit within 127 UTF-8 bytes.");
+            auto look = actorLook->text().toUtf8();
+            require(look.size() < 128 && !look.contains(char(0)),
+                    "Look descriptions must fit within 127 UTF-8 bytes.");
+            memset(d.look, 0, sizeof(d.look));
+            if (actorKind)
+                memcpy(d.look, look.constData(), look.size());
             memset(d.name, 0, 64);
             memcpy(d.name, n.constData(), n.size());
             memset(d.description, 0, 128);
@@ -1857,6 +1941,7 @@ QWidget *editor(Project *p, Workshop::TextCommit commit, QMap<QString, int> *sta
     };
     QObject::connect(name, &QLineEdit::editingFinished, w, applySettings);
     QObject::connect(description, &QLineEdit::editingFinished, w, applySettings);
+    QObject::connect(actorLook, &QLineEdit::editingFinished, w, applySettings);
     for (auto box : props->findChildren<QCheckBox *>())
         QObject::connect(box, &QCheckBox::toggled, w, [=] { applySettings(); });
     for (auto box : props->findChildren<QComboBox *>())

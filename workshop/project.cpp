@@ -184,6 +184,12 @@ static bool conversationFlag(const Project &project, unsigned flag) {
                     return true;
     return false;
 }
+static bool usesActorLook(const Project &p) {
+    for (const auto &r : CustomTiles::records(p))
+        if (TYPES_RecordLook(r.constData(), r.size()))
+            return true;
+    return false;
+}
 QByteArray Project::package() const {
     validate();
     auto list = changed();
@@ -204,7 +210,8 @@ QByteArray Project::package() const {
     for (const auto &cell : CustomTiles::placements(*this))
         extraNpcs |= cell.kind == 3 && (cell.x >= 32 || cell.y);
     QByteArray out(
-        list.contains("LOCATIONS.OVR")                               ? "IMOD0017"
+        usesActorLook(*this)                                         ? "IMOD0018"
+        : list.contains("LOCATIONS.OVR")                             ? "IMOD0017"
         : conversationFlag(*this, IMPERA_TALK_FLAG_GARGOYLE_SPEECH)  ? "IMOD0016"
         : conversationFlag(*this, IMPERA_TALK_FLAG_SKIP_OPENING)     ? "IMOD0015"
         : usesExtendedDialogue(*this)                                ? "IMOD0014"
@@ -293,6 +300,7 @@ void Project::importPackage(const QByteArray &bytes) {
     }
     MOD_Free(&decoded);
     next.validate();
+    CustomTiles::repairActorNames(next);
     *this = next;
 }
 void Project::save(const QString &path) {
@@ -356,6 +364,10 @@ void Project::save(const QString &path) {
         requirements["locationNames"] = 1;
         requirements["packageVersion"] = 17;
     }
+    if (usesActorLook(*this)) {
+        requirements["actorLookDescriptions"] = 1;
+        requirements["packageVersion"] = 18;
+    }
     if (!requirements.isEmpty())
         root["requires"] = requirements;
     QJsonObject annotations;
@@ -414,6 +426,7 @@ void Project::load(const QString &path) {
         r.included = edit["included"].toBool();
     }
     next.validate();
+    CustomTiles::repairActorNames(next);
     next.projectPath = path;
     *this = next;
 }

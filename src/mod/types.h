@@ -34,14 +34,15 @@ extern "C" {
  * count:u32,reserved[4]. Sorted cells: kind:u8 (0 map,1 BRIT.CBT,2 DUNGEON.CBT),
  * map:u8,floor:i8,x:u8,y:u8, kinds 3 NPC slots, 4 world actor slots, 5/6 encounter actor slots;
  * x=slot,y=0. reserved[3],type:u32,reserved[4]. Save records reuse the final word for a temporary
- * door’s restore type. */
+ * door’s restore type. Actor records may append ILOOK001 + Look text[128]
+ * after their frames; this independent text requires package version 18. */
 typedef struct TypeDef {
     uint32_t id, ground, result[4];
     uint16_t movement, actorFlags, frames, effectModes;
     uint8_t kind, base, filters, render, sight, projectile, travel, effects, damageMin, damageMax;
     uint8_t stats[8], moveProfile, range, projectileAppearance, companion;
     uint8_t skiffDirections, humanoidSeat, combatMap, width, height, animation;
-    char name[64], description[128];
+    char name[64], description[128], look[128];
 } TypeDef;
 typedef struct TypeCell {
     uint8_t kind, map;
@@ -53,6 +54,8 @@ uint32_t TYPES_U32(const void *);
 void TYPES_Put32(void *, uint32_t);
 void TYPES_Decode(const unsigned char *, TypeDef *);
 void TYPES_Encode(unsigned char *, const TypeDef *);
+/* Optional ILOOK001 + 128-byte actor Look text after the frame payload. */
+const char *TYPES_RecordLook(const void *, size_t);
 void TYPES_Vanilla(unsigned kind, unsigned id, TypeDef *);
 int TYPES_Walkable(unsigned actorShape, unsigned terrain);
 int TYPES_DefWalkable(unsigned actorShape, const TypeDef *);

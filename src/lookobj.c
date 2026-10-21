@@ -676,8 +676,10 @@ void LOOKOBJ_099c_LookCmd(void)
             unsigned type = ACTORS_Instance(actor);
             /* Vanilla actors retain their dedicated LOOK2.DAT descriptions,
              * including articles and modded text, when only their art changes. */
-            if (type >= 512 && TYPES_Defined(type)) {
-                ULTIMA_1850_PrintString(ACTORS_Name(type, 0));
+            TypeDef def;
+            int authored = TYPES_Defined(type) && TYPES_Get(type, &def);
+            if (authored && (def.look[0] || type >= 512)) {
+                ULTIMA_1850_PrintString(def.look[0] ? def.look : ACTORS_Name(type, 0));
                 ULTIMA_16ba_PrintChar('\n');
                 return;
             }
