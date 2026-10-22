@@ -1,4 +1,5 @@
 #include "map_positions.h"
+#include "mod/maps.h"
 #include "engine_table_names.h"
 #include <QtWidgets>
 #include <memory>
@@ -9,6 +10,8 @@ int positionMap(const QString &resource, const U5::MapPage &page) {
         return 33 + page.settlement;
     if (resource == "BRIT.DAT" || resource == "UNDER.DAT")
         return 0;
+    if (auto id = MAPS_LocationResource(resource.toLatin1().constData()))
+        return id;
     int bank = QStringList{"TOWNE.DAT", "DWELLING.DAT", "CASTLE.DAT", "KEEP.DAT"}.indexOf(resource);
     return bank < 0 ? -1 : bank * 8 + page.settlement + 1;
 }

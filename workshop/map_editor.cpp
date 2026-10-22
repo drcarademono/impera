@@ -1,5 +1,6 @@
 #include "mod/npcs.h"
 #include "map_editor.h"
+#include "extended_maps.h"
 #include "../src/tiles.h"
 #include "contents_editor.h"
 #include "content_navigation.h"
@@ -21,17 +22,35 @@ MapDocument::MapDocument(const Project *p, const QString &r) : project(p), resou
 }
 QByteArray MapDocument::rawTerrain(int index, bool original) const {
     const auto &p = pages.at(index);
-    auto data = original ? project->resources[resource].original : project->data(resource);
-    if (p.side == 256)
-        return U5::worldMap(
+    const auto maps = Workshop::extendedMaps(*project);
+    const auto *extended = Workshop::findExtendedMap(maps, resource, index);
+    if (extended && !original)
+        return extended->cells;
+    const auto data = original ? project->resources[resource].original : project->data(resource);
+    QByteArray native;
+    const bool world = resource == "BRIT.DAT" || resource == "UNDER.DAT";
+    if (world)
+        native = U5::worldMap(
             resource, data,
             resource == "BRIT.DAT"
                 ? (original ? project->resources["DATA.OVL"].original : project->data("DATA.OVL"))
                 : QByteArray());
-    QByteArray cells;
-    for (int y = 0; y < p.side; ++y)
-        cells += data.mid(p.offset + y * p.stride, p.side);
-    require(cells.size() == p.side * p.side, "Map terrain is truncated");
+    const auto nativePages = MAPS_LocationResource(resource.toLatin1().constData())
+                                 ? QVector<U5::MapPage>()
+                                 : U5::mapPages(resource, data);
+    if (nativePages.isEmpty()) {
+        require(extended, "Missing map terrain");
+        return QByteArray(p.side * p.height(), char(extended->background));
+    }
+    const auto &source = nativePages.at(index);
+    if (!world)
+        for (int y = 0; y < source.height(); ++y)
+            native += data.mid(source.offset + y * source.stride, source.side);
+    require(native.size() == source.side * source.height(), "Map terrain is truncated");
+    QByteArray cells(p.side * p.height(), char(extended ? extended->background : 0));
+    for (int y = 0; y < qMin(p.height(), source.height()); ++y)
+        memcpy(cells.data() + y * p.side, native.constData() + y * source.side,
+               qMin(p.side, source.side));
     return cells;
 }
 QByteArray MapDocument::terrain(int index, bool original) const {
@@ -44,7 +63,7 @@ QByteArray MapDocument::terrain(int index, bool original) const {
     for (const auto &placed : CustomTiles::placements(*project)) {
         auto c = CustomTiles::cell(resource, pages[index], index, placed.x, placed.y);
         if (TYPES_CellKey(&c) == TYPES_CellKey(&placed) && placed.x < pages[index].side &&
-            placed.y < pages[index].side)
+            placed.y < pages[index].height())
             bytes[placed.y * pages[index].side + placed.x] =
                 char(U5::byte(definitions[placed.type], 9));
     }
@@ -53,7 +72,7 @@ QByteArray MapDocument::terrain(int index, bool original) const {
 QMap<QString, QByteArray> MapDocument::changes(int index, const QByteArray &cells,
                                                const QByteArray &expanded) const {
     const auto &p = pages.at(index);
-    require(cells.size() == p.side * p.side, "Map terrain dimensions changed");
+    require(cells.size() == p.side * p.height(), "Map terrain dimensions changed");
     auto data = project->data(resource);
     auto native = rawTerrain(index);
     auto ext = expanded;
@@ -70,7 +89,13 @@ QMap<QString, QByteArray> MapDocument::changes(int index, const QByteArray &cell
         if (TYPES_U32(ext.constData() + i * 4) >= 512)
             stored[i] = native[i];
     QMap<QString, QByteArray> result;
-    if (p.side == 256) {
+    auto maps = Workshop::extendedMaps(*project);
+    if (Workshop::findExtendedMap(maps, resource, index)) {
+        for (auto &map : maps)
+            if (map.resource == resource && map.page == index)
+                map.cells = stored;
+        result["MAPS.OVR"] = Workshop::writeExtendedMaps(maps);
+    } else if (resource == "BRIT.DAT" || resource == "UNDER.DAT") {
         auto overlay = resource == "BRIT.DAT" ? project->data("DATA.OVL") : QByteArray();
         U5::writeWorld(resource, stored, data, overlay);
         if (resource == "BRIT.DAT")
@@ -78,7 +103,8 @@ QMap<QString, QByteArray> MapDocument::changes(int index, const QByteArray &cell
     } else
         for (int y = 0; y < p.side; ++y)
             data.replace(p.offset + y * p.stride, p.side, stored.mid(y * p.side, p.side));
-    result[resource] = data;
+    if (!result.contains("MAPS.OVR"))
+        result[resource] = data;
     auto custom = CustomTiles::paint(*project, resource, p, index, cells, ext);
     for (auto it = custom.begin(); it != custom.end(); it++)
         result[it.key()] = it.value();
@@ -1117,15 +1143,17 @@ MapMinimap::MapMinimap(MapCanvas *c, MapView *v) : canvas(c), view(v) {
     setToolTip("Click or drag to navigate; outline shows the visible map area");
 }
 QRectF MapMinimap::imageRect() const {
-    double edge = qMax(1, qMin(width(), height()) - 8);
-    return {(width() - edge) / 2, (height() - edge) / 2, edge, edge};
+    QSizeF size(canvas->side, canvas->rowCount());
+    size.scale(QSizeF(qMax(1, width() - 8), qMax(1, height() - 8)), Qt::KeepAspectRatio);
+    return {(width() - size.width()) / 2, (height() - size.height()) / 2, size.width(),
+            size.height()};
 }
 void MapMinimap::refresh() {
-    cache = QImage(canvas->side * 4, canvas->side * 4, QImage::Format_RGB32);
+    cache = QImage(canvas->side * 4, canvas->rowCount() * 4, QImage::Format_RGB32);
     cache.fill(Qt::black);
     QPainter painter(&cache);
     painter.setRenderHint(QPainter::SmoothPixmapTransform);
-    for (int y = 0; y < canvas->side; ++y)
+    for (int y = 0; y < canvas->rowCount(); ++y)
         for (int x = 0; x < canvas->side; ++x) {
             int offset = y * canvas->side + x;
             if (offset >= canvas->ids.size())
@@ -1147,7 +1175,7 @@ void MapMinimap::paintEvent(QPaintEvent *) {
     double scale = area.width() / canvas->side;
     QPointF top = QPointF(canvas->mapFrom(view->viewport(), QPoint(0, 0))) / (16 * canvas->zoom);
     QSizeF visible = QSizeF(view->viewport()->size()) / (16 * canvas->zoom);
-    auto region = QRectF(top, visible).intersected(QRectF(0, 0, canvas->side, canvas->side));
+    auto region = QRectF(top, visible).intersected(QRectF(0, 0, canvas->side, canvas->rowCount()));
     painter.setPen(QPen(QColor("#ffffff"), 1));
     painter.drawRect(QRectF(area.topLeft() + region.topLeft() * scale, region.size() * scale));
     if (!canvas->selection.isEmpty()) {
@@ -1771,7 +1799,7 @@ MapWorkspace::MapWorkspace(
     };
     loadPage();
     x->setRange(0, canvas->side - 1);
-    y->setRange(0, canvas->side - 1);
+    y->setRange(0, canvas->rowCount() - 1);
 }
 bool MapWorkspace::externalMode() const {
     return locationModes && locationModes->tabText(activeMode) != "Terrain" &&
@@ -2262,7 +2290,7 @@ void MapWorkspace::selectPage(int index) {
     populateFloors(index);
     loadPage();
     findChild<QSpinBox *>("mapGoX")->setRange(0, canvas->side - 1);
-    findChild<QSpinBox *>("mapGoY")->setRange(0, canvas->side - 1);
+    findChild<QSpinBox *>("mapGoY")->setRange(0, canvas->rowCount() - 1);
     if (locationChanged)
         locationChanged();
 }
@@ -2394,6 +2422,7 @@ void MapWorkspace::loadPage() {
     }
     const auto &mp = document.pages[currentPage()];
     canvas->side = mp.side;
+    canvas->rows = mp.height();
     minimap->setVisible(resource == "BRIT.DAT" || resource == "UNDER.DAT");
     canvas->ids = document.terrain(currentPage());
     canvas->extended = CustomTiles::expanded(*project, resource, document.pages[currentPage()],
@@ -2401,7 +2430,7 @@ void MapWorkspace::loadPage() {
     canvas->libraryUuid = project->resources.value("TYPES.OVR").edited.mid(8, 16);
     canvas->original = document.terrain(currentPage(), true);
     canvas->keyboardCell = state.keyboardCell;
-    canvas->selection = state.selection.intersected(QRect(0, 0, mp.side, mp.side));
+    canvas->selection = state.selection.intersected(QRect(0, 0, mp.side, mp.height()));
     canvas->comparison = state.comparison;
     canvas->outline = false;
     {
@@ -2441,7 +2470,7 @@ void MapWorkspace::loadPage() {
     updateSelection();
     view->fitting = state.fit;
     updateZoom();
-    coordinate->setText(QString("%1 · %2 × %2 tiles").arg(mp.name).arg(mp.side));
+    coordinate->setText(QString("%1 · %2 × %3 tiles").arg(mp.name).arg(mp.side).arg(mp.height()));
     {
         QSignalBlocker block(maps);
         QTreeWidgetItemIterator it(maps);
@@ -2467,7 +2496,7 @@ void MapWorkspace::loadPage() {
         else if (state.center.x() >= 0)
             view->centerMap(state.center);
         else
-            view->centerMap({canvas->side / 2.0, canvas->side / 2.0});
+            view->centerMap({canvas->side / 2.0, canvas->rowCount() / 2.0});
         restoring = false;
         updateZoom();
         saveView();
@@ -3513,17 +3542,18 @@ QString MapDocument::tileCategory(int id) {
 QImage MapDocument::terrainImage(int page, const QVector<QImage> &tiles, bool ids) const {
     auto cells = terrain(page);
     int side = pages[page].side;
+    int rows = pages[page].height();
     auto ext = CustomTiles::expanded(*project, resource, pages[page], page, cells);
     bool custom = false;
     for (int i = 0; i < cells.size(); i++)
         custom |= TYPES_U32(ext.constData() + i * 4) >= 512;
-    QImage image(side * (ids ? 1 : 16), side * (ids ? 1 : 16),
+    QImage image(side * (ids ? 1 : 16), rows * (ids ? 1 : 16),
                  ids ? (custom ? QImage::Format_Grayscale16 : QImage::Format_Grayscale8)
                      : QImage::Format_RGB32);
     require(!image.isNull(), "Cannot allocate map export");
     image.fill(Qt::black);
     if (ids) {
-        for (int y = 0; y < side; y++)
+        for (int y = 0; y < rows; y++)
             for (int x = 0; x < side; x++) {
                 unsigned id = TYPES_U32(ext.constData() + (y * side + x) * 4);
                 if (!id)
@@ -3539,6 +3569,7 @@ QImage MapDocument::terrainImage(int page, const QVector<QImage> &tiles, bool id
         canvas.extended = ext;
         canvas.tiles = tiles;
         canvas.side = side;
+        canvas.rows = rows;
         auto definitions = CustomTiles::records(*project);
         for (auto it = definitions.begin(); it != definitions.end(); it++) {
             auto d = CustomTiles::definition(*project, it.key());
@@ -3551,7 +3582,7 @@ QImage MapDocument::terrainImage(int page, const QVector<QImage> &tiles, bool id
                 canvas.spriteGround[d.id] = d.ground;
         }
         QPainter painter(&image);
-        for (int y = 0; y < side; y++)
+        for (int y = 0; y < rows; y++)
             for (int x = 0; x < side; x++)
                 painter.drawImage(QRect(x * 16, y * 16, 16, 16), canvas.tileImageAt(y * side + x));
     }

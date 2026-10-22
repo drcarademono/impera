@@ -2,6 +2,7 @@
 #include "mod/location_names.h"
 #include "mod/npcs.h"
 #include "project.h"
+#include "extended_maps.h"
 #include "contents_editor.h"
 #include "custom_tiles.h"
 #include "dialogue.h"
@@ -79,6 +80,10 @@ const QByteArray &Project::data(const QString &name) const {
     return it->edited;
 }
 QString Project::locationName(int map) const {
+    if (MAPS_NewLocation(map))
+        for (const auto &entry : Workshop::extendedMaps(*this))
+            if (entry.kind == 1 && int(entry.id) == map)
+                return entry.name;
     require(map >= 0 && map < LOCATION_NAME_SLOTS, "Invalid location");
     const auto bytes = resources.value("LOCATIONS.OVR").edited;
     if (const char *name = LOCATIONS_Name(bytes.constData(), bytes.size(), map))
@@ -113,7 +118,19 @@ QByteArray Project::renameLocation(int map, const QString &name) const {
     return bytes;
 }
 QVector<U5::MapPage> Project::mapPages(const QString &resource) const {
-    auto pages = U5::mapPages(resource, data(resource));
+    const auto extended = Workshop::extendedMaps(*this);
+    auto pages = MAPS_LocationResource(resource.toLatin1().constData())
+                     ? QVector<U5::MapPage>()
+                     : U5::mapPages(resource, data(resource));
+    if (pages.isEmpty())
+        for (const auto &map : extended)
+            if (map.resource == resource && MAPS_NewLocation(map.id))
+                pages.append({map.name, map.width, 0, map.width, 0, map.floor, map.height});
+    for (int i = 0; i < pages.size(); ++i)
+        if (const auto *map = Workshop::findExtendedMap(extended, resource, i)) {
+            pages[i].side = map->width;
+            pages[i].rows = map->height;
+        }
     const QStringList banks{"TOWNE.DAT", "DWELLING.DAT", "CASTLE.DAT", "KEEP.DAT"};
     int bank = banks.indexOf(resource);
     for (auto &page : pages) {
@@ -187,6 +204,9 @@ static bool conversationFlag(const Project &project, unsigned flag) {
 QByteArray Project::package() const {
     validate();
     auto list = changed();
+    for (const auto &name : list)
+        require(MOD_AllowedResource(name.toLatin1().constData()),
+                "This engine version does not support exporting " + name);
     require(!list.isEmpty(), "There are no changes to export");
     require(list.size() <= MOD_MAX_ENTRIES, "Too many modified resources");
     bool actorTypes = false, largeActors = false, animationOptions = false;

@@ -1,4 +1,5 @@
 #include "custom_tiles.h"
+#include "mod/maps.h"
 #include "color_palette.h"
 #include "map_editor.h"
 #include "map_entities.h"
@@ -256,6 +257,8 @@ TypeCell cell(const QString &resource, const U5::MapPage &mp, int page, int x, i
     } else if (resource == "BRIT.DAT" || resource == "UNDER.DAT") {
         c.map = 0;
         c.floor = resource == "UNDER.DAT" ? -1 : 0;
+    } else if (auto id = MAPS_LocationResource(resource.toLatin1().constData())) {
+        c.map = id;
     } else {
         int bank = resource == "TOWNE.DAT"      ? 0
                    : resource == "DWELLING.DAT" ? 8
@@ -420,8 +423,8 @@ QMap<QString, QByteArray> moveScenery(const Project &p, const QString &resource,
     const auto mp = doc.pages.at(page);
     auto base = doc.terrain(page);
     auto ids = expanded(p, resource, mp, page, base);
-    require(QRect(0, 0, mp.side, mp.side).contains(from) &&
-                QRect(0, 0, mp.side, mp.side).contains(to),
+    require(QRect(0, 0, mp.side, mp.height()).contains(from) &&
+                QRect(0, 0, mp.side, mp.height()).contains(to),
             "Scenery move is outside the map");
     int source = from.y() * mp.side + from.x(), dest = to.y() * mp.side + to.x();
     unsigned type = TYPES_U32(ids.constData() + source * 4);

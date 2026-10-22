@@ -21,6 +21,8 @@ class MapDocument {
     MapDocument(const Project *project, const QString &resource);
     QVector<U5::MapPage> pages;
     QByteArray terrain(int page, bool original = false) const;
+    // Underlying terrain, without custom tile display substitutions.
+    QByteArray rawTerrain(int index, bool original = false) const;
     QMap<QString, QByteArray> changes(int page, const QByteArray &terrain,
                                       const QByteArray &expanded = {}) const;
     static bool supported(const QString &resource);
@@ -29,7 +31,6 @@ class MapDocument {
     QImage terrainImage(int page, const QVector<QImage> &tiles, bool ids) const;
 
   private:
-    QByteArray rawTerrain(int index, bool original = false) const;
     const Project *project;
     QString resource;
 };

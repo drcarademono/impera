@@ -1,4 +1,6 @@
 #include "map_positions.h"
+#include "extended_maps.h"
+#include "mod/npcs.h"
 #include "content_navigation.h"
 #include "contents_editor.h"
 #include "map_entities.h"
@@ -110,6 +112,91 @@ int main(int argc, char **argv) {
         std::cout << "PASS " << name << "\n";
     };
     try {
+        test("Extended map dimensions preserve native layouts, rectangular edits and crop safety",
+             [&] {
+                 QTemporaryDir dir;
+                 auto p = fixture(dir.path());
+                 QByteArray town(16384, char(5));
+                 town[10 * 32 + 20] = 68;
+                 p.resources["TOWNE.DAT"] = {town, town};
+                 auto apply = [&](const QMap<QString, QByteArray> &edits) {
+                     for (auto it = edits.begin(); it != edits.end(); ++it)
+                         p.resources[it.key()].edited = it.value();
+                 };
+                 apply(Workshop::resizeMap(p, "TOWNE.DAT", 0, 80, 48, 1));
+                 MapDocument map(&p, "TOWNE.DAT");
+                 check(map.pages[0].side == 80 && map.pages[0].height() == 48 &&
+                           map.pages[1].side == 32 && map.pages[1].height() == 32,
+                       "Resizing one floor changed another floor");
+                 auto cells = map.terrain(0);
+                 check(cells.size() == 80 * 48 && cells[10 * 80 + 20] == 68 && cells[79] == 1 &&
+                           p.data("TOWNE.DAT") == town,
+                       "Resize lost terrain or changed native bank data");
+                 cells[47 * 80 + 79] = 68;
+                 apply(map.changes(0, cells));
+                 check(MapDocument(&p, "TOWNE.DAT").terrain(0) == cells,
+                       "Rectangular map paint did not roundtrip");
+                 auto image = map.terrainImage(0, {}, true);
+                 check(image.size() == QSize(80, 48) && image.constScanLine(47)[79] == 68,
+                       "Rectangular map export used square dimensions");
+                 // Runtime catalog loading is a later integration step.
+                 rejects([&] { p.package(); });
+                 auto encoded = p.data("MAPS.OVR");
+                 for (int n = 0; n < encoded.size(); ++n)
+                     check(!MAPS_Validate(encoded.constData(), n),
+                           "Truncated map catalog was accepted");
+                 auto corrupt = encoded;
+                 corrupt[MAPS_HEADER + 10] = 0;
+                 corrupt[MAPS_HEADER + 11] = 0;
+                 check(!MAPS_Validate(corrupt.constData(), corrupt.size()),
+                       "Zero-width map was accepted");
+                 rejects([&] { Workshop::resizeMap(p, "TOWNE.DAT", 0, 257, 32, 5); });
+                 rejects([&] { Workshop::resizeMap(p, "TOWNE.DAT", 0, 32, 0, 5); });
+                 rejects([&] { Workshop::resizeMap(p, "TOWNE.DAT", 0, 256, 1, 5); });
+                 apply(Workshop::resizeMap(p, "TOWNE.DAT", 0, 256, 48, 5));
+                 check(MapDocument(&p, "TOWNE.DAT").terrain(0).size() == 256 * 48,
+                       "Maximum map width did not roundtrip");
+                 p.resources["TOWNE.NPC"] = {QByteArray(4608, 0), QByteArray(4608, 0)};
+                 auto &npc = p.resources["TOWNE.NPC"].edited;
+                 npc[512 + 1] = 1; // Active native shape, slot 1.
+                 npc[16 + 3] = 100;
+                 npc[16 + 6] = 0;
+                 rejects([&] { Workshop::resizeMap(p, "TOWNE.DAT", 0, 64, 32, 5); });
+             });
+        test("New location catalog allocates independent identities and validates entrances", [&] {
+            QTemporaryDir dir;
+            auto p = fixture(dir.path());
+            p.resources["BRIT.DAT"] = {{}, {}};
+            p.resources["UNDER.DAT"] = {{}, {}};
+            auto apply = [&](const QMap<QString, QByteArray> &changes) {
+                for (auto it = changes.begin(); it != changes.end(); ++it)
+                    p.resources[it.key()].edited = it.value();
+                Workshop::hydrateExtendedMaps(p);
+            };
+            apply(Workshop::addLocation(p, "BRIT.DAT", "New island", {200, 100}, 48, 80, 5));
+            apply(Workshop::addLocation(p, "UNDER.DAT", "Deep cavern", {200, 100}, 256, 256, 68));
+            auto maps = Workshop::extendedMaps(p);
+            check(maps.size() == 2 && maps[0].id == 42 && maps[1].id == 43 && maps[0].world == 0 &&
+                      maps[1].world == -1 && maps[0].arrival == QPoint(24, 79),
+                  "New location identities or entrances were not independent");
+            check(p.mapPages("LOC042.DAT")[0].height() == 80 &&
+                      MapDocument(&p, "LOC042.DAT").terrain(0).size() == 48 * 80 &&
+                      U5::readDialogue(p.data("LOC042.TLK")).isEmpty() &&
+                      NPCS_Validate(p.data("LOC042.NPC").constData(), p.data("LOC042.NPC").size()),
+                  "New location did not create independent terrain and actor resources");
+            rejects(
+                [&] { Workshop::addLocation(p, "BRIT.DAT", "Duplicate", {200, 100}, 32, 32, 5); });
+            rejects(
+                [&] { Workshop::addLocation(p, "BRIT.DAT", "Outside", {256, 100}, 32, 32, 5); });
+            rejects([&] { Workshop::addLocation(p, "BRIT.DAT", "Invalid", {2, 2}, -1, 32, 5); });
+            rejects([&] { Workshop::resizeMap(p, "LOC042.DAT", 0, 48, 64, 5); });
+            auto duplicate = maps;
+            duplicate[1].id = 42;
+            rejects([&] { Workshop::writeExtendedMaps(duplicate); });
+            check(!MAPS_NewLocation(41) && !MAPS_NewLocation(64) && !MAPS_NewLocation(66) &&
+                      !MAPS_NewLocation(128) && MAPS_NewLocation(127),
+                  "New locations overlap reserved engine identities");
+        });
         test("Cutscene pages share an editor, preserve originals and roundtrip variable sequences", [&] {
             QTemporaryDir dir;
             auto p=fixture(dir.path());

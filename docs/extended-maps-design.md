@@ -1,6 +1,6 @@
 # Extended maps: implementation design
 
-Status: investigated, implementation pending the map-size requirement.
+Status: implementation in progress. The agreed limit is 256 × 256 tiles.
 Work branch: `feature/extended-maps`.
 
 ## Requested behavior
@@ -15,9 +15,9 @@ Work branch: `feature/extended-maps`.
 
 The current coordinate format supports 0–255. Dimensions of 1–256 on each axis
 can retain those coordinates; dimensions above 256 require a coordinated runtime
-and save-format extension. The map-data extension should store dimensions and
-coordinates explicitly so its schema does not inherit this legacy restriction.
-The UI limit and runtime coordinate changes depend on which range is required.
+and save-format extension. The map-data extension stores width and height explicitly instead of inferring
+them from native storage layouts. Coordinates remain bytes for this version.
+The chosen range is 1–256 tiles on each axis. Existing byte coordinates remain valid.
 
 This is not just a rendering limit. Relevant implementation points:
 
@@ -105,6 +105,21 @@ board; make party starts, monster positions and triggers obey its dimensions.
 - Enter a genuinely new location from each world, leave, re-enter, save and
   reload inside it. Verify NPC dialogue/state, contents and return positions.
 - Existing locations and vanilla quests remain isolated from new identities.
-- If dimensions above 256 are required, exercise player, NPC, monster, sign,
-  custom-tile and container positions on both sides of coordinate 255, then
-  save/reload them. An editor-only large map is not sufficient.
+- Exercise coordinate 255 for players, NPCs, monsters, signs, custom tiles and
+  containers, then save/reload them. An editor-only large map is not sufficient.
+
+## Implementation checkpoint
+
+The branch currently contains the shared, bounded `IMAPS001` map catalog codec
+and Workshop document groundwork: separate width and height, dense rectangular
+terrain, top-left grow/crop operations, independent location identities/resources,
+and rectangular canvas, minimap and image exports. Original native terrain banks
+are preserved. These APIs are internal; resize and location creation are not yet
+exposed in the UI, and packages containing this catalog are not yet supported by
+Impera. This checkpoint is not a completed playable feature.
+
+Still required before exposing the feature: package/project persistence,
+contextual entrance and arrival editing, entity schemas/bounds, runtime terrain
+loading, world wrapping, location entrance/exit routing, NPC/dialogue state,
+combat bounds/camera/pathfinding and versioned save-state persistence. The
+verification list above remains the completion criterion.

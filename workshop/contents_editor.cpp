@@ -1,4 +1,5 @@
 #include "contents_editor.h"
+#include "mod/maps.h"
 #include "custom_tiles.h"
 #include "inventory_names.h"
 #include "mod/discoveries.h"
@@ -13,6 +14,8 @@ ContentsTarget contentsTarget(const QString &r, const U5::MapPage &p, int index)
         return {1, index, 0};
     if (r == "DUNGEON.CBT")
         return {2, index, 0};
+    if (auto id = MAPS_LocationResource(r.toLatin1().constData()))
+        return {0, int(id), p.floor};
     int group = QStringList{"TOWNE.DAT", "DWELLING.DAT", "CASTLE.DAT", "KEEP.DAT"}.indexOf(r);
     return {0, group >= 0 ? group * 8 + p.settlement + 1 : 0, r == "UNDER.DAT" ? -1 : p.floor};
 }
