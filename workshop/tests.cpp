@@ -3971,7 +3971,28 @@ int main(int argc, char **argv) {
             };
             auto split = splitter();
             check(split, "Map panel splitter missing");
-            split->setSizes({0, 650, 370});
+            // Finish the deferred workspace restore before simulating a user resize.
+            // Native fonts and control metrics can make the center pane wider on Windows.
+            bool settled = false;
+            QTimer::singleShot(0, &window, [&] { settled = true; });
+            waitFor([&] { return settled; });
+            window.resize(qMax(window.width(), window.minimumSizeHint().width() + 400),
+                          window.height());
+            app.processEvents();
+            split = splitter();
+            const auto sizes = split->sizes();
+            int available = 0;
+            for (int size : sizes)
+                available += size;
+            const int centerMinimum =
+                qMax(split->widget(1)->minimumWidth(), split->widget(1)->minimumSizeHint().width());
+            const int panelMinimum =
+                qMax(split->widget(2)->minimumWidth(), split->widget(2)->minimumSizeHint().width());
+            const int requested = qMin(panelMinimum + 100, available - centerMinimum);
+            check(requested >= panelMinimum + 40,
+                  "Panel width fixture has insufficient room to resize");
+            // setSizes redistributes any surplus proportionally: request the actual total.
+            split->setSizes({0, available - requested, requested});
             app.processEvents();
             auto canvas = dynamic_cast<MapCanvas *>(split->findChild<QWidget *>("mapCanvas"));
             auto filter = split->findChild<QComboBox *>("mapPaletteFilter");
@@ -3980,19 +4001,30 @@ int main(int argc, char **argv) {
             split->findChild<QToolButton *>("mapTool6")->click();
             check(canvas->tool == MapCanvas::Fill, "Tool fixture failed");
             const int width = split->sizes().last();
-            check(width > 300, "Panel resize was not applied");
+            check(qAbs(width - requested) <= 2,
+                  qPrintable(
+                      QString("Panel resize was not applied: requested %1, got %2 (available %3, "
+                              "center minimum %4, panel minimum %5)")
+                          .arg(requested)
+                          .arg(width)
+                          .arg(available)
+                          .arg(centerMinimum)
+                          .arg(panelMinimum)));
             window.selectResource("KEEP.DAT");
             app.processEvents();
             waitFor([&] { return qAbs(splitter()->sizes().last() - width) <= 2; });
             check(qAbs(splitter()->sizes().last() - width) <= 2,
                   "Changing map resets the tile picker width");
-            check(splitter()->findChild<QComboBox *>("mapPaletteFilter")->currentText() == "Location" &&
-                      dynamic_cast<MapCanvas *>(splitter()->findChild<QWidget *>("mapCanvas"))->brush == 5 &&
-                      dynamic_cast<MapCanvas *>(splitter()->findChild<QWidget *>("mapCanvas"))->tool == MapCanvas::Fill,
+            check(splitter()->findChild<QComboBox *>("mapPaletteFilter")->currentText() ==
+                          "Location" &&
+                      dynamic_cast<MapCanvas *>(splitter()->findChild<QWidget *>("mapCanvas"))
+                              ->brush == 5 &&
+                      dynamic_cast<MapCanvas *>(splitter()->findChild<QWidget *>("mapCanvas"))
+                              ->tool == MapCanvas::Fill,
                   "Changing maps resets filter, tool or tile");
             window.selectResource("TILES.16");
             app.processEvents();
-            window.resize(1540, 900);
+            window.resize(window.width() + 140, window.height());
             app.processEvents();
             window.selectResource("TOWNE.DAT");
             app.processEvents();
