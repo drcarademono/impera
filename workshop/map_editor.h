@@ -66,6 +66,7 @@ class MapCanvas : public QWidget {
     QByteArray extended, beforeExtended, stampExtended, libraryUuid;
     QMap<unsigned, unsigned> legacyTiles;
     QMap<int, int> actorBrushKinds;
+    QMap<int, int> specialBrushKinds;
     QMap<unsigned, unsigned> spriteGround;
     QImage tileImageAt(int offset) const;
     unsigned tileId(int offset) const;

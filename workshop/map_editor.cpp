@@ -267,7 +267,8 @@ unsigned MapCanvas::tileId(int offset) const {
 void MapCanvas::setTileId(int offset, unsigned id) {
     if (offset < 0 || offset >= ids.size())
         return;
-    if (actorBrushKinds.contains(id) || (id >= 512 && !legacyTiles.contains(id)))
+    if (actorBrushKinds.contains(id) || specialBrushKinds.contains(id) ||
+        (id >= 512 && !legacyTiles.contains(id)))
         return;
     if (!extended.isEmpty() || id >= 512) {
         if (extended.size() != ids.size() * 4)
@@ -640,8 +641,8 @@ void MapCanvas::mousePressEvent(QMouseEvent *e) {
         return;
     if (tool != Select && !editable(cell))
         return;
-    if ((tool == Pencil || actorBrushKinds.contains(brush)) && pencilPlacement &&
-        pencilPlacement(cell, brush))
+    if ((tool == Pencil || actorBrushKinds.contains(brush) || specialBrushKinds.contains(brush)) &&
+        pencilPlacement && pencilPlacement(cell, brush))
         return;
     before = ids;
     beforeExtended = extended;
@@ -1615,14 +1616,13 @@ MapWorkspace::MapWorkspace(
     paletteFilter->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
     paletteFilter->setMinimumContentsLength(8);
     paletteFilter->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
-    paletteFilter->addItems(
-        {"All tiles", "World", "Location terrain", "Locations", "NPCs", "Monsters"});
-    const QStringList categoryHelp{"Every tile.",
-                                   "Tiles found on Britannia or Underworld maps.",
+    paletteFilter->addItems({"All tiles", "World", "Locations", "NPCs", "Monsters", "Special"});
+    const QStringList categoryHelp{"Every tile and placeable item.",
+                                   "World terrain and location entrance tiles.",
                                    "Tiles found on location maps, including every floor.",
-                                   "Location entrances to place on world maps.",
-                                   "NPC types to place on location maps.",
-                                   "Monster types to place on supported maps."};
+                                   "NPC types. Scheduled NPCs can be placed on location maps.",
+                                   "Monster types.",
+                                   "Signs, containers, transport, items and other map features."};
     for (int i = 0; i < categoryHelp.size(); ++i)
         paletteFilter->setItemData(i, categoryHelp[i], Qt::ToolTipRole);
     brushControls->addWidget(paletteFilter, 1);
@@ -1675,21 +1675,24 @@ MapWorkspace::MapWorkspace(
         if (d.render & TYPES_SPRITE)
             canvas->spriteGround[d.id] = d.ground;
         if (d.id < 256) {
-            palette->item(d.id)->setIcon(QIcon(QPixmap::fromImage(canvas->tiles[d.id])));
+            palette->item(d.id)->setIcon(
+                QIcon(QPixmap::fromImage(canvas->tiles[d.id])
+                          .scaled(32, 32, Qt::KeepAspectRatio, Qt::FastTransformation)));
             palette->item(d.id)->setToolTip(QString::fromUtf8(d.name));
         }
         if (d.id >= 512) {
-            auto item = new QListWidgetItem(QIcon(QPixmap::fromImage(canvas->tiles[d.id])),
-                                            QString(), palette);
+            auto item = new QListWidgetItem(
+                QIcon(QPixmap::fromImage(canvas->tiles[d.id])
+                          .scaled(32, 32, Qt::KeepAspectRatio, Qt::FastTransformation)),
+                QString(), palette);
             item->setData(Qt::UserRole, d.id);
             item->setToolTip(QString::fromUtf8(d.name));
         }
     }
     const auto supportedItems = Workshop::availableMapItems(*project, resource);
     auto actorEntry = [&](int id, int kind, const QString &name) {
-        if (!supportedItems.contains(kind == 1 ? Workshop::MapItemKind::Npc
-                                               : Workshop::MapItemKind::Monster))
-            return;
+        const bool supported = supportedItems.contains(kind == 1 ? Workshop::MapItemKind::Npc
+                                                                 : Workshop::MapItemKind::Monster);
         canvas->actorBrushKinds[id] = kind;
         auto item = new QListWidgetItem(
             QIcon(QPixmap::fromImage(canvas->tiles.value(id))
@@ -1698,7 +1701,12 @@ MapWorkspace::MapWorkspace(
         item->setData(Qt::UserRole, id);
         item->setData(Qt::UserRole + 1, name);
         item->setData(Qt::AccessibleTextRole, name);
-        item->setToolTip(name + (kind == 1 ? " · NPC" : " · Monster"));
+        item->setToolTip(name + (kind == 1 ? " · NPC" : " · Monster") +
+                         (supported   ? QString()
+                          : kind == 1 ? "\nPlace scheduled NPCs on a location map."
+                                      : "\nMonsters cannot be placed on this map."));
+        if (!supported)
+            item->setFlags(item->flags() & ~Qt::ItemIsEnabled);
     };
     for (int shape = 64; shape < 128; shape += 4)
         if (Workshop::actorName(shape) != "x")
@@ -1713,6 +1721,38 @@ MapWorkspace::MapWorkspace(
         TYPES_Decode(reinterpret_cast<const unsigned char *>(record.constData()), &d);
         if (d.id >= 512 && d.kind)
             actorEntry(d.id, d.kind, QString::fromUtf8(d.name));
+    }
+    auto specialItems = supportedItems;
+    std::sort(specialItems.begin(), specialItems.end(), [](auto a, auto b) {
+        return Workshop::mapItemName(a).compare(Workshop::mapItemName(b), Qt::CaseInsensitive) < 0;
+    });
+    for (auto kind : specialItems) {
+        if (kind == Workshop::MapItemKind::Npc || kind == Workshop::MapItemKind::Monster)
+            continue;
+        int id = 65536 + int(kind);
+        int art = kind == Workshop::MapItemKind::Sign             ? 0xf8
+                  : kind == Workshop::MapItemKind::Container      ? 257
+                  : kind == Workshop::MapItemKind::HiddenContents ? 0x5d
+                  : kind == Workshop::MapItemKind::Trigger        ? 0x45
+                                                           : 256 + Workshop::mapItemShape(kind);
+        auto image =
+            canvas->tiles.value(art).scaled(32, 32, Qt::KeepAspectRatio, Qt::FastTransformation);
+        if (kind == Workshop::MapItemKind::Trigger) {
+            image = image.convertToFormat(QImage::Format_ARGB32);
+            QPainter painter(&image);
+            painter.setPen(Qt::red);
+            painter.drawRect(1, 1, 29, 29);
+        }
+        if (canvas->tiles.size() <= id)
+            canvas->tiles.resize(id + 1);
+        canvas->tiles[id] = image;
+        canvas->specialBrushKinds[id] = int(kind);
+        auto name = Workshop::mapItemName(kind);
+        auto item = new QListWidgetItem(QIcon(QPixmap::fromImage(image)), QString(), palette);
+        item->setData(Qt::UserRole, id);
+        item->setData(Qt::UserRole + 1, name);
+        item->setData(Qt::AccessibleTextRole, name);
+        item->setToolTip(name + " · Special");
     }
     rightLayout->addWidget(palette, 1);
     npcResource = companion;
@@ -1858,9 +1898,15 @@ MapWorkspace::MapWorkspace(
         if (i >= 0) {
             setBrush(palette->item(i)->data(Qt::UserRole).toInt());
             if (!restoring && (canvas->actorBrushKinds.contains(canvas->brush) ||
-                               tileCategories(canvas->brush).contains("Locations")))
+                               canvas->specialBrushKinds.contains(canvas->brush)))
                 tool->button(MapCanvas::Pencil)->click();
         }
+    });
+    connect(palette, &QListWidget::itemClicked, this, [this](QListWidgetItem *item) {
+        if (!(item->flags() & Qt::ItemIsEnabled))
+            return;
+        setBrush(item->data(Qt::UserRole).toInt());
+        tool->button(MapCanvas::Pencil)->click();
     });
     canvas->pick = [=](int id) {
         tileSearch->clear();
@@ -1983,31 +2029,21 @@ void MapWorkspace::enableLocationModes(const QStringList &names, LocationLayerFa
     locationModes->setParent(this);
     locationModes->hide();
     canvas->prepareSelection = [this](QPoint cell) { return selectMapItem(cell); };
-    auto add = new QToolButton;
-    add->setText("Add…");
-    add->setIcon(style()->standardIcon(QStyle::SP_FileDialogNewFolder));
-    add->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-    add->setObjectName("mapAddMenu");
-    add->setToolTip("Place a new map item, then edit its properties on the right.");
-    add->setPopupMode(QToolButton::InstantPopup);
-    auto addMenu = new QMenu(add);
-    auto availableItems = Workshop::availableMapItems(*project, resource);
-    std::sort(availableItems.begin(), availableItems.end(), [](auto a, auto b) {
-        return QString::compare(Workshop::mapItemName(a), Workshop::mapItemName(b),
-                                Qt::CaseInsensitive) < 0;
-    });
-    for (auto kind : availableItems) {
-        if (kind == Workshop::MapItemKind::Npc || kind == Workshop::MapItemKind::Monster)
-            continue;
-        auto action = addMenu->addAction(Workshop::mapItemName(kind));
-        action->setObjectName("addMapItem" + QString::number(int(kind)));
-        connect(action, &QAction::triggered, this, [this, kind] { beginAdd(int(kind)); });
-    }
     canvas->pencilPlacement = [this](QPoint cell, int tile) {
+        if (canvas->specialBrushKinds.contains(tile)) {
+            beginAdd(canvas->specialBrushKinds.value(tile), -1, cell);
+            return true;
+        }
         if (canvas->actorBrushKinds.contains(tile)) {
             int kind = canvas->actorBrushKinds.value(tile) == 1
                            ? int(Workshop::MapItemKind::Npc)
                            : int(Workshop::MapItemKind::Monster);
+            if (!Workshop::availableMapItems(*project, resource)
+                     .contains(Workshop::MapItemKind(kind))) {
+                if (canvas->feedback)
+                    canvas->feedback("This actor cannot be placed on this map.");
+                return true;
+            }
             beginAdd(kind,
                      resource == "BRIT.CBT" && tile < 512 ? -1
                      : tile >= 512                        ? tile
@@ -2027,13 +2063,6 @@ void MapWorkspace::enableLocationModes(const QStringList &names, LocationLayerFa
         beginAddLocation(cell, tile);
         return true;
     };
-    add->setMenu(addMenu);
-    if (auto row = findChild<QHBoxLayout *>("mapToolRow")) {
-        row->insertWidget(7, add);
-        auto divider = new QFrame;
-        divider->setFrameShape(QFrame::VLine);
-        row->insertWidget(7, divider);
-    }
     canvas->deleteItem = [this] { deleteSelectedItem(); };
     auto remove = new QToolButton;
     remove->setObjectName("mapDeleteItem");
@@ -2048,7 +2077,7 @@ void MapWorkspace::enableLocationModes(const QStringList &names, LocationLayerFa
     remove->setFixedSize(28, 28);
     remove->setIconSize({22, 22});
     if (auto row = findChild<QHBoxLayout *>("mapToolRow"))
-        row->insertWidget(9, remove);
+        row->insertWidget(row->count() - 1, remove);
     auto markers = new QCheckBox("Contents markers");
     markers->setObjectName("contentsMarkersToggle");
     markers->setToolTip(
@@ -2501,53 +2530,63 @@ void MapWorkspace::selectPage(int index) {
 }
 void MapWorkspace::cancelGesture() { canvas->cancelStroke(); }
 void MapWorkspace::setBrush(int id) {
-    canvas->brush =
-        canvas->actorBrushKinds.contains(id) || (id >= 512 && canvas->legacyTiles.contains(id))
-            ? id
-            : qBound(0, id, 255);
+    canvas->brush = canvas->actorBrushKinds.contains(id) ||
+                            canvas->specialBrushKinds.contains(id) ||
+                            (id >= 512 && canvas->legacyTiles.contains(id))
+                        ? id
+                        : (id > 255 ? 5 : qBound(0, id, 255));
     {
         QSignalBlocker block(palette);
         for (int i = 0; i < palette->count(); i++)
             if (palette->item(i)->data(Qt::UserRole).toInt() == canvas->brush)
                 palette->setCurrentRow(i);
     }
+    if (auto edit = findChild<QPushButton *>("mapEditTileDefinition"))
+        edit->setVisible(!canvas->specialBrushKinds.contains(canvas->brush));
     brushImage->setPixmap(QPixmap::fromImage(canvas->tiles[canvas->brush])
                               .scaled(64, 64, Qt::KeepAspectRatio, Qt::FastTransformation));
-    brushLabel->setText(
-        QString("%1\nTile %2 · %3")
-            .arg(canvas->actorBrushKinds.contains(canvas->brush)
-                     ? (canvas->brush >= 512
-                            ? QString::fromUtf8(
-                                  CustomTiles::definition(*project, canvas->brush).name)
-                            : Workshop::actorName(canvas->brush - 256))
-                 : canvas->brush >= 512
-                     ? QString::fromUtf8(CustomTiles::definition(*project, canvas->brush).name)
-                     : MapDocument::tileName(canvas->brush))
-            .arg(canvas->brush)
-            .arg(tileCategories(canvas->brush).join(" · ")));
+    QString name;
+    for (int i = 0; i < palette->count(); ++i)
+        if (palette->item(i)->data(Qt::UserRole).toInt() == canvas->brush) {
+            name = palette->item(i)->data(Qt::UserRole + 1).toString();
+            break;
+        }
+    if (name.isEmpty())
+        name = canvas->brush >= 512
+                   ? QString::fromUtf8(CustomTiles::definition(*project, canvas->brush).name)
+               : canvas->brush >= 256 ? Workshop::actorName(canvas->brush - 256)
+                                      : MapDocument::tileName(canvas->brush);
+    brushLabel->setText(canvas->specialBrushKinds.contains(canvas->brush)
+                            ? name
+                            : QString("%1\nTile %2 · %3")
+                                  .arg(name)
+                                  .arg(canvas->brush)
+                                  .arg(tileCategories(canvas->brush).join(" · ")));
     filterPalette();
     canvas->update();
     saveView();
 }
 QStringList MapWorkspace::tileCategories(int id) const {
     QStringList categories;
+    if (canvas->specialBrushKinds.contains(id))
+        return {"Special"};
     if (canvas->actorBrushKinds.contains(id))
         return {canvas->actorBrushKinds.value(id) == 1 ? "NPCs" : "Monsters"};
     const int profile = id >= 512 ? CustomTiles::definition(*project, id).base : id;
     if ((profile >= 0x10 && profile <= 0x1b) || profile == 0x39 || profile == 0x3e)
-        categories << "Locations";
+        categories << "World";
     if (id >= 512) {
         auto d = CustomTiles::definition(*project, id);
-        if (d.filters & 1)
+        if ((d.filters & 1) && !categories.contains("World"))
             categories << "World";
         if (d.filters & 2)
-            categories << "Location terrain";
+            categories << "Locations";
         return categories;
     }
-    if (worldTiles.contains(id))
+    if (worldTiles.contains(id) && !categories.contains("World"))
         categories.append("World");
     if (locationTiles.contains(id))
-        categories.append("Location terrain");
+        categories.append("Locations");
     return categories;
 }
 void MapWorkspace::filterPalette() {
@@ -2556,7 +2595,7 @@ void MapWorkspace::filterPalette() {
         int i = palette->item(row)->data(Qt::UserRole).toInt();
         bool matches =
             query.isEmpty() ||
-            (canvas->actorBrushKinds.contains(i)
+            ((canvas->actorBrushKinds.contains(i) || canvas->specialBrushKinds.contains(i))
                  ? palette->item(row)->data(Qt::UserRole + 1).toString()
              : i >= 512 ? QString::fromUtf8(CustomTiles::definition(*project, i).name)
                         : MapDocument::tileName(i))

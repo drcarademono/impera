@@ -339,7 +339,7 @@ int main(int argc, char **argv) {
             QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
             app.processEvents();
             auto filter = active()->findChild<QComboBox *>("mapPaletteFilter");
-            filter->setCurrentText("Locations");
+            filter->setCurrentText("World");
             active()->findChild<QListWidget *>("mapPalette")->setCurrentRow(0x12);
             QTimer::singleShot(0, [&] {
                 auto dialog = qobject_cast<QDialog *>(QApplication::activeModalWidget());
@@ -519,10 +519,8 @@ int main(int argc, char **argv) {
             auto active = [&] {
                 return window.findChild<QStackedWidget *>("workspaces")->currentWidget();
             };
-            auto add = active()->findChild<QToolButton *>("mapAddMenu");
-            for (auto a : add->menu()->actions())
-                check(a->text() != "NPC" && a->text() != "Monster" && a->text() != "Location…",
-                      "Actor or location is still in Add menu");
+            check(!active()->findChild<QToolButton *>("mapAddMenu"),
+                  "Add menu should be replaced by Special");
             auto palette = active()->findChild<QListWidget *>("mapPalette");
             auto filter = active()->findChild<QComboBox *>("mapPaletteFilter");
             auto canvas = static_cast<MapCanvas *>(active()->findChild<QWidget *>("mapCanvas"));
@@ -611,13 +609,15 @@ int main(int argc, char **argv) {
             app.processEvents();
             auto active = window.findChild<QStackedWidget *>("workspaces")->currentWidget();
             auto filter = active->findChild<QComboBox *>("mapPaletteFilter");
-            filter->setCurrentText("Locations");
+            filter->setCurrentText("World");
             auto palette = active->findChild<QListWidget *>("mapPalette");
             bool found = false;
             for (int i = 0; i < palette->count(); ++i)
                 if (palette->item(i)->data(Qt::UserRole).toUInt() == d.id) {
                     check(!palette->item(i)->isHidden(),
-                          "Custom location tile absent from Locations filter");
+                          "Custom location tile absent from World filter");
+                    check(palette->item(i)->icon().actualSize(QSize(32, 32)) == QSize(32, 32),
+                          "Custom tile thumbnail is smaller than vanilla thumbnails");
                     palette->setCurrentRow(i);
                     found = true;
                     break;
@@ -655,6 +655,80 @@ int main(int argc, char **argv) {
             check(at(restored, "UNDER.DAT", {221, 121}) == 61000,
                   "Package roundtrip lost custom entrance artwork");
         });
+        test("World NPC entries explain availability and Special covers all remaining placements",
+             [&] {
+                 QTemporaryDir dir;
+                 fixture(dir.path());
+                 file(dir.path() + "/BRIT.DAT", QByteArray(256, 1));
+                 file(dir.path() + "/UNDER.DAT", QByteArray(65536, 1));
+                 file(dir.path() + "/DATA.OVL", QByteArray(0x3986, 0));
+                 for (auto name : {"INIT.OOL", "BRIT.OOL", "UNDER.OOL"})
+                     file(dir.path() + "/" + name, QByteArray(256, 0));
+                 QByteArray signs(67, 0);
+                 signs[66] = char(255);
+                 file(dir.path() + "/SIGNS.DAT", signs);
+                 WorkshopWindow window;
+                 check(window.openGame(dir.path()), "Special fixture load");
+                 window.show();
+                 window.selectResource("BRIT.DAT");
+                 app.processEvents();
+                 auto active = window.findChild<QStackedWidget *>("workspaces")->currentWidget();
+                 auto canvas = static_cast<MapCanvas *>(active->findChild<QWidget *>("mapCanvas"));
+                 auto palette = active->findChild<QListWidget *>("mapPalette");
+                 auto filter = active->findChild<QComboBox *>("mapPaletteFilter");
+                 filter->setCurrentText("NPCs");
+                 int npcCount = 0;
+                 for (int i = 0; i < palette->count(); ++i)
+                     if (!palette->item(i)->isHidden()) {
+                         ++npcCount;
+                         check(!(palette->item(i)->flags() & Qt::ItemIsEnabled) &&
+                                   palette->item(i)->toolTip().contains("location map"),
+                               "World NPC availability is not explained");
+                     }
+                 check(npcCount > 0, "World NPC filter is empty");
+                 filter->setCurrentText("Special");
+                 QSet<int> seen;
+                 QString previous;
+                 int goldRow = -1;
+                 for (int i = 0; i < palette->count(); ++i)
+                     if (!palette->item(i)->isHidden()) {
+                         const auto item = palette->item(i);
+                         int id = item->data(Qt::UserRole).toInt();
+                         check(canvas->specialBrushKinds.contains(id),
+                               "Special includes ordinary terrain");
+                         auto name = item->data(Qt::UserRole + 1).toString();
+                         check(previous.compare(name, Qt::CaseInsensitive) <= 0,
+                               "Special entries are not alphabetized");
+                         previous = name;
+                         int kind = canvas->specialBrushKinds.value(id);
+                         seen.insert(kind);
+                         if (kind == int(Workshop::MapItemKind::Gold))
+                             goldRow = i;
+                     }
+                 auto expected = Workshop::availableMapItems(window.projectForTests(), "BRIT.DAT");
+                 for (auto kind : expected)
+                     if (kind != Workshop::MapItemKind::Npc &&
+                         kind != Workshop::MapItemKind::Monster)
+                         check(seen.contains(int(kind)), "Special omitted a former Add entry");
+                 check(goldRow >= 0, "Special Gold missing");
+                 palette->setCurrentRow(goldRow);
+                 canvas->keyboardCell = {220, 120};
+                 auto terrain = window.projectForTests().data("BRIT.DAT");
+                 QKeyEvent enter(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier);
+                 QApplication::sendEvent(canvas, &enter);
+                 check(U5::byte(Workshop::WorldObjects::effective(window.projectForTests(), 0),
+                                8) == 2 &&
+                           window.projectForTests().data("BRIT.DAT") == terrain,
+                       "Special Gold was not placed as a world object");
+                 for (auto action : window.findChildren<QAction *>())
+                     if (action->shortcut() == QKeySequence::Undo) {
+                         action->trigger();
+                         break;
+                     }
+                 app.processEvents();
+                 check(!U5::byte(Workshop::WorldObjects::effective(window.projectForTests(), 0), 8),
+                       "Special item undo failed");
+             });
         test("Cutscene pages share an editor, preserve originals and roundtrip variable sequences", [&] {
             QTemporaryDir dir;
             auto p=fixture(dir.path());
@@ -3628,10 +3702,15 @@ int main(int argc, char **argv) {
             w.show();
             app.processEvents();
             auto root = w.findChild<QStackedWidget *>("workspaces")->currentWidget();
-            auto add = root->findChild<QAction *>("addMapItem3");
-            check(add, "No Add container action");
-            add->trigger();
             auto map = dynamic_cast<MapCanvas *>(root->findChild<QWidget *>("mapCanvas"));
+            root->findChild<QComboBox *>("mapPaletteFilter")->setCurrentText("Special");
+            auto palette = root->findChild<QListWidget *>("mapPalette");
+            for (int i = 0; i < palette->count(); ++i)
+                if (map->specialBrushKinds.value(palette->item(i)->data(Qt::UserRole).toInt(),
+                                                 -1) == int(Workshop::MapItemKind::Container))
+                    palette->setCurrentRow(i);
+            check(map->specialBrushKinds.contains(map->brush),
+                  "Special container brush is missing");
             QPointF pos(2.5 * 16 * map->zoom, 3.5 * 16 * map->zoom);
             QMouseEvent press(QEvent::MouseButtonPress, pos, pos, Qt::LeftButton, Qt::LeftButton,
                               Qt::NoModifier);
@@ -4255,7 +4334,7 @@ int main(int argc, char **argv) {
             app.processEvents();
             auto canvas = dynamic_cast<MapCanvas *>(split->findChild<QWidget *>("mapCanvas"));
             auto filter = split->findChild<QComboBox *>("mapPaletteFilter");
-            filter->setCurrentText("Location terrain");
+            filter->setCurrentText("Locations");
             split->findChild<QListWidget *>("mapPalette")->setCurrentRow(5);
             split->findChild<QToolButton *>("mapTool6")->click();
             check(canvas->tool == MapCanvas::Fill, "Tool fixture failed");
@@ -4275,7 +4354,7 @@ int main(int argc, char **argv) {
             check(qAbs(splitter()->sizes().last() - width) <= 2,
                   "Changing map resets the tile picker width");
             check(splitter()->findChild<QComboBox *>("mapPaletteFilter")->currentText() ==
-                          "Location terrain" &&
+                          "Locations" &&
                       dynamic_cast<MapCanvas *>(splitter()->findChild<QWidget *>("mapCanvas"))
                               ->brush == 5 &&
                       dynamic_cast<MapCanvas *>(splitter()->findChild<QWidget *>("mapCanvas"))
@@ -4306,14 +4385,8 @@ int main(int argc, char **argv) {
             auto findCanvas = [&] {
                 return dynamic_cast<MapCanvas *>(active()->findChild<QWidget *>("mapCanvas"));
             };
-            auto addMenu = active()->findChild<QToolButton *>("mapAddMenu");
-            check(addMenu && addMenu->menu(), "Add menu missing");
-            QString previous;
-            for (auto action : addMenu->menu()->actions()) {
-                check(QString::compare(previous, action->text(), Qt::CaseInsensitive) <= 0,
-                      "Add menu is not alphabetized");
-                previous = action->text();
-            }
+            check(!active()->findChild<QToolButton *>("mapAddMenu"),
+                  "Add menu remains after Special filter migration");
             auto palette = active()->findChild<QListWidget *>("mapPalette");
             palette->setCurrentRow(9);
 
@@ -4376,7 +4449,7 @@ int main(int argc, char **argv) {
             check(findCanvas()->brush == 11, "Floor navigation reset the shared brush");
             auto filter = active()->findChild<QComboBox *>("mapPaletteFilter");
             auto tiles = active()->findChild<QListWidget *>("mapPalette");
-            filter->setCurrentText("Location terrain");
+            filter->setCurrentText("Locations");
             check(!tiles->item(0)->isHidden() && tiles->item(9)->isHidden() &&
                       tiles->item(0x27)->isHidden() && findCanvas()->brush == 11,
                   "Usage filter must reflect restored maps without resetting the brush");
@@ -6689,20 +6762,20 @@ int main(int argc, char **argv) {
                   "Name search failed");
             search->clear();
             check(category->count() == 6 && category->itemText(1) == "World" &&
-                      category->itemText(2) == "Location terrain" &&
-                      category->itemText(3) == "Locations" && category->itemText(4) == "NPCs" &&
-                      category->itemText(5) == "Monsters",
+                      category->itemText(2) == "Locations" && category->itemText(3) == "NPCs" &&
+                      category->itemText(4) == "Monsters" && category->itemText(5) == "Special",
                   "Palette must offer terrain usage and placement filters");
             category->setCurrentText("World");
             check(!palette->item(5)->isHidden() && !palette->item(0x4f)->isHidden() &&
                       !palette->item(0xd4)->isHidden() && palette->item(0xd7)->isHidden() &&
-                      palette->item(0xfa)->isHidden() && palette->item(0x39)->isHidden(),
-                  "World membership must use terrain cells, without inferred frames or unused chunks");
-            category->setCurrentText("Location terrain");
+                      palette->item(0xfa)->isHidden() && !palette->item(0x39)->isHidden(),
+                  "World membership must use terrain cells, without inferred frames or unused "
+                  "chunks");
+            category->setCurrentText("Locations");
             check(!palette->item(5)->isHidden() && !palette->item(0x50)->isHidden() &&
                       palette->item(0xfa)->isHidden(),
                   "Location filter missed floor terrain or counted combat map metadata");
-            check(palette->item(5)->toolTip().contains("World · Location terrain"),
+            check(palette->item(5)->toolTip().contains("World · Locations"),
                   "Tile usage categories must overlap");
             category->setCurrentText("All tiles");
             check(!palette->item(0xfa)->isHidden(), "All tiles must include unused artwork");
