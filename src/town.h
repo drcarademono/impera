@@ -1,6 +1,7 @@
 #ifndef _TOWN_H
 #define _TOWN_H
 
+int TOWN_ExtendedExit(void);
 int TOWN_0000_CheckNpcKilled(int param_1);
 void TOWN_0052_SetNpcKilled(int param_1);
 void TOWN_00b0_DespawnNpc(int param_1);

@@ -1,3 +1,4 @@
+#include "extended_maps.h"
 #include "mod/npcs.h"
 #include "map_entities.h"
 #include "actor_names.h"
@@ -199,8 +200,9 @@ QList<MapItemKind> availableMapItems(const Project &p, const QString &r) {
     if (worldObjectsAvailable || r.endsWith(".CBT") || p.resources.contains(npc))
         out << MapItemKind::Monster;
     if (p.resources.contains("SIGNS.DAT") &&
-        QStringList{"BRIT.DAT", "UNDER.DAT", "TOWNE.DAT", "DWELLING.DAT", "CASTLE.DAT", "KEEP.DAT"}
-            .contains(r))
+        (MAPS_LocationResource(r.toLatin1().constData()) ||
+         QStringList{"BRIT.DAT", "UNDER.DAT", "TOWNE.DAT", "DWELLING.DAT", "CASTLE.DAT", "KEEP.DAT"}
+             .contains(r)))
         out << MapItemKind::Sign;
     out << MapItemKind::Container << MapItemKind::HiddenContents;
     if (worldObjectsAvailable)
@@ -218,8 +220,8 @@ QList<MapItemKind> availableMapItems(const Project &p, const QString &r) {
     return out;
 }
 QByteArray addContentsAt(const Project &p, ContentsTarget target, QPoint cell, bool container) {
-    int side = target.kind ? 11 : target.map >= 33 ? 8 : target.map ? 32 : 256;
-    require(cell.x() >= 0 && cell.y() >= 0 && cell.x() < side && cell.y() < side,
+    auto size = mapSize(p, target.map, target.floor, target.kind);
+    require(cell.x() >= 0 && cell.y() >= 0 && cell.x() < size.width() && cell.y() < size.height(),
             "Placement outside map");
     require(!contentsHit(p, target, cell),
             "This tile already has contents; select it to edit them");
@@ -250,9 +252,10 @@ QMap<QString, QByteArray> moveSignTerrain(const Project &p, const QString &r, in
             return custom;
     }
     int side = doc.pages[page].side;
-    require(from.x() >= 0 && from.y() >= 0 && from.x() < side && from.y() < side,
+    require(from.x() >= 0 && from.y() >= 0 && from.x() < side &&
+                from.y() < doc.pages[page].height(),
             "Sign source outside map");
-    require(to.x() >= 0 && to.y() >= 0 && to.x() < side && to.y() < side,
+    require(to.x() >= 0 && to.y() >= 0 && to.x() < side && to.y() < doc.pages[page].height(),
             "Sign destination outside map");
     int tile = U5::byte(terrain, from.y() * side + from.x());
     if (tile != 0x89 && tile != 0x8a && tile != 0xf8)
@@ -260,7 +263,7 @@ QMap<QString, QByteArray> moveSignTerrain(const Project &p, const QString &r, in
     int ground = 5;
     for (QPoint delta : {QPoint(0, 1), QPoint(1, 0), QPoint(-1, 0), QPoint(0, -1)}) {
         auto n = from + delta;
-        if (n.x() >= 0 && n.y() >= 0 && n.x() < side && n.y() < side) {
+        if (n.x() >= 0 && n.y() >= 0 && n.x() < side && n.y() < doc.pages[page].height()) {
             int t = U5::byte(terrain, n.y() * side + n.x());
             if (t == 5 || t == 0x40 || t == 0x44 || t == 0x45) {
                 ground = t;
@@ -291,7 +294,7 @@ void validateActorPlacement(const Project &p, const QString &r, int index, QPoin
     QSize size(world ? 1 : TYPES_Width(&d), world ? 1 : TYPES_Height(&d));
     QRect footprint(cell, size);
     bool large = size != QSize(1, 1);
-    require(QRect(0, 0, page.side, page.side).contains(footprint),
+    require(QRect(0, 0, page.side, page.height()).contains(footprint),
             "The whole creature must fit inside the map");
     if (large) {
         unsigned shape = d.base;
@@ -334,7 +337,7 @@ void validateActorPlacement(const Project &p, const QString &r, int index, QPoin
             for (int hour = schedule < 0 ? 0 : schedule; hour < (schedule < 0 ? 4 : schedule + 1);
                  ++hour) {
                 auto pos = npcs.location(page.settlement, slot, hour);
-                if (pos.floor == page.floor && pos.x < page.side && pos.y < page.side)
+                if (pos.floor == page.floor && pos.x < page.side && pos.y < page.height())
                     check({pos.x, pos.y}, npcs.sprite(page.settlement, slot));
             }
         }
@@ -346,7 +349,8 @@ void validateActorPlacement(const Project &p, const QString &r, int index, QPoin
                 continue;
             int x = U5::byte(bytes, base + 6 * 32 + 11 + slot),
                 y = U5::byte(bytes, base + 7 * 32 + 11 + slot);
-            if (x > 10 || y > 10 ||
+            if (x >= page.side || y >= page.height() ||
+                !mapMarkerActive(p, r, index, 24 + slot, x, y) ||
                 (r == "DUNGEON.CBT" && !U5::byte(bytes, base + 5 * 32 + 11 + slot)))
                 continue;
             unsigned fallback =
@@ -361,7 +365,7 @@ MapItemEdit addMapItem(const Project &p, const QString &r, int index, QPoint cel
     MapDocument doc(&p, r);
     require(index >= 0 && index < doc.pages.size(), "Invalid map floor");
     const auto page = doc.pages[index];
-    require(cell.x() >= 0 && cell.y() >= 0 && cell.x() < page.side && cell.y() < page.side,
+    require(cell.x() >= 0 && cell.y() >= 0 && cell.x() < page.side && cell.y() < page.height(),
             "Placement outside map");
     unsigned customType = appearance >= 512 ? unsigned(appearance) : 0;
     if (customType) {
@@ -451,7 +455,7 @@ MapItemEdit addMapItem(const Project &p, const QString &r, int index, QPoint cel
             char(conversation);
         out.changes[npc] = b;
         out.mode = "NPCs / Schedules";
-        if (out.slot < 32 && p.resources.contains("INIT.GAM")) {
+        if (out.slot < 32 && target.map <= 32 && p.resources.contains("INIT.GAM")) {
             auto initial = p.data("INIT.GAM");
             int flag = 0x5b4 + (target.map - 1) * 4 + out.slot / 8;
             require(flag < initial.size(), "Initial NPC state is truncated");
@@ -484,8 +488,8 @@ MapItemEdit addMapItem(const Project &p, const QString &r, int index, QPoint cel
         int base = page.offset;
         if (kind == MapItemKind::Trigger) {
             for (int i = 0; i < 8; i++)
-                if (U5::byte(b, base + 8 * 32 + 11 + i) > 10 ||
-                    U5::byte(b, base + 8 * 32 + 19 + i) > 10) {
+                if (!mapMarkerActive(p, r, index, 40 + i, U5::byte(b, base + 8 * 32 + 11 + i),
+                                     U5::byte(b, base + 8 * 32 + 19 + i))) {
                     out.slot = 22 + i;
                     break;
                 }
@@ -501,8 +505,9 @@ MapItemEdit addMapItem(const Project &p, const QString &r, int index, QPoint cel
         } else {
             for (int i = 0; i < 16; i++)
                 if (r == "DUNGEON.CBT" ? !U5::byte(b, base + 5 * 32 + 11 + i)
-                                       : (U5::byte(b, base + 6 * 32 + 11 + i) > 10 ||
-                                          U5::byte(b, base + 7 * 32 + 11 + i) > 10)) {
+                                       : (!mapMarkerActive(p, r, index, 24 + i,
+                                                           U5::byte(b, base + 6 * 32 + 11 + i),
+                                                           U5::byte(b, base + 7 * 32 + 11 + i)))) {
                     out.slot = 6 + i;
                     break;
                 }
@@ -515,6 +520,20 @@ MapItemEdit addMapItem(const Project &p, const QString &r, int index, QPoint cel
             b[base + 6 * 32 + 11 + i] = char(cell.x());
             b[base + 7 * 32 + 11 + i] = char(cell.y());
         }
+        auto set = [&](int bit) {
+            Project view = p;
+            for (auto it = out.changes.begin(); it != out.changes.end(); ++it)
+                view.resources[it.key()].edited = it.value();
+            auto edits = setMapMarker(view, r, index, bit, true);
+            for (auto it = edits.begin(); it != edits.end(); ++it)
+                out.changes[it.key()] = it.value();
+        };
+        if (out.slot >= 22) {
+            set(40 + out.slot - 22);
+            set(48 + out.slot - 22);
+            set(56 + out.slot - 22);
+        } else
+            set(24 + out.slot - 6);
         out.changes[r] = b;
         out.mode = "Encounter";
     } else {
@@ -590,6 +609,9 @@ QMap<QString, QByteArray> deleteMapItem(const Project &p, const QString &r, int 
             b[base + 8 * 32 + 11 + i] = b[base + 8 * 32 + 19 + i] = char(255);
         }
         out[r] = b;
+        auto flags = setMapMarker(p, r, index, slot < 22 ? 24 + slot - 6 : 40 + slot - 22, false);
+        for (auto it = flags.begin(); it != flags.end(); ++it)
+            out[it.key()] = it.value();
     } else if (mode == "Signs") {
         auto signs = readSigns(p.data("SIGNS.DAT"));
         auto target = contentsTarget(r, page, index);

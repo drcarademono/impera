@@ -281,6 +281,7 @@ class MapWorkspace : public QWidget {
     QComboBox *monsterAppearance = nullptr, *triggerTile = nullptr;
     QWidget *triggerProperties = nullptr;
     QSpinBox *triggerX[2]{}, *triggerY[2]{};
+    QCheckBox *triggerEnabled[2]{};
     QLineEdit *npcNameField = nullptr;
     void editNpcProperties();
     void createCombatInspector(QVBoxLayout *layout);

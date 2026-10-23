@@ -28,6 +28,27 @@ int main(void) {
     map(r, 256, 256);
     assert(MAPS_Validate(b, size));
     assert(MAPS_Find(b, size, 0, 0, 0) == r);
+    assert(MAPS_Mount(b, size));
+    assert(MAPS_ActiveWidth(0, 0) == 256 && MAPS_ActiveHeight(0, 0) == 256);
+    *MAPS_ActiveCell(0, 0, -1, -1) = 68;
+    assert(*MAPS_ActiveCell(0, 0, 255, 255) == 68);
+    FILE *save = tmpfile();
+    assert(save && MAPS_WriteState(save));
+    MAPS_Reset();
+    assert(*MAPS_ActiveCell(0, 0, 255, 255) == 0);
+    rewind(save);
+    assert(MAPS_ReadState(save, 0) && *MAPS_ActiveCell(0, 0, 255, 255) == 0);
+    rewind(save);
+    assert(MAPS_ReadState(save, 1) && *MAPS_ActiveCell(0, 0, 255, 255) == 68);
+    assert(fseek(save, 16, SEEK_SET) == 0);
+    int crc = fgetc(save);
+    assert(fseek(save, 16, SEEK_SET) == 0);
+    fputc(crc ^ 1, save);
+    rewind(save);
+    assert(!MAPS_ReadState(save, 1) && *MAPS_ActiveCell(0, 0, 255, 255) == 68);
+    fclose(save);
+    MAPS_Mount(NULL, 0);
+
     assert(!MAPS_Find(b, size, 0, 1, 0));
     for (size_t n = 0; n < size; ++n)
         assert(!MAPS_Validate(b, n));
@@ -52,6 +73,18 @@ int main(void) {
     assert(!MAPS_LocationResource("LOC042.DAT/"));
     assert(!MAPS_LocationResource("LOC999.NPC"));
     assert(!MAPS_LocationResource(NULL));
+    map(r, 256, 256);
+    r[4] = 2;
+    r[20] = 1;
+    memset(r + 88, 0, 32);
+    memcpy(r + 88, "BRIT.CBT", 9);
+    r[123] = 1; /* monster slot zero, bit 24 */
+    assert(MAPS_Validate(b, size));
+    assert(MAPS_Mount(b, size));
+    MAPS_Combat(1, 0);
+    assert(MAPS_CombatMarkerActive(24, 255, 255));
+    assert(!MAPS_CombatMarkerActive(25, 255, 255));
+    MAPS_Mount(NULL, 0);
     free(b);
     return 0;
 }

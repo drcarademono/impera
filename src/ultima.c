@@ -219,14 +219,11 @@ int CDECL main(int argc, char** argv/*, char** envp*/)
         if (D_5893_map_id != 0)
         {
             // 00db
-            if (D_5893_map_id < 0x21)
-            {
+            if (MAPS_Outside(D_5893_map_id)) {
                 TOWN_11f0_Entry(local_2 != 0 || local_8 != 0);
                 TOWN_141e_MainLoop();
                 local_8 = 0;
-            }
-            else
-            {
+            } else {
                 // 0104
                 ULTIMA_251e_SwitchDisks(2);
                 DUNGEON_0e2e_MainLoop(local_2);

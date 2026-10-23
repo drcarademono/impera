@@ -349,7 +349,8 @@ void ENGINE_ShowOptions(bool gameplay)
     MOUSE_SetPointerMode(false);
     TILESET_Copy(g_linearEgaBuffer0,backup,sizeof(backup));memcpy(g_linearEgaBuffer0,backup,sizeof(backup));
     TILESET_Unregister(backup);
-    if(gameplay && previousTileset!=TILESET_Revision() && GRAP_BUF_HasTileset() &&
-       D_58a4 && (D_5893_map_id<=32 || D_5893_map_id>=128)) ULTIMA_56ac_DrawMap();
+    if (gameplay && previousTileset != TILESET_Revision() && GRAP_BUF_HasTileset() && D_58a4 &&
+        (MAPS_Outside(D_5893_map_id) || D_5893_map_id >= 128))
+        ULTIMA_56ac_DrawMap();
     GRAP_BUF_MarkDirty();GRAP_BUF_Present();
 }

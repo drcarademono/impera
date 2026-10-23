@@ -1,3 +1,5 @@
+#include "world_objects.h"
+#include "mod/npcs.h"
 #include "extended_maps.h"
 #include "map_editor.h"
 #include "map_positions.h"
@@ -27,6 +29,9 @@ QVector<ExtendedMap> extendedMaps(const Project &p) {
         m.world = int8_t(r[14]);
         m.entrance = {r[15], r[16]};
         m.arrival = {r[17], r[18]};
+        m.underlay = r[19];
+        m.markerMask = r[20];
+        m.markers = quint64(MAPS_U32(r + 120)) | (quint64(MAPS_U32(r + 124)) << 32);
         m.name = QString::fromLatin1(reinterpret_cast<const char *>(r + 24));
         m.resource = QString::fromLatin1(reinterpret_cast<const char *>(r + 88));
         m.cells = b.mid(off + MAPS_RECORD, m.width * m.height);
@@ -45,10 +50,11 @@ QByteArray writeExtendedMaps(const QVector<ExtendedMap> &maps) {
     TYPES_Put32(b.data() + 8, sorted.size());
     for (const auto &m : sorted) {
         require(m.kind <= 3 && m.id <= 255 && m.page >= 0 && m.page <= 65535 && m.floor >= -128 &&
-                    m.floor <= 127 && m.background >= 0 && m.background <= 255 && m.world >= -2 &&
-                    m.world <= 0 && m.entrance.x() >= 0 && m.entrance.x() <= 255 &&
-                    m.entrance.y() >= 0 && m.entrance.y() <= 255 && m.arrival.x() >= 0 &&
-                    m.arrival.x() <= 255 && m.arrival.y() >= 0 && m.arrival.y() <= 255,
+                    m.floor <= 127 && m.underlay >= 0 && m.underlay <= 255 && m.background >= 0 &&
+                    m.background <= 255 && m.world >= -2 && m.world <= 0 && m.entrance.x() >= 0 &&
+                    m.entrance.x() <= 255 && m.entrance.y() >= 0 && m.entrance.y() <= 255 &&
+                    m.arrival.x() >= 0 && m.arrival.x() <= 255 && m.arrival.y() >= 0 &&
+                    m.arrival.y() <= 255,
                 "Invalid map identity or position");
         require(m.width >= 1 && m.width <= 256 && m.height >= 1 && m.height <= 256 &&
                     m.cells.size() == m.width * m.height,
@@ -75,6 +81,10 @@ QByteArray writeExtendedMaps(const QVector<ExtendedMap> &maps) {
         r[16] = m.entrance.y();
         r[17] = m.arrival.x();
         r[18] = m.arrival.y();
+        r[19] = m.underlay;
+        r[20] = m.markerMask;
+        TYPES_Put32(r.data() + 120, m.markers);
+        TYPES_Put32(r.data() + 124, m.markers >> 32);
         memcpy(r.data() + 24, m.name.toLatin1().constData(), m.name.toLatin1().size());
         memcpy(r.data() + 88, m.resource.toLatin1().constData(), m.resource.size());
         require(b.size() + r.size() + m.cells.size() <= MAPS_MAX_BYTES,
@@ -92,6 +102,41 @@ const ExtendedMap *findExtendedMap(const QVector<ExtendedMap> &maps, const QStri
         if (m.resource == resource && m.page == page)
             return &m;
     return nullptr;
+}
+QSize mapSize(const Project &p, int id, int floor, int kind) {
+    auto maps = extendedMaps(p);
+    for (const auto &m : maps)
+        if (m.kind == unsigned(kind ? kind + 1
+                               : id ? 1
+                                    : 0) &&
+            m.id == unsigned(kind ? id
+                             : id ? id
+                                  : floor != 0) &&
+            m.floor == (kind || !id ? 0 : floor))
+            return {m.width, m.height};
+    require(!MAPS_NewLocation(id) || kind, "Missing location map");
+    int side = kind ? 11 : !id ? 256 : id >= 33 && id <= 40 ? 8 : 32;
+    return {side, side};
+}
+bool mapMarkerActive(const Project &p, const QString &r, int page, int bit, int x, int y) {
+    auto maps = extendedMaps(p);
+    const auto m = findExtendedMap(maps, r, page);
+    return m && m->markerMask ? bool(m->markers & (quint64(1) << bit))
+                              : x >= 0 && y >= 0 && x < 11 && y < 11;
+}
+QMap<QString, QByteArray> setMapMarker(const Project &p, const QString &r, int page, int bit,
+                                       bool active) {
+    auto maps = extendedMaps(p);
+    for (auto &m : maps)
+        if (m.resource == r && m.page == page && m.markerMask) {
+            require(bit >= 0 && bit < 64, "Invalid encounter marker");
+            if (active)
+                m.markers |= quint64(1) << bit;
+            else
+                m.markers &= ~(quint64(1) << bit);
+            return {{"MAPS.OVR", writeExtendedMaps(maps)}};
+        }
+    return {};
 }
 void hydrateExtendedMaps(Project &p) {
     for (const auto &m : extendedMaps(p))
@@ -130,6 +175,30 @@ QMap<QString, QByteArray> resizeMap(const Project &p, const QString &resource, i
                : m.kind == 1 ? positionMap(resource, old)
                              : page;
         m.background = fill;
+        if (m.kind >= 2) {
+            m.markerMask = true;
+            const auto bytes = p.data(resource);
+            auto bit = [&](int index, int row, int xc, int yc, bool enabled = true) {
+                int x = U5::byte(bytes, old.offset + row * 32 + xc),
+                    y = U5::byte(bytes, old.offset + row * 32 + yc);
+                if (enabled && x < old.side && y < old.height())
+                    m.markers |= quint64(1) << index;
+            };
+            for (int row = 1; row <= 4; row++)
+                for (int i = 0; i < 6; i++)
+                    bit((row - 1) * 6 + i, row, 11 + i, 17 + i);
+            for (int i = 0; i < 16; i++) {
+                int x = U5::byte(bytes, old.offset + 6 * 32 + 11 + i),
+                    y = U5::byte(bytes, old.offset + 7 * 32 + 11 + i);
+                if (x < old.side && y < old.height() &&
+                    (resource == "BRIT.CBT" || U5::byte(bytes, old.offset + 5 * 32 + 11 + i)))
+                    m.markers |= quint64(1) << (24 + i);
+            }
+            if (resource == "DUNGEON.CBT")
+                for (int row = 8; row <= 10; row++)
+                    for (int i = 0; i < 8; i++)
+                        bit(40 + (row - 8) * 8 + i, row, 11 + i, 19 + i);
+        }
     }
     m.width = width;
     m.height = height;
@@ -152,6 +221,37 @@ QMap<QString, QByteArray> resizeMap(const Project &p, const QString &resource, i
             (old.settlement >= 0 ? pos.floor == old.floor
                                  : pos.floor == (resource == "UNDER.DAT" ? -1 : old.floor)))
             check(pos.cell.x(), pos.cell.y(), pos.name);
+    if (m.kind == 0 && p.resources.contains("INIT.OOL")) {
+        auto objects = WorldObjects::effective(p, resource == "UNDER.DAT" ? 1 : 0);
+        for (int slot = 1; slot < 32; slot++)
+            if (U5::byte(objects, slot * 8))
+                check(U5::byte(objects, slot * 8 + 2), U5::byte(objects, slot * 8 + 3),
+                      "Starting object");
+    }
+    if (resource.endsWith(".CBT")) {
+        const auto bytes = p.data(resource);
+        int base = old.offset;
+        auto marker = [&](int row, int xcol, int ycol, int bit, const QString &name) {
+            int x = U5::byte(bytes, base + row * 32 + xcol),
+                y = U5::byte(bytes, base + row * 32 + ycol);
+            if ((m.markers & (quint64(1) << bit)) && x < old.side && y < old.height())
+                check(x, y, name);
+        };
+        for (int row = 1; row <= 4; row++)
+            for (int i = 0; i < 6; i++)
+                marker(row, 11 + i, 17 + i, (row - 1) * 6 + i, "Party start");
+        for (int i = 0; i < 16; i++)
+            if (resource == "BRIT.CBT" || U5::byte(bytes, base + 5 * 32 + 11 + i)) {
+                int x = U5::byte(bytes, base + 6 * 32 + 11 + i),
+                    y = U5::byte(bytes, base + 7 * 32 + 11 + i);
+                if ((m.markers & (quint64(1) << (24 + i))) && x < old.side && y < old.height())
+                    check(x, y, "Monster start");
+            }
+        if (resource == "DUNGEON.CBT")
+            for (int row = 8; row <= 10; row++)
+                for (int i = 0; i < 8; i++)
+                    marker(row, 11 + i, 19 + i, 40 + (row - 8) * 8 + i, "Encounter trigger");
+    }
     const auto npc = resource.section('.', 0, 0) + ".NPC";
     if (old.settlement >= 0 && p.resources.contains(npc) && !p.data(npc).isEmpty()) {
         MapNpcDocument actors(const_cast<Project *>(&p), npc);
@@ -160,8 +260,12 @@ QMap<QString, QByteArray> resizeMap(const Project &p, const QString &resource, i
                 actors.sprite(old.settlement, id) >= 512)
                 for (int slot = 0; slot < 4; ++slot) {
                     auto dest = actors.location(old.settlement, id, slot);
-                    if (dest.floor == old.floor && dest.x < old.side && dest.y < old.height())
+                    if (dest.floor == old.floor && dest.x < old.side && dest.y < old.height()) {
                         check(dest.x, dest.y, "NPC schedule destination");
+                        auto def = CustomTiles::definition(p, actors.sprite(old.settlement, id));
+                        check(dest.x + TYPES_Width(&def) - 1, dest.y + TYPES_Height(&def) - 1,
+                              "NPC footprint");
+                    }
                 }
     }
     for (const auto &c : CustomTiles::placements(p))
@@ -225,13 +329,57 @@ QMap<QString, QByteArray> addLocation(const Project &p, const QString &world, co
     m.arrival = {width / 2, height - 1};
     m.background = fill;
     m.cells = QByteArray(width * height, char(fill));
+    MapDocument originalWorld(&p, world);
+    m.underlay = U5::byte(originalWorld.terrain(0), entrance.y() * worldPage.side + entrance.x());
     maps.append(m);
-    return {{"MAPS.OVR", writeExtendedMaps(maps)},
-            {m.resource.section('.', 0, 0) + ".NPC", QByteArray(4608, 0)},
-            {m.resource.section('.', 0, 0) + ".TLK", U5::writeDialogue({})}};
+    Project candidate = p;
+    candidate.resources["MAPS.OVR"].edited = writeExtendedMaps(maps);
+    MapDocument worldDoc(&candidate, world);
+    auto cells = worldDoc.terrain(0);
+    cells[entrance.y() * worldPage.side + entrance.x()] = 0x12;
+    auto changes = worldDoc.changes(0, cells);
+    if (!changes.contains("MAPS.OVR"))
+        changes["MAPS.OVR"] = candidate.data("MAPS.OVR");
+    changes[m.resource.section('.', 0, 0) + ".NPC"] = QByteArray(4608, 0);
+    changes[m.resource.section('.', 0, 0) + ".TLK"] = U5::writeDialogue({});
+    return changes;
 }
 void validateExtendedMaps(const Project &p) {
-    if (!p.resources.value("MAPS.OVR").edited.isEmpty())
-        extendedMaps(p);
+    const auto maps = extendedMaps(p);
+    if (maps.isEmpty())
+        return;
+    auto check = [&](int map, int floor, int kind, int x, int y, const QString &what) {
+        auto size = mapSize(p, map, floor, kind);
+        require(x >= 0 && y >= 0 && x < size.width() && y < size.height(),
+                what + " is outside its map");
+    };
+    for (const auto &m : maps) {
+        require(p.resources.contains(m.resource), "Missing map resource: " + m.resource);
+        if (m.kind == 1 && MAPS_NewLocation(m.id)) {
+            check(0, m.world, 0, m.entrance.x(), m.entrance.y(), "Entrance");
+            const auto stem = m.resource.section('.', 0, 0);
+            require(p.resources.contains(stem + ".NPC") && p.resources.contains(stem + ".TLK"),
+                    "New location needs NPC and dialogue resources");
+            require(NPCS_Validate(p.data(stem + ".NPC").constData(), p.data(stem + ".NPC").size()),
+                    "Invalid location NPCs");
+            U5::readDialogue(p.data(stem + ".TLK"));
+        } else {
+            const auto native = U5::mapPages(m.resource, p.data(m.resource));
+            require(m.page >= 0 && m.page < native.size() &&
+                        (m.kind != 1 || (positionMap(m.resource, native[m.page]) == int(m.id) &&
+                                         native[m.page].floor == m.floor)),
+                    "Map override has an invalid native page identity");
+        }
+    }
+    for (auto pos : mapPositions(p))
+        if (!pos.carried)
+            check(pos.map, pos.floor, 0, pos.cell.x(), pos.cell.y(), pos.name);
+    if (p.resources.contains("SIGNS.DAT"))
+        for (auto sign : readSigns(p.data("SIGNS.DAT")))
+            check(sign.map, sign.floor, 0, sign.x, sign.y, "Sign");
+    for (auto c : readContents(p.resources.value("CONTENTS.OVR").edited))
+        if (!((c.map >= 33 && c.map <= 40) && !c.kind))
+            check(c.map, c.floor, c.kind, c.x, c.y, "Container or discovery");
 }
+
 } // namespace Workshop

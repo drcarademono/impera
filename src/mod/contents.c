@@ -1,3 +1,4 @@
+#include "maps.h"
 #include "contents.h"
 #include "discoveries.h"
 #include "package.h"
@@ -92,15 +93,13 @@ int CONTENTS_Validate(const void *data, size_t size) {
             d.trapEffect || d.lockDifficulty > 30 || d.trapDifficulty > 30)
             return 0;
         if (d.kind == 0) {
-            if (d.map > 40 || d.floor < -1 || d.floor > 7 ||
+            if ((d.map > 40 && !MAPS_NewLocation(d.map)) || d.floor < -1 || d.floor > 7 ||
                 (!d.map && d.floor != 0 && d.floor != -1))
                 return 0;
-            if (d.map >= 33 && (d.x >= 8 || d.y >= 8 || d.floor < 0))
+            if (d.map >= 33 && d.map <= 40 && (d.x >= 8 || d.y >= 8 || d.floor < 0))
                 return 0;
-            if (d.map >= 1 && d.map <= 32 && (d.x >= 32 || d.y >= 32))
-                return 0;
-        } else if (d.map >= (d.kind == 1 ? 16 : 112) || d.floor || d.x >= 11 || d.y >= 11 ||
-                   d.slot != 255 || d.refill != 0)
+
+        } else if (d.map >= (d.kind == 1 ? 16 : 112) || d.floor || d.slot != 255 || d.refill != 0)
             return 0;
         if (d.slot != 255 && (d.slot < 1 || d.slot > 31 || d.kind || d.map || d.action != 1))
             return 0;
@@ -190,12 +189,14 @@ void CONTENTS_Reset(void) {
     CONTENTS_EndEncounter();
 }
 void CONTENTS_BeginEncounter(unsigned kind, unsigned map) {
+    MAPS_Combat(kind, map);
     TYPES_BeginEncounter(kind, map);
     battleKind = kind;
     battleMap = map;
     memset(encounter, 0, sizeof(encounter));
 }
 void CONTENTS_EndEncounter(void) {
+    MAPS_Combat(255, 0);
     battleKind = 255;
     battleMap = 0;
     memset(encounter, 0, sizeof(encounter));

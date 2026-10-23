@@ -944,7 +944,7 @@ void ULTIMA_2e96_SetWindDirection(int direction)
         D_5883 = 0;
     }
 
-    if (D_5893_map_id >= 0x21 || D_5893_map_id == 0x19)
+    if (!MAPS_Outside(D_5893_map_id) || D_5893_map_id == 0x19)
         return;
 
     if (D_5895_map_level < 0x80) // s8 level >= 0?

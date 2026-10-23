@@ -19,7 +19,7 @@ set(SOURCES
     src/mod/actors.c
     src/mod/types_game.c
     src/mod/contents_game.c
-    src/mod/npcs.c src/mod/package.c src/mod/types.c
+    src/mod/npcs.c src/mod/maps.c src/mod/package.c src/mod/types.c
     src/mod/runtime.c
     src/graphics/tileset.c
     src/common/icon.c
@@ -108,25 +108,25 @@ option(U5D_BUILD_TESTS "Build native savegame regression tests" OFF)
 set(U5D_TARGETS Impera)
 if(U5D_BUILD_TESTS)
     enable_testing()
-    add_executable(impera_extended_maps_test tests/extended_maps_test.c)
+    add_executable(impera_extended_maps_test tests/extended_maps_test.c src/mod/maps.c src/mod/npcs.c src/mod/package.c src/mod/types.c src/mod/contents.c)
     target_include_directories(impera_extended_maps_test PRIVATE src)
     add_test(NAME extended_maps_codec COMMAND impera_extended_maps_test)
     add_executable(impera_text_window_test tests/text_window_test.c src/text/text_window.c)
     target_include_directories(impera_text_window_test PRIVATE src tests)
     add_test(NAME text_window COMMAND impera_text_window_test)
-    add_executable(impera_types_test tests/types_test.c tests/type_movement_oracle.c src/vars.c src/mod/types.c src/mod/npcs.c src/mod/package.c src/mod/contents.c)
+    add_executable(impera_types_test tests/types_test.c tests/type_movement_oracle.c src/vars.c src/mod/types.c src/mod/npcs.c src/mod/maps.c src/mod/package.c src/mod/contents.c)
     target_include_directories(impera_types_test PRIVATE src)
     list(APPEND U5D_TARGETS impera_types_test)
     add_test(NAME custom_types COMMAND impera_types_test)
-    add_executable(impera_contents_test tests/contents_test.c src/mod/contents.c src/mod/npcs.c src/mod/package.c src/mod/types.c)
+    add_executable(impera_contents_test tests/contents_test.c src/mod/contents.c src/mod/npcs.c src/mod/maps.c src/mod/package.c src/mod/types.c)
     target_include_directories(impera_contents_test PRIVATE src)
     add_test(NAME map_contents COMMAND impera_contents_test)
-    add_executable(impera_mod_test tests/mod_test.c src/common/file.c src/common/debug.c src/mod/npcs.c src/mod/package.c src/mod/types.c src/mod/runtime.c src/mod/contents.c)
+    add_executable(impera_mod_test tests/mod_test.c src/common/file.c src/common/debug.c src/mod/npcs.c src/mod/maps.c src/mod/package.c src/mod/types.c src/mod/runtime.c src/mod/contents.c)
     list(APPEND U5D_TARGETS impera_mod_test)
     file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/mod-runtime/game/Mods" "${CMAKE_BINARY_DIR}/mod-runtime/SAVEGAME")
     add_test(NAME mod_packages COMMAND impera_mod_test)
     set_tests_properties(mod_packages PROPERTIES WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/mod-runtime" TIMEOUT 20)
-    add_executable(impera_contents_game_test tests/contents_game_test.c src/vars.c src/mod/contents_game.c src/mod/contents.c src/mod/npcs.c src/mod/package.c src/mod/types.c)
+    add_executable(impera_contents_game_test tests/contents_game_test.c src/vars.c src/mod/contents_game.c src/mod/contents.c src/mod/npcs.c src/mod/maps.c src/mod/package.c src/mod/types.c)
     target_include_directories(impera_contents_game_test PRIVATE src)
     add_test(NAME map_contents_game COMMAND impera_contents_game_test)
     set(TEST_SOURCES ${SOURCES})
@@ -411,7 +411,7 @@ if(U5D_BUILD_TESTS)
         add_executable(u5d_world_scroll_test tests/world_scroll_test.c ${TEST_SOURCES})
         list(APPEND U5D_TARGETS u5d_world_scroll_test)
         target_compile_definitions(u5d_world_scroll_test PRIVATE _FORTIFY_SOURCE=2)
-        target_link_options(u5d_world_scroll_test PRIVATE
+        target_link_options(u5d_world_scroll_test PRIVATE "-Wl,--wrap=ULTIMA_1850_PrintString"
             "-Wl,--wrap=OUTSUBS_01b4" "-Wl,--wrap=ULTIMA_5e4a")
         add_test(NAME world_scroll COMMAND u5d_world_scroll_test)
         add_executable(u5d_mouse_test tests/mouse_test.c ${TEST_SOURCES})
@@ -432,7 +432,7 @@ if(U5D_BUILD_TESTS)
             "-Wl,--wrap=DNGLOOK_117e" "-Wl,--wrap=COMBAT_0b94_MainLoop"
             "-Wl,--wrap=AUDIO_PlayBgmPerMap" "-Wl,--wrap=ULTIMA_2900_UpdateVitalsDisplay")
         add_test(NAME combat_return COMMAND u5d_combat_return_test)
-        add_executable(u5d_file_case_test tests/file_case_test.c src/common/file.c src/common/debug.c src/mod/npcs.c src/mod/package.c src/mod/types.c src/mod/runtime.c src/mod/contents.c)
+        add_executable(u5d_file_case_test tests/file_case_test.c src/common/file.c src/common/debug.c src/mod/npcs.c src/mod/maps.c src/mod/package.c src/mod/types.c src/mod/runtime.c src/mod/contents.c)
         list(APPEND U5D_TARGETS u5d_file_case_test)
         target_include_directories(u5d_file_case_test PRIVATE ${CMAKE_SOURCE_DIR}/src)
         file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/case-runtime/MiXeD/SubDir"

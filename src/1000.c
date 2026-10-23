@@ -40,6 +40,12 @@ void ULTIMA_1044_GRAP_4e_CopyBitImageIntoPage(byte* img, int idx, int x, int y)
 // ASM
 int ULTIMA_1068(int param_1, int param_2, int param_3)
 {
+    if (MAP_LARGE_COMBAT) {
+        param_2 -= MAP_VIEW_X;
+        param_3 -= MAP_VIEW_Y;
+        if (param_2 < 0 || param_3 < 0 || param_2 >= 11 || param_3 >= 11)
+            return 0;
+    }
     int iVar1;
     int di;
 

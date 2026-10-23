@@ -15,6 +15,10 @@
 /* Native map bytes remain the DOS boundary; type identities and mutations live
  * in TYPES' authoritative sparse state. Legacy interactions see their profile. */
 TypeCell TYPES_GAME_Cell(int x, int y) {
+    if (!D_5893_map_id) {
+        x = MAPS_Wrap(x, MAP_WIDTH);
+        y = MAPS_Wrap(y, MAP_HEIGHT);
+    }
     TypeCell c = {0};
     c.kind = D_5893_map_id >= 128 ? CONTENTS_EncounterKind() : 0;
     c.map = c.kind ? CONTENTS_EncounterMap() : D_5893_map_id;
@@ -25,10 +29,9 @@ TypeCell TYPES_GAME_Cell(int x, int y) {
 }
 byte *ULTIMA_4402_BaseAddr(int, int);
 uint32_t TYPES_GAME_At(int x, int y) {
-    if (D_5893_map_id >= 33 && D_5893_map_id < 128)
+    if (!MAPS_Outside(D_5893_map_id) && D_5893_map_id < 128)
         return *ULTIMA_4402_BaseAddr(x, y);
-    if (D_5893_map_id && (x < 0 || y < 0 || x >= (D_5893_map_id >= 128 ? 11 : 32) ||
-                          y >= (D_5893_map_id >= 128 ? 11 : 32)))
+    if (D_5893_map_id && (x < 0 || y < 0 || x >= (MAP_WIDTH) || y >= (MAP_HEIGHT)))
         return 255;
     uint32_t base;
     if (!D_5893_map_id && (((x - D_589b) & 255) >= 32 || ((y - D_589c) & 255) >= 32))
@@ -58,7 +61,7 @@ static void writeCell(int x, int y, TypeCell c, uint32_t id) {
                   c.restoreType ||
                   (TYPES_Defined(current) && TYPES_Get(current, &source) &&
                    source.base != current);
-    if (tracked && !(D_5893_map_id >= 33 && D_5893_map_id < 128) && !TYPES_Set(c, id))
+    if (tracked && !(!MAPS_Outside(D_5893_map_id) && D_5893_map_id < 128) && !TYPES_Set(c, id))
         return;
     *ULTIMA_4402_BaseAddr(x, y) = d.base;
 }

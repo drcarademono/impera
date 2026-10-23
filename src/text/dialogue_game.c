@@ -13,9 +13,10 @@ static void vitals(ImperaDialogueGame *g) {
 static unsigned npcCount(ImperaDialogueGame *g) { return g->npcCount ? g->npcCount : 32; }
 static unsigned actorCount(ImperaDialogueGame *g) { return g->actorCount ? g->actorCount : 32; }
 static uint8_t *flag(ImperaDialogueGame *g, uint8_t *flags) {
-    if (*g->map < 1 || *g->map > 32 || g->npc < 0 || (unsigned)g->npc >= npcCount(g))
+    if (*g->map < 1 || *g->map > (g->mapCount ? g->mapCount : 32) || g->npc < 0 ||
+        (unsigned)g->npc >= npcCount(g))
         return 0;
-    if (g->npc >= 32) {
+    if (g->npc >= 32 || *g->map > 32) {
         uint8_t *extra = flags == g->met ? g->extraMet : g->extraKilled;
         return extra ? extra + (*g->map - 1) * 4096 + g->npc / 8 : 0;
     }

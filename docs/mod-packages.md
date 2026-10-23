@@ -30,9 +30,9 @@ All integers are unsigned little-endian 32-bit values; there is no padding.
 
 | Header | Encoding |
 | --- | --- |
-| Magic/version | Eight ASCII bytes `IMOD0001` through `IMOD0017` |
+| Magic/version | Eight ASCII bytes `IMOD0001` through `IMOD0018` |
 | Title length | 1–256 UTF-8 bytes |
-| Resource count | 1–128 |
+| Resource count | 1–512 |
 | Title | Length bytes; embedded NUL forbidden |
 
 Each resource follows in order:
@@ -429,3 +429,65 @@ project persistence, navigation, NPC location filters, and entrance markers.
 Impera uses overrides for entrance announcements and save-slot location names;
 renamed dungeon entrances also use the new name when Look identifies them.
 Authored dialogue, signs, and other prose are not rewritten.
+
+
+## Extended maps and locations (version 18)
+
+`IMOD0018` adds the package-only `MAPS.OVR` catalog (empty original base).
+Native resource banks remain intact. Each overridden world, location floor, or
+combat board has its own width and height, independently 1–256 tiles. Coordinates
+remain bytes. Custom terrain identities continue to use `TYPEMAP.OVR`.
+
+`MAPS.OVR` has a 16-byte header: `IMAPS001`, a u32 record count (at most 512),
+and a zero u32. Records are sorted by kind, ID, then signed floor. Each consists
+of a 128-byte descriptor followed by width × height terrain bytes. The catalog
+is limited to 8 MiB, including descriptors.
+
+| Descriptor offset | Field |
+| --- | --- |
+| 0 | u32 total record length |
+| 4–5 | u8 kind and ID; kinds 0 world, 1 location, 2 BRIT.CBT, 3 DUNGEON.CBT |
+| 6 | u16 native page index; zero for worlds and new locations |
+| 8–9 | i8 floor; u8 background tile |
+| 10, 12 | u16 width and height |
+| 14 | i8 entrance world: 0 Britannia, −1 Underworld, −2 no entrance |
+| 15–16 | u8 world entrance X and Y |
+| 17–18 | u8 arrival X and Y |
+| 19 | u8 terrain originally underneath a new location's entrance |
+| 20 | Combat marker mask present (0 or 1); zero for other maps |
+| 21–23 | Zero reserved bytes |
+| 24–87 | NUL-terminated printable ASCII name, at most 63 characters |
+| 88–119 | NUL-terminated uppercase resource basename |
+| 120–127 | Combat marker bits: party 0–23, monsters 24–39, triggers 40–47, destinations 48–63; zero without a mask |
+
+World IDs are 0 Britannia and 1 Underworld. Native location IDs remain 1–32;
+combat IDs are native board indices. New locations use IDs 42–127 excluding
+64–66, which belong to engine screens. Each new location has independent
+`LOCnnn.NPC` and `LOCnnn.TLK` resources with empty original bases. `LOCnnn.DAT`
+is a virtual Workshop route: terrain lives in the catalog, and an empty DAT
+file is never exported. New locations initially have one ground floor.
+Duplicate identities, entrances, page aliases, missing companion banks and
+out-of-bounds authored placements are rejected.
+
+Signs at extended coordinates or in new locations use `ISIG0001` in SIGNS.DAT:
+eight-byte magic, a u32 record count, then the existing map/floor/X/Y bytes and
+NUL-terminated glyph text per record. Original trailer bytes are retained.
+The engine reads each matching sign with its full location ID; native sign
+resources retain their original encoding when no extension is needed.
+
+Impera stores changed extended terrain in an optional `IMPSAV01` prefix before
+the existing NPC and contents/type save trailers. It has a 24-byte header:
+magic, u32 payload size, u32 record count, u32 CRC32 and a zero u32. The payload
+contains only changed map records. Descriptors must match mounted maps exactly
+before any saved terrain is applied. An absent prefix resets terrain to the mod
+baseline. Old saves remain readable. NPC introduction/death flags for new
+location IDs use the optional `INPSAV02` NPC trailer, while native-only flags
+continue to use `INPSAV01`.
+
+In Workshop, Resize changes the selected map or floor as one undo operation.
+Shrinking refuses to crop placed content; move it first. Add → Location on either
+world places an entrance and opens its new map. Select / Move and the Positions
+pane edit arrivals and entrances, switch their world, and navigate between them.
+Moving an entrance restores the terrain underneath its old marker. Creation,
+terrain, NPC/dialogue companions, project persistence and package import/export
+participate in the same history.

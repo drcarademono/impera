@@ -36,8 +36,7 @@ int COMBAT_0000(int param_1, int param_2, int param_3)
     int local_6;
     int local_8;
 
-    if (param_2 > 0xa || param_3 > 0xa || param_2 < 0 || param_3 < 0)
-    {
+    if (param_2 >= MAP_WIDTH || param_3 >= MAP_HEIGHT || param_2 < 0 || param_3 < 0) {
         // -> a2b0
         return 1;
     }
@@ -1182,17 +1181,18 @@ int COMBAT_111a(int param_1, int param_2)
 
         for (local_e = 0; local_e < 8; local_e++)
         {
-            if (*local_14 == param_1 && *local_4 == param_2)
-            {
+            if (MAPS_CombatMarkerActive(40 + local_e, *local_14, *local_4) &&
+                *local_14 == param_1 && *local_4 == param_2) {
+                MAPS_ConsumeTrigger(local_e);
                 *local_14 = *local_4 = 0xff;
 
-                if (*local_6 < 0xb && *local_a < 0xb)
-                {
+                if (MAPS_CombatMarkerActive(48 + local_e, *local_6, *local_a) &&
+                    *local_6 < MAP_WIDTH && *local_a < MAP_HEIGHT) {
                     GetCombatMap((uint)*local_6, (uint)*local_a) = *local_12;
                 }
 
-                if (*local_8 < 0xb && *local_c < 0xb)
-                {
+                if (MAPS_CombatMarkerActive(56 + local_e, *local_8, *local_c) &&
+                    *local_8 < MAP_WIDTH && *local_c < MAP_HEIGHT) {
                     GetCombatMap((uint)*local_8, (uint)*local_c) = *local_12;
                 }
                 local_10 = 1;
@@ -1218,15 +1218,13 @@ int COMBAT_111a(int param_1, int param_2)
 
 int COMBAT_120e(void)
 {
-    D_5876 = ULTIMA_3aae_Random(0xf);
-    D_5878 = ULTIMA_3aae_Random(0xf);
+    D_5876 = MAP_LARGE_COMBAT ? ULTIMA_2092_RandomRange(0, MAP_WIDTH - 1) : ULTIMA_3aae_Random(0xf);
+    D_5878 =
+        MAP_LARGE_COMBAT ? ULTIMA_2092_RandomRange(0, MAP_HEIGHT - 1) : ULTIMA_3aae_Random(0xf);
 
-    if (D_5876 > 0xa || D_5878 > 0xa)
-    {
+    if (D_5876 >= MAP_WIDTH || D_5878 >= MAP_HEIGHT) {
         return 0;
-    }
-    else
-    {
+    } else {
         return 1;
     }
 }

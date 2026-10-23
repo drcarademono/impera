@@ -171,11 +171,9 @@ int ULTIMA_3178_ProcessCommand(int param_1)
     case 0x41:
         /* 'A' */
         // 3216
-        ret = D_5893_map_id == 0 ?
-            MAINOUT_06ec_AttackCmd() :
-                D_5893_map_id < 0x21 ?
-            TOWN_09e6_AttackCmd() :
-            DUNGEON_1d4a_AttackCmd();
+        ret = D_5893_map_id == 0            ? MAINOUT_06ec_AttackCmd()
+              : MAPS_Outside(D_5893_map_id) ? TOWN_09e6_AttackCmd()
+                                            : DUNGEON_1d4a_AttackCmd();
         break;
     case 0x42:
         /* 'B' Board */
@@ -208,16 +206,14 @@ int ULTIMA_3178_ProcessCommand(int param_1)
         break;
     case 0x47:
         /* 'G' Get */
-        if (D_5893_map_id < 0x21)
-        {
+        if (MAPS_Outside(D_5893_map_id)) {
             ULTIMA_1850_PrintString(_TEXT(0xa16a, "Get-"));
         }
         SJOG_18ce_GetCmd();
         break;
     case 0x48:
         /* 'H' Hole up */
-        if (D_5893_map_id == 0 || D_5893_map_id > 0x20)
-        {
+        if (D_5893_map_id == 0 || !MAPS_Outside(D_5893_map_id)) {
             // outmap_hole_up_cmd
             ULTIMA_3c9a_HoleUpCmd();
             break;
@@ -249,27 +245,20 @@ int ULTIMA_3178_ProcessCommand(int param_1)
         {
             ULTIMA_1850_PrintString(_TEXT(0xa1a0, "Klimb-"));
             CMDS_1c20_KlimbCmd();
-        }
-        else if (D_5893_map_id < 0x21)
-        {
+        } else if (MAPS_Outside(D_5893_map_id)) {
             ret = TOWN_0b82_KlimbCmd();
-        }
-        else
-        {
+        } else {
             ret = DUNGEON_1e10_KlimbCmd();
         }
         break;
     case 0x4c:
         /* 'L' Look */
         ULTIMA_1850_PrintString(_TEXT(0xa1a8, "Look"));
-        if (D_5893_map_id > 0x20 && D_5893_map_id < 0x29)
-        {
+        if (!MAPS_Outside(D_5893_map_id) && D_5893_map_id < 0x29) {
             /* 0x21..0x28 (Dungeon) */
             ULTIMA_1850_PrintString(_TEXT(0xa1ae, "...\n"));
             DNGLOOK_0000_LookCmdInDungeon();
-        }
-        else
-        {
+        } else {
             ULTIMA_16ba_PrintChar('-');
             LOOKOBJ_099c_LookCmd();
         }
@@ -291,14 +280,11 @@ int ULTIMA_3178_ProcessCommand(int param_1)
         break;
     case 0x50:
         /* 'P' Push */
-        if (D_5893_map_id > 0x20 && D_5893_map_id < 0x29)
-        {
+        if (!MAPS_Outside(D_5893_map_id) && D_5893_map_id < 0x29) {
             /* Cannot push in dungeons */
             ULTIMA_1850_PrintString(_TEXT(0xa1d4, "Push\nNot here!\n"));
             ret = 0;
-        }
-        else
-        {
+        } else {
             ULTIMA_1850_PrintString(_TEXT(0xa1e4, "Push-"));
             CMDS_161a_PushCmd();
         }
@@ -316,12 +302,9 @@ int ULTIMA_3178_ProcessCommand(int param_1)
         break;
     case 0x53:
         /* 'S' Search */
-        if (D_5893_map_id < 0x21)
-        {
+        if (MAPS_Outside(D_5893_map_id)) {
             ULTIMA_1850_PrintString(_TEXT(0xa1fc, "Search-"));
-        }
-        else
-        {
+        } else {
             ULTIMA_1850_PrintString(_TEXT(0xa204, "Search...\n"));
         }
         SJOG_095c_SearchCmd();
@@ -337,12 +320,9 @@ int ULTIMA_3178_ProcessCommand(int param_1)
         }
         else
         {
-            if (D_5893_map_id > 0x20)
-            {
+            if (!MAPS_Outside(D_5893_map_id)) {
                 ULTIMA_1850_PrintString(_TEXT(0xa22c, "Talk-Funny, no response!\n"));
-            }
-            else
-            {
+            } else {
                 ULTIMA_1850_PrintString(_TEXT(0xa246, "Talk-"));
                 if (TALK_041c_TalkCmd() != 0)
                 {
@@ -362,12 +342,9 @@ int ULTIMA_3178_ProcessCommand(int param_1)
         if (D_57ad != 0)
         {
             D_57ad--;
-            if (D_5893_map_id < 0x21)
-            {
+            if (MAPS_Outside(D_5893_map_id)) {
                 LOOKOBJ_10fc_ViewCmd(D_5896_map_x, D_5897_map_y);
-            }
-            else
-            {
+            } else {
                 DNGLOOK_06a8_ViewCmd();
             }
             break;
@@ -659,8 +636,7 @@ int ULTIMA_38e4(void)
 
 void ULTIMA_39cc_SetTile(byte new_tile_id, byte x, byte y)
 {
-    if (D_5893_map_id != 0 && D_5893_map_id < 0x21 && new_tile_id != 0)
-    {
+    if (D_5893_map_id != 0 && MAPS_Outside(D_5893_map_id) && new_tile_id != 0) {
         TYPES_GAME_Change(x, y, 1, new_tile_id);
     }
 }
@@ -885,23 +861,16 @@ static void ULTIMA_3c9a_HoleUpCmd(void)
     {
         ULTIMA_1850_PrintString(_TEXT(0xa306, "camp!\n\n"));
 
-        if (D_5893_map_id < 0x21)
-        {
+        if (MAPS_Outside(D_5893_map_id)) {
             local_e = *ULTIMA_4402_GetTileAddr(D_5896_map_x, D_5897_map_y);
         }
 
-        if (D_5893_map_id < 0x21 && local_e != 0 && local_e < 4)
-        {
+        if (MAPS_Outside(D_5893_map_id) && local_e != 0 && local_e < 4) {
             ULTIMA_1850_PrintString(_TEXT(0xa30e, "On land or ship!\n\n"));
-        }
-        else
-        {
-            if (D_5893_map_id < 0x21 && local_a->_1_animTile != TILE_ACTOR_AVATAR)
-            {
+        } else {
+            if (MAPS_Outside(D_5893_map_id) && local_a->_1_animTile != TILE_ACTOR_AVATAR) {
                 ULTIMA_1850_PrintString(_TEXT(0xa322, "On foot!\n"));
-            }
-            else
-            {
+            } else {
                 ULTIMA_1850_PrintString(_TEXT(0xa32c, "For how many hours? (1-9) "));
 
                 while ((local_4 = ULTIMA_266c_GetChar()) != U5_KEY_SPACE && (local_4 < 0x30 || local_4 > 0x39))
@@ -958,8 +927,7 @@ static void ULTIMA_3c9a_HoleUpCmd(void)
                     local_8 = -1;
                 }
 
-                if (D_5893_map_id > 0x20)
-                {
+                if (!MAPS_Outside(D_5893_map_id)) {
                     D_58a1 = 6;
                     DNGLOOK_1130();
                     DNGLOOK_0d3e();
@@ -970,9 +938,7 @@ static void ULTIMA_3c9a_HoleUpCmd(void)
                     D_5c5a[1] = D_a9fc[1];
 
                     DUNGEON_0134(0);
-                }
-                else
-                {
+                } else {
                     ULTIMA_6360_Camping(local_8, local_10);
                 }
             }

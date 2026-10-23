@@ -647,8 +647,7 @@ void SJOG_095c_SearchCmd(void)
 
     local_4 = 0;
 
-    if (D_5893_map_id > 0x20 && D_5893_map_id < 0x29)
-    {
+    if (!MAPS_Outside(D_5893_map_id) && D_5893_map_id < 0x29) {
         SJOG_0646_SearchInDungeon();
         return;
     }
@@ -882,8 +881,7 @@ void SJOG_0d4a_JimmyCmd(void)
     int local_8;
     int local_a;
 
-    if (D_5893_map_id > 0x20 && D_5893_map_id < 0x29)
-    {
+    if (!MAPS_Outside(D_5893_map_id) && D_5893_map_id < 0x29) {
         SJOG_0c3e_JimmyInDungeon();
         return;
     }
@@ -1156,8 +1154,7 @@ static void SJOG_112c_OpenChest(int param_1, int param_2, int param_3)
     local_8 = D_5c5a[local_6]._5;
     ULTIMA_3a74(0, 0, 0, 0, 0, 0, local_6);
     D_24e6 = D_24e6 | 2;
-    if (D_5893_map_id >= 1 && D_5893_map_id <= 0x20)
-    {
+    if (D_5893_map_id >= 1 && MAPS_Outside(D_5893_map_id)) {
         if (D_5888 > 2)
         {
             D_5888 -= 2;
@@ -1245,8 +1242,7 @@ void SJOG_1374_OpenCmd(void)
     int local_6;
     int local_8;
 
-    if (D_5893_map_id > 0x20 && D_5893_map_id < 0x29)
-    {
+    if (!MAPS_Outside(D_5893_map_id) && D_5893_map_id < 0x29) {
         SJOG_12d4_OpenInDungeon();
         return;
     }
@@ -1576,8 +1572,7 @@ void SJOG_18ce_GetCmd(void)
     int local_6;
     int local_4;
 
-    if (D_5893_map_id > 0x20 && D_5893_map_id < 0x29)
-    {
+    if (!MAPS_Outside(D_5893_map_id) && D_5893_map_id < 0x29) {
         SJOG_179e_GetInDungeon();
         return;
     }

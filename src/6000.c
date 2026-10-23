@@ -13,7 +13,17 @@
 #include "sjog.h"
 
 #include <string.h>
+#include <limits.h>
 
+static int spawnMarker(unsigned type, unsigned slot) {
+    int x = D_1704[slot], y = D_1714[slot];
+    if (MAPS_ActiveCell(D_5893_map_id, D_5895_map_level, 0, 0) &&
+        !MAPS_CombatMarkerActive(24 + slot, x, y)) {
+        x = ULTIMA_2092_RandomRange(0, MAP_WIDTH - 1);
+        y = ULTIMA_2092_RandomRange(0, MAP_HEIGHT - 1);
+    }
+    return ULTIMA_6506(type, 0, x, y, D_5895_map_level);
+}
 // NOTE: combine arrays?
 static void ULTIMA_60ec_LoadSpecialMap(int param_1)
 {
@@ -225,12 +235,18 @@ void ULTIMA_637e_DrawFrame(void) {
 // return: placed actor idx
 int ULTIMA_6506(int param_1, int param_2, int param_3, int param_4, int param_5)
 {
+    if (param_2 == 1 && MAPS_ActiveCell(D_5893_map_id, D_5895_map_level, 0, 0)) {
+        param_3 = MAPS_Wrap(param_3, MAP_WIDTH);
+        param_4 = MAPS_Wrap(param_4, MAP_HEIGHT);
+    }
     TypeDef footprint = ACTORS_Def(param_1);
-    if (param_2 == 0 && (TYPES_Width(&footprint) > 1 || TYPES_Height(&footprint) > 1) &&
+    if (param_2 == 0 &&
+        (MAPS_ActiveCell(D_5893_map_id, D_5895_map_level, 0, 0) || TYPES_Width(&footprint) > 1 ||
+         TYPES_Height(&footprint) > 1) &&
         !ACTORS_CanPlace(param_1, param_3, param_4, 32)) {
-        int best = 1000, foundX = -1, foundY = -1;
-        for (int y = 0; y < 11; ++y)
-            for (int x = 0; x < 11; ++x) {
+        int best = INT_MAX, foundX = -1, foundY = -1;
+        for (int y = 0; y < MAP_HEIGHT; ++y)
+            for (int x = 0; x < MAP_WIDTH; ++x) {
                 int distance = (x - param_3) * (x - param_3) + (y - param_4) * (y - param_4);
                 if (distance < best && ACTORS_CanPlace(param_1, x, y, 32)) {
                     best = distance;
@@ -637,12 +653,9 @@ void ULTIMA_6bc2(int param_1, int param_2)
         ULTIMA_1850_PrintString(_TEXT(0xa438, "*** CONFLICT ***\n"));
     }
 
-    if (D_5894 != 0 && D_5894 < 0x21 && ACTORS_Profile(param_2) != 0xc && local_8 != 0)
-    {
+    if (D_5894 != 0 && MAPS_Outside(D_5894) && ACTORS_Profile(param_2) != 0xc && local_8 != 0) {
         local_6 = 1;
-    }
-    else
-    {
+    } else {
         local_6 = ACTORS_Stats(param_2).maxEncounterCount;
     }
 
@@ -663,8 +676,7 @@ void ULTIMA_6bc2(int param_1, int param_2)
     local_2c = D_1704[local_28[0]];
     local_30 = D_1714[local_28[0]];
     spawned[local_28[0]] = 1;
-    ULTIMA_6506(ACTORS_PlacedEncounter(local_28[0], param_2), 0, local_2c, local_30,
-                D_5895_map_level);
+    spawnMarker(ACTORS_PlacedEncounter(local_28[0], param_2), local_28[0]);
 
     local_2e = local_6 / 4 + 1;
     for (local_2a = 1; local_2a < local_6; local_2a++)
@@ -677,24 +689,22 @@ void ULTIMA_6bc2(int param_1, int param_2)
         local_2c = D_1704[local_28[local_2a]];
         local_30 = D_1714[local_28[local_2a]];
         spawned[local_28[local_2a]] = 1;
-        ULTIMA_6506(ACTORS_PlacedEncounter(local_28[local_2a], local_4), 0, local_2c, local_30,
-                    D_5895_map_level);
+        spawnMarker(ACTORS_PlacedEncounter(local_28[local_2a], local_4), local_28[local_2a]);
     }
     for (unsigned slot = 0; slot < 16; slot++) {
         unsigned type = ACTORS_PlacedEncounter(slot, 0);
-        if (!spawned[slot] && type >= 512 && D_1704[slot] < 11 && D_1714[slot] < 11)
+        if (!spawned[slot] && type >= 512 &&
+            MAPS_CombatMarkerActive(24 + slot, D_1704[slot], D_1714[slot]) &&
+            D_1704[slot] < MAP_WIDTH && D_1714[slot] < MAP_HEIGHT)
             ULTIMA_6506(type, 0, D_1704[slot], D_1714[slot], D_5895_map_level);
     }
 }
 
 int ULTIMA_6d82(int param_1, int param_2)
 {
-    if (param_1 > -1 && param_1 < 11 && param_2 > -1 && param_2 < 11)
-    {
+    if (param_1 > -1 && param_1 < MAP_WIDTH && param_2 > -1 && param_2 < MAP_HEIGHT) {
         return 1;
-    }
-    else
-    {
+    } else {
         return 0;
     }
 }

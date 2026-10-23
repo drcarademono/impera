@@ -1,6 +1,6 @@
 # Extended maps: implementation design
 
-Status: implementation in progress. The agreed limit is 256 × 256 tiles.
+Status: implemented; verification covers the agreed 1–256 tiles on each axis.
 Work branch: `feature/extended-maps`.
 
 ## Requested behavior
@@ -108,18 +108,23 @@ board; make party starts, monster positions and triggers obey its dimensions.
 - Exercise coordinate 255 for players, NPCs, monsters, signs, custom tiles and
   containers, then save/reload them. An editor-only large map is not sufficient.
 
-## Implementation checkpoint
+## Implementation
 
-The branch currently contains the shared, bounded `IMAPS001` map catalog codec
-and Workshop document groundwork: separate width and height, dense rectangular
-terrain, top-left grow/crop operations, independent location identities/resources,
-and rectangular canvas, minimap and image exports. Original native terrain banks
-are preserved. These APIs are internal; resize and location creation are not yet
-exposed in the UI, and packages containing this catalog are not yet supported by
-Impera. This checkpoint is not a completed playable feature.
+The shared catalog, rectangular documents, canvas/minimap/image exports, resize
+control and Add → Location flow are implemented. New location companions join
+the normal map, Dialogue, sign and container editors. The Positions pane links
+entrances to arrivals and supports moving entrances between worlds. Undo/redo
+includes new map data, companion resources and entrance terrain atomically.
 
-Still required before exposing the feature: package/project persistence,
-contextual entrance and arrival editing, entity schemas/bounds, runtime terrain
-loading, world wrapping, location entrance/exit routing, NPC/dialogue state,
-combat bounds/camera/pathfinding and versioned save-state persistence. The
-verification list above remains the completion criterion.
+Impera loads the same catalog for terrain, geometry, world wrapping, actor bounds,
+NPC schedules/pathfinding, combat movement/spawns/camera, entrance routing and
+save state. Original banks and metadata retain their layout. Version 18 packages
+gate extended data; saves keep backward compatibility through optional trailers.
+See [the package specification](mod-packages.md#extended-maps-and-locations-version-18)
+for the binary encodings and identity allocation.
+
+Regression coverage includes coordinate 255, rectangular painting/exports,
+unsafe-crop rejection, new-location entity editing and package/project
+roundtrips, UI resize and creation with undo/redo, world wrapping, entry/exit on
+both worlds, first-load NPCs, combat terrain/metadata separation, camera bounds,
+NPC flags, and checksummed terrain persistence.

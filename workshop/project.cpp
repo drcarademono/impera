@@ -47,6 +47,7 @@ void Project::openGame(const QString &directory) {
     for (const auto &name : dir.entryList(QDir::Files, QDir::Name)) {
         QString upper = name.toUpper();
         if (upper == "TYPES.OVR" || upper == "TYPEMAP.OVR" || upper == "CUTSCENE.OVR" ||
+            upper == "MAPS.OVR" || MAPS_LocationResource(upper.toLatin1().constData()) ||
             upper == "LOCATIONS.OVR" || upper == "TEXT.OVR" || upper == "RULES.TBL" ||
             upper == "CONTENTS.OVR")
             continue; // Companion resources are package-only.
@@ -69,6 +70,7 @@ void Project::openGame(const QString &directory) {
     next.resources.insert("TYPEMAP.OVR", {{}, {}});
     next.resources.insert("CUTSCENE.OVR", {{}, {}});
     next.resources.insert("LOCATIONS.OVR", {{}, {}});
+    next.resources.insert("MAPS.OVR", {{}, {}});
     next.resources.insert("TEXT.OVR", {{}, {}});
     next.resources.insert("RULES.TBL", {{}, {}});
     next.resources.insert("CONTENTS.OVR", {{}, {}});
@@ -150,6 +152,7 @@ QStringList Project::changed() const {
     return list;
 }
 void Project::validate() const {
+    Workshop::validateExtendedMaps(*this);
     require(!title.trimmed().isEmpty() && title.toUtf8().size() <= 256 && !title.contains(QChar(0)),
             "Mod name must contain 1–256 UTF-8 bytes");
     if (changed().contains("TILE_SHW.PNG") || changed().contains("TILE_SHN.PNG")) {
@@ -224,7 +227,9 @@ QByteArray Project::package() const {
     for (const auto &cell : CustomTiles::placements(*this))
         extraNpcs |= cell.kind == 3 && (cell.x >= 32 || cell.y);
     QByteArray out(
-        list.contains("LOCATIONS.OVR")                               ? "IMOD0017"
+        (list.contains("MAPS.OVR") || resources.value("SIGNS.DAT").edited.startsWith("ISIG0001"))
+            ? "IMOD0018"
+        : list.contains("LOCATIONS.OVR")                             ? "IMOD0017"
         : conversationFlag(*this, IMPERA_TALK_FLAG_GARGOYLE_SPEECH)  ? "IMOD0016"
         : conversationFlag(*this, IMPERA_TALK_FLAG_SKIP_OPENING)     ? "IMOD0015"
         : usesExtendedDialogue(*this)                                ? "IMOD0014"
@@ -312,6 +317,7 @@ void Project::importPackage(const QByteArray &bytes) {
             QByteArray(reinterpret_cast<char *>(e.data), e.size);
     }
     MOD_Free(&decoded);
+    Workshop::hydrateExtendedMaps(next);
     next.validate();
     *this = next;
 }
@@ -376,6 +382,10 @@ void Project::save(const QString &path) {
         requirements["locationNames"] = 1;
         requirements["packageVersion"] = 17;
     }
+    if (changed().contains("MAPS.OVR")) {
+        requirements["extendedMaps"] = 1;
+        requirements["packageVersion"] = 18;
+    }
     if (!requirements.isEmpty())
         root["requires"] = requirements;
     QJsonObject annotations;
@@ -413,6 +423,16 @@ void Project::load(const QString &path) {
     QSet<QString> names;
     require(root["edits"].isArray() && root["edits"].toArray().size() <= MOD_MAX_ENTRIES,
             "Invalid project edit list");
+    for (auto value : root["edits"].toArray()) {
+        auto e = value.toObject();
+        if (e["name"].toString() == "MAPS.OVR") {
+            auto bytes = QByteArray::fromBase64(e["bytes"].toString().toLatin1());
+            if (bytes.isEmpty())
+                bytes = QByteArray::fromBase64(e["edited"].toString().toLatin1());
+            next.resources["MAPS.OVR"].edited = bytes;
+            Workshop::hydrateExtendedMaps(next);
+        }
+    }
     for (auto value : root["edits"].toArray()) {
         auto edit = value.toObject();
         QString name = edit["name"].toString();
@@ -470,6 +490,7 @@ QVector<ModDiagnostic> validateMod(const Project &project, const QString &modsDi
     for (const auto &name : changes) {
         try {
             if (name == "TYPES.OVR" || name == "TYPEMAP.OVR" || name == "CUTSCENE.OVR" ||
+                name == "MAPS.OVR" || MAPS_LocationResource(name.toLatin1().constData()) ||
                 name == "LOCATIONS.OVR" || name == "TEXT.OVR" || name == "RULES.TBL" ||
                 name == "CONTENTS.OVR") {
                 require(project.resources[name].original.isEmpty(),
@@ -785,6 +806,7 @@ QString prepareModTest(const Project &project, const QString &sessionsDirectory)
     }
     for (const auto &name : project.resources.keys()) {
         if (name == "TYPES.OVR" || name == "TYPEMAP.OVR" || name == "CUTSCENE.OVR" ||
+            name == "MAPS.OVR" || MAPS_LocationResource(name.toLatin1().constData()) ||
             name == "LOCATIONS.OVR" || name == "TEXT.OVR" || name == "RULES.TBL" ||
             name == "CONTENTS.OVR" || MOD_TilesetSheet(name.toLatin1().constData()))
             continue; // Virtual companion exists only inside the package.
