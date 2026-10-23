@@ -1,3 +1,4 @@
+#include "custom_tiles.h"
 #include "map_positions.h"
 #include "extended_maps.h"
 #include "mod/npcs.h"
@@ -337,8 +338,9 @@ int main(int argc, char **argv) {
             window.selectResource("BRIT.DAT");
             QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
             app.processEvents();
-            auto add = active()->findChild<QAction *>("addLocation");
-            check(add, "Add Location action missing");
+            auto filter = active()->findChild<QComboBox *>("mapPaletteFilter");
+            filter->setCurrentText("Locations");
+            active()->findChild<QListWidget *>("mapPalette")->setCurrentRow(0x12);
             QTimer::singleShot(0, [&] {
                 auto dialog = qobject_cast<QDialog *>(QApplication::activeModalWidget());
                 if (!dialog)
@@ -348,9 +350,8 @@ int main(int argc, char **argv) {
                 dialog->findChild<QSpinBox *>("newLocationHeight")->setValue(48);
                 dialog->accept();
             });
-            add->trigger();
             auto canvas = static_cast<MapCanvas *>(active()->findChild<QWidget *>("mapCanvas"));
-            check(canvas && canvas->placing(), "Add Location did not start map placement");
+            check(canvas && canvas->brush == 0x12, "Location palette did not select an entrance");
             auto terrainBefore = MapDocument(&window.projectForTests(), "BRIT.DAT").terrain(0);
             canvas->keyboardCell = {230, 130};
             QKeyEvent enter(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier);
@@ -359,7 +360,7 @@ int main(int argc, char **argv) {
             check(Workshop::extendedMaps(window.projectForTests()).size() == 3 &&
                       window.projectForTests().locationName(44) == "Third location",
                   "UI placement did not create a new location");
-            check(active()->findChild<QAction *>("addLocation"),
+            check(active()->findChild<QLabel *>("mapLocationLabel")->text().contains("Britannia"),
                   "Creating a location unexpectedly left the world editor");
             undo->trigger();
             app.processEvents();
@@ -452,7 +453,11 @@ int main(int argc, char **argv) {
                 });
                 press();
                 app.processEvents();
-                check(active()->findChild<QAction *>("addLocation"),
+                check(canvas->side == 256 &&
+                          active()
+                              ->findChild<QLabel *>("mapLocationLabel")
+                              ->text()
+                              .contains(world == "BRIT.DAT" ? "Britannia" : "Underworld"),
                       "Pencil creation switched away from world map");
                 auto maps = Workshop::extendedMaps(window.projectForTests());
                 const auto m = maps.last();
@@ -477,6 +482,93 @@ int main(int argc, char **argv) {
                       "Repainting an existing entrance created a second location");
             }
             check(dialogCount == 4, "Incorrect number of location dialogs");
+        });
+        test("Actor palette filters place NPCs and monsters without painting terrain", [&] {
+            QTemporaryDir dir;
+            auto p = fixture(dir.path());
+            file(dir.path() + "/TOWNE.DAT", QByteArray(16384, 5));
+            file(dir.path() + "/TOWNE.NPC", QByteArray(4608, 0));
+            file(dir.path() + "/TOWNE.TLK", QByteArray::fromHex("0000"));
+            p.openGame(dir.path());
+            QMap<unsigned, QByteArray> actorRecords;
+            for (unsigned kind : {1u, 2u}) {
+                TypeDef d;
+                TYPES_Vanilla(1, kind == 1 ? 80 : 144, &d);
+                d.kind = kind;
+                d.id = 59999 + kind;
+                d.render = TYPES_SPRITE;
+                strcpy(d.name, kind == 1 ? "Custom scholar" : "Custom beast");
+                QImage art(16, 16, QImage::Format_RGBA8888);
+                art.fill(Qt::white);
+                actorRecords[d.id] = CustomTiles::record(d, {{art, 150, 0}});
+            }
+            p.resources["TYPES.OVR"].edited = CustomTiles::library(p, actorRecords);
+            p.save(dir.path() + "/actors.imperaproject");
+            WorkshopWindow window;
+            check(window.openProject(p.projectPath), "Actor palette fixture");
+            window.show();
+            window.selectResource("TOWNE.DAT");
+            app.processEvents();
+            auto active = [&] {
+                return window.findChild<QStackedWidget *>("workspaces")->currentWidget();
+            };
+            auto add = active()->findChild<QToolButton *>("mapAddMenu");
+            for (auto a : add->menu()->actions())
+                check(a->text() != "NPC" && a->text() != "Monster" && a->text() != "Location…",
+                      "Actor or location is still in Add menu");
+            auto palette = active()->findChild<QListWidget *>("mapPalette");
+            auto filter = active()->findChild<QComboBox *>("mapPaletteFilter");
+            auto canvas = static_cast<MapCanvas *>(active()->findChild<QWidget *>("mapCanvas"));
+            auto choose = [&](const QString &category, int id) {
+                active()->findChild<QToolButton *>("mapTool0")->click();
+                filter->setCurrentText(category);
+                for (int i = 0; i < palette->count(); ++i)
+                    if (palette->item(i)->data(Qt::UserRole).toInt() == id) {
+                        check(!palette->item(i)->isHidden(), "Actor missing from category");
+                        palette->setCurrentRow(i);
+                        return;
+                    }
+                check(false, "Actor absent from palette");
+            };
+            const auto terrain = window.projectForTests().data("TOWNE.DAT");
+            choose("NPCs", 336);
+            check(canvas->brush == 336, "NPC palette selection lost its sprite identity");
+            QTimer::singleShot(0, &window, [&] {
+                auto d = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+                check(d, "NPC placement dialog missing");
+                d->findChild<QLineEdit *>("newNpcName")->setText("Palette friend");
+                d->accept();
+            });
+            canvas->keyboardCell = {6, 7};
+            QKeyEvent enter(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier);
+            QApplication::sendEvent(canvas, &enter);
+            check(U5::byte(window.projectForTests().data("TOWNE.NPC"), 513) == 80 &&
+                      !U5::readDialogue(window.projectForTests().data("TOWNE.TLK")).isEmpty(),
+                  "NPC brush failed to create a scheduled NPC and conversation");
+            choose("Monsters", 400);
+            check(canvas->brush == 400, "Monster palette selection lost sprite identity");
+            canvas->keyboardCell = {9, 8};
+            QApplication::sendEvent(canvas, &enter);
+            check(U5::byte(window.projectForTests().data("TOWNE.NPC"), 514) == 144,
+                  "Monster brush failed to create a real actor");
+            for (unsigned kind : {1u, 2u}) {
+                const unsigned id = 59999 + kind;
+                choose(kind == 1 ? "NPCs" : "Monsters", id);
+                if (kind == 1)
+                    QTimer::singleShot(0, &window, [&] {
+                        auto d = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+                        check(d, "Custom NPC dialog missing");
+                        d->accept();
+                    });
+                canvas->keyboardCell = {int(12 + kind * 2), 10};
+                QApplication::sendEvent(canvas, &enter);
+                const auto &project = window.projectForTests();
+                check(CustomTiles::actorType(project, "TOWNE.DAT", project.mapPages("TOWNE.DAT")[0],
+                                             0, kind + 2, 0) == id,
+                      "Custom actor palette lost its type assignment");
+            }
+            check(window.projectForTests().data("TOWNE.DAT") == terrain,
+                  "Actor palette painted terrain");
         });
         test("Cutscene pages share an editor, preserve originals and roundtrip variable sequences", [&] {
             QTemporaryDir dir;
@@ -4078,7 +4170,7 @@ int main(int argc, char **argv) {
             app.processEvents();
             auto canvas = dynamic_cast<MapCanvas *>(split->findChild<QWidget *>("mapCanvas"));
             auto filter = split->findChild<QComboBox *>("mapPaletteFilter");
-            filter->setCurrentText("Location");
+            filter->setCurrentText("Location terrain");
             split->findChild<QListWidget *>("mapPalette")->setCurrentRow(5);
             split->findChild<QToolButton *>("mapTool6")->click();
             check(canvas->tool == MapCanvas::Fill, "Tool fixture failed");
@@ -4098,7 +4190,7 @@ int main(int argc, char **argv) {
             check(qAbs(splitter()->sizes().last() - width) <= 2,
                   "Changing map resets the tile picker width");
             check(splitter()->findChild<QComboBox *>("mapPaletteFilter")->currentText() ==
-                          "Location" &&
+                          "Location terrain" &&
                       dynamic_cast<MapCanvas *>(splitter()->findChild<QWidget *>("mapCanvas"))
                               ->brush == 5 &&
                       dynamic_cast<MapCanvas *>(splitter()->findChild<QWidget *>("mapCanvas"))
@@ -4199,7 +4291,7 @@ int main(int argc, char **argv) {
             check(findCanvas()->brush == 11, "Floor navigation reset the shared brush");
             auto filter = active()->findChild<QComboBox *>("mapPaletteFilter");
             auto tiles = active()->findChild<QListWidget *>("mapPalette");
-            filter->setCurrentText("Location");
+            filter->setCurrentText("Location terrain");
             check(!tiles->item(0)->isHidden() && tiles->item(9)->isHidden() &&
                       tiles->item(0x27)->isHidden() && findCanvas()->brush == 11,
                   "Usage filter must reflect restored maps without resetting the brush");
@@ -6511,19 +6603,21 @@ int main(int argc, char **argv) {
             check(!palette->item(5)->isHidden() && palette->item(0x4f)->isHidden(),
                   "Name search failed");
             search->clear();
-            check(category->count() == 3 && category->itemText(1) == "World" &&
-                      category->itemText(2) == "Location",
-                  "Palette must offer All tiles and the two map usage filters");
+            check(category->count() == 6 && category->itemText(1) == "World" &&
+                      category->itemText(2) == "Location terrain" &&
+                      category->itemText(3) == "Locations" && category->itemText(4) == "NPCs" &&
+                      category->itemText(5) == "Monsters",
+                  "Palette must offer terrain usage and placement filters");
             category->setCurrentText("World");
             check(!palette->item(5)->isHidden() && !palette->item(0x4f)->isHidden() &&
                       !palette->item(0xd4)->isHidden() && palette->item(0xd7)->isHidden() &&
                       palette->item(0xfa)->isHidden() && palette->item(0x39)->isHidden(),
                   "World membership must use terrain cells, without inferred frames or unused chunks");
-            category->setCurrentText("Location");
+            category->setCurrentText("Location terrain");
             check(!palette->item(5)->isHidden() && !palette->item(0x50)->isHidden() &&
                       palette->item(0xfa)->isHidden(),
                   "Location filter missed floor terrain or counted combat map metadata");
-            check(palette->item(5)->toolTip().contains("World · Location"),
+            check(palette->item(5)->toolTip().contains("World · Location terrain"),
                   "Tile usage categories must overlap");
             category->setCurrentText("All tiles");
             check(!palette->item(0xfa)->isHidden(), "All tiles must include unused artwork");

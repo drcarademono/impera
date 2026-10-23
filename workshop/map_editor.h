@@ -65,6 +65,7 @@ class MapCanvas : public QWidget {
     QByteArray ids, original;
     QByteArray extended, beforeExtended, stampExtended, libraryUuid;
     QMap<unsigned, unsigned> legacyTiles;
+    QMap<int, int> actorBrushKinds;
     QMap<unsigned, unsigned> spriteGround;
     QImage tileImageAt(int offset) const;
     unsigned tileId(int offset) const;
@@ -274,7 +275,7 @@ class MapWorkspace : public QWidget {
     std::function<void(const QString &)> navigateResource;
     void refreshNpcs();
     void refreshCombat();
-    void beginAdd(int kind);
+    void beginAdd(int kind, int selectedAppearance = -1, QPoint cell = {-1, -1});
     void beginAddLocation(QPoint cell = {-1, -1}, int entranceTile = 0x12);
     bool placeAddedItem(int kind, int appearance, int conversation, QString name, QPoint cell);
     void deleteSelectedItem();

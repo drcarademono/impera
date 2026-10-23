@@ -485,8 +485,10 @@ location IDs use the optional `INPSAV02` NPC trailer, while native-only flags
 continue to use `INPSAV01`.
 
 In Workshop, Resize changes the selected map or floor as one undo operation.
-Shrinking refuses to crop placed content; move it first. Add → Location on either
-world places an entrance and opens its new map. Select / Move and the Positions
+Shrinking refuses to crop placed content; move it first. The Locations tile-picker
+filter places entrances on either world, keeping the world map open. NPCs and
+Monsters filters place actors, including custom types, without painting terrain.
+Select / Move and the Positions
 pane edit arrivals and entrances, switch their world, and navigate between them.
 Moving an entrance restores the terrain underneath its old marker. Creation,
 terrain, NPC/dialogue companions, project persistence and package import/export

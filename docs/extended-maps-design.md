@@ -68,13 +68,13 @@ party starts, entrances, encounter positions and triggers outside the proposed
 bounds. Report the affected entries and keep the original map intact until the
 user moves or removes them. Do not silently clamp or discard entities.
 
-Add `Location…` to the world's alphabetized Add menu. The user supplies its name,
-initial dimensions and ground tile, then places its entrance on the current
-world map. Keep the world map open after placement; open the new location from
-the Locations list. Painting a location landmark with the Pencil opens the same
-creation dialog at that tile. The right pane edits entrance, arrival position
-and return world; Select / Move drags those markers. Avoid a
-separate location-management tab.
+The tile picker provides Locations, NPCs and Monsters filters alongside terrain
+usage filters. Select an entrance tile and place it with the Pencil to supply
+the location name, dimensions and initial terrain. Keep the world map open;
+open the new location from the Locations list. NPC entries collect a name and
+conversation when placed; monster entries place their selected type directly.
+These entries are no longer duplicated in Add. The right pane edits entrance,
+arrival position and return world; Select / Move drags those markers.
 
 New locations appear in the existing Locations list, sorted by their display
 names. Their NPCs and conversations join the existing Dialogue workspace.
@@ -113,7 +113,7 @@ board; make party starts, monster positions and triggers obey its dimensions.
 ## Implementation
 
 The shared catalog, rectangular documents, canvas/minimap/image exports, resize
-control and Add → Location flow are implemented. New location companions join
+control and tile-picker location placement are implemented. New location companions join
 the normal map, Dialogue, sign and container editors. The Positions pane links
 entrances to arrivals and supports moving entrances between worlds. Undo/redo
 includes new map data, companion resources and entrance terrain atomically.
