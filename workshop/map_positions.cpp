@@ -1,3 +1,4 @@
+#include "custom_tiles.h"
 #include "map_positions.h"
 #include "mod/maps.h"
 #include "extended_maps.h"
@@ -96,6 +97,12 @@ QMap<QString, QByteArray> moveMapPosition(const Project &p, int id, int map, int
             const int entranceTile =
                 U5::byte(source.terrain(0),
                          previous.entrance.y() * source.pages[0].side + previous.entrance.x());
+            const auto sourceTypes =
+                CustomTiles::expanded(p, previous.world == -1 ? "UNDER.DAT" : "BRIT.DAT",
+                                      source.pages[0], 0, source.terrain(0));
+            const unsigned entranceType = TYPES_U32(
+                sourceTypes.constData() +
+                (previous.entrance.y() * source.pages[0].side + previous.entrance.x()) * 4);
             for (int pass = 0; pass < 2; pass++) {
                 QString world = (pass ? floor : previous.world) == -1 ? "UNDER.DAT" : "BRIT.DAT";
                 MapDocument doc(&candidate, world);
@@ -103,7 +110,10 @@ QMap<QString, QByteArray> moveMapPosition(const Project &p, int id, int map, int
                 QPoint at = pass ? cell : previous.entrance;
                 terrain[at.y() * doc.pages[0].side + at.x()] =
                     pass ? char(entranceTile) : char(previous.underlay);
-                auto edits = doc.changes(0, terrain);
+                auto types = CustomTiles::expanded(candidate, world, doc.pages[0], 0, terrain);
+                TYPES_Put32(types.data() + (at.y() * doc.pages[0].side + at.x()) * 4,
+                            pass ? entranceType : 0);
+                auto edits = doc.changes(0, terrain, types);
                 for (auto it = edits.begin(); it != edits.end(); ++it) {
                     result[it.key()] = it.value();
                     candidate.resources[it.key()].edited = it.value();

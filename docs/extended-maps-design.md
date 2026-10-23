@@ -73,7 +73,10 @@ usage filters. Select an entrance tile and place it with the Pencil to supply
 the location name, dimensions and initial terrain. Keep the world map open;
 open the new location from the Locations list. NPC entries collect a name and
 conversation when placed; monster entries place their selected type directly.
-These entries are no longer duplicated in Add. The right pane edits entrance,
+Custom entrance tiles join Locations according to their entrance behavior,
+and retain their type and artwork when moved between worlds. Actor filters
+include custom 1×1, 1×2, 2×1 and 2×2 definitions, with their normal single-cell
+world artwork. These entries are no longer duplicated in Add. The right pane edits entrance,
 arrival position and return world; Select / Move drags those markers.
 
 New locations appear in the existing Locations list, sorted by their display

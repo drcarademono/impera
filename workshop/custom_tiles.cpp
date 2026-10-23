@@ -572,7 +572,7 @@ QWidget *editor(Project *p, Workshop::TextCommit commit, QMap<QString, int> *sta
     left->addWidget(search);
     auto filter = new QComboBox;
     filter->setObjectName("customTileFilter");
-    filter->addItems({"All tiles", "World", "Locations"});
+    filter->addItems({"All tiles", "World", "Location terrain"});
     filter->setVisible(!actorKind);
     left->addWidget(filter);
     auto list = new QListWidget;
@@ -755,10 +755,10 @@ QWidget *editor(Project *p, Workshop::TextCommit commit, QMap<QString, int> *sta
     name->setToolTip("Name shown in the tile picker and map inspector.");
     description->setToolTip("Text shown by Impera’s Look command.");
     description->setObjectName("customTileDescription");
-    auto world = new QCheckBox("World"), location = new QCheckBox("Locations");
+    auto world = new QCheckBox("World"), location = new QCheckBox("Location terrain");
     world->setToolTip("Include this tile in the map picker’s World filter.");
     location->setToolTip(
-        "Include this tile in the Locations filter. Both filters can include the same tile.");
+        "Include this tile in the Location terrain filter. Both filters can include the same tile.");
     auto sprite = new QCheckBox("Transparent sprite"), masonry = new QCheckBox("Wall lighting");
     sprite->setToolTip(
         "With Impera’s Transparent Sprites option enabled, show ground through PNG alpha "
@@ -1034,7 +1034,7 @@ QWidget *editor(Project *p, Workshop::TextCommit commit, QMap<QString, int> *sta
             "Choose the tile’s appearance after this action, or keep the behavior’s default.");
     // Keep guidance at the control where it is needed, rather than in permanent notes.
     search->setToolTip("Filter this list by name to find an existing type to edit or copy.");
-    filter->setToolTip("Show all tiles, or only tiles included in the World or Locations picker. A "
+    filter->setToolTip("Show all tiles, or only tiles included in the World or Location terrain picker. A "
                        "tile can belong to both.");
     list->setToolTip("Select a type to edit its artwork and shared settings. Changes affect every "
                      "map placement using this type.");
@@ -1081,7 +1081,7 @@ QWidget *editor(Project *p, Workshop::TextCommit commit, QMap<QString, int> *sta
     world->setToolTip(
         "Include this new tile in the World picker filter. This does not restrict where it can be "
         "painted. Original tiles are classified automatically from the maps.");
-    location->setToolTip("Include this new tile in the Locations picker filter. Both filters can "
+    location->setToolTip("Include this new tile in the Location terrain picker filter. Both filters can "
                          "be enabled. Original tiles are classified automatically from the maps.");
     speed->setToolTip("How much this terrain slows travel when crossed. This does not change "
                       "animation speed or decide who can enter.");

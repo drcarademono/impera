@@ -2017,7 +2017,8 @@ void MapWorkspace::enableLocationModes(const QStringList &names, LocationLayerFa
         }
         if (resource != "BRIT.DAT" && resource != "UNDER.DAT")
             return false;
-        if (!((tile >= 0x10 && tile <= 0x1b) || tile == 0x39 || tile == 0x3e))
+        const int profile = tile >= 512 ? CustomTiles::definition(*project, tile).base : tile;
+        if (!((profile >= 0x10 && profile <= 0x1b) || profile == 0x39 || profile == 0x3e))
             return false;
         for (const auto &pos : Workshop::mapPositions(*project))
             if (pos.id >= 100 && pos.map == 0 && pos.floor == (resource == "UNDER.DAT" ? -1 : 0) &&
@@ -2532,7 +2533,8 @@ QStringList MapWorkspace::tileCategories(int id) const {
     QStringList categories;
     if (canvas->actorBrushKinds.contains(id))
         return {canvas->actorBrushKinds.value(id) == 1 ? "NPCs" : "Monsters"};
-    if ((id >= 0x10 && id <= 0x1b) || id == 0x39 || id == 0x3e)
+    const int profile = id >= 512 ? CustomTiles::definition(*project, id).base : id;
+    if ((profile >= 0x10 && profile <= 0x1b) || profile == 0x39 || profile == 0x3e)
         categories << "Locations";
     if (id >= 512) {
         auto d = CustomTiles::definition(*project, id);

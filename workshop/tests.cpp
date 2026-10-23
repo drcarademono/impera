@@ -491,17 +491,24 @@ int main(int argc, char **argv) {
             file(dir.path() + "/TOWNE.TLK", QByteArray::fromHex("0000"));
             p.openGame(dir.path());
             QMap<unsigned, QByteArray> actorRecords;
-            for (unsigned kind : {1u, 2u}) {
-                TypeDef d;
-                TYPES_Vanilla(1, kind == 1 ? 80 : 144, &d);
-                d.kind = kind;
-                d.id = 59999 + kind;
-                d.render = TYPES_SPRITE;
-                strcpy(d.name, kind == 1 ? "Custom scholar" : "Custom beast");
-                QImage art(16, 16, QImage::Format_RGBA8888);
-                art.fill(Qt::white);
-                actorRecords[d.id] = CustomTiles::record(d, {{art, 150, 0}});
-            }
+            const QList<QSize> sizes{{1, 1}, {1, 2}, {2, 1}, {2, 2}};
+            for (int size = 0; size < sizes.size(); ++size)
+                for (unsigned kind : {1u, 2u}) {
+                    TypeDef d;
+                    TYPES_Vanilla(1, kind == 1 ? 80 : 144, &d);
+                    d.kind = kind;
+                    d.id = 59999 + kind + size * 2;
+                    d.width = sizes[size].width();
+                    d.height = sizes[size].height();
+                    d.render = TYPES_SPRITE;
+                    strcpy(d.name, kind == 1 ? "Custom scholar" : "Custom beast");
+                    QImage art(16 * d.width, 16 * d.height, QImage::Format_RGBA8888);
+                    art.fill(Qt::white);
+                    QImage worldArt(16, 16, QImage::Format_RGBA8888);
+                    worldArt.fill(Qt::white);
+                    actorRecords[d.id] =
+                        CustomTiles::record(d, {{art, 150, 0}, {worldArt, 150, 6}});
+                }
             p.resources["TYPES.OVR"].edited = CustomTiles::library(p, actorRecords);
             p.save(dir.path() + "/actors.imperaproject");
             WorkshopWindow window;
@@ -551,24 +558,102 @@ int main(int argc, char **argv) {
             QApplication::sendEvent(canvas, &enter);
             check(U5::byte(window.projectForTests().data("TOWNE.NPC"), 514) == 144,
                   "Monster brush failed to create a real actor");
-            for (unsigned kind : {1u, 2u}) {
-                const unsigned id = 59999 + kind;
-                choose(kind == 1 ? "NPCs" : "Monsters", id);
-                if (kind == 1)
-                    QTimer::singleShot(0, &window, [&] {
-                        auto d = qobject_cast<QDialog *>(QApplication::activeModalWidget());
-                        check(d, "Custom NPC dialog missing");
-                        d->accept();
-                    });
-                canvas->keyboardCell = {int(12 + kind * 2), 10};
-                QApplication::sendEvent(canvas, &enter);
-                const auto &project = window.projectForTests();
-                check(CustomTiles::actorType(project, "TOWNE.DAT", project.mapPages("TOWNE.DAT")[0],
-                                             0, kind + 2, 0) == id,
-                      "Custom actor palette lost its type assignment");
-            }
+            for (int size = 0; size < sizes.size(); ++size)
+                for (unsigned kind : {1u, 2u}) {
+                    const unsigned id = 59999 + kind + size * 2;
+                    choose(kind == 1 ? "NPCs" : "Monsters", id);
+                    check(canvas->actorSize(id) == sizes[size] &&
+                              canvas->tiles[id].size() == sizes[size] * 16,
+                          "Actor picker lost footprint or artwork dimensions");
+                    if (kind == 1)
+                        QTimer::singleShot(0, &window, [&] {
+                            auto d = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+                            check(d, "Custom NPC dialog missing");
+                            d->accept();
+                        });
+                    canvas->keyboardCell = {int(10 + kind * 4), 10 + size * 4};
+                    QApplication::sendEvent(canvas, &enter);
+                    const auto &project = window.projectForTests();
+                    check(CustomTiles::actorType(project, "TOWNE.DAT",
+                                                 project.mapPages("TOWNE.DAT")[0], 0,
+                                                 kind + 2 + size * 2, 0) == id,
+                          "Custom actor palette lost its type assignment");
+                    check(CustomTiles::image(project, id, 6).size() == QSize(16, 16),
+                          "Multi-tile actor lost its single-cell world artwork");
+                }
             check(window.projectForTests().data("TOWNE.DAT") == terrain,
                   "Actor palette painted terrain");
+        });
+        test("Custom location tiles appear in the picker and keep their identity when moved", [&] {
+            QTemporaryDir dir;
+            auto p = fixture(dir.path());
+            file(dir.path() + "/BRIT.DAT", QByteArray(256, 1));
+            file(dir.path() + "/UNDER.DAT", QByteArray(65536, 1));
+            file(dir.path() + "/DATA.OVL", QByteArray(0x3986, 0));
+            QByteArray signs(67, 0);
+            signs[66] = char(255);
+            file(dir.path() + "/SIGNS.DAT", signs);
+            p.openGame(dir.path());
+            TypeDef d;
+            TYPES_Vanilla(0, 0x14, &d);
+            d.id = 61000;
+            d.filters = 1;
+            strcpy(d.name, "Crystal citadel");
+            QImage art(16, 16, QImage::Format_RGBA8888);
+            art.fill(Qt::white);
+            p.resources["TYPES.OVR"].edited =
+                CustomTiles::library(p, {{d.id, CustomTiles::record(d, {{art, 150, 0}})}});
+            p.save(dir.path() + "/entrance.imperaproject");
+            WorkshopWindow window;
+            check(window.openProject(p.projectPath), "Custom entrance project");
+            window.show();
+            window.selectResource("BRIT.DAT");
+            app.processEvents();
+            auto active = window.findChild<QStackedWidget *>("workspaces")->currentWidget();
+            auto filter = active->findChild<QComboBox *>("mapPaletteFilter");
+            filter->setCurrentText("Locations");
+            auto palette = active->findChild<QListWidget *>("mapPalette");
+            bool found = false;
+            for (int i = 0; i < palette->count(); ++i)
+                if (palette->item(i)->data(Qt::UserRole).toUInt() == d.id) {
+                    check(!palette->item(i)->isHidden(),
+                          "Custom location tile absent from Locations filter");
+                    palette->setCurrentRow(i);
+                    found = true;
+                    break;
+                }
+            check(found, "Custom entrance missing from tile picker");
+            auto canvas = static_cast<MapCanvas *>(active->findChild<QWidget *>("mapCanvas"));
+            QTimer::singleShot(0, &window, [&] {
+                auto dialog = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+                check(dialog, "Custom entrance did not open creation dialog");
+                dialog->findChild<QLineEdit *>("newLocationName")->setText("Crystal citadel");
+                dialog->accept();
+            });
+            canvas->keyboardCell = {220, 120};
+            QKeyEvent enter(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier);
+            QApplication::sendEvent(canvas, &enter);
+            app.processEvents();
+            Project moved = window.projectForTests();
+            auto at = [&](const Project &project, const QString &world, QPoint cell) {
+                MapDocument map(&project, world);
+                auto bytes = CustomTiles::expanded(project, world, map.pages[0], 0, map.terrain(0));
+                return TYPES_U32(bytes.constData() + (cell.y() * map.pages[0].side + cell.x()) * 4);
+            };
+            check(at(moved, "BRIT.DAT", {220, 120}) == 61000 &&
+                      moved.locationName(42) == "Crystal citadel",
+                  "Custom entrance was reduced to native artwork");
+            auto changes = Workshop::moveMapPosition(moved, 1042, 0, -1, {221, 121}, true);
+            for (auto it = changes.begin(); it != changes.end(); ++it)
+                moved.resources[it.key()].edited = it.value();
+            moved.validate();
+            check(at(moved, "BRIT.DAT", {220, 120}) == 0 &&
+                      at(moved, "UNDER.DAT", {221, 121}) == 61000,
+                  "Moving entrance lost its custom tile identity");
+            auto restored = p;
+            restored.importPackage(moved.package());
+            check(at(restored, "UNDER.DAT", {221, 121}) == 61000,
+                  "Package roundtrip lost custom entrance artwork");
         });
         test("Cutscene pages share an editor, preserve originals and roundtrip variable sequences", [&] {
             QTemporaryDir dir;

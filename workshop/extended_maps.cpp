@@ -301,8 +301,10 @@ QMap<QString, QByteArray> addLocation(const Project &p, const QString &world, co
     require(world == "BRIT.DAT" || world == "UNDER.DAT",
             "Place a location entrance on a world map");
     auto maps = extendedMaps(p);
-    require((entranceTile >= 0x10 && entranceTile <= 0x1b) || entranceTile == 0x39 ||
-                entranceTile == 0x3e,
+    const auto entranceDefinition = CustomTiles::definition(p, entranceTile);
+    const int entranceProfile = entranceTile >= 512 ? entranceDefinition.base : entranceTile;
+    require(!entranceDefinition.kind && ((entranceProfile >= 0x10 && entranceProfile <= 0x1b) ||
+                                         entranceProfile == 0x39 || entranceProfile == 0x3e),
             "Choose a location entrance tile");
     unsigned id = 42;
     for (; id < 128; ++id)
@@ -340,8 +342,11 @@ QMap<QString, QByteArray> addLocation(const Project &p, const QString &world, co
     candidate.resources["MAPS.OVR"].edited = writeExtendedMaps(maps);
     MapDocument worldDoc(&candidate, world);
     auto cells = worldDoc.terrain(0);
-    cells[entrance.y() * worldPage.side + entrance.x()] = char(entranceTile);
-    auto changes = worldDoc.changes(0, cells);
+    const int index = entrance.y() * worldPage.side + entrance.x();
+    cells[index] = char(entranceProfile);
+    auto expanded = CustomTiles::expanded(candidate, world, worldDoc.pages[0], 0, cells);
+    TYPES_Put32(expanded.data() + index * 4, entranceTile >= 512 ? entranceTile : 0);
+    auto changes = worldDoc.changes(0, cells, expanded);
     if (!changes.contains("MAPS.OVR"))
         changes["MAPS.OVR"] = candidate.data("MAPS.OVR");
     changes[m.resource.section('.', 0, 0) + ".NPC"] = QByteArray(4608, 0);
