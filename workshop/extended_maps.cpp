@@ -294,12 +294,16 @@ QMap<QString, QByteArray> resizeMap(const Project &p, const QString &resource, i
     return {{"MAPS.OVR", writeExtendedMaps(maps)}};
 }
 QMap<QString, QByteArray> addLocation(const Project &p, const QString &world, const QString &name,
-                                      QPoint entrance, int width, int height, int fill) {
+                                      QPoint entrance, int width, int height, int fill,
+                                      int entranceTile) {
     require(width >= 1 && width <= 256 && height >= 1 && height <= 256 && fill >= 0 && fill <= 255,
             "Invalid location dimensions or background tile");
     require(world == "BRIT.DAT" || world == "UNDER.DAT",
             "Place a location entrance on a world map");
     auto maps = extendedMaps(p);
+    require((entranceTile >= 0x10 && entranceTile <= 0x1b) || entranceTile == 0x39 ||
+                entranceTile == 0x3e,
+            "Choose a location entrance tile");
     unsigned id = 42;
     for (; id < 128; ++id)
         if (MAPS_NewLocation(id) && std::none_of(maps.begin(), maps.end(), [&](const auto &m) {
@@ -336,7 +340,7 @@ QMap<QString, QByteArray> addLocation(const Project &p, const QString &world, co
     candidate.resources["MAPS.OVR"].edited = writeExtendedMaps(maps);
     MapDocument worldDoc(&candidate, world);
     auto cells = worldDoc.terrain(0);
-    cells[entrance.y() * worldPage.side + entrance.x()] = 0x12;
+    cells[entrance.y() * worldPage.side + entrance.x()] = char(entranceTile);
     auto changes = worldDoc.changes(0, cells);
     if (!changes.contains("MAPS.OVR"))
         changes["MAPS.OVR"] = candidate.data("MAPS.OVR");

@@ -101,6 +101,7 @@ class MapCanvas : public QWidget {
     int selectedNpc = -1;
     QPoint keyboardCell = {0, 0};
     std::function<bool(QPoint)> prepareSelection;
+    std::function<bool(QPoint, int)> pencilPlacement;
     QVector<Actor> contextActors, contentsMarkers, positionMarkers;
     bool showContentsMarkers = true;
     std::function<int(const QList<int> &)> chooseActor;
@@ -274,6 +275,7 @@ class MapWorkspace : public QWidget {
     void refreshNpcs();
     void refreshCombat();
     void beginAdd(int kind);
+    void beginAddLocation(QPoint cell = {-1, -1}, int entranceTile = 0x12);
     bool placeAddedItem(int kind, int appearance, int conversation, QString name, QPoint cell);
     void deleteSelectedItem();
     void setItemMode(const QString &mode);

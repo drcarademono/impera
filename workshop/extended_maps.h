@@ -17,7 +17,8 @@ const ExtendedMap *findExtendedMap(const QVector<ExtendedMap> &, const QString &
 QMap<QString, QByteArray> resizeMap(const Project &, const QString &, int page, int width,
                                     int height, int fill);
 QMap<QString, QByteArray> addLocation(const Project &, const QString &, const QString &,
-                                      QPoint entrance, int width, int height, int fill);
+                                      QPoint entrance, int width, int height, int fill,
+                                      int entranceTile = 0x12);
 QSize mapSize(const Project &, int map, int floor, int kind = 0);
 bool mapMarkerActive(const Project &, const QString &, int page, int bit, int x, int y);
 QMap<QString, QByteArray> setMapMarker(const Project &, const QString &, int page, int bit,

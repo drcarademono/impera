@@ -358,7 +358,9 @@ int main(int argc, char **argv) {
             app.processEvents();
             check(Workshop::extendedMaps(window.projectForTests()).size() == 3 &&
                       window.projectForTests().locationName(44) == "Third location",
-                  "UI placement did not create/open a new location");
+                  "UI placement did not create a new location");
+            check(active()->findChild<QAction *>("addLocation"),
+                  "Creating a location unexpectedly left the world editor");
             undo->trigger();
             app.processEvents();
             check(Workshop::extendedMaps(window.projectForTests()).size() == 2 &&
@@ -395,6 +397,86 @@ int main(int argc, char **argv) {
             check(list && list->currentItem() &&
                       list->currentItem()->data(Qt::UserRole).toInt() == 1042,
                   "Show entrance did not select its marker on the world map");
+        });
+        test("Pencil location tiles create entrances atomically and keep the world open", [&] {
+            QTemporaryDir dir;
+            fixture(dir.path());
+            file(dir.path() + "/BRIT.DAT", QByteArray(256, 1));
+            file(dir.path() + "/UNDER.DAT", QByteArray(65536, 1));
+            file(dir.path() + "/DATA.OVL", QByteArray(0x3986, 0));
+            QByteArray signs(67, 0);
+            signs[66] = char(255);
+            file(dir.path() + "/SIGNS.DAT", signs);
+            WorkshopWindow window;
+            check(window.openGame(dir.path()), "Pencil location fixture");
+            window.show();
+            auto active = [&] {
+                return window.findChild<QStackedWidget *>("workspaces")->currentWidget();
+            };
+            int dialogCount = 0;
+            for (const QString world : {QString("BRIT.DAT"), QString("UNDER.DAT")}) {
+                window.selectResource(world);
+                app.processEvents();
+                auto canvas = static_cast<MapCanvas *>(active()->findChild<QWidget *>("mapCanvas"));
+                auto pencil = active()->findChild<QToolButton *>("mapTool0");
+                check(canvas && pencil, "Pencil world workspace is missing");
+                pencil->click();
+                canvas->brush = world == "BRIT.DAT" ? 0x14 : 0x16;
+                auto press = [&] {
+                    QPointF at((220 + .5) * 16 * canvas->zoom, (120 + .5) * 16 * canvas->zoom);
+                    QMouseEvent down(QEvent::MouseButtonPress, at, at, Qt::LeftButton,
+                                     Qt::LeftButton, Qt::NoModifier);
+                    QApplication::sendEvent(canvas, &down);
+                    QMouseEvent up(QEvent::MouseButtonRelease, at, at, Qt::LeftButton, Qt::NoButton,
+                                   Qt::NoModifier);
+                    QApplication::sendEvent(canvas, &up);
+                };
+                const auto before = MapDocument(&window.projectForTests(), world).terrain(0);
+                const auto catalog = window.projectForTests().data("MAPS.OVR");
+                QTimer::singleShot(0, &window, [&] {
+                    auto d = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+                    check(d, "Pencil did not open Add location");
+                    ++dialogCount;
+                    d->reject();
+                });
+                press();
+                check(MapDocument(&window.projectForTests(), world).terrain(0) == before &&
+                          window.projectForTests().data("MAPS.OVR") == catalog,
+                      "Cancelled pencil location changed terrain or catalog");
+                QTimer::singleShot(0, &window, [&] {
+                    auto d = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+                    check(d, "Pencil did not reopen Add location");
+                    ++dialogCount;
+                    d->findChild<QLineEdit *>("newLocationName")->setText("Painted location");
+                    d->accept();
+                });
+                press();
+                app.processEvents();
+                check(active()->findChild<QAction *>("addLocation"),
+                      "Pencil creation switched away from world map");
+                auto maps = Workshop::extendedMaps(window.projectForTests());
+                const auto m = maps.last();
+                check(m.world == (world == "BRIT.DAT" ? 0 : -1) && m.entrance == QPoint(220, 120) &&
+                          U5::byte(MapDocument(&window.projectForTests(), world).terrain(0),
+                                   120 * 256 + 220) == unsigned(canvas->brush),
+                      "Pencil lost selected entrance tile or world");
+                check(!canvas->painting() && !canvas->placing(),
+                      "Pencil entrance left a painting gesture active");
+                auto changes = Workshop::moveMapPosition(window.projectForTests(), 1000 + m.id, 0,
+                                                         m.world, {221, 120}, true);
+                Project moved = window.projectForTests();
+                for (auto it = changes.begin(); it != changes.end(); ++it)
+                    moved.resources[it.key()].edited = it.value();
+                auto terrain = MapDocument(&moved, world).terrain(0);
+                check(U5::byte(terrain, 120 * 256 + 221) == unsigned(canvas->brush) &&
+                          U5::byte(terrain, 120 * 256 + 220) == U5::byte(before, 120 * 256 + 220),
+                      "Moving entrance changed its artwork or lost underlying terrain");
+                canvas->brush = 0x10;
+                press();
+                check(Workshop::extendedMaps(window.projectForTests()).size() == maps.size(),
+                      "Repainting an existing entrance created a second location");
+            }
+            check(dialogCount == 4, "Incorrect number of location dialogs");
         });
         test("Cutscene pages share an editor, preserve originals and roundtrip variable sequences", [&] {
             QTemporaryDir dir;

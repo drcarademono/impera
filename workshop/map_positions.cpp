@@ -92,13 +92,17 @@ QMap<QString, QByteArray> moveMapPosition(const Project &p, int id, int map, int
         if (moveLandmark && id < 2000 && (previous.entrance != cell || previous.world != floor)) {
             Project candidate = p;
             candidate.resources["MAPS.OVR"].edited = result["MAPS.OVR"];
+            MapDocument source(&p, previous.world == -1 ? "UNDER.DAT" : "BRIT.DAT");
+            const int entranceTile =
+                U5::byte(source.terrain(0),
+                         previous.entrance.y() * source.pages[0].side + previous.entrance.x());
             for (int pass = 0; pass < 2; pass++) {
                 QString world = (pass ? floor : previous.world) == -1 ? "UNDER.DAT" : "BRIT.DAT";
                 MapDocument doc(&candidate, world);
                 auto terrain = doc.terrain(0);
                 QPoint at = pass ? cell : previous.entrance;
                 terrain[at.y() * doc.pages[0].side + at.x()] =
-                    pass ? char(0x12) : char(previous.underlay);
+                    pass ? char(entranceTile) : char(previous.underlay);
                 auto edits = doc.changes(0, terrain);
                 for (auto it = edits.begin(); it != edits.end(); ++it) {
                     result[it.key()] = it.value();

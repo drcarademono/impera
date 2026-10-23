@@ -640,6 +640,8 @@ void MapCanvas::mousePressEvent(QMouseEvent *e) {
         return;
     if (tool != Select && !editable(cell))
         return;
+    if (tool == Pencil && pencilPlacement && pencilPlacement(cell, brush))
+        return;
     before = ids;
     beforeExtended = extended;
     previousSelection = selection;
@@ -1966,63 +1968,18 @@ void MapWorkspace::enableLocationModes(const QStringList &names, LocationLayerFa
     if (resource == "BRIT.DAT" || resource == "UNDER.DAT") {
         auto location = addMenu->addAction("Location…");
         location->setObjectName("addLocation");
-        connect(location, &QAction::triggered, this, [this] {
-            if (!flushLocationMode())
-                return;
-            QDialog dialog(window());
-            QPointer<MapWorkspace> owner(this);
-            dialog.setWindowTitle("Add location");
-            QFormLayout form(&dialog);
-            QLineEdit name("New location");
-            name.setObjectName("newLocationName");
-            QSpinBox width, height, fill;
-            width.setObjectName("newLocationWidth");
-            height.setObjectName("newLocationHeight");
-            width.setRange(1, 256);
-            height.setRange(1, 256);
-            width.setValue(32);
-            height.setValue(32);
-            fill.setRange(0, 255);
-            fill.setValue(5);
-            form.addRow("Name", &name);
-            form.addRow("Width (tiles)", &width);
-            form.addRow("Height (tiles)", &height);
-            form.addRow("Fill tile", &fill);
-            QDialogButtonBox buttons(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-            form.addRow(&buttons);
-            connect(&buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-            connect(&buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-            if (dialog.exec() != QDialog::Accepted || !owner)
-                return;
-            const QString title = name.text();
-            const int w = width.value(), h = height.value(), tile = fill.value();
-            canvas->beginPlacement(0x12, false, [this, title, w, h, tile](QPoint cell) {
-                try {
-                    const auto changes =
-                        Workshop::addLocation(*project, resource, title, cell, w, h, tile);
-                    if (!commitResources(changes, "Add location"))
-                        return false;
-                    Workshop::hydrateExtendedMaps(*project);
-                    const auto maps = Workshop::extendedMaps(*project);
-                    for (const auto &m : maps)
-                        if (m.world == (resource == "UNDER.DAT" ? -1 : 0) && m.entrance == cell) {
-                            const QString next = m.resource;
-                            (*navigation)[next + "/entranceWorld"] = m.world;
-                            QTimer::singleShot(0, this, [this, next] {
-                                if (locationChanged)
-                                    locationChanged();
-                                if (navigateResource)
-                                    navigateResource(next);
-                            });
-                            break;
-                        }
-                    return true;
-                } catch (const std::exception &e) {
-                    QMessageBox::warning(this, "Cannot add location", e.what());
+        connect(location, &QAction::triggered, this, [this] { beginAddLocation(); });
+        canvas->pencilPlacement = [this](QPoint cell, int tile) {
+            if (!((tile >= 0x10 && tile <= 0x1b) || tile == 0x39 || tile == 0x3e))
+                return false;
+            // Repainting an existing entrance changes its artwork, not its identity.
+            for (const auto &pos : Workshop::mapPositions(*project))
+                if (pos.id >= 100 && pos.map == 0 &&
+                    pos.floor == (resource == "UNDER.DAT" ? -1 : 0) && pos.cell == cell)
                     return false;
-                }
-            });
-        });
+            beginAddLocation(cell, tile);
+            return true;
+        };
         auto actions = addMenu->actions();
         std::sort(actions.begin(), actions.end(), [](auto a, auto b) {
             return a->text().compare(b->text(), Qt::CaseInsensitive) < 0;
@@ -2117,6 +2074,58 @@ void MapWorkspace::enableLocationModes(const QStringList &names, LocationLayerFa
         applyLocationMode();
     });
     applyLocationMode();
+}
+void MapWorkspace::beginAddLocation(QPoint cell, int entranceTile) {
+    if (!flushLocationMode())
+        return;
+    QDialog dialog(window());
+    QPointer<MapWorkspace> owner(this);
+    dialog.setWindowTitle("Add location");
+    QFormLayout form(&dialog);
+    QLineEdit name("New location");
+    name.setObjectName("newLocationName");
+    QSpinBox width, height, fill;
+    width.setObjectName("newLocationWidth");
+    height.setObjectName("newLocationHeight");
+    width.setRange(1, 256);
+    height.setRange(1, 256);
+    width.setValue(32);
+    height.setValue(32);
+    fill.setRange(0, 255);
+    fill.setValue(5);
+    form.addRow("Name", &name);
+    form.addRow("Width (tiles)", &width);
+    form.addRow("Height (tiles)", &height);
+    form.addRow("Fill tile", &fill);
+    QDialogButtonBox buttons(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    form.addRow(&buttons);
+    connect(&buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(&buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    if (dialog.exec() != QDialog::Accepted || !owner)
+        return;
+    const QString title = name.text();
+    const int w = width.value(), h = height.value(), tile = fill.value();
+    auto place = [this, title, w, h, tile, entranceTile](QPoint cell) {
+        try {
+            const auto changes =
+                Workshop::addLocation(*project, resource, title, cell, w, h, tile, entranceTile);
+            if (!commitResources(changes, "Add location"))
+                return false;
+            Workshop::hydrateExtendedMaps(*project);
+            refreshTerrain();
+            minimap->refresh();
+            if (locationChanged)
+                locationChanged();
+            return true;
+        } catch (const std::exception &e) {
+            QMessageBox::warning(this, "Cannot add location", e.what());
+            return false;
+        }
+    };
+    if (cell.x() >= 0)
+        place(cell);
+    else
+        canvas->beginPlacement(entranceTile, false, place);
 }
 void MapWorkspace::applyLocationMode() {
     clearLocationLayer();

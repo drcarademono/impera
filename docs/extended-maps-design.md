@@ -70,8 +70,10 @@ user moves or removes them. Do not silently clamp or discard entities.
 
 Add `Location…` to the world's alphabetized Add menu. The user supplies its name,
 initial dimensions and ground tile, then places its entrance on the current
-world map. Open the new location after placement. The right pane edits entrance,
-arrival position and return world; Select / Move drags those markers. Avoid a
+world map. Keep the world map open after placement; open the new location from
+the Locations list. Painting a location landmark with the Pencil opens the same
+creation dialog at that tile. The right pane edits entrance, arrival position
+and return world; Select / Move drags those markers. Avoid a
 separate location-management tab.
 
 New locations appear in the existing Locations list, sorted by their display
