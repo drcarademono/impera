@@ -14,6 +14,7 @@ void TOWN_10da(int param_1);
 void TOWN_11f0_Entry(int param_1);
 void TOWN_141e_MainLoop(void);
 void TOWN_1694(void);
+void TOWN_AttackPlacedObject(int actor);
 void TOWN_1726(int param_1, int param_2, int param_3, int param_4);
 
 #endif

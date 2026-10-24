@@ -27,6 +27,13 @@ enum class MapItemKind {
     SandalwoodBox = 21,
     BloodSplatter = 22,
     MoldyCorpse = 23,
+    PirateShip = 24,
+    Whirlpool = 25,
+    ShadowLord = 26,
+    Shard = 27,
+    Crown = 28,
+    Sceptre = 29,
+    QuestAmulet = 30,
 };
 struct MapItemEdit {
     QMap<QString, QByteArray> changes;

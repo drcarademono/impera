@@ -179,6 +179,12 @@ static void TOWN_02ae(void)
     ActorFmt* local_6;
 
     D_5958 = 0xff;
+    int placed = NPC_PlacedShadowLord();
+    if (placed >= 0) {
+        D_5958 = placed;
+        TOWN_0212();
+        return;
+    }
     if (D_5897_map_y != 4)
     {
         for (local_8 = 0; local_8 < 3; local_8++)
@@ -591,6 +597,8 @@ static bool TOWN_0600(int param_1)
 
 static void TOWN_085e(int param_1)
 {
+    if (NPC_ObjectKind(param_1) >= 0)
+        return;
     int local_4;
     int i;
 
@@ -669,11 +677,26 @@ void TOWN_0958(void)
 // attack npc
 static void TOWN_09bc(int param_1)
 {
+    int pirate = NPC_ObjectKind(param_1) == NPCS_OBJECT_PIRATE;
+    int actor = D_5f5e[param_1]._c;
     TOWN_0052_SetNpcKilled(param_1);
-    ULTIMA_6150_Combat(D_5f5e[param_1]._c);
-    TOWN_00b0_DespawnNpc(param_1);
+    ULTIMA_6150_Combat(actor);
+    if (pirate && (D_5c5a[actor]._0_tile & 0xfc) == TILE_ACTOR_FRIGATE_24) {
+        D_659e[param_1] = D_5c5a[actor]._0_tile;
+        D_5f5e[param_1]._a = D_5c5a[actor]._5;
+        for (int i = 0; i < 3; i++)
+            D_5d5e[param_1].type[i] = NPCS_OBJECT_MARKER | 7;
+        D_5d5e[param_1].time[3] = D_5c5a[actor]._7;
+    } else
+        TOWN_00b0_DespawnNpc(param_1);
     TOWN_0408(0);
     TOWN_02ae();
+}
+
+void TOWN_AttackPlacedObject(int actor) {
+    int slot = TOWN_011e(actor);
+    if (slot > 0 && NPC_ObjectKind(slot) == NPCS_OBJECT_PIRATE)
+        TOWN_09bc(slot);
 }
 
 int TOWN_09e6_AttackCmd(void)
@@ -689,13 +712,12 @@ int TOWN_09e6_AttackCmd(void)
 
     ULTIMA_1850_PrintString(_TEXT(0x26e0, "Attack-"));
 
-    if (*ULTIMA_4402_GetTileAddr(D_5896_map_x, D_5897_map_y) < TILE_MAP_POISON && D_587c_partyTile != TILE_ACTOR_AVATAR)
-    {
+    if (*ULTIMA_4402_GetTileAddr(D_5896_map_x, D_5897_map_y) < TILE_MAP_POISON &&
+        ((D_587c_partyTile & 0xfc) == TILE_ACTOR_SKIFF ||
+         (D_587c_partyTile & 0xfe) == TILE_ACTOR_FLYING_CARPET)) {
         ULTIMA_1850_PrintString(_TEXT(0x26e8, "On foot!\n"));
         local_6 = 0;
-    }
-    else if (ULTIMA_35ec_SelectDirection() != 0)
-    {
+    } else if (ULTIMA_35ec_SelectDirection() != 0) {
         local_a = (uint)D_5896_map_x + D_5876;
         local_c = (uint)D_5897_map_y + D_5878;
         if (*ULTIMA_4402_GetTileAddr(local_a, local_c) == TILE_MAP_MIRROR)
@@ -718,8 +740,10 @@ int TOWN_09e6_AttackCmd(void)
             {
                 local_10 = D_5876;
                 local_4 = TOWN_011e(local_10);
-                if (local_12 >= TILE_ACTOR_WIZARD && (local_12 < TILE_ACTOR_E8 || local_12 >= TILE_ACTOR_F0) && (local_12 & 0xfc) != TILE_ACTOR_SHARD)
-                {
+                if (((local_12 & 0xfc) == TILE_ACTOR_PIRATE ||
+                     (local_12 >= TILE_ACTOR_WIZARD &&
+                      (local_12 < TILE_ACTOR_E8 || local_12 >= TILE_ACTOR_F0))) &&
+                    (local_12 & 0xfc) != TILE_ACTOR_SHARD) {
                     local_8 = 0;
                 }
             }
@@ -732,13 +756,10 @@ int TOWN_09e6_AttackCmd(void)
             }
             else
             {
-                if (local_12 < 0x80)
-                {
+                if (local_12 < 0x80 && (local_12 & 0xfc) != TILE_ACTOR_PIRATE) {
                     ULTIMA_3f36_DecreaseByte(&D_5888, 5);
                     TOWN_0958();
-                }
-                else if ((local_12 & 0xfc) == TILE_ACTOR_D8)
-                {
+                } else if ((local_12 & 0xfc) == TILE_ACTOR_D8) {
                     TOWN_0958();
                 }
 
@@ -1510,6 +1531,8 @@ void TOWN_141e_MainLoop(void)
                 if ((int)local_c < 2)
                 {
                     NPC_0db4(D_587f);
+                    if (!D_5893_map_id)
+                        return;
                 }
                 // 1671
                 if (D_65bf != 0 || local_c == 2)

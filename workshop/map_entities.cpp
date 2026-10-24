@@ -53,11 +53,12 @@ QMap<QString, QByteArray> createNpcConversation(const Project &p, const QString 
 bool locationObject(const Project &p, const QString &resource, int town, int slot) {
     const auto b = p.data(resource);
     const auto off = NPCS_ShapeOffset(b.constData(), b.size(), town, slot);
-    if (slot < 1 || off >= size_t(b.size()) || !U5::byte(b, off) || U5::byte(b, off) >= 64)
+    if (slot < 1 || off >= size_t(b.size()) || !U5::byte(b, off))
         return false;
     const int base = NPCS_Offset(b.constData(), b.size(), town, slot);
     return NPCS_ObjectKind(b.constData() + base, U5::byte(b, off)) >= 0 ||
-           U5::byte(b, NPCS_DialogueOffset(b.constData(), b.size(), town, slot)) == 0;
+           (U5::byte(b, off) < 64 &&
+            U5::byte(b, NPCS_DialogueOffset(b.constData(), b.size(), town, slot)) == 0);
 }
 QString locationObjectName(const Project &p, const QString &resource, int town, int slot) {
     const auto b = p.data(resource);
@@ -90,6 +91,20 @@ QList<int> monsterShapes() {
 }
 QString mapItemName(MapItemKind k) {
     switch (k) {
+    case MapItemKind::PirateShip:
+        return "Pirate ship";
+    case MapItemKind::Whirlpool:
+        return "Whirlpool";
+    case MapItemKind::ShadowLord:
+        return "Shadow Lord";
+    case MapItemKind::Shard:
+        return "Shard";
+    case MapItemKind::Crown:
+        return "Lord British’s crown";
+    case MapItemKind::Sceptre:
+        return "Lord British’s sceptre";
+    case MapItemKind::QuestAmulet:
+        return "Lord British’s amulet";
     case MapItemKind::Gem:
         return "Gem";
     case MapItemKind::Key:
@@ -143,6 +158,20 @@ QString mapItemName(MapItemKind k) {
 }
 int mapItemShape(MapItemKind kind, int variant) {
     switch (kind) {
+    case MapItemKind::PirateShip:
+        return 44;
+    case MapItemKind::Whirlpool:
+        return 236;
+    case MapItemKind::ShadowLord:
+        return 252;
+    case MapItemKind::Shard:
+        return 180;
+    case MapItemKind::Crown:
+        return 181;
+    case MapItemKind::Sceptre:
+        return 182;
+    case MapItemKind::QuestAmulet:
+        return 183;
     case MapItemKind::Gold:
         return 2;
     case MapItemKind::Food:
@@ -191,6 +220,12 @@ int mapItemShape(MapItemKind kind, int variant) {
 }
 QList<QPair<QString, int>> mapItemVariants(MapItemKind kind) {
     QList<QPair<QString, int>> out;
+    if (kind == MapItemKind::ShadowLord || kind == MapItemKind::Shard)
+        for (auto name :
+             (kind == MapItemKind::Shard ? QStringList{"Falsehood", "Hatred", "Cowardice"}
+                                         : QStringList{"Faulinei — Falsehood", "Astaroth — Hatred",
+                                                       "Nosfentor — Cowardice"}))
+            out.append({name, out.size()});
     if (kind == MapItemKind::Moonstone)
         for (auto name :
              QStringList{"New moon", "Waxing crescent", "First quarter", "Waxing gibbous",
@@ -235,7 +270,9 @@ QList<MapItemKind> availableMapItems(const Project &p, const QString &r) {
             << MapItemKind::Gem << MapItemKind::Key << MapItemKind::SkeletonKey
             << MapItemKind::Torch << MapItemKind::Potion << MapItemKind::Scroll
             << MapItemKind::Equipment << MapItemKind::SandalwoodBox << MapItemKind::BloodSplatter
-            << MapItemKind::MoldyCorpse;
+            << MapItemKind::MoldyCorpse << MapItemKind::PirateShip << MapItemKind::Whirlpool
+            << MapItemKind::ShadowLord << MapItemKind::Shard << MapItemKind::Crown
+            << MapItemKind::Sceptre << MapItemKind::QuestAmulet;
     if ((r == "BRIT.DAT" || r == "UNDER.DAT" || p.resources.contains(npc)) &&
         p.resources.contains("INIT.GAM") && p.data("INIT.GAM").size() == 4192)
         out << MapItemKind::Moonstone;
@@ -410,6 +447,20 @@ MapItemEdit addMapItem(const Project &p, const QString &r, int index, QPoint cel
                               kind != MapItemKind::Monster && kind != MapItemKind::Sign &&
                               kind != MapItemKind::Container && kind != MapItemKind::HiddenContents;
     if (localSpecial) {
+        auto variants = mapItemVariants(kind);
+        if (!variants.isEmpty() && appearance >= 0)
+            require(std::any_of(variants.begin(), variants.end(),
+                                [=](auto v) { return v.second == appearance; }),
+                    "Choose a supported item type");
+        if (kind == MapItemKind::ShadowLord) {
+            const auto bytes = p.data(r.left(r.size() - 4) + ".NPC");
+            for (unsigned i = 1; i < NPCS_Count(bytes.constData(), bytes.size(), page.settlement);
+                 i++)
+                require(U5::byte(bytes, NPCS_ShapeOffset(bytes.constData(), bytes.size(),
+                                                         page.settlement, i)) != 252,
+                        "A location can have one Shadow Lord; select the existing one to change "
+                        "its identity.");
+        }
         const QString npc = r.left(r.size() - 4) + ".NPC";
         auto b = p.data(npc);
         out.slot = NPCS_Count(b.constData(), b.size(), page.settlement);
@@ -422,20 +473,22 @@ MapItemEdit addMapItem(const Project &p, const QString &r, int index, QPoint cel
             b[base + 6 + j] = char(cell.y());
             b[base + 9 + j] = char(page.floor);
         }
-        int value = kind == MapItemKind::Frigate         ? 99
+        int value = kind == MapItemKind::PirateShip      ? 100
+                    : kind == MapItemKind::Frigate       ? 99
                     : kind == MapItemKind::SkeletonKey   ? 129
                     : kind == MapItemKind::BloodSplatter ? 255
                     : kind == MapItemKind::Equipment     ? (appearance < 0 ? 16 : appearance)
                     : kind == MapItemKind::Trigger       ? 5
                     : kind == MapItemKind::Potion || kind == MapItemKind::Scroll ||
-                            kind == MapItemKind::Moonstone
+                            kind == MapItemKind::Moonstone || kind == MapItemKind::Shard
                         ? qMax(0, appearance)
                     : kind == MapItemKind::Gold || kind == MapItemKind::Food ||
                             kind == MapItemKind::Gem || kind == MapItemKind::Key ||
                             kind == MapItemKind::Torch
                         ? 1
                         : 0;
-        b[base + 15] = char(kind == MapItemKind::Frigate         ? 1
+        b[base + 15] = char(kind == MapItemKind::ShadowLord      ? qMax(0, appearance)
+                            : kind == MapItemKind::Frigate       ? 1
                             : kind == MapItemKind::BloodSplatter ? 0xb1
                                                                  : 0);
         b[NPCS_ShapeOffset(b.constData(), b.size(), page.settlement, out.slot)] =
@@ -620,17 +673,21 @@ MapItemEdit addMapItem(const Project &p, const QString &r, int index, QPoint cel
         record[3] = char(cell.y());
         record[4] = char(world ? 255 : 0);
         record[5] =
-            char(kind == MapItemKind::Frigate       ? 99
+            char(kind == MapItemKind::PirateShip    ? 100
+                 : kind == MapItemKind::Frigate     ? 99
                  : kind == MapItemKind::SkeletonKey ? 129
                  : kind == MapItemKind::Equipment   ? (appearance < 0 ? 16 : appearance)
-                 : kind == MapItemKind::Potion || kind == MapItemKind::Scroll ? qMax(0, appearance)
+                 : kind == MapItemKind::Potion || kind == MapItemKind::Scroll ||
+                         kind == MapItemKind::Shard
+                     ? qMax(0, appearance)
                  : shape == 2 || shape == 15 || shape == 7 || shape == 8 || shape == 13 ? 1
                                                                                         : 0);
         if (kind == MapItemKind::BloodSplatter)
             record[5] = char(255);
-        record[7] = char(kind == MapItemKind::BloodSplatter ? 0xb1
-                         : kind == MapItemKind::Frigate     ? 1
-                                                            : 255);
+        record[7] = char(kind == MapItemKind::ShadowLord      ? qMax(0, appearance)
+                         : kind == MapItemKind::BloodSplatter ? 0xb1
+                         : kind == MapItemKind::Frigate       ? 1
+                                                              : 255);
         out.changes[WorldObjects::resource(world)] =
             WorldObjects::change(p, world, out.slot, record);
         out.mode = "Starting Objects";

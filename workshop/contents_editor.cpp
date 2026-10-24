@@ -295,7 +295,7 @@ void ContentsEditor::refresh() {
     for (int i = 0; i < entries.size(); i++) {
         const auto &d = entries[i];
         canvas->contentsMarkers.append({d.x, d.y, -1, -1, {}});
-        canvas->actors.append({d.x, d.y, -1, i, d.action ? "□" : "·"});
+        canvas->actors.append({d.x, d.y, d.action ? 257 : -1, i, d.action ? QString() : "·"});
         locations->addItem(
             QString("%1 · %2, %3").arg(d.action ? "Chest" : "Discovery").arg(d.x).arg(d.y));
     }

@@ -10,6 +10,7 @@
 #include <string.h>
 #include "npc.h"
 #include "town.h"
+#include "mainout.h"
 #include "mod/package.h"
 #include <stdlib.h>
 
@@ -20,6 +21,15 @@ static int NPC_0b9e(int param_1, int param_2, int param_3, int param_4);
 
 int NPC_ObjectKind(unsigned slot) {
     return slot < (unsigned)LOCATION_NPC_COUNT ? NPCS_ObjectKind(&D_5d5e[slot], D_659e[slot]) : -1;
+}
+int NPC_PlacedShadowLord(void) {
+    for (int slot = 1; slot < LOCATION_NPC_COUNT; slot++)
+        if (NPC_ObjectKind(slot) == NPCS_OBJECT_SHADOWLORD && D_5d5e[slot].z[0] == D_5895_map_level)
+            return D_5d5e[slot].time[3];
+    return -1;
+}
+static int NPC_Behavior(int slot, int schedule) {
+    return NPC_ObjectKind(slot) == NPCS_OBJECT_SHADOWLORD ? 6 : D_5d5e[slot].type[schedule];
 }
 int NPC_ConsumeObject(unsigned actor) {
     if (!MAPS_Town(D_5893_map_id) || actor == 0 || actor >= (unsigned)MAP_ACTOR_COUNT)
@@ -627,7 +637,7 @@ static void NPC_06e4(int param_1, int param_2)
 
     local_18 = &D_5c5a[0];
     local_8 = &D_5f5e[param_1];
-    local_4 = D_5d5e[param_1].type[param_2];
+    local_4 = NPC_Behavior(param_1, param_2);
     local_6 = NPC_06a0(D_5c5a[0]._2_x, D_5c5a[0]._3_y, local_8->_2_x, local_8->_4_y);
     if (local_6 == 1 && local_4 > 3)
     {
@@ -764,6 +774,8 @@ static int NPC_0938(int param_1, int param_2)
     int local_6;
     NpcScheduleFmt* local_4;
 
+    if (NPC_ObjectKind(param_1) == NPCS_OBJECT_SHADOWLORD)
+        return 0;
     local_a = -1;
     local_8 = &D_5f5e[param_1];
     local_4 = &D_5d5e[param_1];
@@ -1025,8 +1037,7 @@ static void NPC_0d00(int param_1, int param_2)
     local_4 = &D_5f5e[param_1];
     local_6 = &D_5d5e[param_1];
 
-    switch (local_6->type[param_2])
-    {
+    switch (NPC_Behavior(param_1, param_2)) {
     case 0:
         break;
 
@@ -1083,7 +1094,22 @@ void NPC_0db4(int param_1)
     // 0dd9
     for (local_4 = 1; /*1267*/ local_4 < LOCATION_NPC_COUNT; /*1264*/ local_4++) {
         // 126d
-        if (D_659e[local_4] == 0 || NPC_ObjectKind(local_4) >= 0)
+        int kind = NPC_ObjectKind(local_4);
+        if (kind == NPCS_OBJECT_PIRATE || kind == NPCS_OBJECT_WHIRLPOOL) {
+            unsigned actor = D_5f5e[local_4]._c;
+            if (actor && D_5c5a[actor]._0_tile && D_5c5a[actor]._4_z == D_5895_map_level) {
+                MAINOUT_UpdateLocationHazard(actor);
+                if (!D_5893_map_id)
+                    return;
+                if (D_659e[local_4] && D_5f5e[local_4]._c) {
+                    actor = D_5f5e[local_4]._c;
+                    D_5f5e[local_4]._2_x = D_5c5a[actor]._2_x;
+                    D_5f5e[local_4]._4_y = D_5c5a[actor]._3_y;
+                }
+            }
+            continue;
+        }
+        if (D_659e[local_4] == 0 || (kind >= 0 && kind != NPCS_OBJECT_SHADOWLORD))
             continue;
 
         // 1277

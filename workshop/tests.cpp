@@ -748,7 +748,7 @@ int main(int argc, char **argv) {
                  file(dir.path() + "/SIGNS.DAT", signs);
                  p.openGame(dir.path());
                  const auto original = p.data("TOWNE.NPC");
-                 int n = 0, gold = -1, trigger = -1;
+                 int n = 0, gold = -1, trigger = -1, shadow = -1, shard = -1;
                  for (auto kind : Workshop::availableMapItems(p, "TOWNE.DAT")) {
                      if (kind == Workshop::MapItemKind::Npc ||
                          kind == Workshop::MapItemKind::Monster)
@@ -757,7 +757,10 @@ int main(int argc, char **argv) {
                                    : kind == Workshop::MapItemKind::Potion    ? 7
                                    : kind == Workshop::MapItemKind::Scroll    ? 255
                                    : kind == Workshop::MapItemKind::Moonstone ? 4
-                                                                              : -1;
+                                   : kind == Workshop::MapItemKind::Shard ||
+                                           kind == Workshop::MapItemKind::ShadowLord
+                                       ? 2
+                                       : -1;
                      auto placed = Workshop::addMapItem(
                          p, "TOWNE.DAT", 0, {2 + (n % 8) * 3, 2 + (n / 8) * 3}, kind, variant);
                      ++n;
@@ -773,6 +776,10 @@ int main(int argc, char **argv) {
                                                               placed.slot));
                          check(NPCS_ObjectKind(bytes.constData() + base, shape) == int(kind),
                                "Location object lost its behavior marker");
+                         if (kind == Workshop::MapItemKind::ShadowLord)
+                             shadow = placed.slot;
+                         if (kind == Workshop::MapItemKind::Shard)
+                             shard = placed.slot;
                          if (kind == Workshop::MapItemKind::Gold)
                              gold = placed.slot;
                          if (kind == Workshop::MapItemKind::Trigger)
@@ -789,20 +796,28 @@ int main(int argc, char **argv) {
                                    "Decorative blood is still a searchable corpse");
                      }
                  }
-                 check(n >= 22 && gold >= 32 && trigger >= 32,
+                 check(n == 29 && gold >= 32 && trigger >= 32,
                        "Special types are still unavailable on locations");
                  check(p.data("TOWNE.NPC").left(4608) == original &&
                            p.data("TOWNE.TLK") == QByteArray::fromHex("0000"),
                        "Special placement changed vanilla NPCs or conversation data");
+                 rejects([&] {
+                     Workshop::addMapItem(p, "TOWNE.DAT", 0, {28, 28},
+                                          Workshop::MapItemKind::ShadowLord, 0);
+                 });
+                 rejects([&] {
+                     Workshop::addMapItem(p, "TOWNE.DAT", 0, {28, 28}, Workshop::MapItemKind::Shard,
+                                          3);
+                 });
                  auto blob = p.package();
-                 check(blob.startsWith("IMOD0018"),
+                 check(blob.startsWith("IMOD0019"),
                        "Location objects need an updated engine package");
                  Project imported = fixture(dir.path());
                  imported.importPackage(blob);
                  check(imported.data("TOWNE.NPC") == p.data("TOWNE.NPC"),
                        "Location objects failed package roundtrip");
                  auto old = blob;
-                 old[7] = '7';
+                 old[7] = '8';
                  rejects([&] {
                      Project copy = p;
                      copy.importPackage(old);
@@ -848,6 +863,21 @@ int main(int argc, char **argv) {
                  check(U5::byte(bytes, NPCS_DialogueOffset(bytes.constData(), bytes.size(), 0,
                                                            gold)) == 42,
                        "Object quantity editor did not persist");
+                 list->setCurrentIndex(shadow);
+                 auto identity = active->findChild<QComboBox *>("locationObjectVariant");
+                 check(identity->isVisible() && identity->currentData().toInt() == 2,
+                       "Shadow Lord identity inspector missing");
+                 identity->setCurrentIndex(identity->findData(1));
+                 QMetaObject::invokeMethod(identity, "activated", Qt::DirectConnection,
+                                           Q_ARG(int, identity->currentIndex()));
+                 auto changed = window.projectForTests().data("TOWNE.NPC");
+                 check(U5::byte(changed,
+                                NPCS_Offset(changed.constData(), changed.size(), 0, shadow) + 15) ==
+                           1,
+                       "Shadow identity was not persisted");
+                 list->setCurrentIndex(shard);
+                 check(identity->isVisible() && identity->currentData().toInt() == 2,
+                       "Shard identity inspector missing");
                  list->setCurrentIndex(trigger);
                  check(active->findChild<QComboBox *>("locationObjectVariant")->isVisible(),
                        "Location trigger replacement editor missing");
@@ -3671,11 +3701,15 @@ int main(int argc, char **argv) {
                       U5::byte(placedMoon.changes["INIT.GAM"], 0x296) == 7 &&
                       U5::byte(placedMoon.changes["INIT.GAM"], 0x2a6) == 255,
                   "Add Moonstone did not use the buried stone's initial position");
-            for (auto kind : {Workshop::MapItemKind::Potion, Workshop::MapItemKind::Scroll,
-                              Workshop::MapItemKind::Equipment, Workshop::MapItemKind::Gem,
-                              Workshop::MapItemKind::Key, Workshop::MapItemKind::SkeletonKey,
-                              Workshop::MapItemKind::Torch, Workshop::MapItemKind::SandalwoodBox,
-                              Workshop::MapItemKind::BloodSplatter}) {
+            for (auto kind :
+                 {Workshop::MapItemKind::Potion, Workshop::MapItemKind::Scroll,
+                  Workshop::MapItemKind::Equipment, Workshop::MapItemKind::Gem,
+                  Workshop::MapItemKind::Key, Workshop::MapItemKind::SkeletonKey,
+                  Workshop::MapItemKind::Torch, Workshop::MapItemKind::SandalwoodBox,
+                  Workshop::MapItemKind::BloodSplatter, Workshop::MapItemKind::PirateShip,
+                  Workshop::MapItemKind::Whirlpool, Workshop::MapItemKind::ShadowLord,
+                  Workshop::MapItemKind::Shard, Workshop::MapItemKind::Crown,
+                  Workshop::MapItemKind::Sceptre, Workshop::MapItemKind::QuestAmulet}) {
                 auto item = Workshop::addMapItem(p, "UNDER.DAT", 0, {6, 7}, kind);
                 check(U5::byte(item.changes["UNDER.OOL"], 8) == Workshop::mapItemShape(kind) &&
                           !item.changes.contains("UNDER.DAT"),
@@ -3689,7 +3723,8 @@ int main(int argc, char **argv) {
                                      48);
             });
             for (auto kind : {Workshop::MapItemKind::Potion, Workshop::MapItemKind::Equipment,
-                              Workshop::MapItemKind::Scroll, Workshop::MapItemKind::SkeletonKey}) {
+                              Workshop::MapItemKind::Scroll, Workshop::MapItemKind::SkeletonKey,
+                              Workshop::MapItemKind::Shard, Workshop::MapItemKind::ShadowLord}) {
                 auto item = Workshop::addMapItem(p, "UNDER.DAT", 0, {6, 7}, kind);
                 Project edited = p;
                 edited.resources["UNDER.OOL"].edited = item.changes["UNDER.OOL"];
@@ -3715,9 +3750,14 @@ int main(int argc, char **argv) {
                     auto variant = panel->findChild<QComboBox *>("worldItemVariant");
                     int id = kind == Workshop::MapItemKind::Potion   ? 7
                              : kind == Workshop::MapItemKind::Scroll ? 255
-                                                                     : 45;
+                             : kind == Workshop::MapItemKind::Shard ||
+                                     kind == Workshop::MapItemKind::ShadowLord
+                                 ? 2
+                                 : 45;
                     variant->setCurrentIndex(variant->findData(id));
-                    check(U5::byte(edited.data("UNDER.OOL"), 13) == unsigned(id),
+                    check(U5::byte(edited.data("UNDER.OOL"),
+                                   kind == Workshop::MapItemKind::ShadowLord ? 15 : 13) ==
+                              unsigned(id),
                           "Native item subtype edit failed");
                     if (kind == Workshop::MapItemKind::Equipment)
                         check(U5::byte(edited.data("UNDER.OOL"), 8) == 12,
@@ -3842,6 +3882,11 @@ int main(int argc, char **argv) {
             check(defs.size() == 1 && defs[0].x == 2 && defs[0].y == 3 &&
                       root->findChild<QComboBox *>("contentsMode"),
                   "Add did not select container inspector");
+            check(std::any_of(map->actors.begin(), map->actors.end(),
+                              [](const auto &a) {
+                                  return a.x == 2 && a.y == 3 && a.tile == 257 && a.label.isEmpty();
+                              }),
+                  "Placed chest has no visible chest artwork in its inspector");
             map->cancelStroke();
             for (auto action : w.findChildren<QAction *>())
                 if (action->shortcut() == QKeySequence::Undo) {

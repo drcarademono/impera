@@ -4,6 +4,7 @@
 void NPC_LoadExtra(const char *, unsigned town);
 void NPC_ResetExtra(void);
 int NPC_ObjectKind(unsigned slot);
+int NPC_PlacedShadowLord(void);
 int NPC_ConsumeObject(unsigned actor);
 int NPC_BloodAt(int x, int y, int floor);
 void NPC_ApplyObjectTriggers(int x, int y, int floor);

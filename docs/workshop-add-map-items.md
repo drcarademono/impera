@@ -51,3 +51,30 @@ uses destination 0 as its source and destinations 1 and 2 as its targets.
 Decorative blood is shape 31, property 5 = 255, property 7 = 0xb1. Untagged shape
 31 retains native corpse behavior. Ordinary unmarked location records preserve
 all existing schedule and conversation semantics.
+
+## Pirate ships, whirlpools and quest actors
+
+Special also offers Pirate ship, Whirlpool, Shadow Lord, Shard, Lord British’s
+crown, Lord British’s sceptre and Lord British’s amulet. Pirate ships start with
+the native 100 hull condition; frigates start with 99. Pirates and whirlpools use
+the native movement, cannon/attack and whirlpool rules, including when placed in
+a location. Winning a pirate encounter can leave a captured frigate with the
+native hull and two skiffs aboard.
+
+Choose the identity when placing a Shadow Lord or shard; Select/Move allows that
+choice to be edited later. Shard pickup grants the corresponding native quest
+item, as do the crown, sceptre and amulet. The engine's location-wide Shadow Lord
+influence has one identity, so Workshop permits one placed Shadow Lord per
+location. Its chosen identity applies on its floor, including the native NPC and
+shop/dialogue effects. World Shadow Lords use the native world encounter rules.
+
+These new location placements require package version 19. Stable placement IDs
+24–30 extend the existing authored-object encoding. A Shadow Lord uses property
+7 for its identity (0 Falsehood, 1 Hatred, 2 Cowardice); a shard uses property 5.
+World objects retain their native eight-byte records. Existing reserved
+Underworld quest slots are not overwritten.
+
+Placed chests are drawn with chest artwork in the contents inspector as well as
+in the other map modes. They remain object overlays rather than painted terrain,
+so moving or removing a chest preserves the floor underneath. Empty unopened
+chests remain visible in-game until opened.

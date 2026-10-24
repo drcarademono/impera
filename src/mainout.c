@@ -22,6 +22,8 @@
 #include "cast2.h"
 #include "comsubs.h"
 #include "mainout.h"
+#include "npc.h"
+#include "town.h"
 #include "outsubs.h"
 
 static void MAINOUT_109e(void);
@@ -1391,6 +1393,9 @@ static void MAINOUT_1248(int param_1)
         }
         else
         {
+            int location = MAPS_Town(D_5893_map_id);
+            if (location)
+                NPC_ConsumeObject(param_1);
             D_5c5a[param_1]._0_tile = D_5c5a[param_1]._1_animTile = 0;
             ULTIMA_1850_PrintString(_TEXT(0x6b04, "\nWHIRLPOOL!\n"));
 
@@ -1406,6 +1411,10 @@ static void MAINOUT_1248(int param_1)
             AUDIO_StopBgm();
 #endif
 
+            if (location) {
+                D_5893_map_id = 0;
+                D_594f = 0;
+            }
             D_5895_map_level = 0xff;
             D_5896_map_x = 0x22;
             D_5897_map_y = 0x12;
@@ -1429,7 +1438,10 @@ static void MAINOUT_1248(int param_1)
         }
         else
         {
-            ULTIMA_6150_Combat(param_1);
+            if (MAPS_Town(D_5893_map_id))
+                TOWN_AttackPlacedObject(param_1);
+            else
+                ULTIMA_6150_Combat(param_1);
         }
     }
     else
@@ -1499,6 +1511,9 @@ static int MAINOUT_131a(int param_1)
 
 static int MAINOUT_1482(int param_1, int param_2, int param_3)
 {
+    if (MAPS_Town(D_5893_map_id) &&
+        (param_2 < 0 || param_3 < 0 || param_2 >= MAP_WIDTH || param_3 >= MAP_HEIGHT))
+        return 0;
     unsigned width, height;
     ACTORS_Size(param_1, &width, &height);
     if (width > 1 || height > 1)
@@ -1859,6 +1874,17 @@ static void MAINOUT_198c(int param_1)
     }
 
     MAINOUT_17d4(param_1, 1);
+}
+
+void MAINOUT_UpdateLocationHazard(unsigned actor) {
+    if (!MAPS_Town(D_5893_map_id) || !actor || actor >= (unsigned)MAP_ACTOR_COUNT ||
+        D_5c5a[actor]._4_z != D_5895_map_level)
+        return;
+    unsigned shape = D_5c5a[actor]._0_tile & 0xfc;
+    if (shape != TILE_ACTOR_PIRATE && shape != TILE_ACTOR_WHIRLPOOL)
+        return;
+    if (!MAINOUT_131a(actor))
+        MAINOUT_198c(actor);
 }
 
 int MAINOUT_1a60(void)

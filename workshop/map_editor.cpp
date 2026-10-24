@@ -4234,36 +4234,50 @@ void MapWorkspace::refreshObjectProperties(int npc) {
     npcGhosts->hide();
     npcConversation->hide();
     findChild<QPushButton *>("mapNpcAdvanced")->hide();
-    const bool quantity = shape == 2 || shape == 15 || shape == 7 || shape == 8 || shape == 13 ||
-                          shape == 25 || (shape & 0xf8) == 0x20;
+    const bool ship = (shape & 0xf8) == 0x20 || (shape & 0xfc) == 0x2c;
+    const bool quantity =
+        shape == 2 || shape == 15 || shape == 7 || shape == 8 || shape == 13 || shape == 25 || ship;
     objectForm->setRowVisible(objectValue, quantity);
     qobject_cast<QLabel *>(objectForm->labelForField(objectValue))
-        ->setText(shape == 25              ? "Moon phase"
-                  : (shape & 0xf8) == 0x20 ? "Hull condition"
-                                           : "Quantity");
-    objectValue->setRange(shape == 25 || (shape & 0xf8) == 0x20 ? 0 : 1, shape == 25  ? 7
-                                                                         : shape == 7 ? 127
-                                                                         : (shape & 0xf8) == 0x20
-                                                                             ? 100
-                                                                             : 255);
+        ->setText(shape == 25 ? "Moon phase"
+                  : ship      ? "Hull condition"
+                              : "Quantity");
+    objectValue->setRange(shape == 25 || ship ? 0 : 1, shape == 25  ? 7
+                                                       : shape == 7 ? 127
+                                                       : ship       ? 100
+                                                                    : 255);
     objectValue->setValue(shape == 7 ? value & 127 : value);
     objectForm->setRowVisible(objectAux, (shape & 0xf8) == 0x20);
     objectAux->setValue(U5::byte(b, base + 15));
     objectForm->setRowVisible(objectSkeleton, shape == 7);
     objectSkeleton->setChecked(value & 128);
     const bool equipment = shape == 5 || shape == 6 || (shape >= 9 && shape <= 12);
-    const bool typed = equipment || shape == 3 || shape == 4 || kind == NPCS_OBJECT_TRIGGER;
+    const bool typed = equipment || shape == 3 || shape == 4 || shape == 180 || shape == 252 ||
+                       kind == NPCS_OBJECT_TRIGGER;
     objectForm->setRowVisible(objectVariant, typed);
+    qobject_cast<QLabel *>(objectForm->labelForField(objectVariant))
+        ->setText(shape == 252   ? "Identity"
+                  : shape == 180 ? "Shard"
+                                 : "Type");
     objectVariant->clear();
     if (kind == NPCS_OBJECT_TRIGGER)
         for (int tile = 0; tile < 256; tile++)
             objectVariant->addItem(MapDocument::tileName(tile), tile);
     else
-        for (auto v : Workshop::mapItemVariants(equipment    ? Workshop::MapItemKind::Equipment
-                                                : shape == 3 ? Workshop::MapItemKind::Potion
-                                                             : Workshop::MapItemKind::Scroll))
+        for (auto v : Workshop::mapItemVariants(shape == 180   ? Workshop::MapItemKind::Shard
+                                                : shape == 252 ? Workshop::MapItemKind::ShadowLord
+                                                : equipment    ? Workshop::MapItemKind::Equipment
+                                                : shape == 3   ? Workshop::MapItemKind::Potion
+                                                               : Workshop::MapItemKind::Scroll))
             objectVariant->addItem(v.first, v.second);
-    objectVariant->setCurrentIndex(objectVariant->findData(value));
+    objectVariant->setCurrentIndex(
+        objectVariant->findData(shape == 252 ? U5::byte(b, base + 15) : value));
+    objectVariant->setToolTip(
+        shape == 252 ? "The Shadow Lord’s identity controls this floor’s native influence. One "
+                       "Shadow Lord may be placed per location."
+        : shape == 180 ? "Choose the Shard of Falsehood, Hatred or Cowardice. Picking it up grants "
+                         "that quest item."
+                       : "Choose the item variant or replacement terrain tile.");
     for (int j = 0; j < 2; j++) {
         objectForm->setRowVisible(4 + j, kind == NPCS_OBJECT_TRIGGER);
         objectTriggerX[j]->setRange(0, mp.side - 1);
@@ -4293,7 +4307,10 @@ void MapWorkspace::editObjectProperties() {
                                                : Workshop::MapItemKind::Key);
     }
     if (!objectVariant->isHidden() && objectVariant->currentIndex() >= 0) {
-        value = objectVariant->currentData().toInt();
+        if (shape == 252)
+            b[base + 15] = char(objectVariant->currentData().toInt());
+        else
+            value = objectVariant->currentData().toInt();
         if (kind == int(Workshop::MapItemKind::Equipment))
             b[npcs.shapeOffset(mp.settlement, npc)] =
                 char(Workshop::mapItemShape(Workshop::MapItemKind::Equipment, value));

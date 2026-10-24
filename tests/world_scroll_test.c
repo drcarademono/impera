@@ -18,7 +18,9 @@
 #include <stdlib.h>
 byte *ULTIMA_4402_BaseAddr(int, int);
 
+static int directionSelections;
 int __wrap_ULTIMA_35ec_SelectDirection(void) {
+    directionSelections++;
     D_5876 = 1;
     D_5878 = 0;
     return 1;
@@ -209,7 +211,7 @@ static void spawnObject(unsigned slot, unsigned kind, unsigned shape, unsigned v
 }
 static void testLocationObjects(void) {
     NPC_ResetExtra();
-    D_imperaNpcCount = 40;
+    D_imperaNpcCount = 48;
     D_5893_map_id = 42;
     D_5895_map_level = 0;
     D_5896_map_x = 20;
@@ -239,6 +241,51 @@ static void testLocationObjects(void) {
     spawnObject(36, 13, 25, 4, 0);
     SJOG_18ce_GetCmd();
     assert(D_5840[4] == 255);
+    for (int identity = 0; identity < 3; identity++) {
+        D_57b6[identity] = 0;
+        spawnObject(40 + identity, 27, 180, identity, 0);
+        SJOG_18ce_GetCmd();
+        assert(D_57b6[identity] == 255 && !D_659e[40 + identity]);
+    }
+    D_57b4 = D_57b5 = D_57b3 = 0;
+    spawnObject(43, 28, 181, 0, 0);
+    SJOG_18ce_GetCmd();
+    assert(D_57b4 == 255 && !D_659e[43]);
+    spawnObject(44, 29, 182, 0, 0);
+    SJOG_18ce_GetCmd();
+    assert(D_57b5 == 255 && !D_659e[44]);
+    spawnObject(45, 30, 183, 0, 0);
+    SJOG_18ce_GetCmd();
+    assert(D_57b3 == 255 && !D_659e[45]);
+    // Authored Shadow Lords use native hostile NPC behavior and retain their identity.
+    spawnObject(46, 26, 252, 0, 2);
+    assert(NPC_PlacedShadowLord() == 2);
+    D_5c5a[0]._2_x = 20;
+    D_5c5a[0]._3_y = 19;
+    NPC_0db4(8);
+    assert(D_65be == 0x61 && D_65bf == 46 && NPC_ObjectKind(46) == 26);
+    D_5c5a[46]._0_tile = D_659e[46] = 0;
+    // A whirlpool uses the native alternate-turn delay; off-floor objects stay inactive.
+    spawnObject(47, 25, 236, 1, 0);
+    D_5c5a[47]._2_x = D_5c5a[47]._3_y = 4;
+    D_5c5a[47]._4_z = 1;
+    NPC_0db4(8);
+    assert(D_5c5a[47]._5 == 1);
+    D_5c5a[47]._4_z = 0;
+    NPC_0db4(8);
+    assert(D_5c5a[47]._5 == 0);
+    D_5c5a[47]._0_tile = D_659e[47] = 0;
+    spawnObject(47, 24, 44, 100, 0);
+    D_5894 = 42;
+    D_5893_map_id = 255;
+    D_58a1 = 0;
+    D_58a0 = 0;
+    D_58a3 = 1;
+    SJOG_203e(47);
+    assert(D_5893_map_id == 42 && D_5c5a[47]._0_tile == 36 && D_5c5a[47]._5 == 99 &&
+           D_5c5a[47]._7 == 2);
+    D_5c5a[47]._0_tile = D_659e[47] = 0;
+
     spawnObject(37, 22, 31, 255, 0xb1);
     assert(NPC_BloodAt(21, 19, 0));
     D_5c5a[37]._2_x = D_5c5a[37]._3_y = 0;
@@ -292,6 +339,26 @@ static void testLocationObjects(void) {
     assert(D_659e[32] == 0);
     remove("LOC042.NPC");
     NPC_ResetExtra();
+    D_5893_map_id = 0;
+    D_587c_partyTile = TILE_ACTOR_AVATAR;
+    D_5896_map_x = 20;
+    D_5897_map_y = 19;
+    D_57b4 = 0;
+    ULTIMA_3a74(181, 181, 21, 19, 0, 0, 1);
+    SJOG_18ce_GetCmd();
+    assert(D_57b4 == 255 && !D_5c5a[1]._0_tile);
+    // Ships in location water retain the same Attack restriction as world ships.
+    D_5893_map_id = 42;
+    D_imperaNpcCount = 32;
+    memset(D_5c5a, 0, sizeof(D_5c5a));
+    memset(D_6608, 1, 1024);
+    directionSelections = 0;
+    D_587c_partyTile = 36;
+    TOWN_09e6_AttackCmd();
+    assert(directionSelections == 1);
+    D_587c_partyTile = 40;
+    TOWN_09e6_AttackCmd();
+    assert(directionSelections == 1);
     D_5893_map_id = 0;
 }
 

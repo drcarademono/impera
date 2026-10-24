@@ -48,6 +48,20 @@ static int validObject(const unsigned char *s, unsigned shape, unsigned value) {
         return NPCS_Blood(shape, value, s[15]);
     case 23:
         return shape == 31 && !value;
+    case 24:
+        return shape >= 44 && shape <= 47 && value <= 100;
+    case 25:
+        return shape == 236 && value <= 1;
+    case 26:
+        return shape == 252 && !value && s[15] < 3;
+    case 27:
+        return shape == 180 && value < 3;
+    case 28:
+        return shape == 181 && !value;
+    case 29:
+        return shape == 182 && !value;
+    case 30:
+        return shape == 183 && !value;
     }
     return 0;
 }

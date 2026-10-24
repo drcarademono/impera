@@ -30,7 +30,7 @@ All integers are unsigned little-endian 32-bit values; there is no padding.
 
 | Header | Encoding |
 | --- | --- |
-| Magic/version | Eight ASCII bytes `IMOD0001` through `IMOD0018` |
+| Magic/version | Eight ASCII bytes `IMOD0001` through `IMOD0019` |
 | Title length | 1–256 UTF-8 bytes |
 | Resource count | 1–512 |
 | Title | Length bytes; embedded NUL forbidden |
@@ -493,3 +493,19 @@ Select / Move and the Positions pane edit arrivals and entrances, switch their w
 Moving an entrance restores the terrain underneath its old marker. Creation,
 terrain, NPC/dialogue companions, project persistence and package import/export
 participate in the same history.
+
+
+## Location special actors and quest objects (version 19)
+
+`IMOD0019` preserves all version 18 schemas and adds authored location object
+kinds 24–30 to `.NPC` extension records: pirate ship, whirlpool, Shadow Lord,
+shard, crown, sceptre and Lord British’s amulet. As with the earlier placed
+objects, all three behavior bytes are `0x80 | kind`. Shape and property values
+are validated together. Static pickups and bodies do not run NPC AI; pirates and
+whirlpools use the native world actor routines on their location floor, while a
+Shadow Lord uses native hostile NPC behavior. Shadow Lord identity is property
+7 (schedule byte 15), and shard identity is property 5 (the conversation byte).
+Both identities range from 0 to 2. A location has at most one authored Shadow
+Lord to match the engine's single active location-wide influence. Consumed-state
+flags and save records reuse the existing extended NPC state. Earlier package
+versions reject these new location kinds rather than treating them as dialogue.
