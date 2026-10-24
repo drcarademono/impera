@@ -87,16 +87,16 @@ QString mapItemName(MapItemKind k) {
         return "Equipment";
     case MapItemKind::SandalwoodBox:
         return "Sandalwood box";
-    case MapItemKind::Corpse:
-        return "Corpse";
+    case MapItemKind::BloodSplatter:
+        return "Blood splatter";
     case MapItemKind::Gold:
         return "Gold";
     case MapItemKind::Food:
         return "Food";
     case MapItemKind::Moonstone:
         return "Moonstone";
-    case MapItemKind::SleepingFigure:
-        return "Sleeping figure";
+    case MapItemKind::Corpse:
+        return "Corpse";
     case MapItemKind::Npc:
         return "NPC";
     case MapItemKind::Monster:
@@ -149,9 +149,9 @@ int mapItemShape(MapItemKind kind, int variant) {
                               : 12;
     case MapItemKind::SandalwoodBox:
         return 14;
-    case MapItemKind::Corpse:
+    case MapItemKind::BloodSplatter:
         return 31;
-    case MapItemKind::SleepingFigure:
+    case MapItemKind::Corpse:
         return 30;
     case MapItemKind::Horse:
         return 16;
@@ -207,11 +207,10 @@ QList<MapItemKind> availableMapItems(const Project &p, const QString &r) {
     out << MapItemKind::Container << MapItemKind::HiddenContents;
     if (worldObjectsAvailable)
         out << MapItemKind::Horse << MapItemKind::Skiff << MapItemKind::Frigate
-            << MapItemKind::Carpet << MapItemKind::Gold << MapItemKind::Food
-            << MapItemKind::SleepingFigure << MapItemKind::Gem << MapItemKind::Key
-            << MapItemKind::SkeletonKey << MapItemKind::Torch << MapItemKind::Potion
-            << MapItemKind::Scroll << MapItemKind::Equipment << MapItemKind::SandalwoodBox
-            << MapItemKind::Corpse;
+            << MapItemKind::Carpet << MapItemKind::Gold << MapItemKind::Food << MapItemKind::Corpse
+            << MapItemKind::Gem << MapItemKind::Key << MapItemKind::SkeletonKey
+            << MapItemKind::Torch << MapItemKind::Potion << MapItemKind::Scroll
+            << MapItemKind::Equipment << MapItemKind::SandalwoodBox << MapItemKind::BloodSplatter;
     if ((r == "BRIT.DAT" || r == "UNDER.DAT") && p.resources.contains("INIT.GAM") &&
         p.data("INIT.GAM").size() == 4192)
         out << MapItemKind::Moonstone;

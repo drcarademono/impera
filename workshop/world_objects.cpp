@@ -98,7 +98,7 @@ static QString objectName(int shape) {
     if (shape == 14)
         return "Sandalwood box";
     if (shape == 31)
-        return "Corpse";
+        return "Blood splatter";
     if (shape == TILE_ACTOR_CHEST)
         return "Chest";
     if (shape == TILE_ACTOR_GOLD)
@@ -112,7 +112,7 @@ static QString objectName(int shape) {
     if (shape == TILE_ACTOR_CARPET)
         return "Magic carpet";
     if (shape == TILE_ACTOR_SLEEP)
-        return "Sleeping figure";
+        return "Corpse";
     if ((shape & 0xf8) == TILE_ACTOR_FRIGATE_20)
         return "Frigate";
     if (shape >= TILE_ACTOR_SKIFF && shape <= TILE_ACTOR_SKIFF + 3)

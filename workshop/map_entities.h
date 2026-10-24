@@ -13,7 +13,7 @@ enum class MapItemKind {
     Frigate,
     Carpet,
     Trigger,
-    SleepingFigure,
+    Corpse,
     Gold,
     Food,
     Moonstone,
@@ -25,7 +25,7 @@ enum class MapItemKind {
     Scroll,
     Equipment,
     SandalwoodBox,
-    Corpse
+    BloodSplatter
 };
 struct MapItemEdit {
     QMap<QString, QByteArray> changes;

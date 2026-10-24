@@ -1737,6 +1737,20 @@ MapWorkspace::MapWorkspace(
                                                            : 256 + Workshop::mapItemShape(kind);
         auto image =
             canvas->tiles.value(art).scaled(32, 32, Qt::KeepAspectRatio, Qt::FastTransformation);
+        if (kind == Workshop::MapItemKind::HiddenContents) {
+            image = QImage(32, 32, QImage::Format_ARGB32);
+            image.fill(Qt::transparent);
+            QPainter painter(&image);
+            painter.setPen(QPen(QColor("#72caff"), 2));
+            painter.setBrush(QColor("#365f8d"));
+            painter.drawRect(2, 4, 28, 24);
+            QFont font = painter.font();
+            font.setPixelSize(20);
+            font.setBold(true);
+            painter.setFont(font);
+            painter.setPen(Qt::white);
+            painter.drawText(image.rect(), Qt::AlignCenter, "C");
+        }
         if (kind == Workshop::MapItemKind::Trigger) {
             image = image.convertToFormat(QImage::Format_ARGB32);
             QPainter painter(&image);
@@ -3980,18 +3994,18 @@ void MapWorkspace::beginAdd(int value, int selectedAppearance, QPoint cell) {
             if (name.isEmpty())
                 name = "New NPC";
         }
-        int tile = kind == Workshop::MapItemKind::Gold             ? 258
-                   : kind == Workshop::MapItemKind::Food           ? 271
-                   : kind == Workshop::MapItemKind::Moonstone      ? 281
-                   : kind == Workshop::MapItemKind::SleepingFigure ? 286
-                   : kind == Workshop::MapItemKind::Sign           ? 0xf8
-                   : kind == Workshop::MapItemKind::Container      ? 257
-                   : kind == Workshop::MapItemKind::Horse          ? 272
-                   : kind == Workshop::MapItemKind::Skiff          ? 296
-                   : kind == Workshop::MapItemKind::Frigate        ? 288
-                   : kind == Workshop::MapItemKind::Carpet         ? 283
-                   : appearance >= 0                               ? 256 + appearance
-                                                                   : -1;
+        int tile = kind == Workshop::MapItemKind::Gold        ? 258
+                   : kind == Workshop::MapItemKind::Food      ? 271
+                   : kind == Workshop::MapItemKind::Moonstone ? 281
+                   : kind == Workshop::MapItemKind::Corpse    ? 286
+                   : kind == Workshop::MapItemKind::Sign      ? 0xf8
+                   : kind == Workshop::MapItemKind::Container ? 257
+                   : kind == Workshop::MapItemKind::Horse     ? 272
+                   : kind == Workshop::MapItemKind::Skiff     ? 296
+                   : kind == Workshop::MapItemKind::Frigate   ? 288
+                   : kind == Workshop::MapItemKind::Carpet    ? 283
+                   : appearance >= 0                          ? 256 + appearance
+                                                              : -1;
         if (kind != Workshop::MapItemKind::Sign && kind != Workshop::MapItemKind::Container &&
             kind != Workshop::MapItemKind::HiddenContents && kind != Workshop::MapItemKind::Trigger)
             tile = 256 + Workshop::mapItemShape(kind, appearance);

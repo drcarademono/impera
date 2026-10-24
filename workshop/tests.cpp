@@ -710,6 +710,12 @@ int main(int argc, char **argv) {
                      if (kind != Workshop::MapItemKind::Npc &&
                          kind != Workshop::MapItemKind::Monster)
                          check(seen.contains(int(kind)), "Special omitted a former Add entry");
+                 check(Workshop::mapItemName(Workshop::MapItemKind::Corpse) == "Corpse" &&
+                           Workshop::mapItemShape(Workshop::MapItemKind::Corpse) == 30 &&
+                           Workshop::mapItemName(Workshop::MapItemKind::BloodSplatter) ==
+                               "Blood splatter" &&
+                           Workshop::mapItemShape(Workshop::MapItemKind::BloodSplatter) == 31,
+                       "Corpse and blood splatter labels do not match their sprites");
                  check(goldRow >= 0, "Special Gold missing");
                  palette->setCurrentRow(goldRow);
                  canvas->keyboardCell = {220, 120};
@@ -3552,7 +3558,7 @@ int main(int argc, char **argv) {
                               Workshop::MapItemKind::Equipment, Workshop::MapItemKind::Gem,
                               Workshop::MapItemKind::Key, Workshop::MapItemKind::SkeletonKey,
                               Workshop::MapItemKind::Torch, Workshop::MapItemKind::SandalwoodBox,
-                              Workshop::MapItemKind::Corpse}) {
+                              Workshop::MapItemKind::BloodSplatter}) {
                 auto item = Workshop::addMapItem(p, "UNDER.DAT", 0, {6, 7}, kind);
                 check(U5::byte(item.changes["UNDER.OOL"], 8) == Workshop::mapItemShape(kind) &&
                           !item.changes.contains("UNDER.DAT"),
@@ -3612,11 +3618,11 @@ int main(int argc, char **argv) {
                       U5::byte(U5::worldMap("UNDER.DAT", underSign.changes["UNDER.DAT"], {}),
                                19 * 256 + 18) == 0xf8,
                   "Underworld sign placement is missing or uses the wrong world");
-            auto sleeper = Workshop::addMapItem(p, "UNDER.DAT", 0, {4, 5},
-                                                Workshop::MapItemKind::SleepingFigure);
+            auto sleeper =
+                Workshop::addMapItem(p, "UNDER.DAT", 0, {4, 5}, Workshop::MapItemKind::Corpse);
             check(U5::byte(sleeper.changes["UNDER.OOL"], 8) == 30 &&
                       sleeper.mode == "Starting Objects",
-                  "Sleeping figure uses the wrong world object shape");
+                  "Corpse uses the wrong world object shape");
             auto horse =
                 Workshop::addMapItem(p, "UNDER.DAT", 0, {2, 3}, Workshop::MapItemKind::Horse);
             check(horse.slot == 1 && U5::byte(horse.changes["UNDER.OOL"], 8) == 16 &&
