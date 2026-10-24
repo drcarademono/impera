@@ -1,3 +1,4 @@
+#include "mod/npcs.h"
 #include "custom_tiles.h"
 #include "world_objects.h"
 #include "map_entities.h"
@@ -72,7 +73,7 @@ static int defaultProperty(int shape) {
            : shape == 12                                                          ? 45
                                                                                   : 0;
 }
-static QString objectName(int shape) {
+QString mapObjectName(int shape, int value, int aux) {
     if (shape == 5)
         return "Weapon";
     if (shape == 6)
@@ -98,7 +99,7 @@ static QString objectName(int shape) {
     if (shape == 14)
         return "Sandalwood box";
     if (shape == 31)
-        return "Blood splatter";
+        return NPCS_Blood(shape, value, aux) ? "Blood splatter" : "Corpse";
     if (shape == TILE_ACTOR_CHEST)
         return "Chest";
     if (shape == TILE_ACTOR_GOLD)
@@ -112,7 +113,7 @@ static QString objectName(int shape) {
     if (shape == TILE_ACTOR_CARPET)
         return "Magic carpet";
     if (shape == TILE_ACTOR_SLEEP)
-        return "Corpse";
+        return "Corpse (intact)";
     if ((shape & 0xf8) == TILE_ACTOR_FRIGATE_20)
         return "Frigate";
     if (shape >= TILE_ACTOR_SKIFF && shape <= TILE_ACTOR_SKIFF + 3)
@@ -193,9 +194,9 @@ QWidget *worldObjectEditor(Project *project, int initialWorld, ObjectCommit comm
     type->setObjectName("worldObjectType");
     for (int tile : {1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 15, 16, 17,
                      25, 27, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43})
-        type->addItem(objectName(tile), tile);
+        type->addItem(mapObjectName(tile), tile);
     for (int tile : Workshop::monsterShapes())
-        type->addItem(objectName(tile), tile);
+        type->addItem(mapObjectName(tile), tile);
     if (typedCommit)
         for (auto record : CustomTiles::records(*project)) {
             TypeDef d;
@@ -267,6 +268,10 @@ QWidget *worldObjectEditor(Project *project, int initialWorld, ObjectCommit comm
                 type->addItem(QString("Unusual shape %1 (preserved)").arg(tile), tile);
                 index = type->count() - 1;
             }
+            if (auto corpse = type->findData(31); corpse >= 0)
+                type->setItemText(corpse, NPCS_Blood(tile, uchar(r[5]), uchar(r[7]))
+                                              ? "Blood splatter"
+                                              : "Corpse");
             type->setCurrentIndex(index);
             x->setValue(uchar(r[2]));
             y->setValue(uchar(r[3]));
@@ -333,7 +338,10 @@ QWidget *worldObjectEditor(Project *project, int initialWorld, ObjectCommit comm
             auto mapName = which ? QString("UNDER.DAT") : QString("BRIT.DAT");
             U5::MapPage mapPage{mapName, 256, 0, 256};
             unsigned appearance = CustomTiles::actorType(*project, mapName, mapPage, 0, slot, 256 + tile);
-            QString label = appearance >= 512 ? QString::fromUtf8(CustomTiles::definition(*project, appearance).name) : objectName(tile);
+            QString label =
+                appearance >= 512
+                    ? QString::fromUtf8(CustomTiles::definition(*project, appearance).name)
+                    : mapObjectName(tile, uchar(r[5]), uchar(r[7]));
             auto art = appearance >= 512 ? CustomTiles::image(*project, appearance, 6)
                                          : canvas->tiles.value(appearance);
             auto item = new QListWidgetItem(QIcon(QPixmap::fromImage(art)),
@@ -410,6 +418,7 @@ QWidget *worldObjectEditor(Project *project, int initialWorld, ObjectCommit comm
         if (tile != uchar(r[0])) {
             r[0] = r[1] = char(tile);
             r[5] = char(defaultProperty(tile));
+            r[7] = char((tile & 0xf8) == 0x20 ? 1 : 255);
         }
         r[2] = char(x->value());
         r[3] = char(y->value());

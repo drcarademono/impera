@@ -710,7 +710,7 @@ int main(int argc, char **argv) {
                      if (kind != Workshop::MapItemKind::Npc &&
                          kind != Workshop::MapItemKind::Monster)
                          check(seen.contains(int(kind)), "Special omitted a former Add entry");
-                 check(Workshop::mapItemName(Workshop::MapItemKind::Corpse) == "Corpse" &&
+                 check(Workshop::mapItemName(Workshop::MapItemKind::Corpse) == "Corpse (intact)" &&
                            Workshop::mapItemShape(Workshop::MapItemKind::Corpse) == 30 &&
                            Workshop::mapItemName(Workshop::MapItemKind::BloodSplatter) ==
                                "Blood splatter" &&
@@ -734,6 +734,123 @@ int main(int argc, char **argv) {
                  app.processEvents();
                  check(!U5::byte(Workshop::WorldObjects::effective(window.projectForTests(), 0), 8),
                        "Special item undo failed");
+             });
+        test("Every Special placement uses location records, preserves properties and avoids "
+             "dialogue aliases",
+             [&] {
+                 QTemporaryDir dir;
+                 auto p = fixture(dir.path());
+                 file(dir.path() + "/TOWNE.DAT", QByteArray(16384, 5));
+                 file(dir.path() + "/TOWNE.NPC", QByteArray(4608, 0));
+                 file(dir.path() + "/TOWNE.TLK", QByteArray::fromHex("0000"));
+                 QByteArray signs(67, 0);
+                 signs[66] = char(255);
+                 file(dir.path() + "/SIGNS.DAT", signs);
+                 p.openGame(dir.path());
+                 const auto original = p.data("TOWNE.NPC");
+                 int n = 0, gold = -1, trigger = -1;
+                 for (auto kind : Workshop::availableMapItems(p, "TOWNE.DAT")) {
+                     if (kind == Workshop::MapItemKind::Npc ||
+                         kind == Workshop::MapItemKind::Monster)
+                         continue;
+                     int variant = kind == Workshop::MapItemKind::Equipment   ? 32
+                                   : kind == Workshop::MapItemKind::Potion    ? 7
+                                   : kind == Workshop::MapItemKind::Scroll    ? 255
+                                   : kind == Workshop::MapItemKind::Moonstone ? 4
+                                                                              : -1;
+                     auto placed = Workshop::addMapItem(
+                         p, "TOWNE.DAT", 0, {2 + (n % 8) * 3, 2 + (n / 8) * 3}, kind, variant);
+                     ++n;
+                     for (auto it = placed.changes.begin(); it != placed.changes.end(); ++it)
+                         p.resources[it.key()].edited = it.value();
+                     p.validate();
+                     if (placed.mode == "NPCs / Schedules") {
+                         check(placed.slot >= 32, "Special placement overwrote a vanilla NPC slot");
+                         auto bytes = p.data("TOWNE.NPC");
+                         auto base = NPCS_Offset(bytes.constData(), bytes.size(), 0, placed.slot);
+                         int shape =
+                             U5::byte(bytes, NPCS_ShapeOffset(bytes.constData(), bytes.size(), 0,
+                                                              placed.slot));
+                         check(NPCS_ObjectKind(bytes.constData() + base, shape) == int(kind),
+                               "Location object lost its behavior marker");
+                         if (kind == Workshop::MapItemKind::Gold)
+                             gold = placed.slot;
+                         if (kind == Workshop::MapItemKind::Trigger)
+                             trigger = placed.slot;
+                         if (kind == Workshop::MapItemKind::Frigate)
+                             check(shape == 36 && U5::byte(bytes, base + 15) == 1,
+                                   "New ship is not boardable or has invalid skiff cargo");
+                         if (kind == Workshop::MapItemKind::BloodSplatter)
+                             check(NPCS_Blood(shape,
+                                              U5::byte(bytes, NPCS_DialogueOffset(bytes.constData(),
+                                                                                  bytes.size(), 0,
+                                                                                  placed.slot)),
+                                              U5::byte(bytes, base + 15)),
+                                   "Decorative blood is still a searchable corpse");
+                     }
+                 }
+                 check(n >= 22 && gold >= 32 && trigger >= 32,
+                       "Special types are still unavailable on locations");
+                 check(p.data("TOWNE.NPC").left(4608) == original &&
+                           p.data("TOWNE.TLK") == QByteArray::fromHex("0000"),
+                       "Special placement changed vanilla NPCs or conversation data");
+                 auto blob = p.package();
+                 check(blob.startsWith("IMOD0018"),
+                       "Location objects need an updated engine package");
+                 Project imported = fixture(dir.path());
+                 imported.importPackage(blob);
+                 check(imported.data("TOWNE.NPC") == p.data("TOWNE.NPC"),
+                       "Location objects failed package roundtrip");
+                 auto old = blob;
+                 old[7] = '7';
+                 rejects([&] {
+                     Project copy = p;
+                     copy.importPackage(old);
+                 });
+                 auto destinations = Workshop::contentDestinations(p);
+                 for (auto d : destinations)
+                     check(d.workspace != "Dialogue" || d.scheduleResource != "TOWNE.NPC",
+                           "Object quantities became dialogue entries");
+                 auto npc = Workshop::addMapItem(p, "TOWNE.DAT", 0, {30, 30},
+                                                 Workshop::MapItemKind::Npc, 80, -1, "Neighbor");
+                 for (auto it = npc.changes.begin(); it != npc.changes.end(); ++it)
+                     p.resources[it.key()].edited = it.value();
+                 MapNpcDocument npcs(&p, "TOWNE.NPC");
+                 check(npcs.dialogue(0, npc.slot) == 1,
+                       "Objects reserved ordinary conversation numbers");
+                 // Talking animals remain NPCs even though their sprite is in the object range.
+                 auto smith = p.data("TOWNE.NPC");
+                 smith[NPCS_ShapeOffset(smith.constData(), smith.size(), 0, npc.slot)] = 17;
+                 p.resources["TOWNE.NPC"].edited = smith;
+                 check(!Workshop::locationObject(p, "TOWNE.NPC", 0, npc.slot),
+                       "Talking horse became an inert map object");
+                 bool talkingHorse = false;
+                 for (auto d : Workshop::contentDestinations(p))
+                     if (d.scheduleResource == "TOWNE.NPC" &&
+                         d.character == Workshop::npcCharacter(0, npc.slot) && d.conversation >= 0)
+                         talkingHorse = true;
+                 check(talkingHorse, "Talking horse disappeared from Dialogue");
+                 p.save(dir.path() + "/objects.imperaproject");
+                 WorkshopWindow window;
+                 check(window.openProject(p.projectPath), "Cannot open location objects");
+                 window.show();
+                 window.selectResource("TOWNE.DAT");
+                 app.processEvents();
+                 auto active = window.findChild<QStackedWidget *>("workspaces")->currentWidget();
+                 active->findChild<QToolButton *>("mapTool3")->click();
+                 auto list = active->findChild<QComboBox *>("mapNpcList");
+                 list->setCurrentIndex(gold);
+                 auto value = active->findChild<QSpinBox *>("locationObjectValue");
+                 check(value && value->isVisible(), "Location object quantity editor missing");
+                 value->setValue(42);
+                 QMetaObject::invokeMethod(value, "editingFinished", Qt::DirectConnection);
+                 const auto bytes = window.projectForTests().data("TOWNE.NPC");
+                 check(U5::byte(bytes, NPCS_DialogueOffset(bytes.constData(), bytes.size(), 0,
+                                                           gold)) == 42,
+                       "Object quantity editor did not persist");
+                 list->setCurrentIndex(trigger);
+                 check(active->findChild<QComboBox *>("locationObjectVariant")->isVisible(),
+                       "Location trigger replacement editor missing");
              });
         test("Cutscene pages share an editor, preserve originals and roundtrip variable sequences", [&] {
             QTemporaryDir dir;

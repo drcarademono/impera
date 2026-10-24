@@ -587,6 +587,7 @@ int CMDS_07f6_BoardCmd(void)
         return 0;
     }
 
+    NPC_ConsumeObject(local_6);
     ULTIMA_3a74(0, 0, 0, 0, 0, 0, local_6);
     D_24e6 |= 2;
 
@@ -818,6 +819,7 @@ void CMDS_0aea_FireCmd(void)
 
     if (local_1a && local_a != 0)
     {
+        NPC_ConsumeObject(local_a);
         ULTIMA_3a74(0, 0, 0, 0, 0, 0, local_a);
 
         D_24e6 |= 2;

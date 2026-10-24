@@ -336,6 +336,28 @@ int MOD_Decode(const void *bytes, size_t size, ModBaseReader reader, void *conte
             reason = "Unsupported or invalid cutscene pages";
             goto fail;
         }
+        if (memcmp(magic, "IMOD0018", 8)) {
+            const char *ext = strrchr(entry->name, '.');
+            if (ext && !strcmp(ext, ".NPC") && NPCS_Validate(entry->data, entry->size))
+                for (unsigned town = 0; town < 8; town++)
+                    for (unsigned slot = 1; slot < NPCS_Count(entry->data, entry->size, town);
+                         slot++) {
+                        size_t off = NPCS_Offset(entry->data, entry->size, town, slot);
+                        if (NPCS_ObjectKind(entry->data + off,
+                                            entry->data[NPCS_ShapeOffset(entry->data, entry->size,
+                                                                         town, slot)]) >= 0) {
+                            reason = "Location objects require package version 18; update Impera";
+                            goto fail;
+                        }
+                    }
+            if (ext && !strcmp(ext, ".OOL") && entry->size == 256)
+                for (unsigned i = 0; i < 32; i++)
+                    if (NPCS_Blood(entry->data[i * 8], entry->data[i * 8 + 5],
+                                   entry->data[i * 8 + 7])) {
+                        reason = "Decorative blood requires package version 18; update Impera";
+                        goto fail;
+                    }
+        }
         const char *extension = strrchr(entry->name, '.');
         if (extension && !strcmp(extension, ".TLK") &&
             (!DIALOGUE_ValidateBank(entry->data, entry->size) ||

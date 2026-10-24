@@ -411,7 +411,10 @@ if(U5D_BUILD_TESTS)
         add_executable(u5d_world_scroll_test tests/world_scroll_test.c ${TEST_SOURCES})
         list(APPEND U5D_TARGETS u5d_world_scroll_test)
         target_compile_definitions(u5d_world_scroll_test PRIVATE _FORTIFY_SOURCE=2)
-        target_link_options(u5d_world_scroll_test PRIVATE "-Wl,--wrap=ULTIMA_1850_PrintString"
+        target_link_options(u5d_world_scroll_test PRIVATE "-Wl,--wrap=ULTIMA_35ec_SelectDirection"
+            "-Wl,--wrap=ULTIMA_1a3e_PrintNumber" "-Wl,--wrap=ULTIMA_16ba_PrintChar"
+            "-Wl,--wrap=ULTIMA_1c9e_SelectCharset" "-Wl,--wrap=AUDIO_PlayBgmPerMap"
+            "-Wl,--wrap=ULTIMA_1850_PrintString"
             "-Wl,--wrap=OUTSUBS_01b4" "-Wl,--wrap=ULTIMA_5e4a")
         add_test(NAME world_scroll COMMAND u5d_world_scroll_test)
         add_executable(u5d_mouse_test tests/mouse_test.c ${TEST_SOURCES})

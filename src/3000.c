@@ -500,28 +500,46 @@ int ULTIMA_SelectTalkDirection(void) { return SelectDirection(true); }
 // CHECKED
 int ULTIMA_368e_FindActorTileAtPos(int param_1_x, int param_2_y, int param_3_level)
 {
+    int blood = -1;
     for (int actor = 1; actor < MAP_ACTOR_COUNT; actor++) {
         D_5876 = actor;
-        if (ACTORS_Contains(D_5876, param_1_x, param_2_y) &&
+        if (D_5c5a[D_5876]._0_tile && ACTORS_Contains(D_5876, param_1_x, param_2_y) &&
             (D_5893_map_id > 0x7f ||
              (D_5893_map_id < 0x80 && D_5c5a[D_5876]._4_z == param_3_level))) {
+            if (NPCS_Blood(D_5c5a[D_5876]._0_tile, D_5c5a[D_5876]._5, D_5c5a[D_5876]._7)) {
+                blood = D_5876;
+                continue;
+            }
             return D_5c5a[D_5876]._0_tile;
         }
     }
 
+    if (blood >= 0) {
+        D_5876 = blood;
+        return D_5c5a[blood]._0_tile;
+    }
     return 0;
 }
 
 // CHECKED
 int ULTIMA_3702(int param_1, int param_2, int param_3)
 {
+    int blood = -1;
     for (D_5876 = MAP_ACTOR_COUNT - 1; D_5876 >= 0; D_5876--) {
-        if (ACTORS_Contains(D_5876, param_1, param_2) &&
+        if (D_5c5a[D_5876]._0_tile && ACTORS_Contains(D_5876, param_1, param_2) &&
             (D_5893_map_id > 0x7f || (D_5893_map_id < 0x80 && D_5c5a[D_5876]._4_z == param_3))) {
+            if (NPCS_Blood(D_5c5a[D_5876]._0_tile, D_5c5a[D_5876]._5, D_5c5a[D_5876]._7)) {
+                blood = D_5876;
+                continue;
+            }
             return D_5c5a[D_5876]._0_tile;
         }
     }
 
+    if (blood >= 0) {
+        D_5876 = blood;
+        return D_5c5a[blood]._0_tile;
+    }
     return 0;
 }
 

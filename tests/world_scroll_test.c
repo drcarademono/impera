@@ -8,6 +8,8 @@
 #include "mainout.h"
 #include "town.h"
 #include "npc.h"
+#include "sjog.h"
+#include "cmds.h"
 #include "macros.h"
 #include "funcs.h"
 #include "mod/contents.h"
@@ -16,6 +18,19 @@
 #include <stdlib.h>
 byte *ULTIMA_4402_BaseAddr(int, int);
 
+int __wrap_ULTIMA_35ec_SelectDirection(void) {
+    D_5876 = 1;
+    D_5878 = 0;
+    return 1;
+}
+void __wrap_ULTIMA_1a3e_PrintNumber(int a, int b, int c) {
+    (void)a;
+    (void)b;
+    (void)c;
+}
+void __wrap_ULTIMA_16ba_PrintChar(int c) { (void)c; }
+void __wrap_ULTIMA_1c9e_SelectCharset(int c) { (void)c; }
+void __wrap_AUDIO_PlayBgmPerMap(void) {}
 static int loadX,loadY,loads,visibility;
 void __wrap_OUTSUBS_01b4(int dx,int dy) {loadX=dx;loadY=dy;loads++;}
 void __wrap_ULTIMA_5e4a(void) {visibility++;}
@@ -175,6 +190,111 @@ static void testExtendedMaps(void) {
     D_5895_map_level = 0;
 }
 
+static void spawnObject(unsigned slot, unsigned kind, unsigned shape, unsigned value,
+                        unsigned aux) {
+    D_659e[slot] = shape;
+    D_5f5e[slot]._a = value;
+    D_5f5e[slot]._c = 0;
+    memset(&D_5d5e[slot], 0, sizeof(D_5d5e[slot]));
+    for (int j = 0; j < 3; j++) {
+        D_5d5e[slot].type[j] = NPCS_OBJECT_MARKER | kind;
+        D_5d5e[slot].x[j] = 21;
+        D_5d5e[slot].y[j] = 19;
+    }
+    D_5d5e[slot].time[3] = aux;
+    TOWN_1726(slot, 21, 19, 0);
+    if (kind == NPCS_OBJECT_TRIGGER)
+        return;
+    assert(D_5c5a[slot]._0_tile == shape && D_5c5a[slot]._5 == value && D_5c5a[slot]._7 == aux);
+}
+static void testLocationObjects(void) {
+    NPC_ResetExtra();
+    D_imperaNpcCount = 40;
+    D_5893_map_id = 42;
+    D_5895_map_level = 0;
+    D_5896_map_x = 20;
+    D_5897_map_y = 19;
+    D_587c_partyTile = TILE_ACTOR_AVATAR;
+    memset(D_5c5a, 0, sizeof(D_5c5a));
+    memset(D_659e, 0, sizeof(D_659e));
+    memset(D_5f5e, 0, sizeof(D_5f5e));
+    memset(D_6608, 5, 1024);
+    D_57aa = 0;
+    spawnObject(32, 11, 2, 7, 0);
+    SJOG_18ce_GetCmd();
+    assert(D_57aa == 7 && !D_5c5a[32]._0_tile && !D_659e[32]);
+    D_57b1 = 0;
+    spawnObject(33, 16, 7, 131, 0);
+    SJOG_18ce_GetCmd();
+    assert(D_57b1 == 3 && !D_659e[33]);
+    D_5828[7] = 0;
+    spawnObject(34, 18, 3, 7, 0);
+    SJOG_18ce_GetCmd();
+    assert(D_5828[7] == 1);
+    D_57c0[32] = 0;
+    spawnObject(35, 20, 5, 32, 0);
+    SJOG_18ce_GetCmd();
+    assert(D_57c0[32] == 1);
+    D_5840[4] = 0;
+    spawnObject(36, 13, 25, 4, 0);
+    SJOG_18ce_GetCmd();
+    assert(D_5840[4] == 255);
+    spawnObject(37, 22, 31, 255, 0xb1);
+    assert(NPC_BloodAt(21, 19, 0));
+    D_5c5a[37]._2_x = D_5c5a[37]._3_y = 0;
+    assert(ULTIMA_368e_FindActorTileAtPos(0, 0, 0) == 31);
+    assert(ULTIMA_3702(0, 0, 0) == 31);
+    D_5c5a[37]._2_x = 21;
+    D_5c5a[37]._3_y = 19;
+
+    D_5896_map_x = 21;
+    D_5897_map_y = 19;
+    D_587c_partyTile = TILE_ACTOR_AVATAR;
+    spawnObject(38, 6, 40, 0, 0);
+    assert(CMDS_07f6_BoardCmd() && D_587c_partyTile == 40 && !D_659e[38]);
+    D_587c_partyTile = TILE_ACTOR_AVATAR;
+    spawnObject(38, 7, 36, 99, 1);
+    assert(CMDS_07f6_BoardCmd() && D_587c_partyTile == 36 && D_5c5a[0]._5 == 99 &&
+           D_5c5a[0]._7 == 1);
+    spawnObject(39, 9, 29, 68, 0);
+    D_5c5a[39]._0_tile = 0;
+    D_5d5e[39].x[1] = 5;
+    D_5d5e[39].y[1] = 6;
+    D_5d5e[39].x[2] = 7;
+    D_5d5e[39].y[2] = 8;
+    D_5f5e[39]._0 = 1;
+    NPC_ApplyObjectTriggers(21, 19, 0);
+    assert(GetMap(5, 6) == 68 && GetMap(7, 8) == 68);
+    GetMap(5, 6) = 5;
+    NPC_ApplyObjectTriggers(21, 19, 0);
+    assert(GetMap(5, 6) == 5);
+    FILE *state = tmpfile();
+    assert(state && NPC_WriteExtraState(state));
+    NPC_ResetExtra();
+    rewind(state);
+    assert(NPC_ReadExtraState(state, 1));
+    fclose(state);
+    unsigned char definition[4648] = {0};
+    memcpy(definition + 4608, "INPC0001", 8);
+    definition[4616] = 1;
+    definition[4626] = 32;
+    for (int j = 0; j < 3; j++) {
+        definition[4628 + j] = NPCS_OBJECT_MARKER | 11;
+        definition[4631 + j] = 21;
+        definition[4634 + j] = 19;
+    }
+    definition[4644] = 2;
+    definition[4645] = 7;
+    FILE *file = fopen("LOC042.NPC", "wb");
+    assert(file && fwrite(definition, 1, sizeof(definition), file) == sizeof(definition));
+    fclose(file);
+    NPC_LoadExtra("LOC042.NPC", 0);
+    assert(D_659e[32] == 0);
+    remove("LOC042.NPC");
+    NPC_ResetExtra();
+    D_5893_map_id = 0;
+}
+
 int main(void)
 {
     /* Northeast reproduces the original fortified memcpy overflow first. */
@@ -194,6 +314,7 @@ int main(void)
     MAINOUT_0354(-1,-1);
     assert(D_589b==240 && D_589c==240);
     testExtendedMaps();
+    testLocationObjects();
     puts("World block scrolling and diagonal boundary tests passed.");
     return 0;
 }

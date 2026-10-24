@@ -226,8 +226,26 @@ QByteArray Project::package() const {
         extraNpcs |= resource.endsWith(".NPC") && data(resource).size() > 4608;
     for (const auto &cell : CustomTiles::placements(*this))
         extraNpcs |= cell.kind == 3 && (cell.x >= 32 || cell.y);
+    bool locationObjects = false;
+    for (const auto &name : list) {
+        const auto b = data(name);
+        if (name.endsWith(".NPC"))
+            for (unsigned town = 0; town < 8; town++)
+                for (unsigned slot = 1; slot < NPCS_Count(b.constData(), b.size(), town); slot++) {
+                    const auto off = NPCS_Offset(b.constData(), b.size(), town, slot);
+                    locationObjects |=
+                        NPCS_ObjectKind(b.constData() + off,
+                                        U5::byte(b, NPCS_ShapeOffset(b.constData(), b.size(), town,
+                                                                     slot))) >= 0;
+                }
+        if (name.endsWith(".OOL"))
+            for (int i = 0; i < 32; i++)
+                locationObjects |=
+                    NPCS_Blood(U5::byte(b, i * 8), U5::byte(b, i * 8 + 5), U5::byte(b, i * 8 + 7));
+    }
     QByteArray out(
-        (list.contains("MAPS.OVR") || resources.value("SIGNS.DAT").edited.startsWith("ISIG0001"))
+        (locationObjects || list.contains("MAPS.OVR") ||
+         resources.value("SIGNS.DAT").edited.startsWith("ISIG0001"))
             ? "IMOD0018"
         : list.contains("LOCATIONS.OVR")                             ? "IMOD0017"
         : conversationFlag(*this, IMPERA_TALK_FLAG_GARGOYLE_SPEECH)  ? "IMOD0016"

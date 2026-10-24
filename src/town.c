@@ -40,8 +40,8 @@ int TOWN_0000_CheckNpcKilled(int param_1)
     if (param_1 < 0 || param_1 >= LOCATION_NPC_COUNT || D_5893_map_id < 1 ||
         !MAPS_Outside(D_5893_map_id))
         return 0;
-    if (D_659e[param_1] == TILE_ACTOR_SANDALWOOD_BOX || D_659e[param_1] >= TILE_ACTOR_WIZARD)
-    {
+    if (NPC_ObjectKind(param_1) >= 0 || D_659e[param_1] == TILE_ACTOR_SANDALWOOD_BOX ||
+        D_659e[param_1] >= TILE_ACTOR_WIZARD) {
         if (param_1 >= 32 || MAPS_NewLocation(D_5893_map_id))
             return (D_5b5a[128 + (D_5893_map_id - 1) * (IMPERA_NPC_CAPACITY / 8) + param_1 / 8] &
                     (1u << (param_1 % 8))) != 0;
@@ -62,8 +62,8 @@ void TOWN_0052_SetNpcKilled(int param_1)
 
     local_4 = D_659e[param_1] & 0xfc;
 
-    if ((local_4 != TILE_ACTOR_GUARD && local_4 < TILE_ACTOR_80) || local_4 == TILE_ACTOR_SHARD)
-    {
+    if (NPC_ObjectKind(param_1) >= 0 || (local_4 != TILE_ACTOR_GUARD && local_4 < TILE_ACTOR_80) ||
+        local_4 == TILE_ACTOR_SHARD) {
         if (param_1 >= 32 || MAPS_NewLocation(D_5893_map_id)) {
             D_5b5a[128 + (D_5893_map_id - 1) * (IMPERA_NPC_CAPACITY / 8) + param_1 / 8] |=
                 1u << (param_1 % 8);
@@ -1015,6 +1015,8 @@ static void TOWN_0f02(void)
     int local_4;
     int local_6;
 
+    NPC_ApplyObjectTriggers(D_5896_map_x, D_5897_map_y, D_5895_map_level);
+
     for (local_6 = 0; local_6 < D_585b; local_6++)
     {
         if (D_55a8_party[local_6].status == STATUS_SLEEP && ULTIMA_2092_RandomRange(0, 0xf) == 0xf)
@@ -1554,6 +1556,10 @@ void TOWN_1726(int param_1, int param_2, int param_3, int param_4)
     if (D_659e[param_1] == 0)
         return;
 
+    if (NPC_ObjectKind(param_1) == NPCS_OBJECT_TRIGGER) {
+        D_5f5e[param_1]._0 = 1;
+        return;
+    }
     local_4 = &D_5f5e[param_1];
 
     if (param_4 != D_5895_map_level && local_4->_c != 0)
@@ -1579,6 +1585,10 @@ void TOWN_1726(int param_1, int param_2, int param_3, int param_4)
         ULTIMA_3a74(D_659e[param_1], D_659e[param_1], param_2, param_3, param_4, local_8, local_6);
 
         D_5c5a[local_6]._6 = 0;
+        if (NPC_ObjectKind(param_1) >= 0) {
+            D_5c5a[local_6]._5 = local_4->_a & 255;
+            D_5c5a[local_6]._7 = D_5d5e[param_1].time[3];
+        }
         local_4->_c = local_6;
     }
 

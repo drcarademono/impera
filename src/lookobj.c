@@ -15,6 +15,7 @@
 #include <string.h>
 
 #include "lookobj.h"
+#include "npc.h"
 
 void ULTIMA_0c64_GRAP_30_Pset(int param_1, int param_2);
 int ULTIMA_2e8e();
@@ -710,6 +711,10 @@ void LOOKOBJ_099c_LookCmd(void)
     ULTIMA_1850_PrintString(_TEXT(0x751c, "\nThou dost see\n"));
     if (local_6 != 0)
     {
+        if (NPC_BloodAt(local_8, local_a, D_5895_map_level)) {
+            ULTIMA_1850_PrintString("blood splatter.\n");
+            return;
+        }
         for (unsigned actor = 0; actor < (unsigned)MAP_ACTOR_COUNT; actor++) {
             ActorFmt *a = &D_5c5a[actor];
             if (!a->_0_tile || !a->_1_animTile || a->_4_z != D_5895_map_level ||

@@ -18,6 +18,46 @@ static int NPC_06a0(int param_1, int param_2, int param_3, int param_4);
 static int NPC_0adc(int param_1, int param_2, int param_3, int param_4, int param_5);
 static int NPC_0b9e(int param_1, int param_2, int param_3, int param_4);
 
+int NPC_ObjectKind(unsigned slot) {
+    return slot < (unsigned)LOCATION_NPC_COUNT ? NPCS_ObjectKind(&D_5d5e[slot], D_659e[slot]) : -1;
+}
+int NPC_ConsumeObject(unsigned actor) {
+    if (!MAPS_Town(D_5893_map_id) || actor == 0 || actor >= (unsigned)MAP_ACTOR_COUNT)
+        return 0;
+    int slot = TOWN_011e(actor);
+    if (slot < 1 || NPC_ObjectKind(slot) < 0)
+        return 0;
+    TOWN_0052_SetNpcKilled(slot);
+    TOWN_00b0_DespawnNpc(slot);
+    return 1;
+}
+int NPC_BloodAt(int x, int y, int floor) {
+    int blood = 0;
+    for (int i = 1; i < MAP_ACTOR_COUNT; i++) {
+        if (!D_5c5a[i]._0_tile || !ACTORS_Contains(i, x, y) ||
+            (D_5893_map_id < 128 && D_5c5a[i]._4_z != floor))
+            continue;
+        if (NPCS_Blood(D_5c5a[i]._0_tile, D_5c5a[i]._5, D_5c5a[i]._7))
+            blood = 1;
+        else
+            return 0;
+    }
+    return blood;
+}
+void NPC_ApplyObjectTriggers(int x, int y, int floor) {
+    for (int i = 1; i < LOCATION_NPC_COUNT; i++) {
+        NpcScheduleFmt *s = &D_5d5e[i];
+        if (NPC_ObjectKind(i) != NPCS_OBJECT_TRIGGER || !D_5f5e[i]._0 || s->x[0] != x ||
+            s->y[0] != y || s->z[0] != (unsigned char)floor)
+            continue;
+        D_5f5e[i]._0 = 0;
+        for (int j = 1; j < 3; j++)
+            if (s->x[j] < MAP_WIDTH && s->y[j] < MAP_HEIGHT && s->z[j] == (unsigned char)floor)
+                TYPES_GAME_Write(s->x[j], s->y[j], D_5f5e[i]._a & 255);
+        D_24e6 |= 1;
+    }
+}
+
 void NPC_0000_LoadNpcFile(void)
 {
     int local_4;
@@ -1043,7 +1083,7 @@ void NPC_0db4(int param_1)
     // 0dd9
     for (local_4 = 1; /*1267*/ local_4 < LOCATION_NPC_COUNT; /*1264*/ local_4++) {
         // 126d
-        if (D_659e[local_4] == 0)
+        if (D_659e[local_4] == 0 || NPC_ObjectKind(local_4) >= 0)
             continue;
 
         // 1277

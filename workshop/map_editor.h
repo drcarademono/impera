@@ -287,6 +287,14 @@ class MapWorkspace : public QWidget {
     QSpinBox *triggerX[2]{}, *triggerY[2]{};
     QCheckBox *triggerEnabled[2]{};
     QLineEdit *npcNameField = nullptr;
+    QWidget *objectProperties = nullptr;
+    QFormLayout *npcMainForm = nullptr, *objectForm = nullptr;
+    QSpinBox *objectValue = nullptr, *objectAux = nullptr, *objectTriggerX[2]{},
+             *objectTriggerY[2]{};
+    QComboBox *objectVariant = nullptr;
+    QCheckBox *objectSkeleton = nullptr;
+    void refreshObjectProperties(int npc);
+    void editObjectProperties();
     void editNpcProperties();
     void createCombatInspector(QVBoxLayout *layout);
     QComboBox *combatEntry = nullptr, *combatEntity = nullptr;

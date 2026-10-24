@@ -2359,7 +2359,11 @@ bool MapWorkspace::selectMapItem(QPoint cell) {
     if (npcMode >= 0 && page.settlement >= 0 && project->data(npcResource).size() >= 4608) {
         MapNpcDocument npcs(project, npcResource);
         for (int id = 1; id < npcs.count(page.settlement); ++id) {
-            auto position = npcs.location(page.settlement, id, schedule->currentIndex());
+            auto position =
+                npcs.location(page.settlement, id,
+                              Workshop::locationObject(*project, npcResource, page.settlement, id)
+                                  ? 0
+                                  : schedule->currentIndex());
             npcHit |=
                 U5::byte(project->data(npcResource), npcs.shapeOffset(page.settlement, id)) != 0 &&
                 position.floor == page.floor && position.x == cell.x() && position.y == cell.y();
@@ -2485,11 +2489,28 @@ void MapWorkspace::refreshContextActors() {
         return;
     MapNpcDocument npcs(project, npcResource);
     for (int id = 1; id < npcs.count(page.settlement); id++) {
-        auto position = npcs.location(page.settlement, id, schedule->currentIndex());
+        auto position =
+            npcs.location(page.settlement, id,
+                          Workshop::locationObject(*project, npcResource, page.settlement, id)
+                              ? 0
+                              : schedule->currentIndex());
         if (U5::byte(project->data(npcResource), npcs.shapeOffset(page.settlement, id)) &&
-            position.floor == page.floor && position.x < 32 && position.y < 32)
+            position.floor == page.floor && position.x < page.side && position.y < page.height())
             canvas->contextActors.append(
-                {position.x, position.y, npcs.sprite(page.settlement, id), id, {}});
+                {position.x, position.y,
+                 NPCS_ObjectKind(
+                     project->data(npcResource).constData() + npcs.offset(page.settlement, id),
+                     U5::byte(project->data(npcResource), npcs.shapeOffset(page.settlement, id))) ==
+                         NPCS_OBJECT_TRIGGER
+                     ? -1
+                     : npcs.sprite(page.settlement, id),
+                 id,
+                 NPCS_ObjectKind(
+                     project->data(npcResource).constData() + npcs.offset(page.settlement, id),
+                     U5::byte(project->data(npcResource), npcs.shapeOffset(page.settlement, id))) ==
+                         NPCS_OBJECT_TRIGGER
+                     ? "T"
+                     : QString()});
     }
 }
 int MapWorkspace::currentPage() const { return page->currentData().toInt(); }
@@ -2777,6 +2798,9 @@ void MapWorkspace::loadPage() {
 }
 QString MapWorkspace::npcName(int npc) const {
     MapNpcDocument npcs(project, npcResource);
+    const int town = document.pages[currentPage()].settlement;
+    if (Workshop::locationObject(*project, npcResource, town, npc))
+        return Workshop::locationObjectName(*project, npcResource, town, npc);
     int id = npcs.dialogue(document.pages[currentPage()].settlement, npc);
     unsigned appearance = npcs.sprite(document.pages[currentPage()].settlement, npc);
     if (appearance >= 512 && !npcNames.contains(id))
@@ -2789,6 +2813,7 @@ QString MapWorkspace::npcName(int npc) const {
 }
 void MapWorkspace::createNpcInspector(QVBoxLayout *layout) {
     auto title = new QLabel("NPC schedule");
+    title->setObjectName("mapNpcTitle");
     layout->addWidget(title);
     npcList = new QComboBox;
     npcList->setToolTip(
@@ -2812,7 +2837,52 @@ void MapWorkspace::createNpcInspector(QVBoxLayout *layout) {
     npcInfo->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     npcInfo->setTextInteractionFlags(Qt::TextSelectableByMouse);
     layout->addWidget(npcInfo);
+    objectProperties = new QWidget;
+    objectProperties->setObjectName("locationObjectProperties");
+    objectForm = new QFormLayout(objectProperties);
+    objectForm->setContentsMargins(0, 0, 0, 0);
+    objectValue = new QSpinBox;
+    objectValue->setObjectName("locationObjectValue");
+    objectValue->setRange(0, 255);
+    objectValue->setToolTip("Quantity, moon phase or hull condition for this object.");
+    objectAux = new QSpinBox;
+    objectAux->setObjectName("locationObjectSkiffs");
+    objectAux->setRange(0, 255);
+    objectAux->setToolTip("Number of skiffs carried by this frigate.");
+    objectVariant = new QComboBox;
+    objectVariant->setObjectName("locationObjectVariant");
+    objectVariant->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+    objectVariant->setToolTip("Item received when picked up, or terrain placed by this trigger.");
+    objectSkeleton = new QCheckBox("Skeleton keys");
+    objectSkeleton->setObjectName("locationObjectSkeleton");
+    objectForm->addRow("Quantity", objectValue);
+    objectForm->addRow("Type", objectVariant);
+    objectForm->addRow(objectSkeleton);
+    objectForm->addRow("Skiffs aboard", objectAux);
+    for (int j = 0; j < 2; j++) {
+        auto row = new QHBoxLayout;
+        objectTriggerX[j] = new QSpinBox;
+        objectTriggerY[j] = new QSpinBox;
+        objectTriggerX[j]->setObjectName(QString("locationTriggerX%1").arg(j));
+        objectTriggerY[j]->setObjectName(QString("locationTriggerY%1").arg(j));
+        objectTriggerX[j]->setToolTip("Destination column.");
+        objectTriggerY[j]->setToolTip("Destination row.");
+        row->addWidget(new QLabel("X"));
+        row->addWidget(objectTriggerX[j]);
+        row->addWidget(new QLabel("Y"));
+        row->addWidget(objectTriggerY[j]);
+        objectForm->addRow(QString("Destination %1").arg(j + 1), row);
+        for (auto spin : {objectTriggerX[j], objectTriggerY[j]})
+            connect(spin, &QSpinBox::editingFinished, this, [this] { editObjectProperties(); });
+    }
+    connect(objectValue, &QSpinBox::editingFinished, this, [this] { editObjectProperties(); });
+    connect(objectAux, &QSpinBox::editingFinished, this, [this] { editObjectProperties(); });
+    connect(objectVariant, &QComboBox::activated, this, [this] { editObjectProperties(); });
+    connect(objectSkeleton, &QCheckBox::clicked, this, [this] { editObjectProperties(); });
+    layout->addWidget(objectProperties);
+    objectProperties->hide();
     auto form = new QFormLayout;
+    npcMainForm = form;
     npcStartHour = new QSpinBox;
     npcStartHour->setObjectName("mapNpcStartHour");
     npcStartHour->setRange(0, 255);
@@ -2827,7 +2897,9 @@ void MapWorkspace::createNpcInspector(QVBoxLayout *layout) {
                              "sharing that conversation.");
     form->addRow("Name", npcNameField);
     connect(npcNameField, &QLineEdit::editingFinished, this, [this] {
-        if (canvas->selectedNpc < 1 || !project->resources.contains(talkResource))
+        if (canvas->selectedNpc < 1 || !project->resources.contains(talkResource) ||
+            Workshop::locationObject(*project, npcResource,
+                                     document.pages[currentPage()].settlement, canvas->selectedNpc))
             return;
         try {
             MapNpcDocument npcs(project, npcResource);
@@ -3037,6 +3109,14 @@ void MapWorkspace::refreshNpcs() {
         refreshCombat();
         return;
     }
+    if (objectProperties) {
+        objectProperties->hide();
+        for (int row = 0; row < 5; row++)
+            npcMainForm->setRowVisible(row, true);
+        npcGhosts->show();
+        npcConversation->show();
+        findChild<QPushButton *>("mapNpcAdvanced")->show();
+    }
     canvas->actors.clear();
     canvas->ghosts.clear();
     const auto &mp = document.pages[currentPage()];
@@ -3076,19 +3156,37 @@ void MapWorkspace::refreshNpcs() {
         if(auto list=qobject_cast<QListView *>(npcList->view()))
             list->setRowHidden(npc, npc == 0 || !U5::byte(project->data(npcResource),
                                                           npcs.shapeOffset(mp.settlement, npc)));
-        auto loc = npcs.location(mp.settlement, npc, slot);
+        auto loc = npcs.location(
+            mp.settlement, npc,
+            Workshop::locationObject(*project, npcResource, mp.settlement, npc) ? 0 : slot);
         if (npc > 0 && U5::byte(project->data(npcResource), npcs.shapeOffset(mp.settlement, npc)) &&
-            loc.floor == mp.floor && loc.x < 32 && loc.y < 32)
-            canvas->actors.append({loc.x, loc.y, npcs.sprite(mp.settlement, npc), npc});
+            loc.floor == mp.floor && loc.x < mp.side && loc.y < mp.height())
+            canvas->actors.append(
+                {loc.x, loc.y,
+                 NPCS_ObjectKind(
+                     project->data(npcResource).constData() + npcs.offset(mp.settlement, npc),
+                     U5::byte(project->data(npcResource), npcs.shapeOffset(mp.settlement, npc))) ==
+                         NPCS_OBJECT_TRIGGER
+                     ? -1
+                     : npcs.sprite(mp.settlement, npc),
+                 npc,
+                 NPCS_ObjectKind(
+                     project->data(npcResource).constData() + npcs.offset(mp.settlement, npc),
+                     U5::byte(project->data(npcResource), npcs.shapeOffset(mp.settlement, npc))) ==
+                         NPCS_OBJECT_TRIGGER
+                     ? "T"
+                     : QString()});
     }
     {
         int hours[4]{-1, -1, -1, -1};
         bool consistent = true;
         for (int actor = 0; actor < npcs.count(mp.settlement); ++actor) {
+            if (Workshop::locationObject(*project, npcResource, mp.settlement, actor))
+                continue;
             bool onMap = false;
             for (int change = 0; change < 4; ++change) {
                 auto loc = npcs.location(mp.settlement, actor, change);
-                onMap |= loc.floor == mp.floor && loc.x < 32 && loc.y < 32;
+                onMap |= loc.floor == mp.floor && loc.x < mp.side && loc.y < mp.height();
             }
             if (!onMap)
                 continue;
@@ -3119,7 +3217,18 @@ void MapWorkspace::refreshNpcs() {
         canvas->update();
         return;
     }
-    auto loc = npcs.location(mp.settlement, npc, slot);
+    const bool object = Workshop::locationObject(*project, npcResource, mp.settlement, npc);
+    if (object) {
+        QSignalBlocker block(schedule);
+        schedule->setCurrentIndex(0);
+        slot = 0;
+    }
+    schedule->setVisible(!object);
+    if (auto label = findChild<QLabel *>("mapScheduleLabel"))
+        label->setVisible(!object);
+    auto loc = npcs.location(
+        mp.settlement, npc,
+        Workshop::locationObject(*project, npcResource, mp.settlement, npc) ? 0 : slot);
     npcAppearance->setEnabled(true);
     npcDialogue->setEnabled(true);
     npcBehavior->setEnabled(true);
@@ -3174,7 +3283,10 @@ void MapWorkspace::refreshNpcs() {
         conversationIndices.contains(id)
             ? "Open this NPC’s dialogue for editing."
             : "Create a new conversation for this NPC and open it for editing.");
-    npcInfo->setText(info);
+    npcInfo->setText(object ? npcName(npc) : info);
+    findChild<QLabel *>("mapNpcTitle")->setText(object ? "Map object" : "NPC schedule");
+    if (object)
+        refreshObjectProperties(npc);
     canvas->update();
 }
 void MapWorkspace::selectNpc(int npc) {
@@ -3212,6 +3324,19 @@ bool MapWorkspace::moveNpcTo(int npc, int x, int y, int floor) {
                                          npcs.sprite(settlement, npc), npc,
                                          schedule->currentIndex());
         auto bytes = npcs.move(settlement, npc, schedule->currentIndex(), destination);
+        if (Workshop::locationObject(*project, npcResource, settlement, npc)) {
+            const int base = npcs.offset(settlement, npc);
+            const int shape = U5::byte(bytes, npcs.shapeOffset(settlement, npc));
+            const bool trigger =
+                NPCS_ObjectKind(bytes.constData() + base, shape) == NPCS_OBJECT_TRIGGER;
+            for (int j = 0; j < 3; j++) {
+                if (!trigger || j == 0) {
+                    bytes[base + 3 + j] = char(x);
+                    bytes[base + 6 + j] = char(y);
+                }
+                bytes[base + 9 + j] = char(floor);
+            }
+        }
         if (bytes != project->data(npcResource) &&
             !commitResources({{npcResource, bytes}}, "Move NPC " + npcName(npc)))
             return false;
@@ -4093,6 +4218,99 @@ void MapWorkspace::deleteSelectedItem() {
     } catch (const std::exception &error) {
         QMessageBox::warning(this, "Cannot delete map item", error.what());
     }
+}
+void MapWorkspace::refreshObjectProperties(int npc) {
+    const auto &mp = document.pages[currentPage()];
+    MapNpcDocument npcs(project, npcResource);
+    auto b = project->data(npcResource);
+    int base = npcs.offset(mp.settlement, npc),
+        shape = U5::byte(b, npcs.shapeOffset(mp.settlement, npc));
+    const int kind = NPCS_ObjectKind(b.constData() + base, shape);
+    const int value = U5::byte(b, npcs.dialogueOffset(mp.settlement, npc));
+    objectProperties->show();
+    objectProperties->setEnabled(kind >= 0);
+    for (int row = 0; row < 5; row++)
+        npcMainForm->setRowVisible(row, false);
+    npcGhosts->hide();
+    npcConversation->hide();
+    findChild<QPushButton *>("mapNpcAdvanced")->hide();
+    const bool quantity = shape == 2 || shape == 15 || shape == 7 || shape == 8 || shape == 13 ||
+                          shape == 25 || (shape & 0xf8) == 0x20;
+    objectForm->setRowVisible(objectValue, quantity);
+    qobject_cast<QLabel *>(objectForm->labelForField(objectValue))
+        ->setText(shape == 25              ? "Moon phase"
+                  : (shape & 0xf8) == 0x20 ? "Hull condition"
+                                           : "Quantity");
+    objectValue->setRange(shape == 25 || (shape & 0xf8) == 0x20 ? 0 : 1, shape == 25  ? 7
+                                                                         : shape == 7 ? 127
+                                                                         : (shape & 0xf8) == 0x20
+                                                                             ? 100
+                                                                             : 255);
+    objectValue->setValue(shape == 7 ? value & 127 : value);
+    objectForm->setRowVisible(objectAux, (shape & 0xf8) == 0x20);
+    objectAux->setValue(U5::byte(b, base + 15));
+    objectForm->setRowVisible(objectSkeleton, shape == 7);
+    objectSkeleton->setChecked(value & 128);
+    const bool equipment = shape == 5 || shape == 6 || (shape >= 9 && shape <= 12);
+    const bool typed = equipment || shape == 3 || shape == 4 || kind == NPCS_OBJECT_TRIGGER;
+    objectForm->setRowVisible(objectVariant, typed);
+    objectVariant->clear();
+    if (kind == NPCS_OBJECT_TRIGGER)
+        for (int tile = 0; tile < 256; tile++)
+            objectVariant->addItem(MapDocument::tileName(tile), tile);
+    else
+        for (auto v : Workshop::mapItemVariants(equipment    ? Workshop::MapItemKind::Equipment
+                                                : shape == 3 ? Workshop::MapItemKind::Potion
+                                                             : Workshop::MapItemKind::Scroll))
+            objectVariant->addItem(v.first, v.second);
+    objectVariant->setCurrentIndex(objectVariant->findData(value));
+    for (int j = 0; j < 2; j++) {
+        objectForm->setRowVisible(4 + j, kind == NPCS_OBJECT_TRIGGER);
+        objectTriggerX[j]->setRange(0, mp.side - 1);
+        objectTriggerY[j]->setRange(0, mp.height() - 1);
+        objectTriggerX[j]->setValue(U5::byte(b, base + 4 + j));
+        objectTriggerY[j]->setValue(U5::byte(b, base + 7 + j));
+    }
+}
+void MapWorkspace::editObjectProperties() {
+    int npc = canvas->selectedNpc;
+    if (npc < 1)
+        return;
+    const auto &mp = document.pages[currentPage()];
+    MapNpcDocument npcs(project, npcResource);
+    auto b = project->data(npcResource);
+    int base = npcs.offset(mp.settlement, npc),
+        shape = U5::byte(b, npcs.shapeOffset(mp.settlement, npc));
+    int kind = NPCS_ObjectKind(b.constData() + base, shape);
+    if (kind < 0)
+        return;
+    int value = U5::byte(b, npcs.dialogueOffset(mp.settlement, npc));
+    if (!objectValue->isHidden())
+        value = objectValue->value();
+    if (shape == 7) {
+        value |= objectSkeleton->isChecked() ? 128 : 0;
+        kind = int(objectSkeleton->isChecked() ? Workshop::MapItemKind::SkeletonKey
+                                               : Workshop::MapItemKind::Key);
+    }
+    if (!objectVariant->isHidden() && objectVariant->currentIndex() >= 0) {
+        value = objectVariant->currentData().toInt();
+        if (kind == int(Workshop::MapItemKind::Equipment))
+            b[npcs.shapeOffset(mp.settlement, npc)] =
+                char(Workshop::mapItemShape(Workshop::MapItemKind::Equipment, value));
+    }
+    for (int j = 0; j < 3; j++)
+        b[base + j] = char(NPCS_OBJECT_MARKER | kind);
+    b[npcs.dialogueOffset(mp.settlement, npc)] = char(value);
+    if ((shape & 0xf8) == 0x20)
+        b[base + 15] = char(objectAux->value());
+    if (kind == NPCS_OBJECT_TRIGGER)
+        for (int j = 0; j < 2; j++) {
+            b[base + 4 + j] = char(objectTriggerX[j]->value());
+            b[base + 7 + j] = char(objectTriggerY[j]->value());
+            b[base + 10 + j] = b[base + 9];
+        }
+    if (commitResources({{npcResource, b}}, "Edit map object"))
+        refreshNpcs();
 }
 void MapWorkspace::editNpcProperties() {
     int slot = canvas->selectedNpc;

@@ -34,7 +34,10 @@ QMap<QString, QByteArray> createNpcConversation(const Project &p, const QString 
         used.insert(entry.id);
     for (int t = 0; t < 8; ++t)
         for (int n = 0; n < int(NPCS_Count(bytes.constData(), bytes.size(), t)); ++n)
-            used.insert(dialogue(t, n));
+            if (NPCS_ObjectKind(
+                    bytes.constData() + NPCS_Offset(bytes.constData(), bytes.size(), t, n),
+                    U5::byte(bytes, NPCS_ShapeOffset(bytes.constData(), bytes.size(), t, n))) < 0)
+                used.insert(dialogue(t, n));
     int id = 1;
     while (id < 128 && used.contains(id))
         ++id;
@@ -46,6 +49,22 @@ QMap<QString, QByteArray> createNpcConversation(const Project &p, const QString 
     entries.append({unsigned(id), text});
     bytes[NPCS_DialogueOffset(bytes.constData(), bytes.size(), town, slot)] = char(id);
     return {{npc, bytes}, {talk, U5::writeDialogue(entries)}};
+}
+bool locationObject(const Project &p, const QString &resource, int town, int slot) {
+    const auto b = p.data(resource);
+    const auto off = NPCS_ShapeOffset(b.constData(), b.size(), town, slot);
+    if (slot < 1 || off >= size_t(b.size()) || !U5::byte(b, off) || U5::byte(b, off) >= 64)
+        return false;
+    const int base = NPCS_Offset(b.constData(), b.size(), town, slot);
+    return NPCS_ObjectKind(b.constData() + base, U5::byte(b, off)) >= 0 ||
+           U5::byte(b, NPCS_DialogueOffset(b.constData(), b.size(), town, slot)) == 0;
+}
+QString locationObjectName(const Project &p, const QString &resource, int town, int slot) {
+    const auto b = p.data(resource);
+    int off = NPCS_Offset(b.constData(), b.size(), town, slot);
+    const int shape = U5::byte(b, NPCS_ShapeOffset(b.constData(), b.size(), town, slot));
+    int kind = NPCS_ObjectKind(b.constData() + off, shape);
+    return kind >= 0 ? mapItemName(MapItemKind(kind)) : mapObjectName(shape);
 }
 QString actorName(int shape) {
     // Combat group names do not always describe the NPC appearance artwork.
@@ -96,6 +115,8 @@ QString mapItemName(MapItemKind k) {
     case MapItemKind::Moonstone:
         return "Moonstone";
     case MapItemKind::Corpse:
+        return "Corpse (intact)";
+    case MapItemKind::MoldyCorpse:
         return "Corpse";
     case MapItemKind::Npc:
         return "NPC";
@@ -150,6 +171,7 @@ int mapItemShape(MapItemKind kind, int variant) {
     case MapItemKind::SandalwoodBox:
         return 14;
     case MapItemKind::BloodSplatter:
+    case MapItemKind::MoldyCorpse:
         return 31;
     case MapItemKind::Corpse:
         return 30;
@@ -158,9 +180,11 @@ int mapItemShape(MapItemKind kind, int variant) {
     case MapItemKind::Skiff:
         return 40;
     case MapItemKind::Frigate:
-        return 32;
+        return 36;
     case MapItemKind::Carpet:
         return 27;
+    case MapItemKind::Trigger:
+        return 29;
     default:
         return variant < 0 ? 144 : variant;
     }
@@ -205,16 +229,17 @@ QList<MapItemKind> availableMapItems(const Project &p, const QString &r) {
              .contains(r)))
         out << MapItemKind::Sign;
     out << MapItemKind::Container << MapItemKind::HiddenContents;
-    if (worldObjectsAvailable)
+    if (worldObjectsAvailable || p.resources.contains(npc))
         out << MapItemKind::Horse << MapItemKind::Skiff << MapItemKind::Frigate
             << MapItemKind::Carpet << MapItemKind::Gold << MapItemKind::Food << MapItemKind::Corpse
             << MapItemKind::Gem << MapItemKind::Key << MapItemKind::SkeletonKey
             << MapItemKind::Torch << MapItemKind::Potion << MapItemKind::Scroll
-            << MapItemKind::Equipment << MapItemKind::SandalwoodBox << MapItemKind::BloodSplatter;
-    if ((r == "BRIT.DAT" || r == "UNDER.DAT") && p.resources.contains("INIT.GAM") &&
-        p.data("INIT.GAM").size() == 4192)
+            << MapItemKind::Equipment << MapItemKind::SandalwoodBox << MapItemKind::BloodSplatter
+            << MapItemKind::MoldyCorpse;
+    if ((r == "BRIT.DAT" || r == "UNDER.DAT" || p.resources.contains(npc)) &&
+        p.resources.contains("INIT.GAM") && p.data("INIT.GAM").size() == 4192)
         out << MapItemKind::Moonstone;
-    if (r == "DUNGEON.CBT")
+    if (r == "DUNGEON.CBT" || p.resources.contains(npc))
         out << MapItemKind::Trigger;
     return out;
 }
@@ -381,6 +406,45 @@ MapItemEdit addMapItem(const Project &p, const QString &r, int index, QPoint cel
                 : 256 + (appearance < 0 ? (kind == MapItemKind::Monster ? 144 : 80) : appearance));
     MapItemEdit out;
     auto target = contentsTarget(r, page, index);
+    const bool localSpecial = page.settlement >= 0 && kind != MapItemKind::Npc &&
+                              kind != MapItemKind::Monster && kind != MapItemKind::Sign &&
+                              kind != MapItemKind::Container && kind != MapItemKind::HiddenContents;
+    if (localSpecial) {
+        const QString npc = r.left(r.size() - 4) + ".NPC";
+        auto b = p.data(npc);
+        out.slot = NPCS_Count(b.constData(), b.size(), page.settlement);
+        MapNpcDocument::ensureSlot(b, page.settlement, out.slot);
+        const int base = NPCS_Offset(b.constData(), b.size(), page.settlement, out.slot);
+        b.replace(base, 16, QByteArray(16, 0));
+        for (int j = 0; j < 3; j++) {
+            b[base + j] = char(NPCS_OBJECT_MARKER | int(kind));
+            b[base + 3 + j] = char(cell.x());
+            b[base + 6 + j] = char(cell.y());
+            b[base + 9 + j] = char(page.floor);
+        }
+        int value = kind == MapItemKind::Frigate         ? 99
+                    : kind == MapItemKind::SkeletonKey   ? 129
+                    : kind == MapItemKind::BloodSplatter ? 255
+                    : kind == MapItemKind::Equipment     ? (appearance < 0 ? 16 : appearance)
+                    : kind == MapItemKind::Trigger       ? 5
+                    : kind == MapItemKind::Potion || kind == MapItemKind::Scroll ||
+                            kind == MapItemKind::Moonstone
+                        ? qMax(0, appearance)
+                    : kind == MapItemKind::Gold || kind == MapItemKind::Food ||
+                            kind == MapItemKind::Gem || kind == MapItemKind::Key ||
+                            kind == MapItemKind::Torch
+                        ? 1
+                        : 0;
+        b[base + 15] = char(kind == MapItemKind::Frigate         ? 1
+                            : kind == MapItemKind::BloodSplatter ? 0xb1
+                                                                 : 0);
+        b[NPCS_ShapeOffset(b.constData(), b.size(), page.settlement, out.slot)] =
+            char(mapItemShape(kind, appearance));
+        b[NPCS_DialogueOffset(b.constData(), b.size(), page.settlement, out.slot)] = char(value);
+        out.changes[npc] = b;
+        out.mode = "NPCs / Schedules";
+        return out;
+    }
     if (kind == MapItemKind::Moonstone) {
         int phase = appearance < 0 ? 0 : appearance;
         require(phase >= 0 && phase < 8, "Choose a moonstone phase");
@@ -417,7 +481,11 @@ MapItemEdit addMapItem(const Project &p, const QString &r, int index, QPoint cel
                 used.insert(e.id);
             for (int town = 0; town < 8; town++)
                 for (int i = 0; i < int(NPCS_Count(b.constData(), b.size(), town)); i++)
-                    used.insert(U5::byte(b, NPCS_DialogueOffset(b.constData(), b.size(), town, i)));
+                    if (NPCS_ObjectKind(
+                            b.constData() + NPCS_Offset(b.constData(), b.size(), town, i),
+                            U5::byte(b, NPCS_ShapeOffset(b.constData(), b.size(), town, i))) < 0)
+                        used.insert(
+                            U5::byte(b, NPCS_DialogueOffset(b.constData(), b.size(), town, i)));
             for (int id = 1; id < 128; id++)
                 if (!used.contains(id)) {
                     conversation = id;
@@ -558,7 +626,11 @@ MapItemEdit addMapItem(const Project &p, const QString &r, int index, QPoint cel
                  : kind == MapItemKind::Potion || kind == MapItemKind::Scroll ? qMax(0, appearance)
                  : shape == 2 || shape == 15 || shape == 7 || shape == 8 || shape == 13 ? 1
                                                                                         : 0);
-        record[7] = char(255);
+        if (kind == MapItemKind::BloodSplatter)
+            record[5] = char(255);
+        record[7] = char(kind == MapItemKind::BloodSplatter ? 0xb1
+                         : kind == MapItemKind::Frigate     ? 1
+                                                            : 255);
         out.changes[WorldObjects::resource(world)] =
             WorldObjects::change(p, world, out.slot, record);
         out.mode = "Starting Objects";

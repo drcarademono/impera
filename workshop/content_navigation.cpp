@@ -94,6 +94,12 @@ QVector<ContentDestination> characterDestinations(const Project &project) {
                     if (U5::byte(data,
                                  NPCS_ShapeOffset(data.constData(), data.size(), town, slot)) == 0)
                         continue;
+                    if (NPCS_ObjectKind(
+                            data.constData() +
+                                NPCS_Offset(data.constData(), data.size(), town, slot),
+                            U5::byte(data, NPCS_ShapeOffset(data.constData(), data.size(), town,
+                                                            slot))) >= 0)
+                        continue;
                     int id = U5::byte(
                             data, NPCS_DialogueOffset(data.constData(), data.size(), town, slot)),
                         conversation = -1;
