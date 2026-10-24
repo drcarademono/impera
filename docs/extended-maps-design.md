@@ -135,3 +135,26 @@ unsafe-crop rejection, new-location entity editing and package/project
 roundtrips, UI resize and creation with undo/redo, world wrapping, entry/exit on
 both worlds, first-load NPCs, combat terrain/metadata separation, camera bounds,
 NPC flags, and checksummed terrain persistence.
+
+## Dungeon floor dimensions
+
+Dungeon floors now use catalog kind 4, map IDs 33–40 and floor indices 0–7.
+Each floor independently supports 1–256 cells on each axis. Native DUNGEON.DAT
+remains 4096 bytes; an overridden floor lives entirely in MAPS.OVR and keeps the
+original dungeon feature bytes, room links, subtypes and ceiling flags.
+
+The size button beside Level opens Resize dungeon floor. Existing cells keep
+their upper-left coordinates, new cells use the selected fill feature, and a
+crop preview reports removed cells. Shrinking rejects stranded party starts and
+contents. Dimensions, terrain and contents survive project/package persistence,
+and resizing is one undoable edit. Adjacent floors may have different sizes;
+ladder warnings and the floor stack handle coordinates absent from another floor.
+
+The engine wraps coordinates by each floor's width and height. This applies to
+movement, room exits, first-person and gem views, wandering monsters, search,
+lock/unlock, field spells, pits and ladders. Completed room doors are updated
+across every overridden floor. Extended terrain mutations use the existing
+MAPS save trailer; unchanged floors continue using the original 8×8 storage.
+
+Packages containing dungeon floor records require version 20, so older engines
+reject them rather than reading them as location or combat maps.

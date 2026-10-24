@@ -1,4 +1,5 @@
 #include "world_objects.h"
+#include "dungeon_editor.h"
 #include "mod/npcs.h"
 #include "extended_maps.h"
 #include "map_editor.h"
@@ -49,7 +50,7 @@ QByteArray writeExtendedMaps(const QVector<ExtendedMap> &maps) {
     memcpy(b.data(), "IMAPS001", 8);
     TYPES_Put32(b.data() + 8, sorted.size());
     for (const auto &m : sorted) {
-        require(m.kind <= 3 && m.id <= 255 && m.page >= 0 && m.page <= 65535 && m.floor >= -128 &&
+        require(m.kind <= 4 && m.id <= 255 && m.page >= 0 && m.page <= 65535 && m.floor >= -128 &&
                     m.floor <= 127 && m.underlay >= 0 && m.underlay <= 255 && m.background >= 0 &&
                     m.background <= 255 && m.world >= -2 && m.world <= 0 && m.entrance.x() >= 0 &&
                     m.entrance.x() <= 255 && m.entrance.y() >= 0 && m.entrance.y() <= 255 &&
@@ -106,9 +107,10 @@ const ExtendedMap *findExtendedMap(const QVector<ExtendedMap> &maps, const QStri
 QSize mapSize(const Project &p, int id, int floor, int kind) {
     auto maps = extendedMaps(p);
     for (const auto &m : maps)
-        if (m.kind == unsigned(kind ? kind + 1
-                               : id ? 1
-                                    : 0) &&
+        if (m.kind == unsigned(kind                   ? kind + 1
+                               : id >= 33 && id <= 40 ? 4
+                               : id                   ? 1
+                                                      : 0) &&
             m.id == unsigned(kind ? id
                              : id ? id
                                   : floor != 0) &&
@@ -157,7 +159,8 @@ QMap<QString, QByteArray> resizeMap(const Project &p, const QString &resource, i
     MapDocument doc(&p, resource);
     require(page >= 0 && page < doc.pages.size(), "Invalid map page");
     const auto old = doc.pages[page];
-    require(fill >= 0 && fill <= 255, "Invalid background tile");
+    require(fill >= 0 && fill <= 255 && (resource != "DUNGEON.DAT" || (fill >> 4) != 9),
+            "Invalid background feature");
     auto maps = extendedMaps(p);
     ExtendedMap m;
     if (auto previous = findExtendedMap(maps, resource, page))
@@ -170,12 +173,14 @@ QMap<QString, QByteArray> resizeMap(const Project &p, const QString &resource, i
         m.kind = resource == "BRIT.DAT" || resource == "UNDER.DAT" ? 0
                  : resource == "BRIT.CBT"                          ? 2
                  : resource == "DUNGEON.CBT"                       ? 3
+                 : resource == "DUNGEON.DAT"                       ? 4
                                                                    : 1;
-        m.id = m.kind == 0   ? (resource == "UNDER.DAT")
+        m.id = m.kind == 4   ? 33 + page / 8
+               : m.kind == 0 ? (resource == "UNDER.DAT")
                : m.kind == 1 ? positionMap(resource, old)
                              : page;
         m.background = fill;
-        if (m.kind >= 2) {
+        if (m.kind == 2 || m.kind == 3) {
             m.markerMask = true;
             const auto bytes = p.data(resource);
             auto bit = [&](int index, int row, int xc, int yc, bool enabled = true) {
@@ -269,7 +274,7 @@ QMap<QString, QByteArray> resizeMap(const Project &p, const QString &resource, i
                 }
     }
     for (const auto &c : CustomTiles::placements(p))
-        if (c.kind != 3 && c.kind != 4 && c.kind != 5 && c.kind != 6) {
+        if (resource != "DUNGEON.DAT" && c.kind != 3 && c.kind != 4 && c.kind != 5 && c.kind != 6) {
             auto key = CustomTiles::cell(resource, old, page, c.x, c.y);
             if (TYPES_CellKey(&key) == TYPES_CellKey(&c))
                 check(c.x, c.y, "Custom tile");
@@ -380,6 +385,8 @@ void validateExtendedMaps(const Project &p) {
                     "Map override has an invalid native page identity");
         }
     }
+    if (std::any_of(maps.begin(), maps.end(), [](const auto &m) { return m.kind == 4; }))
+        DungeonDocument::validate(p);
     for (auto pos : mapPositions(p))
         if (!pos.carried)
             check(pos.map, pos.floor, 0, pos.cell.x(), pos.cell.y(), pos.name);
@@ -387,8 +394,7 @@ void validateExtendedMaps(const Project &p) {
         for (auto sign : readSigns(p.data("SIGNS.DAT")))
             check(sign.map, sign.floor, 0, sign.x, sign.y, "Sign");
     for (auto c : readContents(p.resources.value("CONTENTS.OVR").edited))
-        if (!((c.map >= 33 && c.map <= 40) && !c.kind))
-            check(c.map, c.floor, c.kind, c.x, c.y, "Container or discovery");
+        check(c.map, c.floor, c.kind, c.x, c.y, "Container or discovery");
 }
 
 } // namespace Workshop

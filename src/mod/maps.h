@@ -45,20 +45,22 @@ static inline int MAPS_Validate(const void *v, size_t n) {
             return 0;
         const unsigned char *r = b + off;
         unsigned w = MAPS_Word(r + 10), h = MAPS_Word(r + 12), length = MAPS_U32(r);
-        if (r[4] > 3 || !w || !h || w > 256 || h > 256 || length != MAPS_RECORD + w * h ||
+        if (r[4] > 4 || !w || !h || w > 256 || h > 256 || length != MAPS_RECORD + w * h ||
             length > n - off || (i && MAPS_Key(r) <= prev) || !memchr(r + 24, 0, 64) || !r[24] ||
             !memchr(r + 88, 0, 32) || !r[88])
             return 0;
         if ((!r[4] && (r[5] > 1 || r[8])) ||
             (r[4] == 1 && (!MAPS_Town(r[5]) || (MAPS_NewLocation(r[5]) && r[8]))) ||
-            (r[4] >= 2 && r[8]) || (int8_t)r[14] < -2 || (int8_t)r[14] > 0 ||
+            ((r[4] == 2 || r[4] == 3) && r[8]) ||
+            (r[4] == 4 && (r[5] < 33 || r[5] > 40 || r[8] > 7)) || (int8_t)r[14] < -2 ||
+            (int8_t)r[14] > 0 ||
             (MAPS_NewLocation(r[5]) && r[4] == 1 &&
              ((int8_t)r[14] == -2 || r[17] >= w || r[18] >= h)))
             return 0;
         for (unsigned j = 21; j < 24; ++j)
             if (r[j])
                 return 0;
-        if (r[20] > 1 || (r[20] && r[4] < 2))
+        if (r[20] > 1 || (r[20] && (r[4] < 2 || r[4] == 4)))
             return 0;
         for (unsigned j = 120; j < 128; ++j)
             if (r[j] && !r[20])
@@ -86,6 +88,9 @@ static inline int MAPS_Validate(const void *v, size_t n) {
                     strcmp(resource, banks[(r[5] - 1) / 8]))
                     return 0;
             }
+        } else if (r[4] == 4) {
+            if (page != (r[5] - 33) * 8 + r[8] || strcmp(resource, "DUNGEON.DAT"))
+                return 0;
         } else if (page != r[5] || strcmp(resource, r[4] == 2 ? "BRIT.CBT" : "DUNGEON.CBT"))
             return 0;
         if (!(r[4] == 1 && MAPS_NewLocation(r[5])) && ((int8_t)r[14] != -2 || r[19]))
@@ -124,7 +129,7 @@ static inline const unsigned char *MAPS_Find(const void *v, size_t n, unsigned k
 static inline int MAPS_Contains(const void *catalog, size_t size, unsigned kind, unsigned id,
                                 int floor, int x, int y) {
     const unsigned char *r = MAPS_Find(catalog, size, kind, id, floor);
-    int w = r ? MAPS_Word(r + 10) : kind == 0 ? 256 : kind == 1 ? 32 : 11;
+    int w = r ? MAPS_Word(r + 10) : kind == 0 ? 256 : kind == 1 ? 32 : kind == 4 ? 8 : 11;
     int h = r ? MAPS_Word(r + 12) : w;
     if (kind == 1 && MAPS_NewLocation(id) && !r)
         return 0;
@@ -152,6 +157,7 @@ int MAPS_Wrap(int value, int size);
 unsigned char *MAPS_ActiveCell(unsigned map, int level, int x, int y);
 unsigned char *MAPS_LocationCell(unsigned map, int level, int x, int y, unsigned char *native,
                                  unsigned char *background);
+unsigned char *MAPS_DungeonCell(unsigned map, int level, int x, int y, unsigned char *native);
 unsigned char *MAPS_CombatCell(int x, int y, unsigned char *native);
 int MAPS_WriteState(FILE *);
 int MAPS_ReadState(FILE *, int apply);

@@ -48,9 +48,10 @@ void MAPS_Combat(unsigned kind, unsigned id) {
     combatMap = id;
 }
 static const unsigned char *active(unsigned map, int level) {
-    return MAPS_Record(map >= 128 ? combatKind + 1
-                       : map      ? 1
-                                  : 0,
+    return MAPS_Record(map >= 128               ? combatKind + 1
+                       : map >= 33 && map <= 40 ? 4
+                       : map                    ? 1
+                                                : 0,
                        map >= 128 ? combatMap
                        : map      ? map
                                   : !!level,
@@ -91,6 +92,17 @@ unsigned char *MAPS_ActiveCell(unsigned map, int level, int x, int y) {
         return &outside;
     }
     return (unsigned char *)r + MAPS_RECORD + y * w + x;
+}
+unsigned char *MAPS_DungeonCell(unsigned map, int level, int x, int y, unsigned char *native) {
+    if (level < 0 || level >= 8) {
+        outside = 0xb0;
+        return &outside;
+    }
+    const unsigned char *r = MAPS_Record(4, map, level);
+    int w = r ? MAPS_Word(r + 10) : 8, h = r ? MAPS_Word(r + 12) : 8;
+    x = MAPS_Wrap(x, w);
+    y = MAPS_Wrap(y, h);
+    return r ? (unsigned char *)r + MAPS_RECORD + y * w + x : native + level * 64 + y * 8 + x;
 }
 unsigned char *MAPS_LocationCell(unsigned map, int level, int x, int y, unsigned char *native,
                                  unsigned char *background) {

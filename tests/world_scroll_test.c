@@ -10,6 +10,9 @@
 #include "npc.h"
 #include "sjog.h"
 #include "cmds.h"
+#include "dnglook.h"
+#include "dungeon.h"
+#include "cast2.h"
 #include "macros.h"
 #include "funcs.h"
 #include "mod/contents.h"
@@ -186,6 +189,94 @@ static void testExtendedMaps(void) {
     D_659e[1] = TILE_ACTOR_WIZARD;
     assert(TOWN_0000_CheckNpcKilled(1));
     fclose(state);
+    MAPS_Mount(NULL, 0);
+    free(catalog);
+    D_5893_map_id = 0;
+    D_5895_map_level = 0;
+}
+
+static void testDungeonDimensions(void) {
+    unsigned char *catalog = calloc(1, 80000);
+    assert(catalog);
+    memcpy(catalog, "IMAPS001", 8);
+    TYPES_Put32(catalog + 8, 3);
+    size_t off = MAPS_HEADER, record = off;
+    off = appendMap(catalog, off, 4, 33, -2, 19, 3, "Deceit level 1", "DUNGEON.DAT");
+    record = off;
+    off = appendMap(catalog, off, 4, 33, -2, 256, 256, "Deceit level 2", "DUNGEON.DAT");
+    catalog[record + 6] = 1;
+    catalog[record + 8] = 1;
+    record = off;
+    off = appendMap(catalog, off, 4, 33, -2, 1, 1, "Deceit level 3", "DUNGEON.DAT");
+    catalog[record + 6] = 2;
+    catalog[record + 8] = 2;
+    assert(MAPS_Mount(catalog, off));
+    memset(D_595a, 0, sizeof(D_595a));
+    D_5893_map_id = 33;
+    D_5895_map_level = 0;
+    assert(MAP_WIDTH == 19 && MAP_HEIGHT == 3);
+    GetDungeonMap(18, 2, 0) = 0x82;
+    assert(GetDungeonMap(-1, -1, 0) == 0x82 && GetDungeonMap(37, 5, 0) == 0x82);
+    assert(D_595a[18] == 0 && GetDungeonMap(0, 0, 1) == 5);
+    D_5896_map_x = D_5897_map_y = 0;
+    D_58a0 = DIR_UP;
+    DNGLOOK_0fda();
+    assert(D_5897_map_y == 2);
+    D_58a0 = DIR_LEFT;
+    DNGLOOK_0fda();
+    assert(D_5896_map_x == 18);
+    D_58a0 = DIR_RIGHT;
+    DNGLOOK_0fda();
+    assert(D_5896_map_x == 0);
+    D_58a0 = DIR_DOWN;
+    DNGLOOK_0fda();
+    assert(D_5897_map_y == 0);
+    D_5896_map_x = 18;
+    D_5897_map_y = 2;
+    D_6603 = 1;
+    GetDungeonMap(18, 2, 0) = 0;
+    GetDungeonMap(0, 2, 0) = 0x82;
+    assert(CAST2_07bc(0) == -1 && GetDungeonMap(0, 2, 0) == 0);
+    D_5895_map_level = 1;
+    assert(MAP_WIDTH == 256 && MAP_HEIGHT == 256);
+    D_5896_map_x = 255;
+    D_58a0 = DIR_RIGHT;
+    DNGLOOK_0fda();
+    assert(D_5896_map_x == 0);
+    D_58a0 = DIR_LEFT;
+    DNGLOOK_0fda();
+    assert(D_5896_map_x == 255);
+    D_5c5a[1]._5 = 0xff;
+    D_5c5a[1]._2_x = D_5c5a[1]._3_y = 255;
+    D_5896_map_x = 254;
+    D_5897_map_y = 255;
+    D_6603 = 1;
+    assert(DUNGEON_1d4a_AttackCmd() == 0); /* 255,255 is a cell, not an inactive monster. */
+    GetDungeonMap(255, 255, 1) = 0xf1;
+    D_3840 = 0;
+    memset(D_58e0, 0, sizeof(D_58e0));
+    DNGLOOK_0844(1);
+    DNGLOOK_093a();
+    assert(GetDungeonMap(255, 255, 1) == 0xa1);
+    GetDungeonMap(254, 255, 1) = 0x83;
+    FILE *saved = tmpfile();
+    assert(saved && MAPS_WriteState(saved));
+    MAPS_Reset();
+    assert(GetDungeonMap(254, 255, 1) == 5);
+    rewind(saved);
+    assert(MAPS_ReadState(saved, 1));
+    fclose(saved);
+    assert(GetDungeonMap(254, 255, 1) == 0x83);
+    D_5895_map_level = 2;
+    assert(MAP_WIDTH == 1 && MAP_HEIGHT == 1);
+    GetDungeonMap(-20, 999, 2) = 0x40;
+    assert(GetDungeonMap(0, 0, 2) == 0x40);
+    D_5895_map_level = 3;
+    assert(MAP_WIDTH == 8 && MAP_HEIGHT == 8);
+    GetDungeonMap(9, 8, 3) = 0x50;
+    assert(D_595a[3 * 64 + 1] == 0x50);
+    assert(GetDungeonMap(0, 0, 8) ==
+           0xb0); /* Invalid levels cannot index past the native buffer. */
     MAPS_Mount(NULL, 0);
     free(catalog);
     D_5893_map_id = 0;
@@ -382,6 +473,7 @@ int main(void)
     assert(D_589b==240 && D_589c==240);
     testExtendedMaps();
     testLocationObjects();
+    testDungeonDimensions();
     puts("World block scrolling and diagonal boundary tests passed.");
     return 0;
 }

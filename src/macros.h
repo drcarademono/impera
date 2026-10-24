@@ -143,8 +143,10 @@
 #define GetActorMap(x, y) (D_ac64[(y) * 0x10 + (x)])
 
 // dungeon map
-#define GetDungeonMap(x, y, level) (D_595a[(level) * 0x40 + (y) * 8 + (x)])
-#define GetDungeonMap2(x, y, level) (D_595a[((y) & 7) * 8 + ((x) & 7) + (level) * 0x40])
+#define GetDungeonMap(x, y, level) (*MAPS_DungeonCell(D_5893_map_id, (level), (x), (y), D_595a))
+#define GetDungeonMap2(x, y, level) GetDungeonMap(x, y, level)
+#define DungeonX(x) MAPS_Wrap((x), MAP_WIDTH)
+#define DungeonY(y) MAPS_Wrap((y), MAP_HEIGHT)
 
 // combat map
 // ref: https://wiki.ultimacodex.com/wiki/Ultima_V_internal_formats#*.CBT

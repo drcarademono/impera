@@ -30,7 +30,7 @@ All integers are unsigned little-endian 32-bit values; there is no padding.
 
 | Header | Encoding |
 | --- | --- |
-| Magic/version | Eight ASCII bytes `IMOD0001` through `IMOD0019` |
+| Magic/version | Eight ASCII bytes `IMOD0001` through `IMOD0020` |
 | Title length | 1–256 UTF-8 bytes |
 | Resource count | 1–512 |
 | Title | Length bytes; embedded NUL forbidden |
@@ -509,3 +509,15 @@ Both identities range from 0 to 2. A location has at most one authored Shadow
 Lord to match the engine's single active location-wide influence. Consumed-state
 flags and save records reuse the existing extended NPC state. Earlier package
 versions reject these new location kinds rather than treating them as dialogue.
+
+
+## Resized dungeon floors (version 20)
+
+`IMOD0020` retains previous formats and adds MAPS.OVR kind 4. Its map ID is
+33–40, floor is 0–7, resource is DUNGEON.DAT, and page is
+`(map ID - 33) * 8 + floor`. Width and height independently range from 1 to 256.
+Cells are native dungeon feature bytes, not terrain tiles. No entrance or combat
+marker metadata is used. The native DUNGEON.DAT remains 4096 bytes. Dungeon
+contents coordinates are validated against these dimensions, or 8×8 for floors
+without an override. Mutations persist through the existing IMPSAV01 map-state
+trailer. Each floor preserves vanilla toroidal wrapping at its new dimensions.

@@ -563,7 +563,8 @@ int CAST2_07bc(int param_1)
         local_4 = &GetDungeonMap(D_5896_map_x, D_5897_map_y, D_5895_map_level);
         if ((*local_4 & 0xf0) != 0x80)
         {
-            local_4 = &GetDungeonMap((D_5896_map_x + local_a) & 7, (D_5897_map_y + local_c) & 7, D_5895_map_level);
+            local_4 = &GetDungeonMap(DungeonX(D_5896_map_x + local_a),
+                                     DungeonY(D_5897_map_y + local_c), D_5895_map_level);
         }
 
         if ((*local_4 & 0xf0) == 0x80)

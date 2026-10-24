@@ -2331,8 +2331,10 @@ bool WorkshopWindow::reviewPackage(bool launch) {
                             parts[4] == "cell") {
                             editorState["DUNGEON.DAT/dungeon"] = parts[1].toInt();
                             editorState["DUNGEON.DAT/level"] = parts[3].toInt();
-                            editorState["DUNGEON.DAT/x"] = parts[5].toInt() % 8;
-                            editorState["DUNGEON.DAT/y"] = parts[5].toInt() / 8;
+                            const auto size =
+                                Workshop::mapSize(project, 33 + parts[1].toInt(), parts[3].toInt());
+                            editorState["DUNGEON.DAT/x"] = parts[5].toInt() % size.width();
+                            editorState["DUNGEON.DAT/y"] = parts[5].toInt() / size.width();
                         }
                     }
                     selectResource(item->data(0, Qt::UserRole).toString());

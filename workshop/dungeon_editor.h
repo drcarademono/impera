@@ -5,6 +5,7 @@ QVector<QImage> dungeonFeatureImages(const QVector<QImage> &tiles);
 class DungeonDocument {
   public:
     explicit DungeonDocument(const Project *project);
+    QSize size(int dungeon, int floor) const;
     QByteArray level(int dungeon, int floor, bool original = false) const;
     QMap<QString, QByteArray> changes(int dungeon, int floor, const QByteArray &cells) const;
     static int offset(int dungeon, int floor);

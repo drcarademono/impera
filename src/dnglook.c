@@ -12,6 +12,8 @@
 #include "audio/audio.h"
 #include "mod/contents_game.h"
 static int viewDungeonCell(int x,int y,int floor) {
+    x = MAPS_Wrap(x, MAPS_ActiveWidth(D_5893_map_id, floor));
+    y = MAPS_Wrap(y, MAPS_ActiveHeight(D_5893_map_id, floor));
     return CONTENTS_GAME_DungeonTile(GetDungeonMap(x,y,floor),x,y);
 }
 
@@ -45,7 +47,7 @@ void DNGLOOK_0000_LookCmdInDungeon(void)
     local_8 = D_5876;
     local_a = D_5878;
 
-    local_c = viewDungeonCell(local_8 & 7, local_a & 7, D_5895_map_level);
+    local_c = viewDungeonCell(DungeonX(local_8), DungeonY(local_a), D_5895_map_level);
 
     ULTIMA_1850_PrintString(_TEXT(0x7542, "You see:\n"));
 
@@ -244,8 +246,8 @@ static int DNGLOOK_0340(int param_1, int param_2)
         local_8 = 1;
         D_ad14[param_2 * 0x20 + param_1] = 0;
 
-        local_4 = (param_1 + D_5896_map_x - 0xb) & 7;
-        local_6 = (param_2 + D_5897_map_y - 0xb) & 7;
+        local_4 = DungeonX(param_1 + D_5896_map_x - 0xb);
+        local_6 = DungeonY(param_2 + D_5897_map_y - 0xb);
         local_a = viewDungeonCell(local_4, local_6, D_5895_map_level);
         local_a >>= 4;
 
@@ -580,21 +582,17 @@ void DNGLOOK_093a(void)
     int local_6;
     byte* local_a;
 
-    local_a = D_595a;
-
-    for (local_6 = 0; local_6 < 0x200; local_6++)
-    {
-        local_c = *local_a;
-        local_4 = local_c & 0xf0;
-        if (local_4 == 0xf0)
-        {
-            local_8 = local_c & 0xf;
-            if (DNGLOOK_08d4(local_8) != 0)
-            {
-                *local_a &= 0xaf;
+    for (int floor = 0; floor < 8; floor++) {
+        int width = MAPS_ActiveWidth(D_5893_map_id, floor),
+            height = MAPS_ActiveHeight(D_5893_map_id, floor);
+        for (int y = 0; y < height; y++)
+            for (int x = 0; x < width; x++) {
+                local_a = &GetDungeonMap(x, y, floor);
+                local_c = *local_a;
+                local_4 = local_c & 0xf0;
+                if (local_4 == 0xf0 && DNGLOOK_08d4(local_c & 15))
+                    *local_a &= 0xaf;
             }
-        }
-        local_a++;
     }
 }
 
@@ -768,7 +766,7 @@ static void DNGLOOK_0b9e(int param_1)
         break;
     }
 
-    local_8 = viewDungeonCell(local_4 & 7, local_6 & 7, D_5895_map_level);
+    local_8 = viewDungeonCell(DungeonX(local_4), DungeonY(local_6), D_5895_map_level);
     local_8 &= 0xf0;
     if (local_8 < 0xa0)
     {
@@ -1002,39 +1000,23 @@ void DNGLOOK_0fda(void)
     switch (D_58a0)
     {
     case DIR_UP:
-        D_5897_map_y--;
+        D_5897_map_y = DungeonY((int)D_5897_map_y - 1);
         D_6602 = D_6603 = 0;
-        if (7 < D_5897_map_y)
-        {
-            D_5897_map_y = 7;
-        }
         break;
 
     case DIR_RIGHT:
-        D_5896_map_x++;
+        D_5896_map_x = DungeonX((int)D_5896_map_x + 1);
         D_6602 = D_6603 = 1;
-        if (7 < D_5896_map_x)
-        {
-            D_5896_map_x = 0;
-        }
         break;
 
     case DIR_DOWN:
-        D_5897_map_y++;
+        D_5897_map_y = DungeonY((int)D_5897_map_y + 1);
         D_6602 = D_6603 = 2;
-        if (7 < D_5897_map_y)
-        {
-            D_5897_map_y = 0;
-        }
         break;
 
     case DIR_LEFT:
-        D_5896_map_x--;
+        D_5896_map_x = DungeonX((int)D_5896_map_x - 1);
         D_6602 = D_6603 = 3;
-        if (7 < D_5896_map_x)
-        {
-            D_5896_map_x = 7;
-        }
         break;
 
     case 5:
@@ -1067,6 +1049,10 @@ void DNGLOOK_0fda(void)
 
 void DNGLOOK_109e(int param_1)
 {
+    if (D_5893_map_id >= 33 && D_5893_map_id <= 40 && D_5895_map_level < 8) {
+        D_5896_map_x = DungeonX(D_5896_map_x);
+        D_5897_map_y = DungeonY(D_5897_map_y);
+    }
     if (D_5893_map_id != 0)
     {
         if ((D_bb17 & 2) != 0)

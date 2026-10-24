@@ -96,7 +96,7 @@ int CONTENTS_Validate(const void *data, size_t size) {
             if ((d.map > 40 && !MAPS_NewLocation(d.map)) || d.floor < -1 || d.floor > 7 ||
                 (!d.map && d.floor != 0 && d.floor != -1))
                 return 0;
-            if (d.map >= 33 && d.map <= 40 && (d.x >= 8 || d.y >= 8 || d.floor < 0))
+            if (d.map >= 33 && d.map <= 40 && (d.floor < 0))
                 return 0;
 
         } else if (d.map >= (d.kind == 1 ? 16 : 112) || d.floor || d.slot != 255 || d.refill != 0)

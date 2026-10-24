@@ -136,7 +136,9 @@ QVector<U5::MapPage> Project::mapPages(const QString &resource) const {
     const QStringList banks{"TOWNE.DAT", "DWELLING.DAT", "CASTLE.DAT", "KEEP.DAT"};
     int bank = banks.indexOf(resource);
     for (auto &page : pages) {
-        if (bank >= 0)
+        if (resource == "DUNGEON.DAT")
+            page.name = locationName(33 + page.settlement) + " — " + page.name.section(" — ", 1);
+        else if (bank >= 0)
             page.name =
                 locationName(bank * 8 + page.settlement + 1) + " — " + page.name.section(" — ", 1);
         else if (resource == "BRIT.DAT" || resource == "UNDER.DAT")
@@ -247,8 +249,12 @@ QByteArray Project::package() const {
                 locationObjects |=
                     NPCS_Blood(U5::byte(b, i * 8), U5::byte(b, i * 8 + 5), U5::byte(b, i * 8 + 7));
     }
+    bool dungeonMaps = false;
+    for (const auto &map : Workshop::extendedMaps(*this))
+        dungeonMaps |= map.kind == 4;
     QByteArray out(
-        specialActors ? "IMOD0019"
+        dungeonMaps     ? "IMOD0020"
+        : specialActors ? "IMOD0019"
         : (locationObjects || list.contains("MAPS.OVR") ||
            resources.value("SIGNS.DAT").edited.startsWith("ISIG0001"))
             ? "IMOD0018"
@@ -761,24 +767,39 @@ QVector<ModDiagnostic> validateMod(const Project &project, const QString &modsDi
                            "Package verification: " + QString::fromUtf8(error.what())});
         }
     }
-    if (changes.contains("DUNGEON.DAT")) {
+    bool dungeonDimensionsChanged = false;
+    if (changes.contains("MAPS.OVR"))
+        for (const auto &m : Workshop::extendedMaps(project))
+            dungeonDimensionsChanged |= m.kind == 4;
+    if (changes.contains("DUNGEON.DAT") || dungeonDimensionsChanged) {
         try {
             Workshop::DungeonDocument dungeon(&project);
-            for (int d = 0; d < 8; ++d)
-                for (int f = 0; f < 8; ++f)
-                    for (int y = 0; y < 8; ++y)
-                        for (int x = 0; x < 8; ++x) {
-                            auto changedCell = [&](int level) {
-                                const int at =
-                                    Workshop::DungeonDocument::offset(d, level) + y * 8 + x;
-                                return at >= project.resources["DUNGEON.DAT"].original.size() ||
-                                       project.resources["DUNGEON.DAT"].original[at] !=
-                                           project.data("DUNGEON.DAT")[at];
-                            };
-                            if (!changedCell(f) && !(f > 0 && changedCell(f - 1)) &&
-                                !(f < 7 && changedCell(f + 1)))
+            int count = 0;
+            for (int d = 0; d < 8 && count < 200; d++)
+                for (int f = 0; f < 8 && count < 200; f++) {
+                    auto dims = dungeon.size(d, f);
+                    auto cells = dungeon.level(d, f), original = dungeon.level(d, f, true);
+                    for (int y = 0; y < dims.height() && count < 200; y++)
+                        for (int x = 0; x < dims.width() && count < 200; x++) {
+                            int value = U5::byte(cells, y * dims.width() + x), kind = value >> 4;
+                            if (kind != 1 && kind != 2 && kind != 3 && kind != 9 && kind != 10 &&
+                                kind != 15 && !(value & 7))
                                 continue;
-                            for (auto warning : dungeon.warnings(d, f, x, y))
+                            if (x < 8 && y < 8 && value == U5::byte(original, y * 8 + x) &&
+                                !dungeonDimensionsChanged) {
+                                auto changedOther = [&](int other) {
+                                    auto size = dungeon.size(d, other);
+                                    if (x >= size.width() || y >= size.height())
+                                        return true;
+                                    return U5::byte(dungeon.level(d, other),
+                                                    y * size.width() + x) !=
+                                           U5::byte(dungeon.level(d, other, true), y * 8 + x);
+                                };
+                                if (!(((kind == 1 || kind == 3) && f > 0 && changedOther(f - 1)) ||
+                                      ((kind == 2 || kind == 3) && f < 7 && changedOther(f + 1))))
+                                    continue;
+                            }
+                            for (auto warning : dungeon.warnings(d, f, x, y)) {
                                 result.append({ModDiagnostic::Warning, "DUNGEON.DAT",
                                                QString("Dungeon %1 · Level %2 · X %3 Y %4: %5")
                                                    .arg(d + 1)
@@ -789,13 +810,12 @@ QVector<ModDiagnostic> validateMod(const Project &project, const QString &modsDi
                                                QString("dungeon/%1/level/%2/cell/%3")
                                                    .arg(d)
                                                    .arg(f)
-                                                   .arg(y * 8 + x)});
+                                                   .arg(y * dims.width() + x)});
+                                count++;
+                            }
                         }
-            result.append({ModDiagnostic::Information, "DUNGEON.DAT",
-                           "Already-loaded dungeon layouts in saves may retain their old cells. "
-                           "Re-enter the dungeon to load the package layout."});
-        } catch (
-            const std::exception &) { /* The main validation pass already reports malformed data. */
+                }
+        } catch (const std::exception &) {
         }
     }
     return result;

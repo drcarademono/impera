@@ -539,6 +539,12 @@ QMap<QString, QStringList> contentChanges(const Project &project,
                         parts.append("Location names");
                         break;
                     }
+                if (changed("MAPS.OVR"))
+                    for (const auto &m : extendedMaps(project))
+                        if (m.kind == 4) {
+                            parts.append("Dungeon dimensions / terrain");
+                            break;
+                        }
                 if (changed(d.resource))
                     parts.append("Dungeon terrain");
                 if (changed("CONTENTS.OVR"))

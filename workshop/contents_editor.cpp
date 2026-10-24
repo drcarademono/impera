@@ -16,6 +16,8 @@ ContentsTarget contentsTarget(const QString &r, const U5::MapPage &p, int index)
         return {2, index, 0};
     if (auto id = MAPS_LocationResource(r.toLatin1().constData()))
         return {0, int(id), p.floor};
+    if (r == "DUNGEON.DAT")
+        return {0, 33 + p.settlement, p.floor};
     int group = QStringList{"TOWNE.DAT", "DWELLING.DAT", "CASTLE.DAT", "KEEP.DAT"}.indexOf(r);
     return {0, group >= 0 ? group * 8 + p.settlement + 1 : 0, r == "UNDER.DAT" ? -1 : p.floor};
 }
@@ -295,7 +297,10 @@ void ContentsEditor::refresh() {
     for (int i = 0; i < entries.size(); i++) {
         const auto &d = entries[i];
         canvas->contentsMarkers.append({d.x, d.y, -1, -1, {}});
-        canvas->actors.append({d.x, d.y, d.action ? 257 : -1, i, d.action ? QString() : "·"});
+        canvas->actors.append(
+            {d.x, d.y,
+             d.action ? (!target.kind && target.map >= 33 && target.map <= 40 ? 0x40 : 257) : -1, i,
+             d.action ? QString() : "·"});
         locations->addItem(
             QString("%1 · %2, %3").arg(d.action ? "Chest" : "Discovery").arg(d.x).arg(d.y));
     }

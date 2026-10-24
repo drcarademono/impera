@@ -2958,6 +2958,98 @@ int main(int argc, char **argv) {
                       "a test description",
                   "Description UI did not commit");
         });
+        test("Dungeon floors resize independently, roundtrip and keep contents, links and undo",
+             [&] {
+                 QTemporaryDir dir;
+                 auto p = fixture(dir.path());
+                 QByteArray native(4096, 0);
+                 native[63] = char(0xa1);
+                 file(dir.path() + "/DUNGEON.DAT", native);
+                 file(dir.path() + "/DUNGEON.CBT", QByteArray(112 * 352, 0));
+                 p.openGame(dir.path());
+                 auto apply = [&](const QMap<QString, QByteArray> &edits) {
+                     for (auto it = edits.begin(); it != edits.end(); ++it)
+                         p.resources[it.key()].edited = it.value();
+                     p.validate();
+                 };
+                 apply(Workshop::resizeMap(p, "DUNGEON.DAT", 0, 13, 9, 0xb0));
+                 Workshop::DungeonDocument doc(&p);
+                 check(doc.size(0, 0) == QSize(13, 9) && doc.size(0, 1) == QSize(8, 8),
+                       "Dungeon dimensions leaked to another floor");
+                 check(U5::byte(doc.level(0, 0), 7 * 13 + 7) == 0xa1 &&
+                           U5::byte(doc.level(0, 0), 8 * 13 + 12) == 0xb0 &&
+                           p.data("DUNGEON.DAT") == native,
+                       "Resize lost feature bytes or changed native dungeon banks");
+                 auto cells = doc.level(0, 0);
+                 cells[8 * 13 + 12] = 0x20;
+                 apply(doc.changes(0, 0, cells));
+                 check(doc.warnings(0, 0, 12, 8).join(" ").contains("matching"),
+                       "Cross-floor ladder warning failed outside adjacent dimensions");
+                 apply({{"CONTENTS.OVR", Workshop::addContentsAt(p, {0, 33, 0}, {12, 8}, true)}});
+                 rejects([&] { Workshop::resizeMap(p, "DUNGEON.DAT", 0, 12, 8, 0); });
+                 apply(Workshop::resizeMap(p, "DUNGEON.DAT", 1, 5, 3, 0));
+                 apply(Workshop::resizeMap(p, "DUNGEON.DAT", 2, 1, 256, 0));
+                 apply(Workshop::resizeMap(p, "DUNGEON.DAT", 3, 256, 256, 0));
+                 check(doc.level(0, 3).size() == 65536 && doc.size(0, 2) == QSize(1, 256),
+                       "Dungeon size boundary was truncated");
+                 Project positioned = p;
+                 auto starts = Workshop::moveMapPosition(positioned, 0, 33, 3, {255, 255});
+                 for (auto it = starts.begin(); it != starts.end(); ++it)
+                     positioned.resources[it.key()].edited = it.value();
+                 rejects([&] { Workshop::resizeMap(positioned, "DUNGEON.DAT", 3, 255, 256, 0); });
+                 rejects([&] { Workshop::resizeMap(p, "DUNGEON.DAT", 0, 257, 9, 0); });
+                 rejects([&] { Workshop::resizeMap(p, "DUNGEON.DAT", 0, 13, 0, 0); });
+                 rejects([&] { Workshop::resizeMap(p, "DUNGEON.DAT", 0, 13, 9, 0x90); });
+                 auto package = p.package();
+                 check(package.startsWith("IMOD0020"),
+                       "Dungeon dimensions lack package capability protection");
+                 Project imported;
+                 imported.openGame(dir.path());
+                 imported.importPackage(package);
+                 check(Workshop::DungeonDocument(&imported).level(0, 0) == doc.level(0, 0) &&
+                           Workshop::DungeonDocument(&imported).size(0, 3) == QSize(256, 256),
+                       "Dungeon package lost resized terrain");
+                 auto old = package;
+                 old.replace(0, 8, "IMOD0019");
+                 rejects([&] { imported.importPackage(old); });
+                 p.save(dir.path() + "/dungeons.imperaproject");
+                 WorkshopWindow window;
+                 check(window.openProject(p.projectPath), "Cannot reopen resized dungeons");
+                 window.show();
+                 window.selectResource("DUNGEON.DAT");
+                 app.processEvents();
+                 auto active = [&] {
+                     return window.findChild<QStackedWidget *>("workspaces")->currentWidget();
+                 };
+                 auto canvas =
+                     dynamic_cast<MapCanvas *>(active()->findChild<QWidget *>("dungeonCanvas"));
+                 check(canvas && canvas->side == 13 && canvas->rowCount() == 9,
+                       "Dungeon editor still assumes eight cells");
+                 canvas->inspect(12, 8, 0);
+                 QTimer::singleShot(0, [] {
+                     auto dialog = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+                     check(dialog, "Resize dialog missing");
+                     dialog->findChild<QSpinBox *>("mapWidth")->setValue(16);
+                     dialog->findChild<QSpinBox *>("mapHeight")->setValue(10);
+                     dialog->accept();
+                 });
+                 active()->findChild<QToolButton *>("resizeDungeonFloor")->click();
+                 app.processEvents();
+                 check(Workshop::DungeonDocument(&window.projectForTests()).size(0, 0) ==
+                           QSize(16, 10),
+                       "Dungeon Resize control failed");
+                 for (auto action : window.findChildren<QAction *>())
+                     if (action->shortcut() == QKeySequence::Undo) {
+                         action->trigger();
+                         break;
+                     }
+                 app.processEvents();
+                 canvas =
+                     dynamic_cast<MapCanvas *>(active()->findChild<QWidget *>("dungeonCanvas"));
+                 check(canvas && canvas->side == 13 && canvas->rowCount() == 9 &&
+                           window.projectForTests().data("DUNGEON.DAT") == native,
+                       "Dungeon resize undo lost dimensions or original terrain");
+             });
         test("Dungeon codec, feature validation and engine room mapping", [] {
             QTemporaryDir dir;
             auto p = fixture(dir.path());

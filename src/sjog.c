@@ -449,9 +449,9 @@ static void SJOG_0646_SearchInDungeon(void)
 
     local_a = D_5876;
     local_c = D_5878;
-    if (CONTENTS_GAME_Interact(0, local_a & 7, local_c & 7, local_10 - 1))
+    if (CONTENTS_GAME_Interact(0, DungeonX(local_a), DungeonY(local_c), local_10 - 1))
         return;
-    local_e = GetDungeonMap(local_a & 7, local_c & 7, (uint)D_5895_map_level);
+    local_e = GetDungeonMap(DungeonX(local_a), DungeonY(local_c), (uint)D_5895_map_level);
     local_4 = D_55a8_party[local_10].dex;
     local_6 = (D_5895_map_level * 2 - local_4 + 0x1e) >> 1;
     ULTIMA_1850_PrintString(_TEXT(0x86f4, "You find:\n"));
@@ -521,10 +521,11 @@ static void SJOG_0646_SearchInDungeon(void)
         case 0x61:
             // 0782
             ULTIMA_1850_PrintString(_TEXT(0x87a2, "A pit!\n"));
-            GetDungeonMap(local_a & 7, local_c & 7, D_5895_map_level) = (local_e & 0x8) + 0x60;
+            GetDungeonMap(DungeonX(local_a), DungeonY(local_c), D_5895_map_level) =
+                (local_e & 0x8) + 0x60;
             if (D_5895_map_level < 7)
             {
-                GetDungeonMap(local_a & 7, local_c & 7, D_5895_map_level + 1) |= 8;
+                GetDungeonMap(DungeonX(local_a), DungeonY(local_c), D_5895_map_level + 1) |= 8;
             }
 
             DUNGEON_1a90(1);
@@ -536,7 +537,7 @@ static void SJOG_0646_SearchInDungeon(void)
             if (local_6 < ULTIMA_2092_RandomRange(1, 0x1e))
             {
                 ULTIMA_1850_PrintString(_TEXT(0x87aa, "A bomb trap!\n"));
-                GetDungeonMap(local_a & 7, local_c & 7, D_5895_map_level) &= 8;
+                GetDungeonMap(DungeonX(local_a), DungeonY(local_c), D_5895_map_level) &= 8;
             }
             else
             {
@@ -611,7 +612,8 @@ static void SJOG_0646_SearchInDungeon(void)
             ULTIMA_1850_PrintString(_TEXT(0x88c8, "Nothing hidden on the skeleton.\n"));
             ULTIMA_1850_PrintString(_TEXT(0x88ea, "It crumbles away.\n"));
 
-            GetDungeonMap(local_a & 7, local_c & 7, D_5895_map_level) = (local_e & 8) - 0x50;
+            GetDungeonMap(DungeonX(local_a), DungeonY(local_c), D_5895_map_level) =
+                (local_e & 8) - 0x50;
             DUNGEON_1a90(1);
             ULTIMA_0f46_GRAP_66_Reveal(8, 8, 0xb7, 0xb7);
             break;
@@ -622,7 +624,8 @@ static void SJOG_0646_SearchInDungeon(void)
         // 08c2
         ULTIMA_1850_PrintString(_TEXT(0x88fe, "A hidden door!\n"));
 
-        GetDungeonMap(local_a & 7, local_c & 7, D_5895_map_level) = (local_e & 8) - 0x20;
+        GetDungeonMap(DungeonX(local_a), DungeonY(local_c), D_5895_map_level) =
+            (local_e & 8) - 0x20;
         DUNGEON_1a90(1);
         ULTIMA_0f46_GRAP_66_Reveal(8, 8, 0xb7, 0xb7);
         break;
@@ -829,7 +832,7 @@ static void SJOG_0c3e_JimmyInDungeon(void)
     local_a = D_5897_map_y;
     if (CONTENTS_GAME_Interact(3, local_8, local_a, local_c))
         return;
-    local_e = GetDungeonMap(local_8 & 7, local_a & 7, (uint)D_5895_map_level);
+    local_e = GetDungeonMap(DungeonX(local_8), DungeonY(local_a), (uint)D_5895_map_level);
     local_4 = D_55a8_party[local_c].dex;
     local_6 = (D_5895_map_level * 2 - local_4 + 0x1e) >> 1;
 
@@ -856,7 +859,8 @@ static void SJOG_0c3e_JimmyInDungeon(void)
             if (local_6 < ULTIMA_2092_RandomRange(1, 0x1e))
             {
                 ULTIMA_1850_PrintString(_TEXT(0x8a9c, "Chest unlocked\n"));
-                GetDungeonMap(local_8 & 7, local_a & 7, D_5895_map_level) = (local_e & 8) + 0x40;
+                GetDungeonMap(DungeonX(local_8), DungeonY(local_a), D_5895_map_level) =
+                    (local_e & 8) + 0x40;
             }
             else
             {

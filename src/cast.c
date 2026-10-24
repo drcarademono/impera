@@ -49,8 +49,8 @@ static int CAST_004c(int param_1)
     if (D_5893_map_id < 0x80)
     {
         CAST2_0000_CastEffect(param_1 == 3 ? 4 : 3);
-        local_4 = (D_24d6[D_6603] + D_5896_map_x) & 7;
-        local_6 = (D_24de[D_6603] + D_5897_map_y) & 7;
+        local_4 = DungeonX(D_24d6[D_6603] + D_5896_map_x);
+        local_6 = DungeonY(D_24de[D_6603] + D_5897_map_y);
 
         local_a = GetDungeonMap(local_4, local_6, D_5895_map_level);
         if ((local_a & 0xf7) != 0)
@@ -232,19 +232,18 @@ static int CAST_02d2_AnSanct(void)
             CONTENTS_GAME_Interact(1, D_5896_map_x, D_5897_map_y, -1);
             return -1;
         }
-        if (CONTENTS_GAME_Interact(4, (D_5896_map_x + local_c) & 7, (D_5897_map_y + local_e) & 7,
-                                   -1))
-        {
-            CONTENTS_GAME_Interact(1, (D_5896_map_x + local_c) & 7, (D_5897_map_y + local_e) & 7,
-                                   -1);
+        if (CONTENTS_GAME_Interact(4, DungeonX(D_5896_map_x + local_c),
+                                   DungeonY(D_5897_map_y + local_e), -1)) {
+            CONTENTS_GAME_Interact(1, DungeonX(D_5896_map_x + local_c),
+                                   DungeonY(D_5897_map_y + local_e), -1);
             return -1;
         }
         local_4 = &GetDungeonMap(D_5896_map_x, D_5897_map_y, D_5895_map_level);
 
         if ((*local_4 & 0xf0) != 0x40)
         {
-            local_4 =
-                &GetDungeonMap((local_c + D_5896_map_x) & 7, (local_e + D_5897_map_y) & 7, D_5895_map_level);
+            local_4 = &GetDungeonMap(DungeonX(local_c + D_5896_map_x),
+                                     DungeonY(local_e + D_5897_map_y), D_5895_map_level);
         }
 
         if ((*local_4 & 0xf0) == 0x40)
