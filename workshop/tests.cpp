@@ -1,4 +1,7 @@
+#include "custom_tiles.h"
 #include "map_positions.h"
+#include "extended_maps.h"
+#include "mod/npcs.h"
 #include "content_navigation.h"
 #include "contents_editor.h"
 #include "map_entities.h"
@@ -110,6 +113,745 @@ int main(int argc, char **argv) {
         std::cout << "PASS " << name << "\n";
     };
     try {
+        test("Extended map dimensions preserve native layouts, rectangular edits and crop safety",
+             [&] {
+                 QTemporaryDir dir;
+                 auto p = fixture(dir.path());
+                 QByteArray town(16384, char(5));
+                 town[10 * 32 + 20] = 68;
+                 p.resources["TOWNE.DAT"] = {town, town};
+                 auto apply = [&](const QMap<QString, QByteArray> &edits) {
+                     for (auto it = edits.begin(); it != edits.end(); ++it)
+                         p.resources[it.key()].edited = it.value();
+                 };
+                 apply(Workshop::resizeMap(p, "TOWNE.DAT", 0, 80, 48, 1));
+                 MapDocument map(&p, "TOWNE.DAT");
+                 check(map.pages[0].side == 80 && map.pages[0].height() == 48 &&
+                           map.pages[1].side == 32 && map.pages[1].height() == 32,
+                       "Resizing one floor changed another floor");
+                 auto cells = map.terrain(0);
+                 check(cells.size() == 80 * 48 && cells[10 * 80 + 20] == 68 && cells[79] == 1 &&
+                           p.data("TOWNE.DAT") == town,
+                       "Resize lost terrain or changed native bank data");
+                 cells[47 * 80 + 79] = 68;
+                 apply(map.changes(0, cells));
+                 check(MapDocument(&p, "TOWNE.DAT").terrain(0) == cells,
+                       "Rectangular map paint did not roundtrip");
+                 auto image = map.terrainImage(0, {}, true);
+                 check(image.size() == QSize(80, 48) && image.constScanLine(47)[79] == 68,
+                       "Rectangular map export used square dimensions");
+                 check(p.package().startsWith("IMOD0018"), "Extended maps need package version 18");
+                 auto encoded = p.data("MAPS.OVR");
+                 for (int n = 0; n < encoded.size(); ++n)
+                     check(!MAPS_Validate(encoded.constData(), n),
+                           "Truncated map catalog was accepted");
+                 auto corrupt = encoded;
+                 corrupt[MAPS_HEADER + 10] = 0;
+                 corrupt[MAPS_HEADER + 11] = 0;
+                 check(!MAPS_Validate(corrupt.constData(), corrupt.size()),
+                       "Zero-width map was accepted");
+                 rejects([&] { Workshop::resizeMap(p, "TOWNE.DAT", 0, 257, 32, 5); });
+                 rejects([&] { Workshop::resizeMap(p, "TOWNE.DAT", 0, 32, 0, 5); });
+                 rejects([&] { Workshop::resizeMap(p, "TOWNE.DAT", 0, 256, 1, 5); });
+                 apply(Workshop::resizeMap(p, "TOWNE.DAT", 0, 256, 48, 5));
+                 check(MapDocument(&p, "TOWNE.DAT").terrain(0).size() == 256 * 48,
+                       "Maximum map width did not roundtrip");
+                 p.resources["TOWNE.NPC"] = {QByteArray(4608, 0), QByteArray(4608, 0)};
+                 auto &npc = p.resources["TOWNE.NPC"].edited;
+                 npc[512 + 1] = 1; // Active native shape, slot 1.
+                 npc[16 + 3] = 100;
+                 npc[16 + 6] = 0;
+                 rejects([&] { Workshop::resizeMap(p, "TOWNE.DAT", 0, 64, 32, 5); });
+             });
+        test("Extended combat markers preserve disabled slots and maximum coordinates", [&] {
+            QTemporaryDir dir;
+            auto p = fixture(dir.path());
+            QByteArray combat(352, char(255));
+            for (int y = 0; y < 11; y++)
+                for (int x = 0; x < 11; x++)
+                    combat[y * 32 + x] = 5;
+            p.resources["BRIT.CBT"] = {combat, combat};
+            auto apply = [&](const QMap<QString, QByteArray> &changes) {
+                for (auto it = changes.begin(); it != changes.end(); ++it)
+                    p.resources[it.key()].edited = it.value();
+            };
+            apply(Workshop::resizeMap(p, "BRIT.CBT", 0, 256, 256, 5));
+            check(!Workshop::mapMarkerActive(p, "BRIT.CBT", 0, 24, 255, 255),
+                  "Resize activated an unused monster marker");
+            auto added = Workshop::addMapItem(p, "BRIT.CBT", 0, {255, 255},
+                                              Workshop::MapItemKind::Monster, 144);
+            apply(added.changes);
+            check(added.slot == 6 && Workshop::mapMarkerActive(p, "BRIT.CBT", 0, 24, 255, 255),
+                  "Corner monster marker was not enabled");
+            rejects([&] { Workshop::resizeMap(p, "BRIT.CBT", 0, 128, 128, 5); });
+            apply(Workshop::deleteMapItem(p, "BRIT.CBT", 0, "Encounter", 6, {255, 255}));
+            check(!Workshop::mapMarkerActive(p, "BRIT.CBT", 0, 24, 255, 255),
+                  "Deleted corner marker remained enabled");
+            apply(Workshop::resizeMap(p, "BRIT.CBT", 0, 128, 128, 5));
+            check(MapDocument(&p, "BRIT.CBT").pages[0].side == 128,
+                  "Inactive markers prevented resize");
+        });
+        test("New location catalog allocates independent identities and validates entrances", [&] {
+            QTemporaryDir dir;
+            auto p = fixture(dir.path());
+            p.resources["BRIT.DAT"] = {QByteArray(256, 1), QByteArray(256, 1)};
+            p.resources["DATA.OVL"] = {QByteArray(0x3986, 0), QByteArray(0x3986, 0)};
+            p.resources["UNDER.DAT"] = {QByteArray(65536, 1), QByteArray(65536, 1)};
+            auto apply = [&](const QMap<QString, QByteArray> &changes) {
+                for (auto it = changes.begin(); it != changes.end(); ++it)
+                    p.resources[it.key()].edited = it.value();
+                Workshop::hydrateExtendedMaps(p);
+            };
+            apply(Workshop::addLocation(p, "BRIT.DAT", "New island", {200, 100}, 48, 80, 5));
+            apply(Workshop::addLocation(p, "UNDER.DAT", "Deep cavern", {200, 100}, 256, 256, 68));
+            auto maps = Workshop::extendedMaps(p);
+            check(maps.size() == 2 && maps[0].id == 42 && maps[1].id == 43 && maps[0].world == 0 &&
+                      maps[1].world == -1 && maps[0].arrival == QPoint(24, 79),
+                  "New location identities or entrances were not independent");
+            check(p.mapPages("LOC042.DAT")[0].height() == 80 &&
+                      MapDocument(&p, "LOC042.DAT").terrain(0).size() == 48 * 80 &&
+                      U5::readDialogue(p.data("LOC042.TLK")).isEmpty() &&
+                      NPCS_Validate(p.data("LOC042.NPC").constData(), p.data("LOC042.NPC").size()),
+                  "New location did not create independent terrain and actor resources");
+            rejects(
+                [&] { Workshop::addLocation(p, "BRIT.DAT", "Duplicate", {200, 100}, 32, 32, 5); });
+            rejects(
+                [&] { Workshop::addLocation(p, "BRIT.DAT", "Outside", {256, 100}, 32, 32, 5); });
+            rejects([&] { Workshop::addLocation(p, "BRIT.DAT", "Invalid", {2, 2}, -1, 32, 5); });
+            rejects([&] { Workshop::resizeMap(p, "LOC042.DAT", 0, 48, 64, 5); });
+            auto duplicate = maps;
+            duplicate[1].id = 42;
+            rejects([&] { Workshop::writeExtendedMaps(duplicate); });
+            check(!MAPS_NewLocation(41) && !MAPS_NewLocation(64) && !MAPS_NewLocation(66) &&
+                      !MAPS_NewLocation(128) && MAPS_NewLocation(127),
+                  "New locations overlap reserved engine identities");
+        });
+        test("Extended locations roundtrip entities and expose resize with undo", [&] {
+            QTemporaryDir dir;
+            auto p = fixture(dir.path());
+            file(dir.path() + "/BRIT.DAT", QByteArray(256, 1));
+            file(dir.path() + "/UNDER.DAT", QByteArray(65536, 1));
+            file(dir.path() + "/DATA.OVL", QByteArray(0x3986, 0));
+            QByteArray signs(67, 0);
+            signs[66] = char(255);
+            file(dir.path() + "/SIGNS.DAT", signs);
+            p.openGame(dir.path());
+            auto apply = [&](const QMap<QString, QByteArray> &edits) {
+                for (auto it = edits.begin(); it != edits.end(); ++it)
+                    p.resources[it.key()].edited = it.value();
+                Workshop::hydrateExtendedMaps(p);
+                p.validate();
+            };
+            apply(Workshop::addLocation(p, "BRIT.DAT", "New island", {200, 100}, 48, 80, 5));
+            apply(Workshop::addLocation(p, "UNDER.DAT", "Deep cavern", {210, 110}, 40, 80, 68));
+            auto npc = Workshop::addMapItem(p, "LOC042.DAT", 0, {40, 70},
+                                            Workshop::MapItemKind::Npc, 80, -1, "Ada");
+            apply(npc.changes);
+            check(npc.slot == 1, "New location did not allocate its own NPC slots");
+            MapNpcDocument actors(&p, "LOC042.NPC");
+            apply({{"LOC042.NPC", actors.move(0, 1, 0, {45, 75, 0, 0})}});
+            check(actors.location(0, 1, 0).x == 45, "Large-coordinate NPC move was lost");
+            apply(Workshop::addMapItem(p, "LOC042.DAT", 0, {43, 70}, Workshop::MapItemKind::Sign)
+                      .changes);
+            apply(
+                Workshop::addMapItem(p, "LOC042.DAT", 0, {44, 70}, Workshop::MapItemKind::Container)
+                    .changes);
+            check(p.data("SIGNS.DAT").startsWith("ISIG0001") &&
+                      Workshop::readSigns(p.data("SIGNS.DAT")).last().map == 42,
+                  "New location sign was assigned to a vanilla map");
+            check(!Workshop::mapContents(p, {0, 42, 0}).isEmpty(),
+                  "New location contents are missing");
+            apply(Workshop::moveMapPosition(p, 1042, 0, -1, {220, 120}, true));
+            check(Workshop::extendedMaps(p)[0].world == -1 &&
+                      MapDocument(&p, "UNDER.DAT").terrain(0)[120 * 256 + 220] == 0x12,
+                  "Moving an entrance failed to move its landmark/world");
+            apply(Workshop::moveMapPosition(p, 2042, 42, 0, {46, 78}));
+            auto package = p.package();
+            check(package.startsWith("IMOD0018"), "Extended map package capability missing");
+            Project restored;
+            restored.openGame(dir.path());
+            restored.importPackage(package);
+            check(restored.locationName(42) == "New island" &&
+                      restored.data("LOC042.NPC") == p.data("LOC042.NPC") &&
+                      restored.data("LOC042.TLK") == p.data("LOC042.TLK") &&
+                      restored.data("SIGNS.DAT") == p.data("SIGNS.DAT"),
+                  "Mod package lost location entities");
+            auto characters = Workshop::characterDestinations(restored);
+            check(std::any_of(
+                      characters.begin(), characters.end(),
+                      [](const auto &d) { return d.resource == "LOC042.TLK" && d.title == "Ada"; }),
+                  "New NPC is absent from Dialogue");
+            auto setup =
+                Dialogue::nativeSetup(restored, "LOC042.TLK", 0, Workshop::npcCharacter(0, 1));
+            check(setup.hasNpc && uchar(setup.gameState[0x2ed]) == 42,
+                  "New NPC has an incorrect Playtest map identity");
+            p.save(dir.path() + "/maps.imperaproject");
+            Project loaded;
+            loaded.load(p.projectPath);
+            check(loaded.data("MAPS.OVR") == p.data("MAPS.OVR") &&
+                      loaded.data("LOC042.TLK") == p.data("LOC042.TLK"),
+                  "Project save/load lost new location data");
+            WorkshopWindow window;
+            check(window.openProject(p.projectPath), "Cannot open extended map project");
+            window.selectResource("LOC042.DAT");
+            QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+            app.processEvents();
+            auto active = [&] {
+                return window.findChild<QStackedWidget *>("workspaces")->currentWidget();
+            };
+            auto resize = active()->findChild<QToolButton *>("resizeMap");
+            check(resize, "Resize control missing");
+            bool handled = false;
+            QTimer::singleShot(0, [&] {
+                auto dialog = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+                if (!dialog)
+                    return;
+                auto w = dialog->findChild<QSpinBox *>("mapWidth"),
+                     h = dialog->findChild<QSpinBox *>("mapHeight");
+                if (!w || !h) {
+                    dialog->reject();
+                    return;
+                }
+                w->setValue(70);
+                h->setValue(100);
+                handled = true;
+                dialog->accept();
+            });
+            resize->click();
+            check(handled && window.projectForTests().mapPages("LOC042.DAT")[0].side == 70 &&
+                      window.projectForTests().mapPages("LOC042.DAT")[0].height() == 100,
+                  "Resize dialog did not update map geometry");
+            QAction *undo = nullptr, *redo = nullptr;
+            for (auto action : window.findChildren<QAction *>()) {
+                if (action->shortcut() == QKeySequence::Undo)
+                    undo = action;
+                if (action->shortcut() == QKeySequence::Redo)
+                    redo = action;
+            }
+            check(undo && redo, "History actions missing");
+            undo->trigger();
+            check(window.projectForTests().data("MAPS.OVR") == p.data("MAPS.OVR"),
+                  "Resize undo did not restore map data");
+            redo->trigger();
+            check(window.projectForTests().mapPages("LOC042.DAT")[0].height() == 100,
+                  "Resize redo did not restore dimensions");
+            window.selectResource("BRIT.DAT");
+            QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+            app.processEvents();
+            auto filter = active()->findChild<QComboBox *>("mapPaletteFilter");
+            filter->setCurrentText("World");
+            active()->findChild<QListWidget *>("mapPalette")->setCurrentRow(0x12);
+            QTimer::singleShot(0, [&] {
+                auto dialog = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+                if (!dialog)
+                    return;
+                dialog->findChild<QLineEdit *>("newLocationName")->setText("Third location");
+                dialog->findChild<QSpinBox *>("newLocationWidth")->setValue(64);
+                dialog->findChild<QSpinBox *>("newLocationHeight")->setValue(48);
+                dialog->accept();
+            });
+            auto canvas = static_cast<MapCanvas *>(active()->findChild<QWidget *>("mapCanvas"));
+            check(canvas && canvas->brush == 0x12, "Location palette did not select an entrance");
+            auto terrainBefore = MapDocument(&window.projectForTests(), "BRIT.DAT").terrain(0);
+            canvas->keyboardCell = {230, 130};
+            QKeyEvent enter(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier);
+            QApplication::sendEvent(canvas, &enter);
+            app.processEvents();
+            check(Workshop::extendedMaps(window.projectForTests()).size() == 3 &&
+                      window.projectForTests().locationName(44) == "Third location",
+                  "UI placement did not create a new location");
+            check(active()->findChild<QLabel *>("mapLocationLabel")->text().contains("Britannia"),
+                  "Creating a location unexpectedly left the world editor");
+            undo->trigger();
+            app.processEvents();
+            check(Workshop::extendedMaps(window.projectForTests()).size() == 2 &&
+                      MapDocument(&window.projectForTests(), "BRIT.DAT").terrain(0) ==
+                          terrainBefore &&
+                      window.projectForTests().data("LOC044.NPC").isEmpty(),
+                  "Creation undo left terrain or NPC data behind");
+            redo->trigger();
+            app.processEvents();
+            check(Workshop::extendedMaps(window.projectForTests()).size() == 3 &&
+                      window.projectForTests().mapPages("LOC044.DAT")[0].side == 64,
+                  "Creation redo lost the new map");
+            window.selectResource("LOC042.DAT");
+            app.processEvents();
+            auto positions = active()->findChild<QAbstractButton *>("mapPositions");
+            check(positions, "Positions control missing");
+            positions->click();
+            auto list = active()->findChild<QListWidget *>("mapPositionList");
+            check(list, "Position inspector missing");
+            for (int i = 0; i < list->count(); i++)
+                if (list->item(i)->data(Qt::UserRole).toInt() == 2042)
+                    list->setCurrentRow(i);
+            auto worlds = active()->findChild<QComboBox *>("locationEntranceWorld");
+            check(worlds && worlds->currentData().toInt() == -1,
+                  "Entrance world property is incorrect");
+            worlds->setCurrentIndex(worlds->findData(0));
+            check(Workshop::extendedMaps(window.projectForTests())[0].world == 0,
+                  "Right-pane world change failed");
+            auto entrance = active()->findChild<QPushButton *>("openLocationPosition");
+            check(entrance && entrance->isEnabled(), "Entrance navigation missing");
+            entrance->click();
+            app.processEvents();
+            list = active()->findChild<QListWidget *>("mapPositionList");
+            check(list && list->currentItem() &&
+                      list->currentItem()->data(Qt::UserRole).toInt() == 1042,
+                  "Show entrance did not select its marker on the world map");
+        });
+        test("Pencil location tiles create entrances atomically and keep the world open", [&] {
+            QTemporaryDir dir;
+            fixture(dir.path());
+            file(dir.path() + "/BRIT.DAT", QByteArray(256, 1));
+            file(dir.path() + "/UNDER.DAT", QByteArray(65536, 1));
+            file(dir.path() + "/DATA.OVL", QByteArray(0x3986, 0));
+            QByteArray signs(67, 0);
+            signs[66] = char(255);
+            file(dir.path() + "/SIGNS.DAT", signs);
+            WorkshopWindow window;
+            check(window.openGame(dir.path()), "Pencil location fixture");
+            window.show();
+            auto active = [&] {
+                return window.findChild<QStackedWidget *>("workspaces")->currentWidget();
+            };
+            int dialogCount = 0;
+            for (const QString world : {QString("BRIT.DAT"), QString("UNDER.DAT")}) {
+                window.selectResource(world);
+                app.processEvents();
+                auto canvas = static_cast<MapCanvas *>(active()->findChild<QWidget *>("mapCanvas"));
+                auto pencil = active()->findChild<QToolButton *>("mapTool0");
+                check(canvas && pencil, "Pencil world workspace is missing");
+                pencil->click();
+                canvas->brush = world == "BRIT.DAT" ? 0x14 : 0x16;
+                auto press = [&] {
+                    QPointF at((220 + .5) * 16 * canvas->zoom, (120 + .5) * 16 * canvas->zoom);
+                    QMouseEvent down(QEvent::MouseButtonPress, at, at, Qt::LeftButton,
+                                     Qt::LeftButton, Qt::NoModifier);
+                    QApplication::sendEvent(canvas, &down);
+                    QMouseEvent up(QEvent::MouseButtonRelease, at, at, Qt::LeftButton, Qt::NoButton,
+                                   Qt::NoModifier);
+                    QApplication::sendEvent(canvas, &up);
+                };
+                const auto before = MapDocument(&window.projectForTests(), world).terrain(0);
+                const auto catalog = window.projectForTests().data("MAPS.OVR");
+                QTimer::singleShot(0, &window, [&] {
+                    auto d = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+                    check(d, "Pencil did not open Add location");
+                    ++dialogCount;
+                    d->reject();
+                });
+                press();
+                check(MapDocument(&window.projectForTests(), world).terrain(0) == before &&
+                          window.projectForTests().data("MAPS.OVR") == catalog,
+                      "Cancelled pencil location changed terrain or catalog");
+                QTimer::singleShot(0, &window, [&] {
+                    auto d = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+                    check(d, "Pencil did not reopen Add location");
+                    ++dialogCount;
+                    d->findChild<QLineEdit *>("newLocationName")->setText("Painted location");
+                    d->accept();
+                });
+                press();
+                app.processEvents();
+                check(canvas->side == 256 &&
+                          active()
+                              ->findChild<QLabel *>("mapLocationLabel")
+                              ->text()
+                              .contains(world == "BRIT.DAT" ? "Britannia" : "Underworld"),
+                      "Pencil creation switched away from world map");
+                auto maps = Workshop::extendedMaps(window.projectForTests());
+                const auto m = maps.last();
+                check(m.world == (world == "BRIT.DAT" ? 0 : -1) && m.entrance == QPoint(220, 120) &&
+                          U5::byte(MapDocument(&window.projectForTests(), world).terrain(0),
+                                   120 * 256 + 220) == unsigned(canvas->brush),
+                      "Pencil lost selected entrance tile or world");
+                check(!canvas->painting() && !canvas->placing(),
+                      "Pencil entrance left a painting gesture active");
+                auto changes = Workshop::moveMapPosition(window.projectForTests(), 1000 + m.id, 0,
+                                                         m.world, {221, 120}, true);
+                Project moved = window.projectForTests();
+                for (auto it = changes.begin(); it != changes.end(); ++it)
+                    moved.resources[it.key()].edited = it.value();
+                auto terrain = MapDocument(&moved, world).terrain(0);
+                check(U5::byte(terrain, 120 * 256 + 221) == unsigned(canvas->brush) &&
+                          U5::byte(terrain, 120 * 256 + 220) == U5::byte(before, 120 * 256 + 220),
+                      "Moving entrance changed its artwork or lost underlying terrain");
+                canvas->brush = 0x10;
+                press();
+                check(Workshop::extendedMaps(window.projectForTests()).size() == maps.size(),
+                      "Repainting an existing entrance created a second location");
+            }
+            check(dialogCount == 4, "Incorrect number of location dialogs");
+        });
+        test("Actor palette filters place NPCs and monsters without painting terrain", [&] {
+            QTemporaryDir dir;
+            auto p = fixture(dir.path());
+            file(dir.path() + "/TOWNE.DAT", QByteArray(16384, 5));
+            file(dir.path() + "/TOWNE.NPC", QByteArray(4608, 0));
+            file(dir.path() + "/TOWNE.TLK", QByteArray::fromHex("0000"));
+            p.openGame(dir.path());
+            QMap<unsigned, QByteArray> actorRecords;
+            const QList<QSize> sizes{{1, 1}, {1, 2}, {2, 1}, {2, 2}};
+            for (int size = 0; size < sizes.size(); ++size)
+                for (unsigned kind : {1u, 2u}) {
+                    TypeDef d;
+                    TYPES_Vanilla(1, kind == 1 ? 80 : 144, &d);
+                    d.kind = kind;
+                    d.id = 59999 + kind + size * 2;
+                    d.width = sizes[size].width();
+                    d.height = sizes[size].height();
+                    d.render = TYPES_SPRITE;
+                    strcpy(d.name, kind == 1 ? "Custom scholar" : "Custom beast");
+                    QImage art(16 * d.width, 16 * d.height, QImage::Format_RGBA8888);
+                    art.fill(Qt::white);
+                    QImage worldArt(16, 16, QImage::Format_RGBA8888);
+                    worldArt.fill(Qt::white);
+                    actorRecords[d.id] =
+                        CustomTiles::record(d, {{art, 150, 0}, {worldArt, 150, 6}});
+                }
+            p.resources["TYPES.OVR"].edited = CustomTiles::library(p, actorRecords);
+            p.save(dir.path() + "/actors.imperaproject");
+            WorkshopWindow window;
+            check(window.openProject(p.projectPath), "Actor palette fixture");
+            window.show();
+            window.selectResource("TOWNE.DAT");
+            app.processEvents();
+            auto active = [&] {
+                return window.findChild<QStackedWidget *>("workspaces")->currentWidget();
+            };
+            check(!active()->findChild<QToolButton *>("mapAddMenu"),
+                  "Add menu should be replaced by Special");
+            auto palette = active()->findChild<QListWidget *>("mapPalette");
+            auto filter = active()->findChild<QComboBox *>("mapPaletteFilter");
+            auto canvas = static_cast<MapCanvas *>(active()->findChild<QWidget *>("mapCanvas"));
+            auto choose = [&](const QString &category, int id) {
+                active()->findChild<QToolButton *>("mapTool0")->click();
+                filter->setCurrentText(category);
+                for (int i = 0; i < palette->count(); ++i)
+                    if (palette->item(i)->data(Qt::UserRole).toInt() == id) {
+                        check(!palette->item(i)->isHidden(), "Actor missing from category");
+                        palette->setCurrentRow(i);
+                        return;
+                    }
+                check(false, "Actor absent from palette");
+            };
+            const auto terrain = window.projectForTests().data("TOWNE.DAT");
+            choose("NPCs", 336);
+            check(canvas->brush == 336, "NPC palette selection lost its sprite identity");
+            QTimer::singleShot(0, &window, [&] {
+                auto d = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+                check(d, "NPC placement dialog missing");
+                d->findChild<QLineEdit *>("newNpcName")->setText("Palette friend");
+                d->accept();
+            });
+            canvas->keyboardCell = {6, 7};
+            QKeyEvent enter(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier);
+            QApplication::sendEvent(canvas, &enter);
+            check(U5::byte(window.projectForTests().data("TOWNE.NPC"), 513) == 80 &&
+                      !U5::readDialogue(window.projectForTests().data("TOWNE.TLK")).isEmpty(),
+                  "NPC brush failed to create a scheduled NPC and conversation");
+            choose("Monsters", 400);
+            check(canvas->brush == 400, "Monster palette selection lost sprite identity");
+            canvas->keyboardCell = {9, 8};
+            QApplication::sendEvent(canvas, &enter);
+            check(U5::byte(window.projectForTests().data("TOWNE.NPC"), 514) == 144,
+                  "Monster brush failed to create a real actor");
+            for (int size = 0; size < sizes.size(); ++size)
+                for (unsigned kind : {1u, 2u}) {
+                    const unsigned id = 59999 + kind + size * 2;
+                    choose(kind == 1 ? "NPCs" : "Monsters", id);
+                    check(canvas->actorSize(id) == sizes[size] &&
+                              canvas->tiles[id].size() == sizes[size] * 16,
+                          "Actor picker lost footprint or artwork dimensions");
+                    if (kind == 1)
+                        QTimer::singleShot(0, &window, [&] {
+                            auto d = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+                            check(d, "Custom NPC dialog missing");
+                            d->accept();
+                        });
+                    canvas->keyboardCell = {int(10 + kind * 4), 10 + size * 4};
+                    QApplication::sendEvent(canvas, &enter);
+                    const auto &project = window.projectForTests();
+                    check(CustomTiles::actorType(project, "TOWNE.DAT",
+                                                 project.mapPages("TOWNE.DAT")[0], 0,
+                                                 kind + 2 + size * 2, 0) == id,
+                          "Custom actor palette lost its type assignment");
+                    check(CustomTiles::image(project, id, 6).size() == QSize(16, 16),
+                          "Multi-tile actor lost its single-cell world artwork");
+                }
+            check(window.projectForTests().data("TOWNE.DAT") == terrain,
+                  "Actor palette painted terrain");
+        });
+        test("Custom location tiles appear in the picker and keep their identity when moved", [&] {
+            QTemporaryDir dir;
+            auto p = fixture(dir.path());
+            file(dir.path() + "/BRIT.DAT", QByteArray(256, 1));
+            file(dir.path() + "/UNDER.DAT", QByteArray(65536, 1));
+            file(dir.path() + "/DATA.OVL", QByteArray(0x3986, 0));
+            QByteArray signs(67, 0);
+            signs[66] = char(255);
+            file(dir.path() + "/SIGNS.DAT", signs);
+            p.openGame(dir.path());
+            TypeDef d;
+            TYPES_Vanilla(0, 0x14, &d);
+            d.id = 61000;
+            d.filters = 1;
+            strcpy(d.name, "Crystal citadel");
+            QImage art(16, 16, QImage::Format_RGBA8888);
+            art.fill(Qt::white);
+            p.resources["TYPES.OVR"].edited =
+                CustomTiles::library(p, {{d.id, CustomTiles::record(d, {{art, 150, 0}})}});
+            p.save(dir.path() + "/entrance.imperaproject");
+            WorkshopWindow window;
+            check(window.openProject(p.projectPath), "Custom entrance project");
+            window.show();
+            window.selectResource("BRIT.DAT");
+            app.processEvents();
+            auto active = window.findChild<QStackedWidget *>("workspaces")->currentWidget();
+            auto filter = active->findChild<QComboBox *>("mapPaletteFilter");
+            filter->setCurrentText("World");
+            auto palette = active->findChild<QListWidget *>("mapPalette");
+            bool found = false;
+            for (int i = 0; i < palette->count(); ++i)
+                if (palette->item(i)->data(Qt::UserRole).toUInt() == d.id) {
+                    check(!palette->item(i)->isHidden(),
+                          "Custom location tile absent from World filter");
+                    check(palette->item(i)->icon().actualSize(QSize(32, 32)) == QSize(32, 32),
+                          "Custom tile thumbnail is smaller than vanilla thumbnails");
+                    palette->setCurrentRow(i);
+                    found = true;
+                    break;
+                }
+            check(found, "Custom entrance missing from tile picker");
+            auto canvas = static_cast<MapCanvas *>(active->findChild<QWidget *>("mapCanvas"));
+            QTimer::singleShot(0, &window, [&] {
+                auto dialog = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+                check(dialog, "Custom entrance did not open creation dialog");
+                dialog->findChild<QLineEdit *>("newLocationName")->setText("Crystal citadel");
+                dialog->accept();
+            });
+            canvas->keyboardCell = {220, 120};
+            QKeyEvent enter(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier);
+            QApplication::sendEvent(canvas, &enter);
+            app.processEvents();
+            Project moved = window.projectForTests();
+            auto at = [&](const Project &project, const QString &world, QPoint cell) {
+                MapDocument map(&project, world);
+                auto bytes = CustomTiles::expanded(project, world, map.pages[0], 0, map.terrain(0));
+                return TYPES_U32(bytes.constData() + (cell.y() * map.pages[0].side + cell.x()) * 4);
+            };
+            check(at(moved, "BRIT.DAT", {220, 120}) == 61000 &&
+                      moved.locationName(42) == "Crystal citadel",
+                  "Custom entrance was reduced to native artwork");
+            auto changes = Workshop::moveMapPosition(moved, 1042, 0, -1, {221, 121}, true);
+            for (auto it = changes.begin(); it != changes.end(); ++it)
+                moved.resources[it.key()].edited = it.value();
+            moved.validate();
+            check(at(moved, "BRIT.DAT", {220, 120}) == 0 &&
+                      at(moved, "UNDER.DAT", {221, 121}) == 61000,
+                  "Moving entrance lost its custom tile identity");
+            auto restored = p;
+            restored.importPackage(moved.package());
+            check(at(restored, "UNDER.DAT", {221, 121}) == 61000,
+                  "Package roundtrip lost custom entrance artwork");
+        });
+        test("World NPC entries explain availability and Special covers all remaining placements",
+             [&] {
+                 QTemporaryDir dir;
+                 fixture(dir.path());
+                 file(dir.path() + "/BRIT.DAT", QByteArray(256, 1));
+                 file(dir.path() + "/UNDER.DAT", QByteArray(65536, 1));
+                 file(dir.path() + "/DATA.OVL", QByteArray(0x3986, 0));
+                 for (auto name : {"INIT.OOL", "BRIT.OOL", "UNDER.OOL"})
+                     file(dir.path() + "/" + name, QByteArray(256, 0));
+                 QByteArray signs(67, 0);
+                 signs[66] = char(255);
+                 file(dir.path() + "/SIGNS.DAT", signs);
+                 WorkshopWindow window;
+                 check(window.openGame(dir.path()), "Special fixture load");
+                 window.show();
+                 window.selectResource("BRIT.DAT");
+                 app.processEvents();
+                 auto active = window.findChild<QStackedWidget *>("workspaces")->currentWidget();
+                 auto canvas = static_cast<MapCanvas *>(active->findChild<QWidget *>("mapCanvas"));
+                 auto palette = active->findChild<QListWidget *>("mapPalette");
+                 auto filter = active->findChild<QComboBox *>("mapPaletteFilter");
+                 filter->setCurrentText("NPCs");
+                 int npcCount = 0;
+                 for (int i = 0; i < palette->count(); ++i)
+                     if (!palette->item(i)->isHidden()) {
+                         ++npcCount;
+                         check(!(palette->item(i)->flags() & Qt::ItemIsEnabled) &&
+                                   palette->item(i)->toolTip().contains("location map"),
+                               "World NPC availability is not explained");
+                     }
+                 check(npcCount > 0, "World NPC filter is empty");
+                 filter->setCurrentText("Special");
+                 QSet<int> seen;
+                 QString previous;
+                 int goldRow = -1;
+                 for (int i = 0; i < palette->count(); ++i)
+                     if (!palette->item(i)->isHidden()) {
+                         const auto item = palette->item(i);
+                         int id = item->data(Qt::UserRole).toInt();
+                         check(canvas->specialBrushKinds.contains(id),
+                               "Special includes ordinary terrain");
+                         auto name = item->data(Qt::UserRole + 1).toString();
+                         check(previous.compare(name, Qt::CaseInsensitive) <= 0,
+                               "Special entries are not alphabetized");
+                         previous = name;
+                         int kind = canvas->specialBrushKinds.value(id);
+                         seen.insert(kind);
+                         if (kind == int(Workshop::MapItemKind::Gold))
+                             goldRow = i;
+                     }
+                 auto expected = Workshop::availableMapItems(window.projectForTests(), "BRIT.DAT");
+                 for (auto kind : expected)
+                     if (kind != Workshop::MapItemKind::Npc &&
+                         kind != Workshop::MapItemKind::Monster)
+                         check(seen.contains(int(kind)), "Special omitted a former Add entry");
+                 check(Workshop::mapItemName(Workshop::MapItemKind::Corpse) == "Corpse (intact)" &&
+                           Workshop::mapItemShape(Workshop::MapItemKind::Corpse) == 30 &&
+                           Workshop::mapItemName(Workshop::MapItemKind::BloodSplatter) ==
+                               "Blood splatter" &&
+                           Workshop::mapItemShape(Workshop::MapItemKind::BloodSplatter) == 31,
+                       "Corpse and blood splatter labels do not match their sprites");
+                 check(goldRow >= 0, "Special Gold missing");
+                 palette->setCurrentRow(goldRow);
+                 canvas->keyboardCell = {220, 120};
+                 auto terrain = window.projectForTests().data("BRIT.DAT");
+                 QKeyEvent enter(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier);
+                 QApplication::sendEvent(canvas, &enter);
+                 check(U5::byte(Workshop::WorldObjects::effective(window.projectForTests(), 0),
+                                8) == 2 &&
+                           window.projectForTests().data("BRIT.DAT") == terrain,
+                       "Special Gold was not placed as a world object");
+                 for (auto action : window.findChildren<QAction *>())
+                     if (action->shortcut() == QKeySequence::Undo) {
+                         action->trigger();
+                         break;
+                     }
+                 app.processEvents();
+                 check(!U5::byte(Workshop::WorldObjects::effective(window.projectForTests(), 0), 8),
+                       "Special item undo failed");
+             });
+        test("Every Special placement uses location records, preserves properties and avoids "
+             "dialogue aliases",
+             [&] {
+                 QTemporaryDir dir;
+                 auto p = fixture(dir.path());
+                 file(dir.path() + "/TOWNE.DAT", QByteArray(16384, 5));
+                 file(dir.path() + "/TOWNE.NPC", QByteArray(4608, 0));
+                 file(dir.path() + "/TOWNE.TLK", QByteArray::fromHex("0000"));
+                 QByteArray signs(67, 0);
+                 signs[66] = char(255);
+                 file(dir.path() + "/SIGNS.DAT", signs);
+                 p.openGame(dir.path());
+                 const auto original = p.data("TOWNE.NPC");
+                 int n = 0, gold = -1, trigger = -1;
+                 for (auto kind : Workshop::availableMapItems(p, "TOWNE.DAT")) {
+                     if (kind == Workshop::MapItemKind::Npc ||
+                         kind == Workshop::MapItemKind::Monster)
+                         continue;
+                     int variant = kind == Workshop::MapItemKind::Equipment   ? 32
+                                   : kind == Workshop::MapItemKind::Potion    ? 7
+                                   : kind == Workshop::MapItemKind::Scroll    ? 255
+                                   : kind == Workshop::MapItemKind::Moonstone ? 4
+                                                                              : -1;
+                     auto placed = Workshop::addMapItem(
+                         p, "TOWNE.DAT", 0, {2 + (n % 8) * 3, 2 + (n / 8) * 3}, kind, variant);
+                     ++n;
+                     for (auto it = placed.changes.begin(); it != placed.changes.end(); ++it)
+                         p.resources[it.key()].edited = it.value();
+                     p.validate();
+                     if (placed.mode == "NPCs / Schedules") {
+                         check(placed.slot >= 32, "Special placement overwrote a vanilla NPC slot");
+                         auto bytes = p.data("TOWNE.NPC");
+                         auto base = NPCS_Offset(bytes.constData(), bytes.size(), 0, placed.slot);
+                         int shape =
+                             U5::byte(bytes, NPCS_ShapeOffset(bytes.constData(), bytes.size(), 0,
+                                                              placed.slot));
+                         check(NPCS_ObjectKind(bytes.constData() + base, shape) == int(kind),
+                               "Location object lost its behavior marker");
+                         if (kind == Workshop::MapItemKind::Gold)
+                             gold = placed.slot;
+                         if (kind == Workshop::MapItemKind::Trigger)
+                             trigger = placed.slot;
+                         if (kind == Workshop::MapItemKind::Frigate)
+                             check(shape == 36 && U5::byte(bytes, base + 15) == 1,
+                                   "New ship is not boardable or has invalid skiff cargo");
+                         if (kind == Workshop::MapItemKind::BloodSplatter)
+                             check(NPCS_Blood(shape,
+                                              U5::byte(bytes, NPCS_DialogueOffset(bytes.constData(),
+                                                                                  bytes.size(), 0,
+                                                                                  placed.slot)),
+                                              U5::byte(bytes, base + 15)),
+                                   "Decorative blood is still a searchable corpse");
+                     }
+                 }
+                 check(n >= 22 && gold >= 32 && trigger >= 32,
+                       "Special types are still unavailable on locations");
+                 check(p.data("TOWNE.NPC").left(4608) == original &&
+                           p.data("TOWNE.TLK") == QByteArray::fromHex("0000"),
+                       "Special placement changed vanilla NPCs or conversation data");
+                 auto blob = p.package();
+                 check(blob.startsWith("IMOD0018"),
+                       "Location objects need an updated engine package");
+                 Project imported = fixture(dir.path());
+                 imported.importPackage(blob);
+                 check(imported.data("TOWNE.NPC") == p.data("TOWNE.NPC"),
+                       "Location objects failed package roundtrip");
+                 auto old = blob;
+                 old[7] = '7';
+                 rejects([&] {
+                     Project copy = p;
+                     copy.importPackage(old);
+                 });
+                 auto destinations = Workshop::contentDestinations(p);
+                 for (auto d : destinations)
+                     check(d.workspace != "Dialogue" || d.scheduleResource != "TOWNE.NPC",
+                           "Object quantities became dialogue entries");
+                 auto npc = Workshop::addMapItem(p, "TOWNE.DAT", 0, {30, 30},
+                                                 Workshop::MapItemKind::Npc, 80, -1, "Neighbor");
+                 for (auto it = npc.changes.begin(); it != npc.changes.end(); ++it)
+                     p.resources[it.key()].edited = it.value();
+                 MapNpcDocument npcs(&p, "TOWNE.NPC");
+                 check(npcs.dialogue(0, npc.slot) == 1,
+                       "Objects reserved ordinary conversation numbers");
+                 // Talking animals remain NPCs even though their sprite is in the object range.
+                 auto smith = p.data("TOWNE.NPC");
+                 smith[NPCS_ShapeOffset(smith.constData(), smith.size(), 0, npc.slot)] = 17;
+                 p.resources["TOWNE.NPC"].edited = smith;
+                 check(!Workshop::locationObject(p, "TOWNE.NPC", 0, npc.slot),
+                       "Talking horse became an inert map object");
+                 bool talkingHorse = false;
+                 for (auto d : Workshop::contentDestinations(p))
+                     if (d.scheduleResource == "TOWNE.NPC" &&
+                         d.character == Workshop::npcCharacter(0, npc.slot) && d.conversation >= 0)
+                         talkingHorse = true;
+                 check(talkingHorse, "Talking horse disappeared from Dialogue");
+                 p.save(dir.path() + "/objects.imperaproject");
+                 WorkshopWindow window;
+                 check(window.openProject(p.projectPath), "Cannot open location objects");
+                 window.show();
+                 window.selectResource("TOWNE.DAT");
+                 app.processEvents();
+                 auto active = window.findChild<QStackedWidget *>("workspaces")->currentWidget();
+                 active->findChild<QToolButton *>("mapTool3")->click();
+                 auto list = active->findChild<QComboBox *>("mapNpcList");
+                 list->setCurrentIndex(gold);
+                 auto value = active->findChild<QSpinBox *>("locationObjectValue");
+                 check(value && value->isVisible(), "Location object quantity editor missing");
+                 value->setValue(42);
+                 QMetaObject::invokeMethod(value, "editingFinished", Qt::DirectConnection);
+                 const auto bytes = window.projectForTests().data("TOWNE.NPC");
+                 check(U5::byte(bytes, NPCS_DialogueOffset(bytes.constData(), bytes.size(), 0,
+                                                           gold)) == 42,
+                       "Object quantity editor did not persist");
+                 list->setCurrentIndex(trigger);
+                 check(active->findChild<QComboBox *>("locationObjectVariant")->isVisible(),
+                       "Location trigger replacement editor missing");
+             });
         test("Cutscene pages share an editor, preserve originals and roundtrip variable sequences", [&] {
             QTemporaryDir dir;
             auto p=fixture(dir.path());
@@ -2933,7 +3675,7 @@ int main(int argc, char **argv) {
                               Workshop::MapItemKind::Equipment, Workshop::MapItemKind::Gem,
                               Workshop::MapItemKind::Key, Workshop::MapItemKind::SkeletonKey,
                               Workshop::MapItemKind::Torch, Workshop::MapItemKind::SandalwoodBox,
-                              Workshop::MapItemKind::Corpse}) {
+                              Workshop::MapItemKind::BloodSplatter}) {
                 auto item = Workshop::addMapItem(p, "UNDER.DAT", 0, {6, 7}, kind);
                 check(U5::byte(item.changes["UNDER.OOL"], 8) == Workshop::mapItemShape(kind) &&
                           !item.changes.contains("UNDER.DAT"),
@@ -2993,11 +3735,11 @@ int main(int argc, char **argv) {
                       U5::byte(U5::worldMap("UNDER.DAT", underSign.changes["UNDER.DAT"], {}),
                                19 * 256 + 18) == 0xf8,
                   "Underworld sign placement is missing or uses the wrong world");
-            auto sleeper = Workshop::addMapItem(p, "UNDER.DAT", 0, {4, 5},
-                                                Workshop::MapItemKind::SleepingFigure);
+            auto sleeper =
+                Workshop::addMapItem(p, "UNDER.DAT", 0, {4, 5}, Workshop::MapItemKind::Corpse);
             check(U5::byte(sleeper.changes["UNDER.OOL"], 8) == 30 &&
                       sleeper.mode == "Starting Objects",
-                  "Sleeping figure uses the wrong world object shape");
+                  "Corpse uses the wrong world object shape");
             auto horse =
                 Workshop::addMapItem(p, "UNDER.DAT", 0, {2, 3}, Workshop::MapItemKind::Horse);
             check(horse.slot == 1 && U5::byte(horse.changes["UNDER.OOL"], 8) == 16 &&
@@ -3083,10 +3825,15 @@ int main(int argc, char **argv) {
             w.show();
             app.processEvents();
             auto root = w.findChild<QStackedWidget *>("workspaces")->currentWidget();
-            auto add = root->findChild<QAction *>("addMapItem3");
-            check(add, "No Add container action");
-            add->trigger();
             auto map = dynamic_cast<MapCanvas *>(root->findChild<QWidget *>("mapCanvas"));
+            root->findChild<QComboBox *>("mapPaletteFilter")->setCurrentText("Special");
+            auto palette = root->findChild<QListWidget *>("mapPalette");
+            for (int i = 0; i < palette->count(); ++i)
+                if (map->specialBrushKinds.value(palette->item(i)->data(Qt::UserRole).toInt(),
+                                                 -1) == int(Workshop::MapItemKind::Container))
+                    palette->setCurrentRow(i);
+            check(map->specialBrushKinds.contains(map->brush),
+                  "Special container brush is missing");
             QPointF pos(2.5 * 16 * map->zoom, 3.5 * 16 * map->zoom);
             QMouseEvent press(QEvent::MouseButtonPress, pos, pos, Qt::LeftButton, Qt::LeftButton,
                               Qt::NoModifier);
@@ -3685,28 +4432,60 @@ int main(int argc, char **argv) {
             };
             auto split = splitter();
             check(split, "Map panel splitter missing");
-            split->setSizes({0, 650, 370});
+            // Finish the deferred workspace restore before simulating a user resize.
+            // Native fonts and control metrics can make the center pane wider on Windows.
+            bool settled = false;
+            QTimer::singleShot(0, &window, [&] { settled = true; });
+            waitFor([&] { return settled; });
+            window.resize(qMax(window.width(), window.minimumSizeHint().width() + 400),
+                          window.height());
+            app.processEvents();
+            split = splitter();
+            const auto sizes = split->sizes();
+            int available = 0;
+            for (int size : sizes)
+                available += size;
+            const int centerMinimum =
+                qMax(split->widget(1)->minimumWidth(), split->widget(1)->minimumSizeHint().width());
+            const int panelMinimum =
+                qMax(split->widget(2)->minimumWidth(), split->widget(2)->minimumSizeHint().width());
+            const int requested = qMin(panelMinimum + 100, available - centerMinimum);
+            check(requested >= panelMinimum + 40,
+                  "Panel width fixture has insufficient room to resize");
+            // setSizes redistributes any surplus proportionally: request the actual total.
+            split->setSizes({0, available - requested, requested});
             app.processEvents();
             auto canvas = dynamic_cast<MapCanvas *>(split->findChild<QWidget *>("mapCanvas"));
             auto filter = split->findChild<QComboBox *>("mapPaletteFilter");
-            filter->setCurrentText("Location");
+            filter->setCurrentText("Locations");
             split->findChild<QListWidget *>("mapPalette")->setCurrentRow(5);
             split->findChild<QToolButton *>("mapTool6")->click();
             check(canvas->tool == MapCanvas::Fill, "Tool fixture failed");
             const int width = split->sizes().last();
-            check(width > 300, "Panel resize was not applied");
+            check(qAbs(width - requested) <= 2,
+                  qPrintable(
+                      QString("Panel resize was not applied: requested %1, got %2 (available %3, "
+                              "center minimum %4, panel minimum %5)")
+                          .arg(requested)
+                          .arg(width)
+                          .arg(available)
+                          .arg(centerMinimum)
+                          .arg(panelMinimum)));
             window.selectResource("KEEP.DAT");
             app.processEvents();
             waitFor([&] { return qAbs(splitter()->sizes().last() - width) <= 2; });
             check(qAbs(splitter()->sizes().last() - width) <= 2,
                   "Changing map resets the tile picker width");
-            check(splitter()->findChild<QComboBox *>("mapPaletteFilter")->currentText() == "Location" &&
-                      dynamic_cast<MapCanvas *>(splitter()->findChild<QWidget *>("mapCanvas"))->brush == 5 &&
-                      dynamic_cast<MapCanvas *>(splitter()->findChild<QWidget *>("mapCanvas"))->tool == MapCanvas::Fill,
+            check(splitter()->findChild<QComboBox *>("mapPaletteFilter")->currentText() ==
+                          "Locations" &&
+                      dynamic_cast<MapCanvas *>(splitter()->findChild<QWidget *>("mapCanvas"))
+                              ->brush == 5 &&
+                      dynamic_cast<MapCanvas *>(splitter()->findChild<QWidget *>("mapCanvas"))
+                              ->tool == MapCanvas::Fill,
                   "Changing maps resets filter, tool or tile");
             window.selectResource("TILES.16");
             app.processEvents();
-            window.resize(1540, 900);
+            window.resize(window.width() + 140, window.height());
             app.processEvents();
             window.selectResource("TOWNE.DAT");
             app.processEvents();
@@ -3729,14 +4508,8 @@ int main(int argc, char **argv) {
             auto findCanvas = [&] {
                 return dynamic_cast<MapCanvas *>(active()->findChild<QWidget *>("mapCanvas"));
             };
-            auto addMenu = active()->findChild<QToolButton *>("mapAddMenu");
-            check(addMenu && addMenu->menu(), "Add menu missing");
-            QString previous;
-            for (auto action : addMenu->menu()->actions()) {
-                check(QString::compare(previous, action->text(), Qt::CaseInsensitive) <= 0,
-                      "Add menu is not alphabetized");
-                previous = action->text();
-            }
+            check(!active()->findChild<QToolButton *>("mapAddMenu"),
+                  "Add menu remains after Special filter migration");
             auto palette = active()->findChild<QListWidget *>("mapPalette");
             palette->setCurrentRow(9);
 
@@ -3799,7 +4572,7 @@ int main(int argc, char **argv) {
             check(findCanvas()->brush == 11, "Floor navigation reset the shared brush");
             auto filter = active()->findChild<QComboBox *>("mapPaletteFilter");
             auto tiles = active()->findChild<QListWidget *>("mapPalette");
-            filter->setCurrentText("Location");
+            filter->setCurrentText("Locations");
             check(!tiles->item(0)->isHidden() && tiles->item(9)->isHidden() &&
                       tiles->item(0x27)->isHidden() && findCanvas()->brush == 11,
                   "Usage filter must reflect restored maps without resetting the brush");
@@ -6111,19 +6884,21 @@ int main(int argc, char **argv) {
             check(!palette->item(5)->isHidden() && palette->item(0x4f)->isHidden(),
                   "Name search failed");
             search->clear();
-            check(category->count() == 3 && category->itemText(1) == "World" &&
-                      category->itemText(2) == "Location",
-                  "Palette must offer All tiles and the two map usage filters");
+            check(category->count() == 6 && category->itemText(1) == "World" &&
+                      category->itemText(2) == "Locations" && category->itemText(3) == "NPCs" &&
+                      category->itemText(4) == "Monsters" && category->itemText(5) == "Special",
+                  "Palette must offer terrain usage and placement filters");
             category->setCurrentText("World");
             check(!palette->item(5)->isHidden() && !palette->item(0x4f)->isHidden() &&
                       !palette->item(0xd4)->isHidden() && palette->item(0xd7)->isHidden() &&
-                      palette->item(0xfa)->isHidden() && palette->item(0x39)->isHidden(),
-                  "World membership must use terrain cells, without inferred frames or unused chunks");
-            category->setCurrentText("Location");
+                      palette->item(0xfa)->isHidden() && !palette->item(0x39)->isHidden(),
+                  "World membership must use terrain cells, without inferred frames or unused "
+                  "chunks");
+            category->setCurrentText("Locations");
             check(!palette->item(5)->isHidden() && !palette->item(0x50)->isHidden() &&
                       palette->item(0xfa)->isHidden(),
                   "Location filter missed floor terrain or counted combat map metadata");
-            check(palette->item(5)->toolTip().contains("World · Location"),
+            check(palette->item(5)->toolTip().contains("World · Locations"),
                   "Tile usage categories must overlap");
             category->setCurrentText("All tiles");
             check(!palette->item(0xfa)->isHidden(), "All tiles must include unused artwork");

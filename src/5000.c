@@ -156,9 +156,13 @@ int ULTIMA_ResolveActorTile(int param_5, int terrain, int above, int below, bool
 static void ULTIMA_51b8(int x, int y, int worldX, int worldY, int actor)
 {
     bool reflection;
-    int tile = ULTIMA_ResolveActorTile(actor, *ULTIMA_4402_GetTileAddr(worldX, worldY),
+    int tile = ULTIMA_ResolveActorTile(
+        actor, *ULTIMA_4402_GetTileAddr(worldX, worldY),
         D_5893_map_id >= 128 && worldY == 0 ? 0 : *ULTIMA_4402_GetTileAddr(worldX, worldY - 1),
-        D_5893_map_id >= 128 && worldY == 10 ? 0 : *ULTIMA_4402_GetTileAddr(worldX, worldY + 1), &reflection);
+        D_5893_map_id >= 128 && worldY == MAP_HEIGHT - 1
+            ? 0
+            : *ULTIMA_4402_GetTileAddr(worldX, worldY + 1),
+        &reflection);
     if (tile == -1) return;
     if (tile == -2) { GetMapViewport(x, y) = TILE_MAP_38; return; }
     if (reflection && y != 0) GetMapViewport(x, y - 1) = TILE_MAP_MIRROR_9E;
@@ -171,8 +175,8 @@ void ULTIMA_5394(void)
 {
     int local_c;
     int local_e;
-    byte local_a;
-    byte local_8;
+    int local_a;
+    int local_8;
 
     byte local_6;
     byte local_4;
@@ -211,11 +215,26 @@ void ULTIMA_5394(void)
             local_8 = local_4 = D_5c5a[local_c]._2_x;
             local_a = local_6 = D_5c5a[local_c]._3_y;
 
+            if (D_5893_map_id >= 128) {
+                local_8 -= MAP_VIEW_X;
+                local_a -= MAP_VIEW_Y;
+                if (local_8 < 0 || local_a < 0 || local_8 > 10 || local_a > 10)
+                    continue;
+            }
             if (D_5893_map_id < 0x80)
             {
                 local_8 -= D_5896_map_x - 5;
                 local_a -= D_5897_map_y - 5;
-                if (D_5c5a[local_c]._4_z != D_5895_map_level || local_8 > 10 || local_a > 10)
+                if (!D_5893_map_id) {
+                    local_8 = MAPS_Wrap((int)D_5c5a[local_c]._2_x - D_5896_map_x + MAP_WIDTH / 2,
+                                        MAP_WIDTH) -
+                              MAP_WIDTH / 2 + 5;
+                    local_a = MAPS_Wrap((int)D_5c5a[local_c]._3_y - D_5897_map_y + MAP_HEIGHT / 2,
+                                        MAP_HEIGHT) -
+                              MAP_HEIGHT / 2 + 5;
+                }
+                if (D_5c5a[local_c]._4_z != D_5895_map_level || local_8 < 0 || local_a < 0 ||
+                    local_8 > 10 || local_a > 10)
                     continue;
             }
 
@@ -256,17 +275,16 @@ void ULTIMA_5394(void)
             }
         }
     } while (--local_c >= 0);
-    if (D_5893_map_id < 33 || D_5893_map_id >= 128)
-    {
+    if (MAPS_Outside(D_5893_map_id) || D_5893_map_id >= 128) {
         for (int y = 0; y < 11; y++)
             for (int x = 0; x < 11; x++)
             {
-                int wx = D_5893_map_id >= 128 ? x : (D_5896_map_x + x - 5);
-                int wy = D_5893_map_id >= 128 ? y : (D_5897_map_y + y - 5);
+                int wx = MAP_VIEW_X + x;
+                int wy = MAP_VIEW_Y + y;
                 if (!D_5893_map_id)
                 {
-                    wx &= 255;
-                    wy &= 255;
+                    wx = MAPS_Wrap(wx, MAP_WIDTH);
+                    wy = MAPS_Wrap(wy, MAP_HEIGHT);
                 }
                 int shape = CONTENTS_GAME_Shape(wx, wy);
                 if (shape && GetActorMap(x, y) == 0 && GetMapViewport(x, y) != 0xff &&
@@ -333,43 +351,38 @@ static void AddCombatSprite(CombatSprite *sprites, int *count, unsigned tile, in
 static void DrawCombatSprites(void) {
     CombatSprite sprites[121 + 32 + 121];
     int count = 0;
-    for (int y = 0; y < 11; ++y)
-        for (int x = 0; x < 11; ++x) {
-            if (GetMapViewport(x, y) != 0 || GetActorMap(x, y) == 0x16)
-                continue;
-            bool owned = false;
-            for (int i = 0; i < 32; ++i) {
-                ActorFmt *a = &D_5c5a[i];
-                if (a->_0_tile && a->_1_animTile && a->_2_x == x && a->_3_y == y) {
-                    owned = true;
-                    break;
-                }
-            }
-            if (!owned)
-                AddCombatSprite(sprites, &count, 256 + GetActorMap(x, y), x, y, 32);
-        }
-    for (int i = 0; i < 32; ++i) {
+    for (int i = 0; i < 32; i++) {
         ActorFmt *a = &D_5c5a[i];
-        int x = a->_2_x, y = a->_3_y;
-        if (!a->_0_tile || !a->_1_animTile || x >= 11 || y >= 11 || GetMapViewport(x, y) == 255 ||
-            GetMapViewport(x, y) == TILE_MAP_87 || a->_1_animTile == 0x16)
+        int x = (int)a->_2_x - MAP_VIEW_X, y = (int)a->_3_y - MAP_VIEW_Y;
+        if (!a->_0_tile || !a->_1_animTile || x < -1 || y < -1 || x >= 11 || y >= 11 ||
+            a->_1_animTile == 0x16)
             continue;
-        int native = SPRITES_NativeActorTile(a, *ULTIMA_4402_GetTileAddr(x, y),
-                                             y ? *ULTIMA_4402_GetTileAddr(x, y - 1) : 0,
-                                             y < 10 ? *ULTIMA_4402_GetTileAddr(x, y + 1) : 0);
+        if (x >= 0 && y >= 0 &&
+            (GetMapViewport(x, y) == 255 || GetMapViewport(x, y) == TILE_MAP_87))
+            continue;
+        int native = SPRITES_NativeActorTile(a, *ULTIMA_4402_GetTileAddr(a->_2_x, a->_3_y),
+                                             *ULTIMA_4402_GetTileAddr(a->_2_x, a->_3_y - 1),
+                                             *ULTIMA_4402_GetTileAddr(a->_2_x, a->_3_y + 1));
         if (native >= 0)
             AddCombatSprite(sprites, &count, ACTORS_Sprite(i, 256 + native), x, y, i);
     }
-    for (int y = 0; y < 11; ++y)
-        for (int x = 0; x < 11; ++x) {
+    for (int y = 0; y < 11; y++)
+        for (int x = 0; x < 11; x++) {
             if (GetMapViewport(x, y) == 255 || GetMapViewport(x, y) == TILE_MAP_87)
                 continue;
-            int shape = CONTENTS_GAME_Shape(x, y);
+            int shape = CONTENTS_GAME_Shape(x + MAP_VIEW_X, y + MAP_VIEW_Y);
             if (shape && !SPRITES_Layer(256 + shape))
                 AddCombatSprite(sprites, &count, 256 + shape, x, y, 32);
+            bool owned = false;
+            for (int i = 0; i < 32; i++)
+                if (D_5c5a[i]._0_tile && D_5c5a[i]._1_animTile &&
+                    D_5c5a[i]._2_x == x + MAP_VIEW_X && D_5c5a[i]._3_y == y + MAP_VIEW_Y)
+                    owned = true;
+            if (!owned && !GetMapViewport(x, y) && GetActorMap(x, y) != 0x16)
+                AddCombatSprite(sprites, &count, 256 + GetActorMap(x, y), x, y, 32);
         }
     qsort(sprites, count, sizeof(*sprites), SPRITES_Compare);
-    for (int i = 0; i < count; ++i)
+    for (int i = 0; i < count; i++)
         GRAP_BUF_PutMapSprite(sprites[i].x, sprites[i].y, sprites[i].tile);
 }
 #endif
@@ -391,8 +404,8 @@ void ULTIMA_56ac_DrawMap(void)
                 {
                     // Draw the ground before the sprite overlay on modern platforms.
 #if defined(TARGET_SDL)
-                    int dx = local_6 - (D_5893_map_id >= 128 ? D_5896_map_x : 5);
-                    int dy = local_8 - (D_5893_map_id >= 128 ? D_5897_map_y : 5);
+                    int dx = local_6 - (MAP_CENTER_X);
+                    int dy = local_8 - (MAP_CENTER_Y);
                     ULTIMA_10e0_GRAP_51_PutTile(D_b11e[WIDE_GroundTile(dx,dy)], local_6, local_8);
 #else
                     ULTIMA_10e0_GRAP_51_PutTile(0x100 + GetActorMap(local_6, local_8), local_6, local_8);
@@ -411,7 +424,7 @@ void ULTIMA_56ac_DrawMap(void)
                     // draw map tile
 #if defined(TARGET_SDL)
                     byte tile=GetMapViewport(local_6,local_8);
-                    int dx=local_6-(D_5893_map_id>=128?D_5896_map_x:5),dy=local_8-(D_5893_map_id>=128?D_5897_map_y:5);
+                    int dx = local_6 - (MAP_CENTER_X), dy = local_8 - (MAP_CENTER_Y);
                     if(tile!=255 && tile==WIDE_MapTile(dx,dy)) tile=WIDE_GroundTile(dx,dy);
                     ULTIMA_10e0_GRAP_51_PutTile(D_b11e[tile],local_6,local_8);
 #else
@@ -429,12 +442,11 @@ void ULTIMA_56ac_DrawMap(void)
                 (GetMapViewport(tx, ty) != 0 ||
                  GRAP_BUF_SpriteIsTransparent(256 + GetActorMap(tx, ty))))
                 TYPES_GAME_Draw(D_52ba_vdp._52d8_page ? g_linearEgaBuffer1 : g_linearEgaBuffer0,
-                                320, 8 + tx * 16, 8 + ty * 16,
-                                tx - (D_5893_map_id >= 128 ? D_5896_map_x : 5),
-                                ty - (D_5893_map_id >= 128 ? D_5897_map_y : 5), 8, 184);
+                                320, 8 + tx * 16, 8 + ty * 16, tx - (MAP_CENTER_X),
+                                ty - (MAP_CENTER_Y), 8, 184);
     for(local_8=0;local_8<11;local_8++) for(local_6=0;local_6<11;local_6++) {
         byte tile=GetMapViewport(local_6,local_8);
-        int dx=local_6-(D_5893_map_id>=128?D_5896_map_x:5),dy=local_8-(D_5893_map_id>=128?D_5897_map_y:5);
+        int dx = local_6 - (MAP_CENTER_X), dy = local_8 - (MAP_CENTER_Y);
         if(tile==0 && GetActorMap(local_6,local_8)!=0x16) {
             if(!GRAP_BUF_SpriteIsTransparent(256+GetActorMap(local_6,local_8))) continue;
             tile=WIDE_MapTile(dx,dy);
@@ -455,8 +467,8 @@ void ULTIMA_56ac_DrawMap(void)
                         ActorFmt *a = &D_5c5a[actor];
                         if (!a->_0_tile || !a->_1_animTile || a->_4_z != D_5895_map_level)
                             continue;
-                        int x = D_5893_map_id >= 128 ? a->_2_x : a->_2_x - D_5896_map_x + 5;
-                        int y = D_5893_map_id >= 128 ? a->_3_y : a->_3_y - D_5897_map_y + 5;
+                        int x = a->_2_x - MAP_VIEW_X;
+                        int y = a->_3_y - MAP_VIEW_Y;
                         if (y != local_8 || (x >= 0 && y >= 0 && x < 11 && y < 11))
                             continue;
                         unsigned w, h;
@@ -477,12 +489,9 @@ void ULTIMA_56ac_DrawMap(void)
                         continue;
                     /* Bodies occupy the ground beneath a footprint. Resolving their
                      * cell as a standing actor would redraw a large sprite off-anchor. */
-                    unsigned sprite =
-                        body ? 256 + native
-                             : ACTORS_AtCell(
-                                   D_5893_map_id >= 128 ? local_6 : D_5896_map_x + local_6 - 5,
-                                   D_5893_map_id >= 128 ? local_8 : D_5897_map_y + local_8 - 5,
-                                   256 + native);
+                    unsigned sprite = body ? 256 + native
+                                           : ACTORS_AtCell(MAP_VIEW_X + local_6,
+                                                           MAP_VIEW_Y + local_8, 256 + native);
                     GRAP_BUF_PutMapSprite(local_6, local_8, sprite);
                 }
             }
@@ -587,6 +596,13 @@ void ULTIMA_5910_UpdateFrame(void)
         else // map_id >= 0x80; combat?
         {
             memcpy(D_ab02, D_ad14, 0x160);
+            if (MAPS_ActiveCell(D_5893_map_id, D_5895_map_level, 0, 0))
+                for (int y = 0; y < 11; y++)
+                    for (int x = 0; x < 11; x++)
+                        GetMapViewport(x, y) =
+                            (x + MAP_VIEW_X < MAP_WIDTH && y + MAP_VIEW_Y < MAP_HEIGHT)
+                                ? *ULTIMA_4402_GetTileAddr(x + MAP_VIEW_X, y + MAP_VIEW_Y)
+                                : 255;
         }
 
         ULTIMA_5394();
@@ -838,6 +854,37 @@ static void ULTIMA_5a28(int param_1, int param_2_y, int param_3_x, int param_4, 
 // param_1: light intensity
 void ULTIMA_5d0a(int param_1_light, int param_2_x, int param_3_y, int param_4)
 {
+    if (MAPS_ActiveCell(D_5893_map_id, D_5895_map_level, 0, 0)) {
+        for (int y = 0; y < 11; y++)
+            for (int x = 0; x < 11; x++) {
+                int dx = x - 5, dy = y - 5,
+                    visible = param_1_light > 0 &&
+                              (param_1_light >= 50 || dx * dx + dy * dy <= param_1_light);
+                int ax = abs(dx), ay = abs(dy), sx = dx < 0 ? -1 : 1, sy = dy < 0 ? -1 : 1,
+                    err = ax - ay, cx = 0, cy = 0;
+                while (visible && (cx != dx || cy != dy)) {
+                    int e = 2 * err;
+                    if (e > -ay) {
+                        err -= ay;
+                        cx += sx;
+                    }
+                    if (e < ax) {
+                        err += ax;
+                        cy += sy;
+                    }
+                    if (cx == dx && cy == dy)
+                        break;
+                    int tile = *ULTIMA_4402_GetTileAddr(D_5896_map_x + cx, D_5897_map_y + cy);
+                    if (!TYPES_GAME_Sight(D_5896_map_x + cx, D_5897_map_y + cy, cx * cx + cy * cy,
+                                          !memchr(D_6a86, tile, sizeof(D_6a86))))
+                        visible = 0;
+                }
+                GetMapViewport(x, y) =
+                    visible ? *ULTIMA_4402_GetTileAddr(D_5896_map_x + dx, D_5897_map_y + dy) : 255;
+            }
+        return;
+    }
+
     int local5_4;
     int local4_6;
     byte* local3_8;
@@ -932,8 +979,7 @@ void ULTIMA_5e4a(void)
         {
             // 5e78
             local_92 = *ULTIMA_4402_GetTileAddr(D_589b + local_6, D_589c + local_8);
-            if (memchr(D_6a9a, local_92, 10) != 0)
-            {
+            if (local_90 < 64 && memchr(D_6a9a, local_92, 10) != 0) {
                 // 5eb0
                 local_8e[local_90++] = local_8;
                 local_8e[local_90++] = local_6;

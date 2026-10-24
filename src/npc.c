@@ -18,6 +18,46 @@ static int NPC_06a0(int param_1, int param_2, int param_3, int param_4);
 static int NPC_0adc(int param_1, int param_2, int param_3, int param_4, int param_5);
 static int NPC_0b9e(int param_1, int param_2, int param_3, int param_4);
 
+int NPC_ObjectKind(unsigned slot) {
+    return slot < (unsigned)LOCATION_NPC_COUNT ? NPCS_ObjectKind(&D_5d5e[slot], D_659e[slot]) : -1;
+}
+int NPC_ConsumeObject(unsigned actor) {
+    if (!MAPS_Town(D_5893_map_id) || actor == 0 || actor >= (unsigned)MAP_ACTOR_COUNT)
+        return 0;
+    int slot = TOWN_011e(actor);
+    if (slot < 1 || NPC_ObjectKind(slot) < 0)
+        return 0;
+    TOWN_0052_SetNpcKilled(slot);
+    TOWN_00b0_DespawnNpc(slot);
+    return 1;
+}
+int NPC_BloodAt(int x, int y, int floor) {
+    int blood = 0;
+    for (int i = 1; i < MAP_ACTOR_COUNT; i++) {
+        if (!D_5c5a[i]._0_tile || !ACTORS_Contains(i, x, y) ||
+            (D_5893_map_id < 128 && D_5c5a[i]._4_z != floor))
+            continue;
+        if (NPCS_Blood(D_5c5a[i]._0_tile, D_5c5a[i]._5, D_5c5a[i]._7))
+            blood = 1;
+        else
+            return 0;
+    }
+    return blood;
+}
+void NPC_ApplyObjectTriggers(int x, int y, int floor) {
+    for (int i = 1; i < LOCATION_NPC_COUNT; i++) {
+        NpcScheduleFmt *s = &D_5d5e[i];
+        if (NPC_ObjectKind(i) != NPCS_OBJECT_TRIGGER || !D_5f5e[i]._0 || s->x[0] != x ||
+            s->y[0] != y || s->z[0] != (unsigned char)floor)
+            continue;
+        D_5f5e[i]._0 = 0;
+        for (int j = 1; j < 3; j++)
+            if (s->x[j] < MAP_WIDTH && s->y[j] < MAP_HEIGHT && s->z[j] == (unsigned char)floor)
+                TYPES_GAME_Write(s->x[j], s->y[j], D_5f5e[i]._a & 255);
+        D_24e6 |= 1;
+    }
+}
+
 void NPC_0000_LoadNpcFile(void)
 {
     int local_4;
@@ -29,27 +69,17 @@ void NPC_0000_LoadNpcFile(void)
     local_6 = NULL;
 #endif
 
-    D_5893_map_id--;
-
-    local_4 = (uint)D_5893_map_id >> 3;
-    switch (local_4)
-    {
-    case 0:
-        local_6 = /*0x6d46*/ "TOWNE.NPC";
-        break;
-    case 1:
-        local_6 = /*0x6d50*/ "DWELLING.NPC";
-        break;
-    case 2:
-        local_6 = /*0x6d5e*/ "CASTLE.NPC";
-        break;
-    case 3:
-        local_6 = /*0x6d6a*/ "KEEP.NPC";
-        break;
+    char customName[32];
+    unsigned map = D_5893_map_id;
+    if (MAPS_NewLocation(map)) {
+        snprintf(customName, sizeof(customName), "LOC%03u.NPC", map);
+        local_6 = customName;
+        local_28 = 0;
+    } else {
+        static char *files[] = {"TOWNE.NPC", "DWELLING.NPC", "CASTLE.NPC", "KEEP.NPC"};
+        local_6 = files[(map - 1) / 8];
+        local_28 = (map - 1) % 8;
     }
-
-    local_28 = (uint)D_5893_map_id - (local_4 << 3);
-
     ULTIMA_256e_ReadFileFromDisk(local_6, D_5d5e, 0x200, local_28 * 0x240);
     ULTIMA_256e_ReadFileFromDisk(local_6, D_659e, 0x20, local_28 * 0x240 + 0x200);
     ULTIMA_256e_ReadFileFromDisk(local_6, local_26, 0x20, local_28 * 0x240 + 0x220);
@@ -59,7 +89,6 @@ void NPC_0000_LoadNpcFile(void)
         D_5f5e[local_4]._a = (u16)local_26[local_4];
     }
 
-    D_5893_map_id++;
     NPC_LoadExtra(local_6, local_28);
 }
 
@@ -67,18 +96,26 @@ int NPC_InitializeNewGame(void)
 {
     static const char *files[] = {"TOWNE.NPC", "DWELLING.NPC", "CASTLE.NPC", "KEEP.NPC"};
     byte record[0x240];
-    if (D_5893_map_id == 0 || D_5893_map_id > 32) return 1;
+    if (D_5893_map_id == 0 || !MAPS_Outside(D_5893_map_id))
+        return 1;
     int location = D_5893_map_id - 1;
-    FILE *file = FILE_Open(files[location / 8], "rb");
+    char customName[32];
+    const char *resource = files[MAPS_NewLocation(D_5893_map_id) ? 0 : location / 8];
+    if (MAPS_NewLocation(D_5893_map_id)) {
+        snprintf(customName, sizeof(customName), "LOC%03u.NPC", D_5893_map_id);
+        resource = customName;
+        location = 0;
+    }
+    FILE *file = FILE_Open(resource, "rb");
     if (!file) {
-        DEBUG_Error("Cannot initialize starting NPCs from %s", files[location / 8]);
+        DEBUG_Error("Cannot initialize starting NPCs from %s", resource);
         return 0;
     }
     int ok = fseek(file, (location % 8) * sizeof(record), SEEK_SET) == 0 &&
              fread(record, 1, sizeof(record), file) == sizeof(record) && !ferror(file);
     fclose(file);
     if (!ok) {
-        DEBUG_Error("Starting location NPC definitions are incomplete in %s", files[location / 8]);
+        DEBUG_Error("Starting location NPC definitions are incomplete in %s", resource);
         return 0;
     }
     memcpy(D_5d5e, record, 0x200);
@@ -87,7 +124,7 @@ int NPC_InitializeNewGame(void)
         D_5f5e[i]._a = record[0x220 + i];
         if (i && TOWN_0000_CheckNpcKilled(i)) D_659e[i] = 0;
     }
-    NPC_LoadExtra(files[location / 8], location % 8);
+    NPC_LoadExtra(resource, location % 8);
     NPC_00d6(D_587f);
     TOWN_1694();
     debug("Initialized starting settlement NPCs: map=%u floor=%u hour=%u", D_5893_map_id,
@@ -211,9 +248,95 @@ static void NPC_01d2(int param_1, int param_2, int param_3, int param_4, int par
     D_b11c[param_2 * 0x20 + param_1] = 0x46;
 }
 
+static int NPC_ExtendedPath(int sx, int sy, int tx, int ty, int mode, int npc) {
+    int w = MAP_WIDTH, h = MAP_HEIGHT, n = w * h;
+    if (sx < 0 || sy < 0 || sx >= w || sy >= h || npc < 1 || npc >= LOCATION_NPC_COUNT)
+        return 0;
+    int *parent = malloc((size_t)n * sizeof(int)), *queue = malloc((size_t)n * sizeof(int));
+    if (!parent || !queue) {
+        free(parent);
+        free(queue);
+        return 0;
+    }
+    for (int i = 0; i < n; i++)
+        parent[i] = -1;
+    int start = sy * w + sx, read = 0, write = 1, goal = -1;
+    queue[0] = start;
+    parent[start] = start;
+    const int dx[] = {1, 0, -1, 0}, dy[] = {0, -1, 0, 1};
+    int schedule = NPC_12e0(npc, D_587f);
+    while (read < write) {
+        int at = queue[read++], x = at % w, y = at / w;
+        if (mode < 0 ? GetMap(x, y) == (mode == -1 ? TILE_MAP_LADDER_UP : TILE_MAP_LADDER_DOWN)
+                     : x == tx && y == ty) {
+            goal = at;
+            break;
+        }
+        for (int d = 0; d < 4; d++) {
+            int nx = x + dx[d], ny = y + dy[d];
+            if (nx < 0 || ny < 0 || nx >= w || ny >= h)
+                continue;
+            int next = ny * w + nx;
+            if (parent[next] >= 0)
+                continue;
+            if (!(nx == tx && ny == ty && mode >= 0) &&
+                !NPC_0adc(nx, ny, D_5895_map_level, npc, schedule))
+                continue;
+            int occupant = ULTIMA_368e_FindActorTileAtPos(nx, ny, D_5895_map_level);
+            if (occupant && !(nx == tx && ny == ty))
+                continue;
+            parent[next] = at;
+            queue[write++] = next;
+        }
+    }
+    if (goal >= 0 && mode < 0) {
+        D_5876 = goal % w;
+        D_5878 = goal / w;
+    }
+    if (goal >= 0 && mode >= 0) {
+        int length = 0, at = goal;
+        while (at != start && length < n) {
+            queue[length++] = at;
+            at = parent[at];
+        }
+        memset(D_615e[npc].data, 0, 32);
+        D_655e[npc] = 0;
+        int used = 0, last = -1, count = 0, previous = start;
+        for (int i = length - 1; i >= 0; i--) {
+            int next = queue[i], direction = next == previous + 1   ? 1
+                                             : next == previous - w ? 2
+                                             : next == previous - 1 ? 3
+                                                                    : 4;
+            if (direction != last || count == 255) {
+                if (count) {
+                    D_615e[npc].data[used++] = count;
+                    D_615e[npc].data[used++] = last;
+                }
+                if (used >= 30) {
+                    count = 0;
+                    break;
+                }
+                last = direction;
+                count = 0;
+            }
+            count++;
+            previous = next;
+        }
+        if (count && used < 30) {
+            D_615e[npc].data[used++] = count;
+            D_615e[npc].data[used] = last;
+        }
+    }
+    free(parent);
+    free(queue);
+    return goal >= 0;
+}
+
 // CHECKED
 static int NPC_032c(int param_1, int param_2, int param_3, int param_4, int param_5, int param_6)
 {
+    if (MAPS_Record(1, D_5893_map_id, (int8_t)D_5895_map_level))
+        return NPC_ExtendedPath(param_1, param_2, param_3, param_4, param_5, param_6);
     byte local_50[32];
     byte local_2e[32];
     int local_30;
@@ -338,6 +461,8 @@ static int NPC_032c(int param_1, int param_2, int param_3, int param_4, int para
 // CHECKED
 static int NPC_04ac(int param_1, int param_2, int param_3, int param_4)
 {
+    if (MAPS_Record(1, D_5893_map_id, (int8_t)D_5895_map_level))
+        return 0;
     int local_c;
     int local_a;
     int local_8;
@@ -430,9 +555,8 @@ static void NPC_0632(int param_1)
     {
     case 1:
         D_5876++;
-        if (D_5878 > 0x20)
-        {
-            D_5876 = 0x20;
+        if (D_5878 >= MAP_HEIGHT) {
+            D_5876 = MAP_WIDTH - 1;
         }
         break;
 
@@ -454,9 +578,8 @@ static void NPC_0632(int param_1)
 
     case 4:
         D_5878++;
-        if (D_5876 > 0x20)
-        {
-            D_5878 = 0x20;
+        if (D_5876 >= MAP_WIDTH) {
+            D_5878 = MAP_HEIGHT - 1;
         }
         break;
     }
@@ -787,12 +910,9 @@ static int NPC_0adc(int param_1, int param_2, int param_3, int param_4, int para
     }
     else
     {
-        if (param_1 < 0 || param_2 < 0 || 0x1f < param_1 || 0x1f < param_2)
-        {
+        if (param_1 < 0 || param_2 < 0 || param_1 >= MAP_WIDTH || param_2 >= MAP_HEIGHT) {
             local_8 = D_6a07;
-        }
-        else
-        {
+        } else {
             local_8 = GetMap(param_1, param_2);
         }
 
@@ -803,7 +923,7 @@ static int NPC_0adc(int param_1, int param_2, int param_3, int param_4, int para
         else
         {
             local_6 = ((uint)D_367e[local_8 >> 3] & 0x80 >> (local_8 & 7)) == 0;
-            if (param_1 >= 0 && param_2 >= 0 && param_1 < 32 && param_2 < 32) {
+            if (param_1 >= 0 && param_2 >= 0 && param_1 < MAP_WIDTH && param_2 < MAP_HEIGHT) {
                 TypeCell key = {3, D_5893_map_id, 0, param_4 & 255, (unsigned)param_4 >> 8, 0, 0};
                 unsigned actorType = TYPES_At(key, 0), tileType = TYPES_GAME_At(param_1, param_2);
                 unsigned originalType = 256 + D_659e[param_4];
@@ -837,8 +957,7 @@ static int NPC_0b9e(int param_1, int param_2, int param_3, int param_4)
     int local_4;
 
     local_6 = 0;
-    if (param_1 < 0 || param_1 > 0x1f || param_2 < 0 || param_2 > 0x1f)
-    {
+    if (param_1 < 0 || param_1 >= MAP_WIDTH || param_2 < 0 || param_2 >= MAP_HEIGHT) {
         return 0;
     }
 
@@ -964,7 +1083,7 @@ void NPC_0db4(int param_1)
     // 0dd9
     for (local_4 = 1; /*1267*/ local_4 < LOCATION_NPC_COUNT; /*1264*/ local_4++) {
         // 126d
-        if (D_659e[local_4] == 0)
+        if (D_659e[local_4] == 0 || NPC_ObjectKind(local_4) >= 0)
             continue;
 
         // 1277
@@ -1316,7 +1435,12 @@ void NPC_LoadExtra(const char *name, unsigned town) {
  * Records use explicit little-endian words, never compiler structure layouts. */
 int NPC_WriteExtraState(FILE *f) {
     unsigned count = LOCATION_NPC_COUNT;
-    size_t flagBytes = sizeof(D_5b5a) - 128;
+    size_t flagBytes = 32u * (IMPERA_NPC_CAPACITY / 8);
+    for (size_t i = 128 + flagBytes; i < sizeof(D_5b5a); ++i)
+        if (D_5b5a[i] || D_5bda[i]) {
+            flagBytes = sizeof(D_5b5a) - 128;
+            break;
+        }
     int flags = 0;
     for (size_t i = 0; i < flagBytes; i++)
         flags |= D_5b5a[128 + i] | D_5bda[128 + i];
@@ -1326,7 +1450,7 @@ int NPC_WriteExtraState(FILE *f) {
     unsigned char *b = calloc(1, size), h[24] = {0};
     if (!b)
         return 0;
-    memcpy(h, "INPSAV01", 8);
+    memcpy(h, flagBytes == 32u * (IMPERA_NPC_CAPACITY / 8) ? "INPSAV01" : "INPSAV02", 8);
     TYPES_Put32(h + 8, size);
     TYPES_Put32(h + 12, count);
     memcpy(b, D_5b5a + 128, flagBytes);
@@ -1355,9 +1479,9 @@ int NPC_WriteExtraState(FILE *f) {
 }
 int NPC_ReadExtraState(FILE *f, int apply) {
     long start = ftell(f);
-    unsigned char h[24];
+    unsigned char h[24] = {0};
     size_t got = fread(h, 1, 24, f);
-    if (got < 8 || memcmp(h, "INPSAV01", 8)) {
+    if (got < 8 || (memcmp(h, "INPSAV01", 8) && memcmp(h, "INPSAV02", 8))) {
         if (ferror(f) || fseek(f, start, SEEK_SET))
             return 0;
         if (apply)
@@ -1365,7 +1489,8 @@ int NPC_ReadExtraState(FILE *f, int apply) {
         return 1;
     }
     unsigned count = TYPES_U32(h + 12), size = TYPES_U32(h + 8);
-    size_t flagBytes = sizeof(D_5b5a) - 128;
+    size_t flagBytes =
+        !memcmp(h, "INPSAV02", 8) ? sizeof(D_5b5a) - 128 : 32u * (IMPERA_NPC_CAPACITY / 8);
     if (got != 24 || count < 32 || count > IMPERA_NPC_CAPACITY || TYPES_U32(h + 20) ||
         size != 2 * flagBytes + (size_t)(count - 32) * 78)
         return 0;

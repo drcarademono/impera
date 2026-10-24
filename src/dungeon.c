@@ -831,8 +831,7 @@ void DUNGEON_0c76(byte param_1, int param_2)
         // 0d4a
         DNGLOOK_109e(1);
 
-        if (D_5893_map_id > 0x20)
-        {
+        if (!MAPS_Outside(D_5893_map_id)) {
             // 0d5b
             DUNGEON_1be0();
         }
@@ -935,8 +934,7 @@ void DUNGEON_0e2e_MainLoop(int param_1)
         DUNGEON_0000(GetDungeonMap(D_5896_map_x, D_5897_map_y, D_5895_map_level));
     }
 
-    if (D_5893_map_id > 0x20)
-    {
+    if (!MAPS_Outside(D_5893_map_id)) {
         DNGLOOK_109e(param_1);
         DUNGEON_0134(param_1);
         DUNGEON_1be0();
@@ -947,7 +945,7 @@ void DUNGEON_0e2e_MainLoop(int param_1)
 #endif
 
     // 0f15
-    while (local_e != 0 && D_5893_map_id > 0x20) // 0f93
+    while (local_e != 0 && !MAPS_Outside(D_5893_map_id)) // 0f93
     {
         local_e = 1;
         local_c = 1;
@@ -999,8 +997,7 @@ void DUNGEON_0e2e_MainLoop(int param_1)
             local_c = DUNGEON_06c4_ProcessCommand(local_a);
         }
 
-        if (D_5893_map_id < 0x21)
-        {
+        if (MAPS_Outside(D_5893_map_id)) {
             local_c = 0;
             local_e = local_c;
         }
@@ -1013,8 +1010,7 @@ void DUNGEON_0e2e_MainLoop(int param_1)
             DUNGEON_0c76(local_4, local_6);
         }
 
-        if (D_5893_map_id >= 0x21)
-        {
+        if (!MAPS_Outside(D_5893_map_id)) {
             continue;
         }
 

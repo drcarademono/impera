@@ -206,8 +206,7 @@ int CMDS_0000(int param_1, int param_2, int param_3)
         local_20 = D_587f;
         ULTIMA_4f7c(5);
         ULTIMA_20fa_WaitTicks(1);
-        if (D_5894 < 0x21)
-        {
+        if (MAPS_Outside(D_5894)) {
             D_5893_map_id = D_5894;
             ULTIMA_4a84();
             D_5893_map_id = 0xff;
@@ -494,8 +493,7 @@ int CMDS_07f6_BoardCmd(void)
     int local_8;
     int local_6;
 
-    if (D_5893_map_id > 0x20 && D_5893_map_id < 0x29)
-    {
+    if (!MAPS_Outside(D_5893_map_id) && D_5893_map_id < 0x29) {
         ULTIMA_1850_PrintString(_TEXT(0x4252, "\nNot here!\n"));
 
         return 1;
@@ -589,6 +587,7 @@ int CMDS_07f6_BoardCmd(void)
         return 0;
     }
 
+    NPC_ConsumeObject(local_6);
     ULTIMA_3a74(0, 0, 0, 0, 0, 0, local_6);
     D_24e6 |= 2;
 
@@ -820,6 +819,7 @@ void CMDS_0aea_FireCmd(void)
 
     if (local_1a && local_a != 0)
     {
+        NPC_ConsumeObject(local_a);
         ULTIMA_3a74(0, 0, 0, 0, 0, 0, local_a);
 
         D_24e6 |= 2;
@@ -856,12 +856,9 @@ void CMDS_0d98_IgniteTorchCmd(void)
     else
     {
         D_57ae--;
-        if (D_5893_map_id > 0x20 && D_5893_map_id < 0x29)
-        {
+        if (!MAPS_Outside(D_5893_map_id) && D_5893_map_id < 0x29) {
             ULTIMA_3ef0_IncreaseByte(&D_58a7, ULTIMA_2092_RandomRange(0, 0xf) + 0x70, 0xff);
-        }
-        else
-        {
+        } else {
             D_58a7 = 0xf0;
         }
     }
@@ -1312,16 +1309,11 @@ int CMDS_1418_YellCmd(void)
         else
         {
             ULTIMA_16ba_PrintChar('\n');
-            if (D_5893_map_id >= 1 && D_5893_map_id <= 0x20)
-            {
+            if (D_5893_map_id >= 1 && MAPS_Outside(D_5893_map_id)) {
                 local_24 = CMDS_1030(local_22);
-            }
-            else if (D_5893_map_id == 0)
-            {
+            } else if (D_5893_map_id == 0) {
                 CMDS_12c8(local_22);
-            }
-            else
-            {
+            } else {
                 ULTIMA_1850_PrintString(_TEXT(0x453a, "\nNo effect!\n"));
             }
         }
@@ -1753,12 +1745,9 @@ void CMDS_1ad8_MixCmd(void)
                 if (local_4 != 0)
                 {
                     ULTIMA_1850_PrintString(_TEXT(0x8ff0, "Mixing...\n"));
-                    if (D_5893_map_id > 0x20)
-                    {
+                    if (!MAPS_Outside(D_5893_map_id)) {
                         ULTIMA_20fa_WaitTicks(10);
-                    }
-                    else
-                    {
+                    } else {
                         ULTIMA_3ae6(10);
                     }
 

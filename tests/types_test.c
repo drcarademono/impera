@@ -1,3 +1,4 @@
+#include "mod/maps.h"
 #include "common/common.h"
 #include "mod/contents.h"
 #include "mod/package.h"
@@ -144,7 +145,8 @@ int main(void) {
     assert(!TYPES_ValidateMap(map, sizeof(map), defs, len));
     map[8] = 1;
     map[35] = 32;
-    assert(!TYPES_ValidateMap(map, sizeof(map), defs, len));
+    assert(TYPES_ValidateMap(map, sizeof(map), defs, len));
+    assert(!MAPS_Contains(NULL, 0, 1, map[33], 0, 32, 0));
     map[35] = 12;
     defs[32 + 8] = 2;
     assert(!TYPES_Validate(defs, len));

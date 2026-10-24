@@ -1177,8 +1177,14 @@ void DNGLOOK_117e(int param_1, int param_2)
         // NOT MATCHING
         for (local_10 = 0; local_10 < D_585b; local_10++)
         {
-            D_ba14[local_10].x = D_5c5a[local_10]._2_x = GetCombatMapSpecial(local_4, local_10 + local_c);
-            D_ba14[local_10].y = D_5c5a[local_10]._3_y = GetCombatMapSpecial(local_4, local_10 + local_e);
+            int px = GetCombatMapSpecial(local_4, local_10 + local_c);
+            int py = GetCombatMapSpecial(local_4, local_10 + local_e);
+            if (MAPS_ActiveCell(D_5893_map_id, D_5895_map_level, 0, 0)) {
+                px = MAPS_Wrap(px, MAP_WIDTH);
+                py = MAPS_Wrap(py, MAP_HEIGHT);
+            }
+            D_ba14[local_10].x = D_5c5a[local_10]._2_x = px;
+            D_ba14[local_10].y = D_5c5a[local_10]._3_y = py;
         }
     }
 

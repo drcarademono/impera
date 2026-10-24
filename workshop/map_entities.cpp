@@ -1,3 +1,4 @@
+#include "extended_maps.h"
 #include "mod/npcs.h"
 #include "map_entities.h"
 #include "actor_names.h"
@@ -33,7 +34,10 @@ QMap<QString, QByteArray> createNpcConversation(const Project &p, const QString 
         used.insert(entry.id);
     for (int t = 0; t < 8; ++t)
         for (int n = 0; n < int(NPCS_Count(bytes.constData(), bytes.size(), t)); ++n)
-            used.insert(dialogue(t, n));
+            if (NPCS_ObjectKind(
+                    bytes.constData() + NPCS_Offset(bytes.constData(), bytes.size(), t, n),
+                    U5::byte(bytes, NPCS_ShapeOffset(bytes.constData(), bytes.size(), t, n))) < 0)
+                used.insert(dialogue(t, n));
     int id = 1;
     while (id < 128 && used.contains(id))
         ++id;
@@ -45,6 +49,22 @@ QMap<QString, QByteArray> createNpcConversation(const Project &p, const QString 
     entries.append({unsigned(id), text});
     bytes[NPCS_DialogueOffset(bytes.constData(), bytes.size(), town, slot)] = char(id);
     return {{npc, bytes}, {talk, U5::writeDialogue(entries)}};
+}
+bool locationObject(const Project &p, const QString &resource, int town, int slot) {
+    const auto b = p.data(resource);
+    const auto off = NPCS_ShapeOffset(b.constData(), b.size(), town, slot);
+    if (slot < 1 || off >= size_t(b.size()) || !U5::byte(b, off) || U5::byte(b, off) >= 64)
+        return false;
+    const int base = NPCS_Offset(b.constData(), b.size(), town, slot);
+    return NPCS_ObjectKind(b.constData() + base, U5::byte(b, off)) >= 0 ||
+           U5::byte(b, NPCS_DialogueOffset(b.constData(), b.size(), town, slot)) == 0;
+}
+QString locationObjectName(const Project &p, const QString &resource, int town, int slot) {
+    const auto b = p.data(resource);
+    int off = NPCS_Offset(b.constData(), b.size(), town, slot);
+    const int shape = U5::byte(b, NPCS_ShapeOffset(b.constData(), b.size(), town, slot));
+    int kind = NPCS_ObjectKind(b.constData() + off, shape);
+    return kind >= 0 ? mapItemName(MapItemKind(kind)) : mapObjectName(shape);
 }
 QString actorName(int shape) {
     // Combat group names do not always describe the NPC appearance artwork.
@@ -86,16 +106,18 @@ QString mapItemName(MapItemKind k) {
         return "Equipment";
     case MapItemKind::SandalwoodBox:
         return "Sandalwood box";
-    case MapItemKind::Corpse:
-        return "Corpse";
+    case MapItemKind::BloodSplatter:
+        return "Blood splatter";
     case MapItemKind::Gold:
         return "Gold";
     case MapItemKind::Food:
         return "Food";
     case MapItemKind::Moonstone:
         return "Moonstone";
-    case MapItemKind::SleepingFigure:
-        return "Sleeping figure";
+    case MapItemKind::Corpse:
+        return "Corpse (intact)";
+    case MapItemKind::MoldyCorpse:
+        return "Corpse";
     case MapItemKind::Npc:
         return "NPC";
     case MapItemKind::Monster:
@@ -148,18 +170,21 @@ int mapItemShape(MapItemKind kind, int variant) {
                               : 12;
     case MapItemKind::SandalwoodBox:
         return 14;
-    case MapItemKind::Corpse:
+    case MapItemKind::BloodSplatter:
+    case MapItemKind::MoldyCorpse:
         return 31;
-    case MapItemKind::SleepingFigure:
+    case MapItemKind::Corpse:
         return 30;
     case MapItemKind::Horse:
         return 16;
     case MapItemKind::Skiff:
         return 40;
     case MapItemKind::Frigate:
-        return 32;
+        return 36;
     case MapItemKind::Carpet:
         return 27;
+    case MapItemKind::Trigger:
+        return 29;
     default:
         return variant < 0 ? 144 : variant;
     }
@@ -199,27 +224,28 @@ QList<MapItemKind> availableMapItems(const Project &p, const QString &r) {
     if (worldObjectsAvailable || r.endsWith(".CBT") || p.resources.contains(npc))
         out << MapItemKind::Monster;
     if (p.resources.contains("SIGNS.DAT") &&
-        QStringList{"BRIT.DAT", "UNDER.DAT", "TOWNE.DAT", "DWELLING.DAT", "CASTLE.DAT", "KEEP.DAT"}
-            .contains(r))
+        (MAPS_LocationResource(r.toLatin1().constData()) ||
+         QStringList{"BRIT.DAT", "UNDER.DAT", "TOWNE.DAT", "DWELLING.DAT", "CASTLE.DAT", "KEEP.DAT"}
+             .contains(r)))
         out << MapItemKind::Sign;
     out << MapItemKind::Container << MapItemKind::HiddenContents;
-    if (worldObjectsAvailable)
+    if (worldObjectsAvailable || p.resources.contains(npc))
         out << MapItemKind::Horse << MapItemKind::Skiff << MapItemKind::Frigate
-            << MapItemKind::Carpet << MapItemKind::Gold << MapItemKind::Food
-            << MapItemKind::SleepingFigure << MapItemKind::Gem << MapItemKind::Key
-            << MapItemKind::SkeletonKey << MapItemKind::Torch << MapItemKind::Potion
-            << MapItemKind::Scroll << MapItemKind::Equipment << MapItemKind::SandalwoodBox
-            << MapItemKind::Corpse;
-    if ((r == "BRIT.DAT" || r == "UNDER.DAT") && p.resources.contains("INIT.GAM") &&
-        p.data("INIT.GAM").size() == 4192)
+            << MapItemKind::Carpet << MapItemKind::Gold << MapItemKind::Food << MapItemKind::Corpse
+            << MapItemKind::Gem << MapItemKind::Key << MapItemKind::SkeletonKey
+            << MapItemKind::Torch << MapItemKind::Potion << MapItemKind::Scroll
+            << MapItemKind::Equipment << MapItemKind::SandalwoodBox << MapItemKind::BloodSplatter
+            << MapItemKind::MoldyCorpse;
+    if ((r == "BRIT.DAT" || r == "UNDER.DAT" || p.resources.contains(npc)) &&
+        p.resources.contains("INIT.GAM") && p.data("INIT.GAM").size() == 4192)
         out << MapItemKind::Moonstone;
-    if (r == "DUNGEON.CBT")
+    if (r == "DUNGEON.CBT" || p.resources.contains(npc))
         out << MapItemKind::Trigger;
     return out;
 }
 QByteArray addContentsAt(const Project &p, ContentsTarget target, QPoint cell, bool container) {
-    int side = target.kind ? 11 : target.map >= 33 ? 8 : target.map ? 32 : 256;
-    require(cell.x() >= 0 && cell.y() >= 0 && cell.x() < side && cell.y() < side,
+    auto size = mapSize(p, target.map, target.floor, target.kind);
+    require(cell.x() >= 0 && cell.y() >= 0 && cell.x() < size.width() && cell.y() < size.height(),
             "Placement outside map");
     require(!contentsHit(p, target, cell),
             "This tile already has contents; select it to edit them");
@@ -250,9 +276,10 @@ QMap<QString, QByteArray> moveSignTerrain(const Project &p, const QString &r, in
             return custom;
     }
     int side = doc.pages[page].side;
-    require(from.x() >= 0 && from.y() >= 0 && from.x() < side && from.y() < side,
+    require(from.x() >= 0 && from.y() >= 0 && from.x() < side &&
+                from.y() < doc.pages[page].height(),
             "Sign source outside map");
-    require(to.x() >= 0 && to.y() >= 0 && to.x() < side && to.y() < side,
+    require(to.x() >= 0 && to.y() >= 0 && to.x() < side && to.y() < doc.pages[page].height(),
             "Sign destination outside map");
     int tile = U5::byte(terrain, from.y() * side + from.x());
     if (tile != 0x89 && tile != 0x8a && tile != 0xf8)
@@ -260,7 +287,7 @@ QMap<QString, QByteArray> moveSignTerrain(const Project &p, const QString &r, in
     int ground = 5;
     for (QPoint delta : {QPoint(0, 1), QPoint(1, 0), QPoint(-1, 0), QPoint(0, -1)}) {
         auto n = from + delta;
-        if (n.x() >= 0 && n.y() >= 0 && n.x() < side && n.y() < side) {
+        if (n.x() >= 0 && n.y() >= 0 && n.x() < side && n.y() < doc.pages[page].height()) {
             int t = U5::byte(terrain, n.y() * side + n.x());
             if (t == 5 || t == 0x40 || t == 0x44 || t == 0x45) {
                 ground = t;
@@ -291,7 +318,7 @@ void validateActorPlacement(const Project &p, const QString &r, int index, QPoin
     QSize size(world ? 1 : TYPES_Width(&d), world ? 1 : TYPES_Height(&d));
     QRect footprint(cell, size);
     bool large = size != QSize(1, 1);
-    require(QRect(0, 0, page.side, page.side).contains(footprint),
+    require(QRect(0, 0, page.side, page.height()).contains(footprint),
             "The whole creature must fit inside the map");
     if (large) {
         unsigned shape = d.base;
@@ -334,7 +361,7 @@ void validateActorPlacement(const Project &p, const QString &r, int index, QPoin
             for (int hour = schedule < 0 ? 0 : schedule; hour < (schedule < 0 ? 4 : schedule + 1);
                  ++hour) {
                 auto pos = npcs.location(page.settlement, slot, hour);
-                if (pos.floor == page.floor && pos.x < page.side && pos.y < page.side)
+                if (pos.floor == page.floor && pos.x < page.side && pos.y < page.height())
                     check({pos.x, pos.y}, npcs.sprite(page.settlement, slot));
             }
         }
@@ -346,7 +373,8 @@ void validateActorPlacement(const Project &p, const QString &r, int index, QPoin
                 continue;
             int x = U5::byte(bytes, base + 6 * 32 + 11 + slot),
                 y = U5::byte(bytes, base + 7 * 32 + 11 + slot);
-            if (x > 10 || y > 10 ||
+            if (x >= page.side || y >= page.height() ||
+                !mapMarkerActive(p, r, index, 24 + slot, x, y) ||
                 (r == "DUNGEON.CBT" && !U5::byte(bytes, base + 5 * 32 + 11 + slot)))
                 continue;
             unsigned fallback =
@@ -361,7 +389,7 @@ MapItemEdit addMapItem(const Project &p, const QString &r, int index, QPoint cel
     MapDocument doc(&p, r);
     require(index >= 0 && index < doc.pages.size(), "Invalid map floor");
     const auto page = doc.pages[index];
-    require(cell.x() >= 0 && cell.y() >= 0 && cell.x() < page.side && cell.y() < page.side,
+    require(cell.x() >= 0 && cell.y() >= 0 && cell.x() < page.side && cell.y() < page.height(),
             "Placement outside map");
     unsigned customType = appearance >= 512 ? unsigned(appearance) : 0;
     if (customType) {
@@ -378,6 +406,45 @@ MapItemEdit addMapItem(const Project &p, const QString &r, int index, QPoint cel
                 : 256 + (appearance < 0 ? (kind == MapItemKind::Monster ? 144 : 80) : appearance));
     MapItemEdit out;
     auto target = contentsTarget(r, page, index);
+    const bool localSpecial = page.settlement >= 0 && kind != MapItemKind::Npc &&
+                              kind != MapItemKind::Monster && kind != MapItemKind::Sign &&
+                              kind != MapItemKind::Container && kind != MapItemKind::HiddenContents;
+    if (localSpecial) {
+        const QString npc = r.left(r.size() - 4) + ".NPC";
+        auto b = p.data(npc);
+        out.slot = NPCS_Count(b.constData(), b.size(), page.settlement);
+        MapNpcDocument::ensureSlot(b, page.settlement, out.slot);
+        const int base = NPCS_Offset(b.constData(), b.size(), page.settlement, out.slot);
+        b.replace(base, 16, QByteArray(16, 0));
+        for (int j = 0; j < 3; j++) {
+            b[base + j] = char(NPCS_OBJECT_MARKER | int(kind));
+            b[base + 3 + j] = char(cell.x());
+            b[base + 6 + j] = char(cell.y());
+            b[base + 9 + j] = char(page.floor);
+        }
+        int value = kind == MapItemKind::Frigate         ? 99
+                    : kind == MapItemKind::SkeletonKey   ? 129
+                    : kind == MapItemKind::BloodSplatter ? 255
+                    : kind == MapItemKind::Equipment     ? (appearance < 0 ? 16 : appearance)
+                    : kind == MapItemKind::Trigger       ? 5
+                    : kind == MapItemKind::Potion || kind == MapItemKind::Scroll ||
+                            kind == MapItemKind::Moonstone
+                        ? qMax(0, appearance)
+                    : kind == MapItemKind::Gold || kind == MapItemKind::Food ||
+                            kind == MapItemKind::Gem || kind == MapItemKind::Key ||
+                            kind == MapItemKind::Torch
+                        ? 1
+                        : 0;
+        b[base + 15] = char(kind == MapItemKind::Frigate         ? 1
+                            : kind == MapItemKind::BloodSplatter ? 0xb1
+                                                                 : 0);
+        b[NPCS_ShapeOffset(b.constData(), b.size(), page.settlement, out.slot)] =
+            char(mapItemShape(kind, appearance));
+        b[NPCS_DialogueOffset(b.constData(), b.size(), page.settlement, out.slot)] = char(value);
+        out.changes[npc] = b;
+        out.mode = "NPCs / Schedules";
+        return out;
+    }
     if (kind == MapItemKind::Moonstone) {
         int phase = appearance < 0 ? 0 : appearance;
         require(phase >= 0 && phase < 8, "Choose a moonstone phase");
@@ -414,7 +481,11 @@ MapItemEdit addMapItem(const Project &p, const QString &r, int index, QPoint cel
                 used.insert(e.id);
             for (int town = 0; town < 8; town++)
                 for (int i = 0; i < int(NPCS_Count(b.constData(), b.size(), town)); i++)
-                    used.insert(U5::byte(b, NPCS_DialogueOffset(b.constData(), b.size(), town, i)));
+                    if (NPCS_ObjectKind(
+                            b.constData() + NPCS_Offset(b.constData(), b.size(), town, i),
+                            U5::byte(b, NPCS_ShapeOffset(b.constData(), b.size(), town, i))) < 0)
+                        used.insert(
+                            U5::byte(b, NPCS_DialogueOffset(b.constData(), b.size(), town, i)));
             for (int id = 1; id < 128; id++)
                 if (!used.contains(id)) {
                     conversation = id;
@@ -451,7 +522,7 @@ MapItemEdit addMapItem(const Project &p, const QString &r, int index, QPoint cel
             char(conversation);
         out.changes[npc] = b;
         out.mode = "NPCs / Schedules";
-        if (out.slot < 32 && p.resources.contains("INIT.GAM")) {
+        if (out.slot < 32 && target.map <= 32 && p.resources.contains("INIT.GAM")) {
             auto initial = p.data("INIT.GAM");
             int flag = 0x5b4 + (target.map - 1) * 4 + out.slot / 8;
             require(flag < initial.size(), "Initial NPC state is truncated");
@@ -484,8 +555,8 @@ MapItemEdit addMapItem(const Project &p, const QString &r, int index, QPoint cel
         int base = page.offset;
         if (kind == MapItemKind::Trigger) {
             for (int i = 0; i < 8; i++)
-                if (U5::byte(b, base + 8 * 32 + 11 + i) > 10 ||
-                    U5::byte(b, base + 8 * 32 + 19 + i) > 10) {
+                if (!mapMarkerActive(p, r, index, 40 + i, U5::byte(b, base + 8 * 32 + 11 + i),
+                                     U5::byte(b, base + 8 * 32 + 19 + i))) {
                     out.slot = 22 + i;
                     break;
                 }
@@ -501,8 +572,9 @@ MapItemEdit addMapItem(const Project &p, const QString &r, int index, QPoint cel
         } else {
             for (int i = 0; i < 16; i++)
                 if (r == "DUNGEON.CBT" ? !U5::byte(b, base + 5 * 32 + 11 + i)
-                                       : (U5::byte(b, base + 6 * 32 + 11 + i) > 10 ||
-                                          U5::byte(b, base + 7 * 32 + 11 + i) > 10)) {
+                                       : (!mapMarkerActive(p, r, index, 24 + i,
+                                                           U5::byte(b, base + 6 * 32 + 11 + i),
+                                                           U5::byte(b, base + 7 * 32 + 11 + i)))) {
                     out.slot = 6 + i;
                     break;
                 }
@@ -515,6 +587,20 @@ MapItemEdit addMapItem(const Project &p, const QString &r, int index, QPoint cel
             b[base + 6 * 32 + 11 + i] = char(cell.x());
             b[base + 7 * 32 + 11 + i] = char(cell.y());
         }
+        auto set = [&](int bit) {
+            Project view = p;
+            for (auto it = out.changes.begin(); it != out.changes.end(); ++it)
+                view.resources[it.key()].edited = it.value();
+            auto edits = setMapMarker(view, r, index, bit, true);
+            for (auto it = edits.begin(); it != edits.end(); ++it)
+                out.changes[it.key()] = it.value();
+        };
+        if (out.slot >= 22) {
+            set(40 + out.slot - 22);
+            set(48 + out.slot - 22);
+            set(56 + out.slot - 22);
+        } else
+            set(24 + out.slot - 6);
         out.changes[r] = b;
         out.mode = "Encounter";
     } else {
@@ -540,7 +626,11 @@ MapItemEdit addMapItem(const Project &p, const QString &r, int index, QPoint cel
                  : kind == MapItemKind::Potion || kind == MapItemKind::Scroll ? qMax(0, appearance)
                  : shape == 2 || shape == 15 || shape == 7 || shape == 8 || shape == 13 ? 1
                                                                                         : 0);
-        record[7] = char(255);
+        if (kind == MapItemKind::BloodSplatter)
+            record[5] = char(255);
+        record[7] = char(kind == MapItemKind::BloodSplatter ? 0xb1
+                         : kind == MapItemKind::Frigate     ? 1
+                                                            : 255);
         out.changes[WorldObjects::resource(world)] =
             WorldObjects::change(p, world, out.slot, record);
         out.mode = "Starting Objects";
@@ -590,6 +680,9 @@ QMap<QString, QByteArray> deleteMapItem(const Project &p, const QString &r, int 
             b[base + 8 * 32 + 11 + i] = b[base + 8 * 32 + 19 + i] = char(255);
         }
         out[r] = b;
+        auto flags = setMapMarker(p, r, index, slot < 22 ? 24 + slot - 6 : 40 + slot - 22, false);
+        for (auto it = flags.begin(); it != flags.end(); ++it)
+            out[it.key()] = it.value();
     } else if (mode == "Signs") {
         auto signs = readSigns(p.data("SIGNS.DAT"));
         auto target = contentsTarget(r, page, index);

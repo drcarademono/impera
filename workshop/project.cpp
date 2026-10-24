@@ -2,6 +2,7 @@
 #include "mod/location_names.h"
 #include "mod/npcs.h"
 #include "project.h"
+#include "extended_maps.h"
 #include "contents_editor.h"
 #include "custom_tiles.h"
 #include "dialogue.h"
@@ -46,6 +47,7 @@ void Project::openGame(const QString &directory) {
     for (const auto &name : dir.entryList(QDir::Files, QDir::Name)) {
         QString upper = name.toUpper();
         if (upper == "TYPES.OVR" || upper == "TYPEMAP.OVR" || upper == "CUTSCENE.OVR" ||
+            upper == "MAPS.OVR" || MAPS_LocationResource(upper.toLatin1().constData()) ||
             upper == "LOCATIONS.OVR" || upper == "TEXT.OVR" || upper == "RULES.TBL" ||
             upper == "CONTENTS.OVR")
             continue; // Companion resources are package-only.
@@ -68,6 +70,7 @@ void Project::openGame(const QString &directory) {
     next.resources.insert("TYPEMAP.OVR", {{}, {}});
     next.resources.insert("CUTSCENE.OVR", {{}, {}});
     next.resources.insert("LOCATIONS.OVR", {{}, {}});
+    next.resources.insert("MAPS.OVR", {{}, {}});
     next.resources.insert("TEXT.OVR", {{}, {}});
     next.resources.insert("RULES.TBL", {{}, {}});
     next.resources.insert("CONTENTS.OVR", {{}, {}});
@@ -79,6 +82,10 @@ const QByteArray &Project::data(const QString &name) const {
     return it->edited;
 }
 QString Project::locationName(int map) const {
+    if (MAPS_NewLocation(map))
+        for (const auto &entry : Workshop::extendedMaps(*this))
+            if (entry.kind == 1 && int(entry.id) == map)
+                return entry.name;
     require(map >= 0 && map < LOCATION_NAME_SLOTS, "Invalid location");
     const auto bytes = resources.value("LOCATIONS.OVR").edited;
     if (const char *name = LOCATIONS_Name(bytes.constData(), bytes.size(), map))
@@ -113,7 +120,19 @@ QByteArray Project::renameLocation(int map, const QString &name) const {
     return bytes;
 }
 QVector<U5::MapPage> Project::mapPages(const QString &resource) const {
-    auto pages = U5::mapPages(resource, data(resource));
+    const auto extended = Workshop::extendedMaps(*this);
+    auto pages = MAPS_LocationResource(resource.toLatin1().constData())
+                     ? QVector<U5::MapPage>()
+                     : U5::mapPages(resource, data(resource));
+    if (pages.isEmpty())
+        for (const auto &map : extended)
+            if (map.resource == resource && MAPS_NewLocation(map.id))
+                pages.append({map.name, map.width, 0, map.width, 0, map.floor, map.height});
+    for (int i = 0; i < pages.size(); ++i)
+        if (const auto *map = Workshop::findExtendedMap(extended, resource, i)) {
+            pages[i].side = map->width;
+            pages[i].rows = map->height;
+        }
     const QStringList banks{"TOWNE.DAT", "DWELLING.DAT", "CASTLE.DAT", "KEEP.DAT"};
     int bank = banks.indexOf(resource);
     for (auto &page : pages) {
@@ -133,6 +152,7 @@ QStringList Project::changed() const {
     return list;
 }
 void Project::validate() const {
+    Workshop::validateExtendedMaps(*this);
     require(!title.trimmed().isEmpty() && title.toUtf8().size() <= 256 && !title.contains(QChar(0)),
             "Mod name must contain 1–256 UTF-8 bytes");
     if (changed().contains("TILE_SHW.PNG") || changed().contains("TILE_SHN.PNG")) {
@@ -187,6 +207,9 @@ static bool conversationFlag(const Project &project, unsigned flag) {
 QByteArray Project::package() const {
     validate();
     auto list = changed();
+    for (const auto &name : list)
+        require(MOD_AllowedResource(name.toLatin1().constData()),
+                "This engine version does not support exporting " + name);
     require(!list.isEmpty(), "There are no changes to export");
     require(list.size() <= MOD_MAX_ENTRIES, "Too many modified resources");
     bool actorTypes = false, largeActors = false, animationOptions = false;
@@ -203,8 +226,28 @@ QByteArray Project::package() const {
         extraNpcs |= resource.endsWith(".NPC") && data(resource).size() > 4608;
     for (const auto &cell : CustomTiles::placements(*this))
         extraNpcs |= cell.kind == 3 && (cell.x >= 32 || cell.y);
+    bool locationObjects = false;
+    for (const auto &name : list) {
+        const auto b = data(name);
+        if (name.endsWith(".NPC"))
+            for (unsigned town = 0; town < 8; town++)
+                for (unsigned slot = 1; slot < NPCS_Count(b.constData(), b.size(), town); slot++) {
+                    const auto off = NPCS_Offset(b.constData(), b.size(), town, slot);
+                    locationObjects |=
+                        NPCS_ObjectKind(b.constData() + off,
+                                        U5::byte(b, NPCS_ShapeOffset(b.constData(), b.size(), town,
+                                                                     slot))) >= 0;
+                }
+        if (name.endsWith(".OOL"))
+            for (int i = 0; i < 32; i++)
+                locationObjects |=
+                    NPCS_Blood(U5::byte(b, i * 8), U5::byte(b, i * 8 + 5), U5::byte(b, i * 8 + 7));
+    }
     QByteArray out(
-        list.contains("LOCATIONS.OVR")                               ? "IMOD0017"
+        (locationObjects || list.contains("MAPS.OVR") ||
+         resources.value("SIGNS.DAT").edited.startsWith("ISIG0001"))
+            ? "IMOD0018"
+        : list.contains("LOCATIONS.OVR")                             ? "IMOD0017"
         : conversationFlag(*this, IMPERA_TALK_FLAG_GARGOYLE_SPEECH)  ? "IMOD0016"
         : conversationFlag(*this, IMPERA_TALK_FLAG_SKIP_OPENING)     ? "IMOD0015"
         : usesExtendedDialogue(*this)                                ? "IMOD0014"
@@ -292,6 +335,7 @@ void Project::importPackage(const QByteArray &bytes) {
             QByteArray(reinterpret_cast<char *>(e.data), e.size);
     }
     MOD_Free(&decoded);
+    Workshop::hydrateExtendedMaps(next);
     next.validate();
     *this = next;
 }
@@ -356,6 +400,10 @@ void Project::save(const QString &path) {
         requirements["locationNames"] = 1;
         requirements["packageVersion"] = 17;
     }
+    if (changed().contains("MAPS.OVR")) {
+        requirements["extendedMaps"] = 1;
+        requirements["packageVersion"] = 18;
+    }
     if (!requirements.isEmpty())
         root["requires"] = requirements;
     QJsonObject annotations;
@@ -393,6 +441,16 @@ void Project::load(const QString &path) {
     QSet<QString> names;
     require(root["edits"].isArray() && root["edits"].toArray().size() <= MOD_MAX_ENTRIES,
             "Invalid project edit list");
+    for (auto value : root["edits"].toArray()) {
+        auto e = value.toObject();
+        if (e["name"].toString() == "MAPS.OVR") {
+            auto bytes = QByteArray::fromBase64(e["bytes"].toString().toLatin1());
+            if (bytes.isEmpty())
+                bytes = QByteArray::fromBase64(e["edited"].toString().toLatin1());
+            next.resources["MAPS.OVR"].edited = bytes;
+            Workshop::hydrateExtendedMaps(next);
+        }
+    }
     for (auto value : root["edits"].toArray()) {
         auto edit = value.toObject();
         QString name = edit["name"].toString();
@@ -450,6 +508,7 @@ QVector<ModDiagnostic> validateMod(const Project &project, const QString &modsDi
     for (const auto &name : changes) {
         try {
             if (name == "TYPES.OVR" || name == "TYPEMAP.OVR" || name == "CUTSCENE.OVR" ||
+                name == "MAPS.OVR" || MAPS_LocationResource(name.toLatin1().constData()) ||
                 name == "LOCATIONS.OVR" || name == "TEXT.OVR" || name == "RULES.TBL" ||
                 name == "CONTENTS.OVR") {
                 require(project.resources[name].original.isEmpty(),
@@ -765,6 +824,7 @@ QString prepareModTest(const Project &project, const QString &sessionsDirectory)
     }
     for (const auto &name : project.resources.keys()) {
         if (name == "TYPES.OVR" || name == "TYPEMAP.OVR" || name == "CUTSCENE.OVR" ||
+            name == "MAPS.OVR" || MAPS_LocationResource(name.toLatin1().constData()) ||
             name == "LOCATIONS.OVR" || name == "TEXT.OVR" || name == "RULES.TBL" ||
             name == "CONTENTS.OVR" || MOD_TilesetSheet(name.toLatin1().constData()))
             continue; // Virtual companion exists only inside the package.

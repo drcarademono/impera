@@ -40,13 +40,12 @@ void AUDIO_PlayBgmPerMap(void)
         return;
     }
 
-    if (D_5893_map_id > 0x20)
-    {
+    if (!MAPS_Outside(D_5893_map_id)) {
         AUDIO_PlayBgm(BGM_ID_10);
         return;
     }
 
-    int bgmId = 0;
+    int bgmId = MAPS_NewLocation(D_5893_map_id) ? 9 : 0;
 
     switch (D_5893_map_id)
     {

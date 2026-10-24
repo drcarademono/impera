@@ -1,3 +1,6 @@
+#include "mod/types.h"
+#include "mod/signs.h"
+#include "extended_maps.h"
 #include "location_text.h"
 #include "map_entities.h"
 #include "map_editor.h"
@@ -17,6 +20,19 @@ static void put(QByteArray &b, int at, int v) {
     b[at + 1] = char(v >> 8);
 }
 QVector<SignRecord> readSigns(const QByteArray &b) {
+    if (b.startsWith("ISIG0001")) {
+        require(SIGNS_Validate(b.constData(), b.size()), "Invalid extended signs");
+        QVector<SignRecord> records;
+        int off = 12;
+        for (unsigned i = 0; i < MAPS_U32(b.constData() + 8); i++) {
+            int end = b.indexOf('\0', off + 4);
+            records.append({uchar(b[off]), qint8(b[off + 1]), uchar(b[off + 2]), uchar(b[off + 3]),
+                            b.mid(off + 4, end - off - 4)});
+            off = end + 1;
+        }
+        return records;
+    }
+
     require(b.size() >= 66, "Signs header is truncated");
     QVector<SignRecord> out;
     QMap<int, int> starts;
@@ -66,6 +82,35 @@ QByteArray writeSigns(const QByteArray &original, const QVector<SignRecord> &rec
     const auto before = readSigns(original);
     if (before == records)
         return original;
+    bool extended = original.startsWith("ISIG0001");
+    for (const auto &r : records)
+        extended |= MAPS_NewLocation(r.map) || (r.map && (r.x >= 32 || r.y >= 32));
+    if (extended) {
+        QByteArray out("ISIG0001", 8);
+        out += QByteArray(4, 0);
+        TYPES_Put32(out.data() + 8, records.size());
+        auto sorted = records;
+        std::stable_sort(sorted.begin(), sorted.end(),
+                         [](const auto &a, const auto &b) { return a.map < b.map; });
+        for (const auto &r : sorted) {
+            require((r.map == 0 || MAPS_Town(r.map)) && r.floor >= -1 && r.floor <= 3 && r.x >= 0 &&
+                        r.x <= 255 && r.y >= 0 && r.y <= 255 && !r.text.contains('\0') &&
+                        r.text.size() < 2994,
+                    "Invalid sign");
+            out += char(r.map);
+            out += char(r.floor);
+            out += char(r.x);
+            out += char(r.y);
+            out += r.text;
+            out += char(0);
+        }
+        int tail = original.startsWith("ISIG0001") ? 12 : 66;
+        for (const auto &r : before)
+            tail += r.text.size() + 5;
+        out += original.mid(tail);
+        require(SIGNS_Validate(out.constData(), out.size()), "Invalid signs");
+        return out;
+    }
     for (const auto &r : records) {
         require(r.map >= 0 && r.map <= 32 && r.floor >= -1 && r.floor <= 3,
                 "Invalid sign location or floor");
@@ -415,6 +460,11 @@ QWidget *locationTextEditor(Project *project, const QString &resource, TextCommi
                 location->addItem(m.name);
             }
         }
+        for (const auto &m : extendedMaps(*project))
+            if (m.kind == 1 && MAPS_NewLocation(m.id)) {
+                pages->append({m.resource, 0, int(m.id), 0});
+                location->addItem(m.name);
+            }
         auto place = new QComboBox;
         place->setObjectName("signLocation");
         location->setObjectName("signFloor");
@@ -551,11 +601,12 @@ QWidget *locationTextEditor(Project *project, const QString &resource, TextCommi
             auto page = pages->at(p);
             MapDocument doc(project, page.resource);
             canvas->side = doc.pages[page.index].side;
+            canvas->rows = doc.pages[page.index].height();
             canvas->ids = doc.terrain(page.index);
             if (!context.canvas)
                 canvas->original = canvas->ids;
             x->setMaximum(canvas->side - 1);
-            y->setMaximum(canvas->side - 1);
+            y->setMaximum(canvas->rowCount() - 1);
             for (int i = 0; i < records->size(); i++) {
                 auto r = records->at(i);
                 if (r.map != page.map || r.floor != page.floor ||

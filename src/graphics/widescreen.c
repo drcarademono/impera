@@ -47,6 +47,9 @@ static byte WorldTile(int x, int y)
     static byte loaded[256];
     static int level = -1;
     static unsigned revision;
+    byte *extended = MAPS_ActiveCell(0, D_5895_map_level, x, y);
+    if (extended)
+        return *extended;
     x &= 255;
     y &= 255;
     int block = (y / 16) * 16 + x / 16;
@@ -89,14 +92,16 @@ byte WIDE_MapTile(int dx, int dy)
 {
     int x = D_5896_map_x + dx, y = D_5897_map_y + dy;
     if (D_5893_map_id >= 128) {
-        if (x < 0 || y < 0 || x >= 11 || y >= 11) return 255;
+        if (x < 0 || y < 0 || x >= MAP_WIDTH || y >= MAP_HEIGHT)
+            return 255;
         return *ULTIMA_4402_GetTileAddr(x,y);
     }
     if (D_5893_map_id == 0) return WorldTile(x, y);
     /* Vanilla ULTIMA_4402_GetTileAddr uses the location's final map byte
      * as background outside town bounds. Extend the same backdrop rather
      * than turning the extra fullscreen columns/rows into black void. */
-    if (x < 0 || y < 0 || x >= 32 || y >= 32) return D_6a07;
+    if (x < 0 || y < 0 || x >= MAP_WIDTH || y >= MAP_HEIGHT)
+        return D_6a07;
     return *ULTIMA_4402_GetTileAddr(x, y);
 }
 
@@ -178,6 +183,9 @@ static bool Transparent(byte tile, int distance)
 
 bool WIDE_Visible(int dx, int dy)
 {
+    if (D_5893_map_id >= 128)
+        return D_5896_map_x + dx >= 0 && D_5897_map_y + dy >= 0 && D_5896_map_x + dx < MAP_WIDTH &&
+               D_5897_map_y + dy < MAP_HEIGHT;
     if (D_58a5 == 0) return dx == 0 && dy == 0;
     /* Daylight illuminates the larger viewport; torch/night light keeps the
      * original squared-distance limit. Opaque intervening tiles block sight. */
@@ -230,8 +238,9 @@ static void Copy(byte* dst, int stride, int dx, int dy, int sx, int sy, int w, i
 
 bool WIDE_Compose(byte* pixels, WideLayout l)
 {
-    if (!D_58a4 || (D_5893_map_id >= 33 && D_5893_map_id < 128) ||
-        l.columns < 11 || l.rows < 11 || !GRAP_BUF_HasTileset()) return false;
+    if (!D_58a4 || (!MAPS_Outside(D_5893_map_id) && D_5893_map_id < 128) || l.columns < 11 ||
+        l.rows < 11 || !GRAP_BUF_HasTileset())
+        return false;
     TILESET_Copy(pixels,NULL,(size_t)l.width*l.height);
     memset(pixels, 0, (size_t)l.width * l.height);
     /* Relocate the original status and command column intact. */
@@ -262,28 +271,31 @@ bool WIDE_Compose(byte* pixels, WideLayout l)
     int* sprites = malloc((size_t)l.columns * l.rows * sizeof(int));
     if (!sprites) return false;
     for (int i = 0; i < l.columns * l.rows; i++) sprites[i] = -1;
-    if (D_5893_map_id < 33) {
+    if (MAPS_Outside(D_5893_map_id) || MAP_LARGE_COMBAT) {
         for (int row = 0; row < l.rows; row++) {
             for (int col = 0; col < l.columns; col++) {
                 int dx = col - cx, dy = row - cy;
-                if (abs(dx) <= 5 && abs(dy) <= 5) continue;
+                if (MAP_IN_VIEW(dx, dy))
+                    continue;
                 if (!WIDE_Visible(dx, dy)) continue;
                 byte tile = WIDE_MapTile(dx, dy);
                 if (tile == 255) continue;
                 int idx = D_b11e[WIDE_GroundTile(dx,dy)];
                 int loot = CONTENTS_GAME_Shape(
-                    D_5893_map_id ? D_5896_map_x + dx : (D_5896_map_x + dx) & 255,
-                    D_5893_map_id ? D_5897_map_y + dy : (D_5897_map_y + dy) & 255);
+                    D_5893_map_id ? D_5896_map_x + dx : MAPS_Wrap(D_5896_map_x + dx, MAP_WIDTH),
+                    D_5893_map_id ? D_5897_map_y + dy : MAPS_Wrap(D_5897_map_y + dy, MAP_HEIGHT));
                 if (loot)
                     sprites[row * l.columns + col] = 256 + loot;
                 for (int actor = MAP_ACTOR_COUNT - 1; actor >= 0; actor--) {
                     ActorFmt* a = &D_5c5a[actor];
                     int ax = a->_2_x - D_5896_map_x, ay = a->_3_y - D_5897_map_y;
                     if (D_5893_map_id == 0) {
-                        ax = ((ax + 128) & 255) - 128;
-                        ay = ((ay + 128) & 255) - 128;
+                        ax = MAPS_Wrap(ax + MAP_WIDTH / 2, MAP_WIDTH) - MAP_WIDTH / 2;
+                        ay = MAPS_Wrap(ay + MAP_HEIGHT / 2, MAP_HEIGHT) - MAP_HEIGHT / 2;
                     }
-                    if (a->_0_tile && a->_1_animTile && a->_4_z == D_5895_map_level && ax == dx && ay == dy) {
+                    if (a->_0_tile && a->_1_animTile &&
+                        (D_5893_map_id >= 128 || a->_4_z == D_5895_map_level) && ax == dx &&
+                        ay == dy) {
                         int sprite = a->_1_animTile;
                         bool reflection = false;
                         if (tile == TILE_MAP_87) continue;
@@ -321,7 +333,7 @@ bool WIDE_Compose(byte* pixels, WideLayout l)
     for (int row = 0; row < l.rows; row++)
         for (int col = 0; col < l.columns; col++) {
             int dx = col - cx, dy = row - cy;
-            if (abs(dx) <= 5 && abs(dy) <= 5 || !WIDE_Visible(dx, dy))
+            if (MAP_IN_VIEW(dx, dy) || !WIDE_Visible(dx, dy))
                 continue;
             if (sprites[row * l.columns + col] < 0 ||
                 GRAP_BUF_SpriteIsTransparent(sprites[row * l.columns + col]))
@@ -329,12 +341,15 @@ bool WIDE_Compose(byte* pixels, WideLayout l)
                                 l.height - 8);
         }
     /* Keep the engine's central tiles, effects, targeting and modal overlays. */
-    Copy(pixels, l.width, l.mapX + (cx - 5) * 16, l.mapY + (cy - 5) * 16,
-         8, 8, 176, l.height-8-(l.mapY+(cy-5)*16)<176 ?
-         l.height-8-(l.mapY+(cy-5)*16) : 176);
+    Copy(pixels, l.width, l.mapX + (cx - (MAP_LARGE_COMBAT ? MAP_CENTER_X : 5)) * 16,
+         l.mapY + (cy - (MAP_LARGE_COMBAT ? MAP_CENTER_Y : 5)) * 16, 8, 8, 176,
+         l.height - 8 - (l.mapY + (cy - (MAP_LARGE_COMBAT ? MAP_CENTER_Y : 5)) * 16) < 176
+             ? l.height - 8 - (l.mapY + (cy - (MAP_LARGE_COMBAT ? MAP_CENTER_Y : 5)) * 16)
+             : 176);
     for(int row=0;row<l.rows;row++) for(int col=0;col<l.columns;col++) {
         int dx=col-cx,dy=row-cy;
-        if(abs(dx)<=5 && abs(dy)<=5 || !WIDE_Visible(dx,dy)) continue;
+        if (MAP_IN_VIEW(dx, dy) || !WIDE_Visible(dx, dy))
+            continue;
         int actorSprite=sprites[row*l.columns+col];
         if(actorSprite>=0 && !GRAP_BUF_SpriteIsTransparent(actorSprite)) continue;
         byte tile=WIDE_MapTile(dx,dy);
@@ -383,13 +398,13 @@ bool WIDE_Compose(byte* pixels, WideLayout l)
             for (int col = 0; col < l.columns; col++) {
                 int dx = col - cx, dy = row - cy;
                 int sprite = sprites[row * l.columns + col];
-                if (largeVisible && abs(dx) <= 5 && abs(dy) <= 5 &&
-                    GetMapViewport(dx + 5, dy + 5) == 0 && GetActorMap(dx + 5, dy + 5) != 0x16)
+                if (largeVisible && MAP_IN_VIEW(dx, dy) && GetMapViewport(dx + 5, dy + 5) == 0 &&
+                    GetActorMap(dx + 5, dy + 5) != 0x16)
                     sprite = 256 + GetActorMap(dx + 5, dy + 5);
                 bool body = sprite == 256 + TILE_ACTOR_SLEEP || sprite == 256 + TILE_ACTOR_DEAD;
                 if (body != (layer == 0))
                     continue;
-                if (largeVisible && !body && abs(dx) <= 5 && abs(dy) <= 5 &&
+                if (largeVisible && !body && MAP_IN_VIEW(dx, dy) &&
                     GetMapViewport(dx + 5, dy + 5) == 0 && GetActorMap(dx + 5, dy + 5) != 0x16)
                     sprite = ACTORS_AtCell(D_5896_map_x + dx, D_5897_map_y + dy, sprite);
                 if (sprite >= 0)
@@ -405,17 +420,22 @@ bool WIDE_Compose(byte* pixels, WideLayout l)
             int dx = col - cx, dy = row - cy;
             if (abs(dx) > 5 || abs(dy) > 5 || (abs(dx) != 5 && abs(dy) != 5)) continue;
             int tile;
-            if (GetMapViewport(dx+5,dy+5)==0 && GetActorMap(dx+5,dy+5)!=0x16)
-                tile=256+GetActorMap(dx+5,dy+5);
-            else if(GetMapViewport(dx+5,dy+5)!=255 && WIDE_GroundTile(dx,dy)!=WIDE_MapTile(dx,dy))
+            if (GetMapViewport(dx + MAP_CENTER_X, dy + MAP_CENTER_Y) == 0 &&
+                GetActorMap(dx + MAP_CENTER_X, dy + MAP_CENTER_Y) != 0x16)
+                tile = 256 + GetActorMap(dx + MAP_CENTER_X, dy + MAP_CENTER_Y);
+            else if (GetMapViewport(dx + MAP_CENTER_X, dy + MAP_CENTER_Y) != 255 &&
+                     WIDE_GroundTile(dx, dy) != WIDE_MapTile(dx, dy))
                 tile=D_b11e[WIDE_MapTile(dx,dy)];
             else continue;
             for (int sy = -1; sy <= 16; sy++)
                 for (int sx = -1; sx <= 16; sx++) {
                     int px = col * 16 + sx, py = row * 16 + sy;
                     if (px < 0 || py < 0 || px >= l.columns * 16 || py >= l.rows * 16) continue;
-                    if (px >= (cx - 5) * 16 && px < (cx + 6) * 16 &&
-                        py >= (cy - 5) * 16 && py < (cy + 6) * 16) continue;
+                    if (px >= (cx - (MAP_LARGE_COMBAT ? MAP_CENTER_X : 5)) * 16 &&
+                        px < (cx + 6) * 16 &&
+                        py >= (cy - (MAP_LARGE_COMBAT ? MAP_CENTER_Y : 5)) * 16 &&
+                        py < (cy + 6) * 16)
+                        continue;
                     if (l.mapY+py>=8 && l.mapY+py<l.height-8 && WIDE_SpritePixel(tile, dx, dy, sx, sy) == 0)
                         pixels[(l.mapY + py) * l.width + l.mapX + px] = 0;
                 }
@@ -461,8 +481,10 @@ bool WIDE_DarknessMask(byte* mask,int columns,int rows)
             tile == 255 ||
             TYPES_GAME_Property(D_5896_map_x + col - columns / 2, D_5897_map_y + row - rows / 2, 2,
                                 SolidMasonry(tile));
-        lit[(row+2)*stride+col+2]=tile!=255 &&
-            (abs(dx)<=5 && abs(dy)<=5 ? GetMapViewport(dx+5,dy+5)!=255 : WIDE_Visible(dx,dy));
+        lit[(row + 2) * stride + col + 2] =
+            tile != 255 &&
+            (MAP_IN_VIEW(dx, dy) ? GetMapViewport(dx + MAP_CENTER_X, dy + MAP_CENTER_Y) != 255
+                                 : WIDE_Visible(dx, dy));
     }
     for(int row=0;row<rows;row++) for(int col=0;col<columns;col++) {
         bool visible=lit[(row+2)*stride+col+2];

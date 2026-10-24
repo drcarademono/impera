@@ -1,3 +1,4 @@
+#include "mod/maps.h"
 #include "mod/npcs.h"
 #ifndef _VARS_H
 #define _VARS_H
@@ -713,10 +714,11 @@ STUB u8  D_5958;
 STUB u8  D_5959;
 STUB u8 D_595a[0x200];  // +0x03B4 dungeon map data ..5b5a)
 // 5b00
-STUB u8 D_5b5a[0x80 + 32 * (IMPERA_NPC_CAPACITY / 8)]; // +0x05B4 NPC killed flags (4 bytes / 32
-                                                       // bits per settlement) [..5bda) // TODO: u32
-STUB u8 D_5bda[0x80 + 32 * (IMPERA_NPC_CAPACITY / 8)]; // +0x0634 NPC met flags (4 bytes / 32 bits
-                                                       // per settlement) [..5c5a)
+STUB u8
+    D_5b5a[0x80 + 128 * (IMPERA_NPC_CAPACITY / 8)]; // +0x05B4 NPC killed flags (4 bytes / 32
+                                                    // bits per settlement) [..5bda) // TODO: u32
+STUB u8 D_5bda[0x80 + 128 * (IMPERA_NPC_CAPACITY / 8)]; // +0x0634 NPC met flags (4 bytes / 32 bits
+                                                        // per settlement) [..5c5a)
 
 STUB ActorFmt D_5c5a[IMPERA_NPC_CAPACITY]; // ~5d5a) "Object" struct
 
@@ -932,4 +934,29 @@ STUB u8 D_bd3e;
  * combat keep the original 32 actor slots. */
 STUB unsigned D_imperaNpcCount;
 #define LOCATION_NPC_COUNT ((int)(D_imperaNpcCount < 32 ? 32 : D_imperaNpcCount))
-#define MAP_ACTOR_COUNT ((D_5893_map_id >= 1 && D_5893_map_id <= 32) ? LOCATION_NPC_COUNT : 32)
+#define MAP_ACTOR_COUNT (MAPS_Town(D_5893_map_id) ? LOCATION_NPC_COUNT : 32)
+
+#define MAP_WIDTH MAPS_ActiveWidth(D_5893_map_id, D_5895_map_level)
+#define MAP_HEIGHT MAPS_ActiveHeight(D_5893_map_id, D_5895_map_level)
+
+#define MAP_VIEW_X                                                                                 \
+    (D_5893_map_id >= 128 ? (MAP_WIDTH > 11 ? (D_5896_map_x < 5               ? 0                  \
+                                               : D_5896_map_x > MAP_WIDTH - 6 ? MAP_WIDTH - 11     \
+                                                                              : D_5896_map_x - 5)  \
+                                            : 0)                                                   \
+                          : (int)D_5896_map_x - 5)
+#define MAP_VIEW_Y                                                                                 \
+    (D_5893_map_id >= 128                                                                          \
+         ? (MAP_HEIGHT > 11 ? (D_5897_map_y < 5                ? 0                                 \
+                               : D_5897_map_y > MAP_HEIGHT - 6 ? MAP_HEIGHT - 11                   \
+                                                               : D_5897_map_y - 5)                 \
+                            : 0)                                                                   \
+         : (int)D_5897_map_y - 5)
+#define MAP_CENTER_X ((int)D_5896_map_x - MAP_VIEW_X)
+#define MAP_CENTER_Y ((int)D_5897_map_y - MAP_VIEW_Y)
+
+#define MAP_IN_VIEW(dx, dy)                                                                        \
+    ((dx) >= -MAP_CENTER_X && (dx) < 11 - MAP_CENTER_X && (dy) >= -MAP_CENTER_Y &&                 \
+     (dy) < 11 - MAP_CENTER_Y)
+
+#define MAP_LARGE_COMBAT (D_5893_map_id >= 128 && (MAP_WIDTH > 11 || MAP_HEIGHT > 11))

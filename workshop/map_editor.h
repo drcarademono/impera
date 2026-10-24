@@ -21,6 +21,8 @@ class MapDocument {
     MapDocument(const Project *project, const QString &resource);
     QVector<U5::MapPage> pages;
     QByteArray terrain(int page, bool original = false) const;
+    // Underlying terrain, without custom tile display substitutions.
+    QByteArray rawTerrain(int index, bool original = false) const;
     QMap<QString, QByteArray> changes(int page, const QByteArray &terrain,
                                       const QByteArray &expanded = {}) const;
     static bool supported(const QString &resource);
@@ -29,7 +31,6 @@ class MapDocument {
     QImage terrainImage(int page, const QVector<QImage> &tiles, bool ids) const;
 
   private:
-    QByteArray rawTerrain(int index, bool original = false) const;
     const Project *project;
     QString resource;
 };
@@ -64,6 +65,8 @@ class MapCanvas : public QWidget {
     QByteArray ids, original;
     QByteArray extended, beforeExtended, stampExtended, libraryUuid;
     QMap<unsigned, unsigned> legacyTiles;
+    QMap<int, int> actorBrushKinds;
+    QMap<int, int> specialBrushKinds;
     QMap<unsigned, unsigned> spriteGround;
     QImage tileImageAt(int offset) const;
     unsigned tileId(int offset) const;
@@ -100,6 +103,7 @@ class MapCanvas : public QWidget {
     int selectedNpc = -1;
     QPoint keyboardCell = {0, 0};
     std::function<bool(QPoint)> prepareSelection;
+    std::function<bool(QPoint, int)> pencilPlacement;
     QVector<Actor> contextActors, contentsMarkers, positionMarkers;
     bool showContentsMarkers = true;
     std::function<int(const QList<int> &)> chooseActor;
@@ -272,7 +276,8 @@ class MapWorkspace : public QWidget {
     std::function<void(const QString &)> navigateResource;
     void refreshNpcs();
     void refreshCombat();
-    void beginAdd(int kind);
+    void beginAdd(int kind, int selectedAppearance = -1, QPoint cell = {-1, -1});
+    void beginAddLocation(QPoint cell = {-1, -1}, int entranceTile = 0x12);
     bool placeAddedItem(int kind, int appearance, int conversation, QString name, QPoint cell);
     void deleteSelectedItem();
     void setItemMode(const QString &mode);
@@ -280,7 +285,16 @@ class MapWorkspace : public QWidget {
     QComboBox *monsterAppearance = nullptr, *triggerTile = nullptr;
     QWidget *triggerProperties = nullptr;
     QSpinBox *triggerX[2]{}, *triggerY[2]{};
+    QCheckBox *triggerEnabled[2]{};
     QLineEdit *npcNameField = nullptr;
+    QWidget *objectProperties = nullptr;
+    QFormLayout *npcMainForm = nullptr, *objectForm = nullptr;
+    QSpinBox *objectValue = nullptr, *objectAux = nullptr, *objectTriggerX[2]{},
+             *objectTriggerY[2]{};
+    QComboBox *objectVariant = nullptr;
+    QCheckBox *objectSkeleton = nullptr;
+    void refreshObjectProperties(int npc);
+    void editObjectProperties();
     void editNpcProperties();
     void createCombatInspector(QVBoxLayout *layout);
     QComboBox *combatEntry = nullptr, *combatEntity = nullptr;

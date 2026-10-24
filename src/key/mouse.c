@@ -151,8 +151,9 @@ static const char* s_cursorNames[9] = {"pointer", "direction-n", "diag-ne", "dir
 int MOUSE_CursorDirection(float x, float y)
 {
     int dx, dy; float rx, ry;
-    if (s_pointerMode || !D_58a4 || (D_5893_map_id > 32 && D_5893_map_id < 128) ||
-        !GRAP_SDL_MouseMapPoint(x, y, &dx, &dy, &rx, &ry)) return 0;
+    if (s_pointerMode || !D_58a4 || (!MAPS_Outside(D_5893_map_id) && D_5893_map_id < 128) ||
+        !GRAP_SDL_MouseMapPoint(x, y, &dx, &dy, &rx, &ry))
+        return 0;
     /* Combat sprites occupy fixed coordinates in the original 11x11 map. */
     if (D_5893_map_id >= 128) {
         if (D_589e >= 32) return 0;
@@ -374,7 +375,8 @@ int MOUSE_Action(int dx, int dy, bool mainAction)
     if (D_5893_map_id >= 128) {
         if (D_589e >= 32) return 0;
         int x=dx+5, y=dy+5;
-        if (x<0 || y<0 || x>10 || y>10) return 0;
+        if (x < 0 || y < 0 || x >= MAP_WIDTH || y >= MAP_HEIGHT)
+            return 0;
         if (!mainAction) return 0;
         int target=COMSUBS_0748(x,y);
         int ox=x-D_ba14[D_589e].x, oy=y-D_ba14[D_589e].y;
@@ -404,9 +406,11 @@ int MOUSE_Action(int dx, int dy, bool mainAction)
             return 0;
         return 'A';
     }
-    if (D_5893_map_id > 32) return 0;
-    if (D_5893_map_id && (D_5896_map_x + dx < 0 || D_5896_map_x + dx >= 32 ||
-        D_5897_map_y + dy < 0 || D_5897_map_y + dy >= 32)) return 0;
+    if (!MAPS_Outside(D_5893_map_id))
+        return 0;
+    if (D_5893_map_id && (D_5896_map_x + dx < 0 || D_5896_map_x + dx >= MAP_WIDTH ||
+                          D_5897_map_y + dy < 0 || D_5897_map_y + dy >= MAP_HEIGHT))
+        return 0;
     if (!mainAction) return 'L';
     int x = D_5896_map_x + dx, y = D_5897_map_y + dy;
     if (!dx && !dy) {
@@ -508,12 +512,15 @@ void MOUSE_Button(float x, float y, int button, bool down, int clicks)
         int dx,dy;float rx,ry;
         if(down && button==SDL_BUTTON_LEFT && SamePosition() &&
             GRAP_SDL_MouseMapPoint(x,y,&dx,&dy,&rx,&ry)) {
-            if(D_5893_map_id && D_5893_map_id<=32 &&
-                (D_5896_map_x+dx<0 || D_5896_map_x+dx>=32 || D_5897_map_y+dy<0 || D_5897_map_y+dy>=32)) return;
+            if (D_5893_map_id && MAPS_Outside(D_5893_map_id) &&
+                (D_5896_map_x + dx < 0 || D_5896_map_x + dx >= MAP_WIDTH || D_5897_map_y + dy < 0 ||
+                 D_5897_map_y + dy >= MAP_HEIGHT))
+                return;
             if(D_5893_map_id>=128) {
                 if(D_589e>=32) return;
                 int tx=dx+5,ty=dy+5;
-                if(tx<0 || tx>=11 || ty<0 || ty>=11) return;
+                if (tx < 0 || tx >= MAP_WIDTH || ty < 0 || ty >= MAP_HEIGHT)
+                    return;
                 dx=tx-D_ba14[D_589e].x;dy=ty-D_ba14[D_589e].y;
             }
             if(AdjacentDirection(dx,dy)) s_directionKey=MOUSE_Direction(dx,dy);
@@ -531,7 +538,7 @@ void MOUSE_Button(float x, float y, int button, bool down, int clicks)
             if (target >= 0)
                 ACTORS_AttackCells(s_aimEntity, target, &ax, &ay, &bx, &by);
             int distance = COMSUBS_048a(ax, ay, bx, by);
-            if (tx >= 0 && tx < 11 && ty >= 0 && ty < 11 && distance > 0 &&
+            if (tx >= 0 && tx < MAP_WIDTH && ty >= 0 && ty < MAP_HEIGHT && distance > 0 &&
                 distance <= s_aimRange && MOVEMENT_AttackAllowed(bx - ax, by - ay)) {
                 D_5899=tx; D_589a=ty; s_aimKey=U5_KEY_ENTER;
             }
@@ -568,7 +575,8 @@ int MOUSE_PollCommand(void)
         return key;
     }
     if (s_enabled && s_menu) return PollMenu();
-    if (!s_enabled || !s_input || (D_5893_map_id > 32 && D_5893_map_id < 128)) return 0;
+    if (!s_enabled || !s_input || (!MAPS_Outside(D_5893_map_id) && D_5893_map_id < 128))
+        return 0;
     if (s_single && SDL_GetTicks() - s_singleTime >= 300) {
         s_single = false;
         if (SamePosition()) s_command = MOUSE_Action(s_dx, s_dy, false);

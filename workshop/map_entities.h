@@ -3,29 +3,30 @@
 namespace Workshop {
 struct ContentsTarget;
 enum class MapItemKind {
-    Npc,
-    Monster,
-    Sign,
-    Container,
-    HiddenContents,
-    Horse,
-    Skiff,
-    Frigate,
-    Carpet,
-    Trigger,
-    SleepingFigure,
-    Gold,
-    Food,
-    Moonstone,
-    Gem,
-    Key,
-    SkeletonKey,
-    Torch,
-    Potion,
-    Scroll,
-    Equipment,
-    SandalwoodBox,
-    Corpse
+    Npc = 0,
+    Monster = 1,
+    Sign = 2,
+    Container = 3,
+    HiddenContents = 4,
+    Horse = 5,
+    Skiff = 6,
+    Frigate = 7,
+    Carpet = 8,
+    Trigger = 9,
+    Corpse = 10,
+    Gold = 11,
+    Food = 12,
+    Moonstone = 13,
+    Gem = 14,
+    Key = 15,
+    SkeletonKey = 16,
+    Torch = 17,
+    Potion = 18,
+    Scroll = 19,
+    Equipment = 20,
+    SandalwoodBox = 21,
+    BloodSplatter = 22,
+    MoldyCorpse = 23,
 };
 struct MapItemEdit {
     QMap<QString, QByteArray> changes;
@@ -48,6 +49,8 @@ void validateActorPlacement(const Project &, const QString &, int page, QPoint, 
                             int ignoreSlot = -1, int schedule = -1);
 QMap<QString, QByteArray> createNpcConversation(const Project &, const QString &npcResource,
                                                 int town, int slot, const QString &name);
+QString locationObjectName(const Project &, const QString &, int town, int slot);
+bool locationObject(const Project &, const QString &, int town, int slot);
 QString actorName(int shape);
 QList<int> monsterShapes();
 } // namespace Workshop

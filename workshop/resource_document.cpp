@@ -1,3 +1,4 @@
+#include "extended_maps.h"
 #include "mod/location_names.h"
 #include "mod/npcs.h"
 #include "resource_document.h"
@@ -56,6 +57,8 @@ Capability capability(const QString &resource) {
         return {n == "MISCMSG.DAT" ? "Shrine / Codex / Blackthorn messages"
                                    : "Final rescue messages",
                 "Scenes", "Editable runtime message entries", EditorKind::Narrative};
+    if (n == "MAPS.OVR")
+        return {"Maps", "World", "Map geometry", EditorKind::Inspector};
     if (n == "LOCATIONS.OVR")
         return {"Location names", "World", "Edited through map headers", EditorKind::Inspector};
     if (n == "TEXT.OVR")
@@ -69,7 +72,8 @@ Capability capability(const QString &resource) {
     if (n == "DUNGEON.DAT")
         return {"Dungeons", "Maps", "Editable dungeon features and room links",
                 EditorKind::Dungeon};
-    if (n.endsWith(".CBT") ||
+    if ((MAPS_LocationResource(n.toLatin1().constData()) && n.endsWith(".DAT")) ||
+        n.endsWith(".CBT") ||
         QStringList{"BRIT.DAT", "UNDER.DAT", "TOWNE.DAT", "DWELLING.DAT", "KEEP.DAT", "CASTLE.DAT"}
             .contains(n))
         return {n, "Maps", "Editable terrain", EditorKind::Map};
@@ -214,6 +218,10 @@ void validateResource(const Project &project, const QString &name) {
         CustomTiles::validate(project);
         return;
     }
+    if (name == "MAPS.OVR") {
+        validateExtendedMaps(project);
+        return;
+    }
     if (name == "LOCATIONS.OVR") {
         require(LOCATIONS_Validate(b.constData(), b.size()), "Invalid location names");
         return;
@@ -225,12 +233,18 @@ void validateResource(const Project &project, const QString &name) {
     if (name == "CONTENTS.OVR") {
         U5::require(CONTENTS_Validate(b.constData(), b.size()), "Invalid map contents");
         for (const auto &d : readContents(b)) {
+            auto size = mapSize(project, d.map, d.floor, d.kind);
+            require(d.x < size.width() && d.y < size.height(), "Contents are outside their map");
             if (d.kind) {
                 const QString map = d.kind == 1 ? "BRIT.CBT" : "DUNGEON.CBT";
                 U5::require(project.resources.contains(map),
                             "Contents need the combat map: " + map);
                 U5::require(d.map < project.mapPages(map).size(),
                             "Contents reference a missing encounter");
+            } else if (MAPS_NewLocation(d.map)) {
+                require(
+                    project.resources.contains(QString("LOC%1.DAT").arg(d.map, 3, 10, QChar('0'))),
+                    "Contents reference a missing location");
             } else if (d.map >= 33) {
                 U5::require(project.resources.contains("DUNGEON.DAT"),
                             "Contents need dungeon maps");
@@ -278,11 +292,14 @@ void validateResource(const Project &project, const QString &name) {
             for (const auto &r : readSigns(b)) {
                 if (r.map == 0)
                     continue;
-                QString map = maps[(r.map - 1) / 8];
+                QString map = MAPS_NewLocation(r.map)
+                                  ? QString("LOC%1.DAT").arg(r.map, 3, 10, QChar('0'))
+                                  : maps[(r.map - 1) / 8];
                 require(project.resources.contains(map), "Sign refers to an absent location map");
                 bool found = false;
                 for (const auto &page : project.mapPages(map))
-                    if (page.settlement == (r.map - 1) % 8 && page.floor == r.floor)
+                    if (page.settlement == (MAPS_NewLocation(r.map) ? 0 : (r.map - 1) % 8) &&
+                        page.floor == r.floor)
                         found = true;
                 require(found, "Sign refers to a floor absent from its location");
             }
@@ -303,7 +320,9 @@ void validateResource(const Project &project, const QString &name) {
         U5::readGraphics(name, b);
     else if (kind == EditorKind::Conversation) {
         auto entries = U5::readDialogue(b);
-        auto originals = U5::readDialogue(project.resources[name].original);
+        auto originals = project.resources[name].original.isEmpty()
+                             ? QVector<U5::Conversation>()
+                             : U5::readDialogue(project.resources[name].original);
         for (auto e : entries) {
             U5::validateText(e.bytes);
             bool unchanged = false;

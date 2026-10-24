@@ -246,6 +246,9 @@ void ULTIMA_43ae_AudioSweepTone(int param_1, int param_2, int param_3, int param
 
 // CHECKED (NOT MATCHING: optimization)
 byte *ULTIMA_4402_BaseAddr(int x, int y) {
+    byte *extended = MAPS_ActiveCell(D_5893_map_id, D_5895_map_level, x, y);
+    if (extended)
+        return extended;
     byte *local_4;
     int local_6;
 
@@ -457,12 +460,9 @@ int ULTIMA_47f4(int param_1)
     D_5897_map_y = D_5838[param_1];
     D_5895_map_level = D_5848[param_1];
 
-    if (D_5893_map_id != 0 && local_4 != 0 && D_5893_map_id < 0x21 && local_4 < 0x21)
-    {
+    if (D_5893_map_id != 0 && local_4 != 0 && MAPS_Outside(D_5893_map_id) && MAPS_Outside(local_4)) {
         TOWN_11f0_Entry(1);
-    }
-    else
-    {
+    } else {
         if (D_5893_map_id == 0 && local_4 == 0)
         {
 #if defined(ENABLE_BGM)
@@ -601,89 +601,75 @@ void ULTIMA_4a84(void)
 	byte local_12[12 + 1];
 	int local_4;
 
-	if (D_5893_map_id < 0x21)
-	{
-		// 4a96
-		for (local_14 = 0; local_14 < 12; local_14++)
-		{
-			local_12[local_14] = 0x20;
-		}
+        if (MAPS_Outside(D_5893_map_id)) {
+            // 4a96
+            for (local_14 = 0; local_14 < 12; local_14++) {
+                local_12[local_14] = 0x20;
+            }
 
-		local_12[12] = 0;
-		local_16 = D_5386_current_text_window_idx;
-		ULTIMA_1b94_SelectTextWindow(0);
-		ULTIMA_1c9e_SelectCharset(1);
+            local_12[12] = 0;
+            local_16 = D_5386_current_text_window_idx;
+            ULTIMA_1b94_SelectTextWindow(0);
+            ULTIMA_1c9e_SelectCharset(1);
 
-		// 4ac3
-		local_4 = -((int)D_587f - 17);
-		if (local_4 < 12 && local_4 >= 0)
-		{
-			local_12[local_4] = 0x2a;
-		}
+            // 4ac3
+            local_4 = -((int)D_587f - 17);
+            if (local_4 < 12 && local_4 >= 0) {
+                local_12[local_4] = 0x2a;
+            }
 
-		// 4adf
-		D_5885 = D_1eda[(D_587e - 1) * 2];
-		local_4 = -(D_587f - 8);
-		if (local_4 < -12)
-		{
-			local_4 += 24;
-		}
+            // 4adf
+            D_5885 = D_1eda[(D_587e - 1) * 2];
+            local_4 = -(D_587f - 8);
+            if (local_4 < -12) {
+                local_4 += 24;
+            }
 
-		// 4b04
-		if (local_4 < 12 && local_4 >= 0)
-		{
-			local_12[local_4] = D_5885;
-		}
+            // 4b04
+            if (local_4 < 12 && local_4 >= 0) {
+                local_12[local_4] = D_5885;
+            }
 
-		// 4b19
-		D_5886 = D_1eda[(D_587e - 1) * 2 + 1];
-		local_4 = -(D_587f - 2);
-		if (local_4 < -12)
-		{
-			local_4 += 24;
-		}
+            // 4b19
+            D_5886 = D_1eda[(D_587e - 1) * 2 + 1];
+            local_4 = -(D_587f - 2);
+            if (local_4 < -12) {
+                local_4 += 24;
+            }
 
-		// 4b3e
-		if (local_4 < 12 && local_4 >= 0)
-		{
-			local_12[local_4] = D_5886;
-		}
+            // 4b3e
+            if (local_4 < 12 && local_4 >= 0) {
+                local_12[local_4] = D_5886;
+            }
 
-		// 4b53
-		ULTIMA_1bf2_SetTextPosition(6, 0);
-		if (D_5893_map_id != 0x19 && D_5895_map_level < 0x80)
-		{
-			for (local_14 = 0; local_12[local_14] != 0;)
-			{
-				if (local_12[local_14] == 0x2a)
-				{
-					// -> 4b74
-					ULTIMA_1cca_SetTextForegroundColor(D_13b8_brightYellowColor);
-				}
-				else
-				{
-					// 4b70
-					ULTIMA_1cca_SetTextForegroundColor(D_13ba_lightGrayColor);
-				}
+            // 4b53
+            ULTIMA_1bf2_SetTextPosition(6, 0);
+            if (D_5893_map_id != 0x19 && D_5895_map_level < 0x80) {
+                for (local_14 = 0; local_12[local_14] != 0;) {
+                    if (local_12[local_14] == 0x2a) {
+                        // -> 4b74
+                        ULTIMA_1cca_SetTextForegroundColor(D_13b8_brightYellowColor);
+                    } else {
+                        // 4b70
+                        ULTIMA_1cca_SetTextForegroundColor(D_13ba_lightGrayColor);
+                    }
 
-				ULTIMA_16ba_PrintChar(local_12[local_14++]);
-			}
+                    ULTIMA_16ba_PrintChar(local_12[local_14++]);
+                }
 
-			ULTIMA_1cca_SetTextForegroundColor(D_13b0_brightWhiteColor);
-		}
-		else
-		{
-			// 4ba2
-			ULTIMA_0a70_GRAP_2d_SetPenColor(D_13b2_blueColor);
-			ULTIMA_0aa6_GRAP_3f_FillRect(0x28, 0, 0x98, 6);
-			ULTIMA_0a70_GRAP_2d_SetPenColor(D_13b0_brightWhiteColor);
-			ULTIMA_0b10_GRAP_Line(0x28, 7, 0x98, 7);
-		}
+                ULTIMA_1cca_SetTextForegroundColor(D_13b0_brightWhiteColor);
+            } else {
+                // 4ba2
+                ULTIMA_0a70_GRAP_2d_SetPenColor(D_13b2_blueColor);
+                ULTIMA_0aa6_GRAP_3f_FillRect(0x28, 0, 0x98, 6);
+                ULTIMA_0a70_GRAP_2d_SetPenColor(D_13b0_brightWhiteColor);
+                ULTIMA_0b10_GRAP_Line(0x28, 7, 0x98, 7);
+            }
 
-		// 4bd5
-		ULTIMA_1b94_SelectTextWindow(local_16);
-		ULTIMA_1c9e_SelectCharset(0);
-	}
+            // 4bd5
+            ULTIMA_1b94_SelectTextWindow(local_16);
+            ULTIMA_1c9e_SelectCharset(0);
+        }
 }
 
 // print map name?
@@ -987,15 +973,13 @@ void ULTIMA_4f7c(int param_1)
 	// 514a
 	if (D_587f != D_5880)
 	{
-		if (D_5893_map_id < 0x21 && D_5895_map_level < 0x80)
-		{
-			ULTIMA_4a84();
-		}
+            if (MAPS_Outside(D_5893_map_id) && D_5895_map_level < 0x80) {
+                ULTIMA_4a84();
+            }
 
-		// 5164
-		if (D_587f == 0)
-		{
-			D_5884 = 0xc;
+            // 5164
+            if (D_587f == 0) {
+                D_5884 = 0xc;
 		}
 		else
 		{
@@ -1011,8 +995,7 @@ void ULTIMA_4f7c(int param_1)
 		}
 	}
 
-	if (D_5893_map_id != 0 && D_5893_map_id < 0x21)
-	{
-		ULTIMA_71aa();
-	}
+        if (D_5893_map_id != 0 && MAPS_Outside(D_5893_map_id)) {
+            ULTIMA_71aa();
+        }
 }

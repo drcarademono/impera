@@ -1,3 +1,4 @@
+#include "maps.h"
 #include "types.h"
 #include "types_state.h"
 #include "package.h"
@@ -354,7 +355,7 @@ uint64_t TYPES_CellKey(const TypeCell *c) {
 static int validCell(const TypeCell *c) {
     /* Actor placements use stable instance slots, never terrain coordinates. */
     if (c->kind == 3)
-        return c->map >= 1 && c->map <= 32 && c->floor == 0 && (c->x || c->y) && c->y < 128;
+        return MAPS_Town(c->map) && c->floor == 0 && (c->x || c->y) && c->y < 128;
     if (c->kind == 4)
         return c->map == 0 && (c->floor == 0 || c->floor == -1) && c->x > 0 && c->x < 32 &&
                (c->floor != -1 || c->x < 28) && !c->y;
@@ -371,9 +372,9 @@ static int validCell(const TypeCell *c) {
     }
 
     return c->kind <= 2 &&
-           (c->kind ? (c->floor == 0 && c->x < 11 && c->y < 11)
-                    : (c->map <= 32 &&
-                       (c->map ? c->x < 32 && c->y < 32 : (c->floor == 0 || c->floor == -1))));
+           (c->kind       ? c->floor == 0
+            : c->map == 0 ? (c->floor == 0 || c->floor == -1)
+                          : MAPS_Town(c->map) && (!MAPS_NewLocation(c->map) || !c->floor));
 }
 int TYPES_ValidateMap(const void *v, size_t size, const void *defs, size_t len) {
     const unsigned char *b = v;

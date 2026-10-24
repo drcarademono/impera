@@ -1,3 +1,4 @@
+#include "extended_maps.h"
 #include "mod/npcs.h"
 #include "cutscene_editor.h"
 #include "cutscene_composition.h"
@@ -49,7 +50,11 @@ QStringList contentWorkspaces() {
 }
 QVector<ContentDestination> characterDestinations(const Project &project) {
     QVector<ContentDestination> result;
-    for (const QString stem : {"TOWNE", "CASTLE", "KEEP", "DWELLING"}) {
+    QStringList stems{"TOWNE", "CASTLE", "KEEP", "DWELLING"};
+    for (const auto &m : extendedMaps(project))
+        if (m.kind == 1 && MAPS_NewLocation(m.id))
+            stems.append(m.resource.section('.', 0, 0));
+    for (const QString &stem : stems) {
         const QString talk = stem + ".TLK", schedule = stem + ".NPC", map = stem + ".DAT";
         QVector<U5::Conversation> conversations;
         if (project.resources.contains(talk)) {
@@ -88,6 +93,12 @@ QVector<ContentDestination> characterDestinations(const Project &project) {
                      ++slot) {
                     if (U5::byte(data,
                                  NPCS_ShapeOffset(data.constData(), data.size(), town, slot)) == 0)
+                        continue;
+                    if (NPCS_ObjectKind(
+                            data.constData() +
+                                NPCS_Offset(data.constData(), data.size(), town, slot),
+                            U5::byte(data, NPCS_ShapeOffset(data.constData(), data.size(), town,
+                                                            slot))) >= 0)
                         continue;
                     int id = U5::byte(
                             data, NPCS_DialogueOffset(data.constData(), data.size(), town, slot)),
@@ -179,6 +190,13 @@ QVector<ContentDestination> contentDestinations(const Project &project) {
             continue;
         if (name == "CONTENTS.OVR")
             continue; // Edited through the map inspector.
+        if (MAPS_LocationResource(name.toLatin1().constData())) {
+            bool exists = false;
+            for (const auto &m : extendedMaps(project))
+                exists |= m.resource.section('.', 0, 0) == name.section('.', 0, 0);
+            if (!exists)
+                continue;
+        }
         const auto c = capability(name);
         if (MapDocument::supported(name)) {
             const auto pages = project.mapPages(name);
@@ -320,7 +338,8 @@ QVector<ContentDestination> contentDestinations(const Project &project) {
             group = "Compatibility details";
             break;
         }
-        if (name == "CUTSCENE.OVR") continue;
+        if (name == "CUTSCENE.OVR" || name == "MAPS.OVR")
+            continue;
         ContentDestination d{"content/" + name, workspace, group, title, name, -1};
         d.sources = {name};
         if (name == "STORY.DAT" || name == "END.DAT") d.sources.append("CUTSCENE.OVR");

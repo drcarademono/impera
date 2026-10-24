@@ -1,84 +1,53 @@
 # Adding map items
 
-Use **Add…** in the map tool row, choose an item, and click its destination.
-The new item is selected and its properties open on the right. NPCs and signs
-place once; chests, containers, creatures and vehicles repeat until
-Escape, right-click, another tool, or leaving the map cancels placement.
-Arrow keys and Enter also place items. Previewing or cancelling changes nothing.
+Choose NPCs, Monsters or Special in the map tile picker, select an entry, and
+click its destination. Use Select/Move to select an existing object and edit its
+properties in the right pane, or drag it to another cell. Delete removes the
+selected object and Undo restores the transaction. Terrain painting alone does
+not invent object records or contents.
 
-Use **Select / Move** to select an existing item or drag it. Overlapping kinds
-have an item chooser. **Delete** or the trash button removes the selected item;
-Undo restores the entire edit. Painting terrain does not create NPCs or erase
-attached contents. Project saving and package export retain the entities.
+NPCs are placed on location maps; world-map conversational NPCs are not supported.
+World monsters use roaming creature records, location monsters use NPC records,
+and combat maps retain their encounter placement rules. Signs pair text with
+visible terrain. Chests and containers use explicit contents, lock, trap and
+refill settings. Container contents can belong to furniture or terrain without
+changing its artwork. Dungeon features remain available through feature painting.
 
-## Available items
+## Location Special placements (current behavior)
 
-| Item | Maps | Properties and behavior |
-| --- | --- | --- |
-| NPC | Settlements | Name, appearance, new or shared conversation, schedule destinations, start hours and behavior. All destinations initially equal the placement cell. |
-| Monster | Settlements | Uses an NPC slot with native attack behavior and no conversation. |
-| Monster | Britannia / Underworld | A native roaming world creature. Species can be changed in the object inspector. |
-| Monster | Dungeon combat rooms | A native monster placement with an editable species. |
-| Monster | Outdoor combat templates | A starting position for encounter-generated enemies; the encounter determines species and count. Adding a position does not increase that count. |
-| Sign | Britannia / settlements | Creates both a visible sign and text. Appearance can be sign, gravestone or cross. Dragging moves text and the visible tile together. |
-| Chest | Worlds, settlements, dungeon levels, combat maps | Chest with explicit item contents, locks, traps and refill settings. Starts empty; add items in the right pane. |
-| Container | Same maps as chests | Searchable contents without changing the terrain, including trees, furniture and other hiding places. |
-| Horse, skiff, frigate, magic carpet | Britannia / Underworld | Native usable objects. Frigates start with 99 hull condition. Place ships on suitable water. |
-| Trigger | Dungeon combat rooms | Stepping on it changes up to two destination tiles. Edit destinations and replacement tile in the right pane; preview is optional. |
+The tile picker's **Special** filter also works on location maps. It includes
+vehicles, loose gold/food and other item pickups, moonstones, bodies, triggers,
+signs and containers. Select/Move opens each object's properties in the right
+pane. Quantities and item variants use the same native fields as world objects;
+frigates start with their sails down, 99 hull and one skiff aboard. Place vehicles
+on terrain suitable for their native movement rules.
 
-Dungeon feature painting continues to supply ladders, fountains, pits, fields,
-walls and room doors. Dungeon levels have Add… for chests and containers;
-creatures are placed in the linked combat room.
+Vanilla locations already contain non-NPC object records: Trinsic's skiff is one
+example. Workshop-created objects use extended location slots (32 and above), so
+they do not replace those original records. The engine now carries their item
+properties into actors and remembers when they have been picked up or boarded.
+Talking animals remain conversational NPCs rather than static objects.
 
-## Compatibility and capacity
+Both body graphics have native descriptions identifying them as corpses. The
+intact prone figure is **Corpse (intact)**; the red remains are **Corpse**, retaining
+the game's searchable moldy-corpse behavior, including its loot and plague rules.
+**Blood splatter** reuses the red graphic as decoration, without corpse searches,
+loot or plague. It does not take interaction priority over another object on the
+same tile.
 
-Native NPC and world-object identities are existing resource/slot identities;
-custom contents use persistent namespace/ID identities. No extra engine entity
-schema is needed for the native placements. Custom contents retain package v4
-and its existing runtime/save behavior.
+Location triggers are invisible in-game and have a T marker in Workshop. Stepping
+on their source changes up to two destination cells on the same floor to the
+selected terrain tile. They fire once per location/floor visit; current trigger
+state is retained in saves.
 
-NPC creation reserves slot 0 for the party and uses only a slot with no appearance.
-There are 31 usable slots per settlement. It never overwrites an existing NPC.
-New conversations use an unused number from 1–127, checking both the dialogue
-collection and references from every settlement in that bank. Native table,
-1024-byte conversation and signed-offset limits remain enforced. Creation also
-clears that NPC's killed bit in the fresh-game starting state. Existing saves can
-retain their own killed flags; test new NPCs with a fresh game.
+### Authored location object encoding
 
-World placement reserves party slot 0 and, in the Underworld, quest slots 28–31
-used for the amulet and shards. Object overrides affect new games. Combat rooms
-retain 16 placement slots and eight trigger slots; party starts cannot be deleted.
-Outdoor combat positions are available only where a coordinate is disabled.
-Signs retain native size/floor constraints and the engine-generated Yew poster
-cannot be replaced. Contents retain their existing 256-definition capacity.
-
-Capacity or validation failures leave the project untouched. Creating an NPC and
-conversation, creating a sign and tile, deleting an object and attached contents,
-and dragging a sign are each one undoable transaction. Shared dialogue survives
-NPC deletion. Removing/moving a freestanding sign infers its exposed ground from
-adjacent grass, wood, brick or stone floor; Undo restores the exact previous tiles.
-
-## Additional tile audit
-
-The audit added **vehicles** and **combat triggers** to the original NPC / monster /
-sign / chest / container list. These need records beyond terrain artwork.
-
-* Ordinary doors, portcullises, fields, furniture and stairs already work as terrain;
-  duplicating them in Add… would create two ways to paint the same thing.
-* Barrels, trunks, desks, dressers, trees and similar objects can carry **Container** contents. Painting their artwork alone never invents an inventory. These are
-  Search targets; the Chest option uses Open.
-* Graves and crosses use Sign's appearance selector, rather than separate Add entries.
-* Shopkeepers need shop definitions as well as an NPC. The Shops editor changes
-  existing shops; arbitrary new shops/services require a future runtime extension.
-* Entrances and portals need destination/quest state, not merely a tile. Existing
-  entrances have table controls; Add… does not fabricate a destination.
-* Moonstones and quest artifacts have special identities and engine-managed
-  spawns. They are not offered as generic copies that could duplicate quest state.
-* Loose pickup piles and arbitrary new service/portal definitions are candidates
-  for a future extension. Containers can supply ordinary items now, with
-  Search revealing the pickup; it does not claim to be a pre-revealed pile.
-
-Validation covers native slot reservation, missing capacity, duplicate targets,
-shared dialogue deletion, starting killed bits, tile/text pairing, combat metadata,
-package round trips, cancellation, repeated placement and UI undo. Native
-Windows/macOS execution remains a CI check.
+These placements require package version 18. Original `.NPC` records and the
+`INPC0001` extension layout remain unchanged. An authored static object uses three
+identical behavior bytes `0x80 | kind`, where `kind` is the stable MapItemKind ID
+5–23. The conversation byte stores native actor property 5; schedule time byte 3
+stores property 7. The three destinations agree for ordinary objects. A trigger
+uses destination 0 as its source and destinations 1 and 2 as its targets.
+Decorative blood is shape 31, property 5 = 255, property 7 = 0xb1. Untagged shape
+31 retains native corpse behavior. Ordinary unmarked location records preserve
+all existing schedule and conversation semantics.

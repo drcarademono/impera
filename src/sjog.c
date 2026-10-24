@@ -15,16 +15,16 @@
 #include "sjog.h"
 
 #include "town.h"
+#include "npc.h"
 
 void ULTIMA_6794(int param_1);
 
 static int SJOG_0000(void)
 {
-    int i = 0x20;
+    int i = MAP_ACTOR_COUNT;
 
-    while (--i >= 0)
-    {
-        if (D_5c5a[i]._0_tile == 0)
+    while (--i > 0) {
+        if (D_5c5a[i]._0_tile == 0 && (i < 32 || D_659e[i] == 0))
             return i;
     }
 
@@ -168,6 +168,7 @@ static void SJOG_01f2(int param_1, int param_2)
 {
     if (ULTIMA_2092_RandomRange(0, 7) != 0)
     {
+        NPC_ConsumeObject(param_1);
         ULTIMA_3a74(0, 0, 0, 0, 0, 0, param_1);
         if (ULTIMA_2092_RandomRange(0, 0x1f) == 0x13)
         {
@@ -647,8 +648,7 @@ void SJOG_095c_SearchCmd(void)
 
     local_4 = 0;
 
-    if (D_5893_map_id > 0x20 && D_5893_map_id < 0x29)
-    {
+    if (!MAPS_Outside(D_5893_map_id) && D_5893_map_id < 0x29) {
         SJOG_0646_SearchInDungeon();
         return;
     }
@@ -669,8 +669,7 @@ void SJOG_095c_SearchCmd(void)
         return;
     local_10 = *ULTIMA_4402_GetTileAddr(local_a, local_c);
 
-    for (local_6 = 1; local_6 < 0x20; local_6++)
-    {
+    for (local_6 = 1; local_6 < MAP_ACTOR_COUNT; local_6++) {
         if (D_5c5a[local_6]._2_x == local_a &&
             D_5c5a[local_6]._3_y == local_c &&
             (D_5893_map_id > 0x7f || D_5c5a[local_6]._4_z == D_5895_map_level))
@@ -681,14 +680,17 @@ void SJOG_095c_SearchCmd(void)
         }
     }
 
-    if (local_6 < 0x20)
-    {
+    if (local_6 < MAP_ACTOR_COUNT) {
         ULTIMA_1850_PrintString(_TEXT(0x892c, "\nThou dost find\n"));
         SJOG_02ea(local_6, local_e);
         return;
     }
 
     local_8 = ULTIMA_3702(local_a, local_c, D_5895_map_level);
+    if (NPC_BloodAt(local_a, local_c, D_5895_map_level)) {
+        ULTIMA_1850_PrintString("Nothing of note.\n");
+        return;
+    }
     if (local_8 == 0x1f)
     {
         ULTIMA_1850_PrintString(_TEXT(0x893e, "\nThou dost find\n"));
@@ -882,8 +884,7 @@ void SJOG_0d4a_JimmyCmd(void)
     int local_8;
     int local_a;
 
-    if (D_5893_map_id > 0x20 && D_5893_map_id < 0x29)
-    {
+    if (!MAPS_Outside(D_5893_map_id) && D_5893_map_id < 0x29) {
         SJOG_0c3e_JimmyInDungeon();
         return;
     }
@@ -1126,8 +1127,7 @@ static void SJOG_112c_OpenChest(int param_1, int param_2, int param_3)
     CombatEntity* local_4;
 
     local_a = 0;
-    for (local_6 = 1; local_6 < 0x20; local_6++)
-    {
+    for (local_6 = 1; local_6 < MAP_ACTOR_COUNT; local_6++) {
         if (D_5c5a[local_6]._2_x == param_1 && D_5c5a[local_6]._3_y == param_2 &&
             (D_5893_map_id > 0x7f || (D_5893_map_id < 0x80 && D_5c5a[local_6]._4_z == param_3)))
         {
@@ -1142,8 +1142,7 @@ static void SJOG_112c_OpenChest(int param_1, int param_2, int param_3)
         }
     }
 
-    if (local_6 == 0x20)
-    {
+    if (local_6 == MAP_ACTOR_COUNT) {
         ULTIMA_1850_PrintString(_TEXT(0x8b6c, "Nothing to open!\n"));
         return;
     }
@@ -1156,8 +1155,7 @@ static void SJOG_112c_OpenChest(int param_1, int param_2, int param_3)
     local_8 = D_5c5a[local_6]._5;
     ULTIMA_3a74(0, 0, 0, 0, 0, 0, local_6);
     D_24e6 = D_24e6 | 2;
-    if (D_5893_map_id >= 1 && D_5893_map_id <= 0x20)
-    {
+    if (D_5893_map_id >= 1 && MAPS_Outside(D_5893_map_id)) {
         if (D_5888 > 2)
         {
             D_5888 -= 2;
@@ -1245,8 +1243,7 @@ void SJOG_1374_OpenCmd(void)
     int local_6;
     int local_8;
 
-    if (D_5893_map_id > 0x20 && D_5893_map_id < 0x29)
-    {
+    if (!MAPS_Outside(D_5893_map_id) && D_5893_map_id < 0x29) {
         SJOG_12d4_OpenInDungeon();
         return;
     }
@@ -1323,7 +1320,8 @@ static void SJOG_1458_GetObject(int param_1, int param_2, int param_3)
             D_57b0 = 99;
         }
 
-        if (D_5893_map_id != 0x11)
+        if (D_5893_map_id != 0x11 ||
+            (TOWN_011e(param_3) > 0 && NPC_ObjectKind(TOWN_011e(param_3)) >= 0))
             break;
 
         TOWN_00b0_DespawnNpc(0x16);
@@ -1338,7 +1336,8 @@ static void SJOG_1458_GetObject(int param_1, int param_2, int param_3)
     case TILE_ACTOR_SANDALWOOD_BOX:
         ULTIMA_1850_PrintString(_TEXT(0x8c76, "A sandalwood box!\n"));
         D_57bf = 0xff;
-        D_5b5a[0x43] |= 0x80;
+        if (TOWN_011e(param_3) < 1 || NPC_ObjectKind(TOWN_011e(param_3)) < 0)
+            D_5b5a[0x43] |= 0x80;
         break;
 
     case TILE_ACTOR_TORCH:
@@ -1495,8 +1494,8 @@ static void SJOG_1458_GetObject(int param_1, int param_2, int param_3)
         return;
     }
 
-    if (param_3 < 0x20)
-    {
+    if (param_3 < MAP_ACTOR_COUNT) {
+        NPC_ConsumeObject(param_3);
         ULTIMA_3a74(0, 0, 0, 0, 0, 0, param_3);
     }
 
@@ -1576,8 +1575,7 @@ void SJOG_18ce_GetCmd(void)
     int local_6;
     int local_4;
 
-    if (D_5893_map_id > 0x20 && D_5893_map_id < 0x29)
-    {
+    if (!MAPS_Outside(D_5893_map_id) && D_5893_map_id < 0x29) {
         SJOG_179e_GetInDungeon();
         return;
     }
@@ -1596,20 +1594,19 @@ void SJOG_18ce_GetCmd(void)
     if (CONTENTS_GAME_Interact(2, local_a, local_e, -1))
         return;
     // 1921 (NOT MATCHING: loop)
-    for (local_6 = 1; local_6 < 0x20; local_6++)
-    {
+    for (local_6 = 1; local_6 < MAP_ACTOR_COUNT; local_6++) {
         if (D_5c5a[local_6]._2_x == local_a && D_5c5a[local_6]._3_y == local_e &&
-            (D_5893_map_id > 0x7f || (D_5893_map_id < 0x80 && D_5c5a[local_6]._4_z == D_5895_map_level)))
-        {
+            (D_5893_map_id > 0x7f ||
+             (D_5893_map_id < 0x80 && D_5c5a[local_6]._4_z == D_5895_map_level))) {
             local_8 = D_5c5a[local_6]._0_tile;
-            if (local_8 < TILE_ACTOR_HORSE || local_8 == TILE_ACTOR_MOONSTONE || local_8 == TILE_ACTOR_CARPET || (local_8 & 0xfc) == TILE_ACTOR_SHARD)
+            if (local_8 && (local_8 < TILE_ACTOR_HORSE || local_8 == TILE_ACTOR_MOONSTONE ||
+                            local_8 == TILE_ACTOR_CARPET || (local_8 & 0xfc) == TILE_ACTOR_SHARD))
                 break;
         }
     }
 
     // 197f (NOT MATCHING)
-    if (local_6 < 0x20)
-    {
+    if (local_6 < MAP_ACTOR_COUNT) {
         local_4 = D_5c5a[local_6]._5;
         SJOG_1458_GetObject(local_8, local_4, local_6);
         return;

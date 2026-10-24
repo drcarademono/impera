@@ -7,7 +7,7 @@ extern "C" {
 #endif
 #define MOD_MAX_RESOURCE (8u * 1024u * 1024u)
 #define MOD_MAX_PACKAGE (32u * 1024u * 1024u)
-#define MOD_MAX_ENTRIES 128
+#define MOD_MAX_ENTRIES 512
 /* Packages are data-only sparse patches. Reader owns returned base allocation. */
 typedef int (*ModBaseReader)(void *context, const char *name, unsigned char **data, size_t *size);
 typedef struct ModResource {

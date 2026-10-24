@@ -221,8 +221,7 @@ static int CAST_02d2_AnSanct(void)
     int local_c;
     int local_e;
 
-    if (D_5893_map_id > 0x20 && D_5893_map_id < 0x80)
-    {
+    if (!MAPS_Outside(D_5893_map_id) && D_5893_map_id < 0x80) {
         CAST2_0000_CastEffect(2);
 
         local_c = D_24d6[D_6603];
@@ -265,9 +264,7 @@ static int CAST_02d2_AnSanct(void)
         {
             local_8 = 0;
         }
-    }
-    else
-    {
+    } else {
         if (CAST2_0306() == 0)
         {
             return -1;
@@ -995,15 +992,12 @@ int CAST_0dba_CastSpellCmd(void)
 #endif
         }
 
-        if (D_5893_map_id < 0x21)
-        {
+        if (MAPS_Outside(D_5893_map_id)) {
             if ((D_1c90[local_4] & 4) == 0)
             {
                 local_e = 0;
             }
-        }
-        else
-        {
+        } else {
             if ((D_1c90[local_4] & 2) == 0)
             {
                 local_e = 0;
@@ -1196,12 +1190,9 @@ int CAST_0dba_CastSpellCmd(void)
                 break;
             case 0x27: // IQW view?
                 CAST2_0000_CastEffect(7);
-                if (D_5893_map_id < 0x21)
-                {
+                if (MAPS_Outside(D_5893_map_id)) {
                     LOOKOBJ_10fc_ViewCmd(D_5896_map_x, D_5897_map_y);
-                }
-                else
-                {
+                } else {
                     DNGLOOK_06a8_ViewCmd();
                 }
                 break;
@@ -1270,8 +1261,7 @@ static int CAST_11de_UseScroll(int param_1)
     case 1:
         ULTIMA_1850_PrintString(_TEXT(0x467b, "Wind change!\n"));
         local_6 = CAST2_0306();
-        if (D_5893_map_id < 0x21)
-        {
+        if (MAPS_Outside(D_5893_map_id)) {
             CAST2_040a_ChangeWindDirection(local_6, 1);
             break;
         }
@@ -1300,8 +1290,7 @@ static int CAST_11de_UseScroll(int param_1)
         {
             // 1290
             CAST2_0000_CastEffect(4);
-            if (D_5893_map_id < 0x21)
-            {
+            if (MAPS_Outside(D_5893_map_id)) {
                 LOOKOBJ_10fc_ViewCmd(D_5896_map_x, D_5897_map_y);
                 break;
             }
@@ -1510,12 +1499,9 @@ static int CAST_135a_UsePotion(int param_1)
         break;
 
     case 7:
-        if (D_5893_map_id < 0x21)
-        {
+        if (MAPS_Outside(D_5893_map_id)) {
             CAST2_046c();
-        }
-        else
-        {
+        } else {
             ULTIMA_1850_PrintString(_TEXT(0x474c, "\nNo noticeable effect now!\n"));
         }
         break;
@@ -1531,16 +1517,15 @@ static void CAST_153c_UseMoonstone(int param_1)
 
     local_4 = *ULTIMA_4402_GetTileAddr(D_5896_map_x, D_5897_map_y);
     ULTIMA_1850_PrintString(_TEXT(0x4768, "Moonstone "));
-    if (D_5893_map_id < 0x21 && (local_4 == TILE_MAP_CROPS_PICKED || local_4 == TILE_MAP_CROPS || (local_4 > TILE_MAP_WATER_3 && local_4 < TILE_MAP_B)))
-    {
+    if (MAPS_Outside(D_5893_map_id) &&
+        (local_4 == TILE_MAP_CROPS_PICKED || local_4 == TILE_MAP_CROPS ||
+         (local_4 > TILE_MAP_WATER_3 && local_4 < TILE_MAP_B))) {
         ULTIMA_1850_PrintString(_TEXT(0x4773, "buried!\n"));
         D_5830[param_1] = D_5896_map_x;
         D_5838[param_1] = D_5897_map_y;
         D_5840[param_1] = D_5893_map_id;
         D_5848[param_1] = D_5895_map_level;
-    }
-    else
-    {
+    } else {
         ULTIMA_1850_PrintString(_TEXT(0x477c, "cannot be buried here!\n"));
     }
 }
@@ -1715,8 +1700,8 @@ void CAST_1792_UseCmd(void)
         {
         case 0x10:
             ULTIMA_1850_PrintString(_TEXT(0x48bf, "Carpet\n\n"));
-            if (D_5893_map_id < 0x21 && *ULTIMA_4402_GetTileAddr(D_5896_map_x, D_5897_map_y) != TILE_MAP_C)
-            {
+            if (MAPS_Outside(D_5893_map_id) &&
+                *ULTIMA_4402_GetTileAddr(D_5896_map_x, D_5897_map_y) != TILE_MAP_C) {
                 if (D_587c_partyTile == TILE_ACTOR_AVATAR)
                 {
                     ULTIMA_1850_PrintString(_TEXT(0x48c8, "Boarded!\n"));
@@ -1731,9 +1716,7 @@ void CAST_1792_UseCmd(void)
                 {
                     ULTIMA_1850_PrintString(_TEXT(0x48e4, "Only on foot!\n"));
                 }
-            }
-            else
-            {
+            } else {
                 ULTIMA_1850_PrintString(_TEXT(0x48f3, "Not here!\n"));
             }
             break;
@@ -1741,8 +1724,7 @@ void CAST_1792_UseCmd(void)
         case 0x11:
             D_57b1--;
             ULTIMA_1850_PrintString(_TEXT(0x48fe, "Skull Key\n"));
-            if (D_5893_map_id < 0x21 || 0x7f < D_5893_map_id)
-            {
+            if (MAPS_Outside(D_5893_map_id) || 0x7f < D_5893_map_id) {
                 local_c = CAST2_0768();
                 if (local_c != 0 && D_5893_map_id < 0x80)
                 {
@@ -1781,8 +1763,7 @@ void CAST_1792_UseCmd(void)
             ULTIMA_2192_AudioPulse(0x1450, 1, 50000, 5000, 1);
 
             local_4 = 0;
-            if (D_5893_map_id < 0x21 || D_5893_map_id > 0x28)
-            {
+            if (MAPS_Outside(D_5893_map_id) || D_5893_map_id > 0x28) {
                 for (local_e = -1; local_e <= 1; local_e++)
                 {
                     for (local_12 = -1; local_12 <= 1; local_12++)
@@ -1822,8 +1803,7 @@ void CAST_1792_UseCmd(void)
 
         case 0x20:
             ULTIMA_1850_PrintString(_TEXT(0x498d, "Spyglass\n\n"));
-            if (D_5893_map_id < 0x21 && D_5895_map_level < 0x80)
-            {
+            if (MAPS_Outside(D_5893_map_id) && D_5895_map_level < 0x80) {
                 if (D_587f < 6 || 0x12 < D_587f)
                 {
                     ULTIMA_1850_PrintString(_TEXT(0x4998, "Looking...\n"));
@@ -1832,9 +1812,7 @@ void CAST_1792_UseCmd(void)
                 }
 
                 ULTIMA_1850_PrintString(_TEXT(0x49a4, "No stars!\n"));
-            }
-            else
-            {
+            } else {
                 ULTIMA_1850_PrintString(_TEXT(0x49af, "Not here!\n"));
             }
             break;

@@ -1,3 +1,4 @@
+#include "mod/maps.h"
 #include "mod/npcs.h"
 #include "native_dialogue_session.h"
 #include "content_navigation.h"
@@ -96,7 +97,9 @@ NativeSetup nativeSetup(const Project &project, const QString &resource, int con
     result.actorRecords = result.gameState.mid(0x6b4, 8) + QByteArray(count * 8 - 8, char(0));
     result.npc = Workshop::npcSlot(selected.character);
     result.hasNpc = true;
-    result.gameState[0x2ed] = char(bank * 8 + selected.settlement + 1);
+    result.gameState[0x2ed] = char(MAPS_LocationResource(resource.toLatin1().constData())
+                                       ? MAPS_LocationResource(resource.toLatin1().constData())
+                                       : bank * 8 + selected.settlement + 1);
     int hour = byte(0x2d9);
     int destination = IMPERA_GameSchedule(
         reinterpret_cast<const uint8_t *>(result.scheduleRecords.constData()) + result.npc * 16,
@@ -132,9 +135,10 @@ NativeSetup nativeSetup(const Project &project, const QString &resource, int con
             result.actorRecords[actor * 8 + 3] = char(schedule[6 + index]);
             result.actorRecords[actor * 8 + 4] = char(floor);
             result.actorRecords[actor * 8 + 5] =
-                char(shape == 1                                                        ? 0x1e
-                     : (i < 32 && (nativeNpcProperties[map - 1] & (uint32_t(1) << i))) ? 0xff
-                                                                                       : 0);
+                char(shape == 1 ? 0x1e
+                     : (map <= 32 && i < 32 && (nativeNpcProperties[map - 1] & (uint32_t(1) << i)))
+                         ? 0xff
+                         : 0);
             ++actor;
         }
     }
@@ -191,7 +195,7 @@ NativeSetup nativeSetup(const Project &project, const QString &resource, int con
     game.dirty = &dirty;
     for (int i = 0; i < count; ++i) {
         int shape = game.shapes[i];
-        bool killed = i < 32 && byte(0x5b4 + (map - 1) * 4 + i / 8) & (1 << (i % 8));
+        bool killed = map <= 32 && i < 32 && byte(0x5b4 + (map - 1) * 4 + i / 8) & (1 << (i % 8));
         if (killed && (shape == 0x0e || shape >= 0x40))
             IMPERA_GameDespawn(&game, i);
     }
@@ -200,7 +204,7 @@ NativeSetup nativeSetup(const Project &project, const QString &resource, int con
     U5::require(uint8_t(result.shapes[result.npc]) != 0,
                 "This NPC is absent in the starting game state");
     result.state.introduced =
-        result.npc < 32 &&
+        map <= 32 && result.npc < 32 &&
         byte(0x634 + (byte(0x2ed) - 1) * 4 + result.npc / 8) & (1 << (result.npc % 8));
     return result;
 }

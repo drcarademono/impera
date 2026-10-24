@@ -129,7 +129,8 @@ struct Execution {
         game.npc = setup.hasNpc ? setup.npc : -1;
         game.npcCount = setup.shapes.size();
         game.actorCount = setup.actorRecords.size() / 8;
-        extraKilled = QByteArray(32 * 4096, 0);
+        game.mapCount = 128;
+        extraKilled = QByteArray(128 * 4096, 0);
         extraMet = extraKilled;
         game.extraKilled = reinterpret_cast<uint8_t *>(extraKilled.data());
         game.extraMet = reinterpret_cast<uint8_t *>(extraMet.data());
@@ -142,10 +143,11 @@ struct Execution {
         animate = state[0x2eb];
         if (setup.hasNpc) {
             U5::require(game.npc >= 1 && game.npc < int(game.npcCount) && *game.map >= 1 &&
-                            *game.map <= 32,
+                            *game.map < 128,
                         "Invalid Playtest NPC identity");
-            auto *flag = game.npc < 32 ? game.met + (*game.map - 1) * 4 + game.npc / 8
-                                       : game.extraMet + (*game.map - 1) * 4096 + game.npc / 8;
+            auto *flag = game.npc < 32 && *game.map <= 32
+                             ? game.met + (*game.map - 1) * 4 + game.npc / 8
+                             : game.extraMet + (*game.map - 1) * 4096 + game.npc / 8;
             *flag = uint8_t((*flag & ~(1 << (game.npc % 8))) |
                             (s.state.introduced ? 1 << (game.npc % 8) : 0));
         }

@@ -254,8 +254,8 @@ void MAINOUT_0354(int param_1, int param_2)
     int local_4;
     int local_6;
 
-    D_5896_map_x += param_1;
-    D_5897_map_y += param_2;
+    D_5896_map_x = MAPS_Wrap(D_5896_map_x + param_1, MAP_WIDTH);
+    D_5897_map_y = MAPS_Wrap(D_5897_map_y + param_2, MAP_HEIGHT);
     D_24e6 = 1;
     local_4 = D_5896_map_x - D_589b & 0x1f;
     local_6 = D_5897_map_y - D_589c & 0x1f;
@@ -737,6 +737,17 @@ int MAINOUT_08de_EnterCmd(void)
     local_4 = 1;
 
     ULTIMA_1850_PrintString(_TEXT(0x2a6f, "Enter "));
+    const unsigned char *destination =
+        MAPS_Entrance((int8_t)D_5895_map_level, D_5896_map_x, D_5897_map_y);
+    if (destination) {
+        ULTIMA_1850_PrintString((char *)destination + 24);
+        ULTIMA_1850_PrintString("\n");
+        D_5893_map_id = destination[5];
+        D_5895_map_level = 0;
+        D_5896_map_x = destination[17];
+        D_5897_map_y = destination[18];
+        return 0;
+    }
 
     local_8 = *ULTIMA_4402_GetTileAddr(D_5896_map_x, D_5897_map_y);
     switch (local_8)
@@ -1602,8 +1613,8 @@ static void MAINOUT_1578(int param_1, int param_2, int param_3)
     D_a526 = D_5c5a[param_1]._2_x;
     D_a527 = D_5c5a[param_1]._3_y;
 
-    D_5c5a[param_1]._2_x = local_8;
-    D_5c5a[param_1]._3_y = local_a;
+    D_5c5a[param_1]._2_x = MAPS_Wrap(local_8, MAP_WIDTH);
+    D_5c5a[param_1]._3_y = MAPS_Wrap(local_a, MAP_HEIGHT);
     D_24e6 |= 2;
 
     if (*ULTIMA_4402_GetTileAddr(local_8, local_a) == TILE_MAP_MOONGATE)
@@ -1683,17 +1694,11 @@ static void MAINOUT_17d4(int param_1, int param_2)
 
     local_8 = D_5c5a[param_1]._2_x;
     local_c = D_5c5a[param_1]._3_y;
-    local_a = (D_5c5a[param_1]._2_x - D_5896_map_x) & 0xff;
-    if (local_a > 0x7f)
-    {
-        local_a -= 0x100;
-    }
+    local_a = MAPS_Wrap(D_5c5a[param_1]._2_x - D_5896_map_x, MAP_WIDTH);
+    if (local_a >= (MAP_WIDTH + 1) / 2) local_a -= MAP_WIDTH;
 
-    local_e = (D_5c5a[param_1]._3_y - D_5897_map_y) & 0xff;
-    if (local_e > 0x7f)
-    {
-        local_e -= 0x100;
-    }
+    local_e = MAPS_Wrap(D_5c5a[param_1]._3_y - D_5897_map_y, MAP_HEIGHT);
+    if (local_e >= (MAP_HEIGHT + 1) / 2) local_e -= MAP_HEIGHT;
 
     // 1828
     if (local_a == 0)
