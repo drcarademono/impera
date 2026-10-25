@@ -458,6 +458,8 @@ void validateExtendedMaps(const Project &p) {
     };
     for (const auto &m : maps) {
         require(p.resources.contains(m.resource), "Missing map resource: " + m.resource);
+        if (m.world != -2)
+            check(0, m.world, 0, m.entrance.x(), m.entrance.y(), "Entrance");
         if (m.kind == 4 && MAPS_NewLocation(m.id)) {
             for (int f = 0; f < 8; ++f)
                 require(std::any_of(maps.begin(), maps.end(),
@@ -471,7 +473,12 @@ void validateExtendedMaps(const Project &p) {
             require(m.roomBase + 16 <= unsigned(p.data("DUNGEON.CBT").size() / 352),
                     "Dungeon combat rooms are missing");
         } else if (m.kind == 1 && MAPS_NewLocation(m.id)) {
-            check(0, m.world, 0, m.entrance.x(), m.entrance.y(), "Entrance");
+            if (!m.floor)
+                check(0, m.world, 0, m.entrance.x(), m.entrance.y(), "Entrance");
+            const auto pages = p.mapPages(m.resource);
+            require(std::any_of(pages.begin(), pages.end(),
+                                [](const auto &page) { return page.floor == 0; }),
+                    "Location is missing its ground floor");
             const auto stem = m.resource.section('.', 0, 0);
             require(p.resources.contains(stem + ".NPC") && p.resources.contains(stem + ".TLK"),
                     "New location needs NPC and dialogue resources");

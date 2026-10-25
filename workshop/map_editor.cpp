@@ -1,6 +1,7 @@
 #include "mod/npcs.h"
 #include "map_editor.h"
 #include "map_resize_dialog.h"
+#include "map_json.h"
 #include "dungeon_editor.h"
 #include "extended_maps.h"
 #include "../src/tiles.h"
@@ -1392,9 +1393,41 @@ MapWorkspace::MapWorkspace(
                                                [this] { exportImage(false, true); });
     previewExport->setToolTip("Export the visible canvas, including grid, markers and trigger "
                               "preview. Not suitable for terrain import.");
+    exportMenu->addSeparator();
+    auto jsonExport = exportMenu->addAction("Map JSON…", this, [this] {
+        try {
+            if (flushLocationMode())
+                Workshop::saveMapJson(this, *project, resource, currentPage());
+        } catch (const std::exception &e) {
+            QMessageBox::warning(this, "Cannot export map", QString::fromUtf8(e.what()));
+        }
+    });
+    jsonExport->setObjectName("mapExportJson");
+    jsonExport->setToolTip("Export all floors, map contents, and custom artwork.");
     exportButton->setMenu(exportMenu);
     exportButton->setObjectName("mapExport");
     row->addWidget(exportButton);
+    auto importButton = new QPushButton("Import…");
+    importButton->setObjectName("mapImport");
+    importButton->setToolTip("Replace this map with a map JSON of the same type.");
+    row->addWidget(importButton);
+    connect(importButton, &QPushButton::clicked, this, [this, navigate] {
+        try {
+            if (!flushLocationMode())
+                return;
+            auto json = Workshop::openMapJson(this);
+            if (json.isEmpty())
+                return;
+            auto edits = Workshop::importMapJson(*project, resource, currentPage(), json);
+            saveView();
+            if (commitResources(edits, "Import map")) {
+                Workshop::hydrateExtendedMaps(*project);
+                navigate(resource);
+            }
+        } catch (const std::exception &e) {
+            QMessageBox::warning(this, "Cannot import map", QString::fromUtf8(e.what()));
+        }
+    });
     centerLayout->addLayout(row);
     auto tools = new QHBoxLayout;
     tools->setObjectName("mapToolRow");

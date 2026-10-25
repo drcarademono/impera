@@ -27,6 +27,8 @@ int MAPS_IsDungeon(unsigned id);
 int MAPS_IsTown(unsigned id);
 int MAPS_DungeonRoom(unsigned id, unsigned room);
 int MAPS_Outside(unsigned id);
+void MAPS_Entered(unsigned map, int world, int x, int y);
+int MAPS_ReturnPoint(unsigned map, int *world, int *x, int *y);
 #ifdef __cplusplus
 }
 #endif
@@ -63,11 +65,12 @@ static inline int MAPS_Validate(const void *v, size_t n) {
             !memchr(r + 88, 0, 32) || !r[88])
             return 0;
         if ((!r[4] && (r[5] > 1 || r[8])) ||
-            (r[4] == 1 && (!MAPS_Town(r[5]) || (MAPS_NewLocation(r[5]) && r[8]))) ||
+            (r[4] == 1 && (!MAPS_Town(r[5]) ||
+                           (MAPS_NewLocation(r[5]) && ((int8_t)r[8] < -1 || (int8_t)r[8] > 3)))) ||
             ((r[4] == 2 || r[4] == 3) && r[8]) ||
             (r[4] == 4 && (!((r[5] >= 33 && r[5] <= 40) || MAPS_NewLocation(r[5])) || r[8] > 7)) ||
             (int8_t)r[14] < -2 || (int8_t)r[14] > 0 ||
-            (MAPS_NewLocation(r[5]) && r[4] == 1 &&
+            (MAPS_NewLocation(r[5]) && r[4] == 1 && !r[8] &&
              ((int8_t)r[14] == -2 || r[17] >= w || r[18] >= h)))
             return 0;
         for (unsigned j = 21; j < 24; ++j)
@@ -93,7 +96,8 @@ static inline int MAPS_Validate(const void *v, size_t n) {
                 return 0;
         } else if (r[4] == 1) {
             if (MAPS_NewLocation(r[5])) {
-                if (page || MAPS_LocationResource(resource) != r[5] || strcmp(resource + 6, ".DAT"))
+                if (page > 4 || MAPS_LocationResource(resource) != r[5] ||
+                    strcmp(resource + 6, ".DAT"))
                     return 0;
             } else {
                 static const char *banks[] = {"TOWNE.DAT", "DWELLING.DAT", "CASTLE.DAT",
@@ -110,11 +114,12 @@ static inline int MAPS_Validate(const void *v, size_t n) {
                 return 0;
         } else if (page != MAPS_Id(r) || strcmp(resource, r[4] == 2 ? "BRIT.CBT" : "DUNGEON.CBT"))
             return 0;
-        if (!(MAPS_NewLocation(r[5]) && (r[4] == 1 || (r[4] == 4 && !r[8]))) &&
-            ((int8_t)r[14] != -2 || r[19]))
+        if (!((r[4] == 1 || r[4] == 4) && !r[8]) && ((int8_t)r[14] != -2 || r[19]))
             return 0;
         if (r[4] == 4 && MAPS_NewLocation(r[5]) && !r[8] &&
             ((int8_t)r[14] == -2 || r[17] >= w || r[18] >= h))
+            return 0;
+        if ((int8_t)r[14] != -2 && (r[17] >= w || r[18] >= h))
             return 0;
         /* Disallow page aliases and duplicate entrance coordinates. */
         for (size_t earlier = MAPS_HEADER; earlier < off; earlier += MAPS_U32(b + earlier)) {

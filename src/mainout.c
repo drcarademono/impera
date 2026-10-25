@@ -706,6 +706,7 @@ static int MAINOUT_0790_LoadDungeon(char* param_1)
         ULTIMA_25d8_WriteFileToDisk(OUTSUBS_0368_GetWorldSavefile(), D_5c5a, 0x100);
         ULTIMA_251e_SwitchDisks(2);
         ULTIMA_256e_ReadFileFromDisk(/*0x2a53*/ "DUNGEON.DAT", D_595a, 0x200, local_4 * 0x200 + -0x4000);
+        MAPS_Entered(local_4 + 1, (int8_t)D_5895_map_level, D_5896_map_x, D_5897_map_y);
         D_5893_map_id = local_4 + 1;
         if (D_5895_map_level != 0 && (byte)(local_4 + 1) != 0x28)
         {
@@ -748,9 +749,14 @@ int MAINOUT_08de_EnterCmd(void)
         }
         ULTIMA_1850_PrintString((char *)destination + 24);
         ULTIMA_1850_PrintString("\n");
+        MAPS_Entered(destination[5], (int8_t)D_5895_map_level, D_5896_map_x, D_5897_map_y);
+        ULTIMA_25d8_WriteFileToDisk(OUTSUBS_0368_GetWorldSavefile(), D_5c5a, 0x100);
         if (destination[4] == 4) {
-            ULTIMA_25d8_WriteFileToDisk(OUTSUBS_0368_GetWorldSavefile(), D_5c5a, 0x100);
-            memset(D_595a, 0xb0, 512);
+            if (destination[5] <= 40)
+                ULTIMA_256e_ReadFileFromDisk("DUNGEON.DAT", D_595a, 512,
+                                             (destination[5] - 33) * 512);
+            else
+                memset(D_595a, 0xb0, 512);
             D_6602 = D_6603 = 0;
         }
         D_5893_map_id = destination[5];

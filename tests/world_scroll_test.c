@@ -94,6 +94,7 @@ static size_t appendMap(unsigned char *b, size_t off, unsigned kind, unsigned id
 }
 void __wrap_ULTIMA_1850_PrintString(char *text) { (void)text; }
 static void testExtendedMaps(void) {
+    assert(SDL_CreateDirectory("SAVEGAME"));
     unsigned char *catalog = calloc(1, 200000);
     assert(catalog);
     memcpy(catalog, "IMAPS001", 8);
@@ -342,6 +343,30 @@ static void testNewDungeon(void) {
     free(catalog);
 }
 
+static void testPortableEntranceReturn(void) {
+    unsigned char catalog[MAPS_HEADER + MAPS_RECORD + 1024] = {0};
+    memcpy(catalog, "IMAPS001", 8);
+    TYPES_Put32(catalog + 8, 1);
+    appendMap(catalog, MAPS_HEADER, 1, 1, -1, 32, 32, "Portable Moonglow", "TOWNE.DAT");
+    assert(MAPS_Mount(catalog, sizeof(catalog)));
+    MAPS_Entered(1, 0, 50, 60);
+    FILE *save = tmpfile();
+    assert(save && MAPS_WriteState(save));
+    MAPS_Reset();
+    rewind(save);
+    assert(MAPS_ReadState(save, 1));
+    fclose(save);
+    D_5893_map_id = 1;
+    assert(TOWN_ExtendedExit() && !D_5893_map_id && !D_5895_map_level && D_5896_map_x == 50 &&
+           D_5897_map_y == 60);
+    MAPS_Entered(1, -1, 18, 12);
+    D_5893_map_id = 1;
+    assert(TOWN_ExtendedExit() && D_5895_map_level == 255 && D_5896_map_x == 18 &&
+           D_5897_map_y == 12);
+    MAPS_Mount(NULL, 0);
+    D_5895_map_level = 0;
+}
+
 static void spawnObject(unsigned slot, unsigned kind, unsigned shape, unsigned value,
                         unsigned aux) {
     D_659e[slot] = shape;
@@ -534,6 +559,7 @@ int main(void)
     testLocationObjects();
     testDungeonDimensions();
     testNewDungeon();
+    testPortableEntranceReturn();
     puts("World block scrolling and diagonal boundary tests passed.");
     return 0;
 }

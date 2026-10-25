@@ -1628,12 +1628,15 @@ int DUNGEON_1c6a_Klimb(int param_1, int param_2)
 
 void DUNGEON_1d08_Exit(void)
 {
-    const unsigned char *custom =
-        MAPS_NewLocation(D_5893_map_id) ? MAPS_Record(4, D_5893_map_id, 0) : NULL;
+    const unsigned char *custom = MAPS_Record(4, D_5893_map_id, 0);
+    if (custom && (int8_t)custom[14] == -2)
+        custom = NULL;
     if (custom) {
-        D_5896_map_x = custom[15];
-        D_5897_map_y = custom[16];
-        D_5895_map_level = (int8_t)custom[14] ? 7 : 0;
+        int world = (int8_t)custom[14], x = custom[15], y = custom[16];
+        MAPS_ReturnPoint(D_5893_map_id, &world, &x, &y);
+        D_5896_map_x = x;
+        D_5897_map_y = y;
+        D_5895_map_level = world ? 7 : 0;
     } else {
         D_5896_map_x = MOD_TableValue(7, (D_5893_map_id - 1), D_1e8a[D_5893_map_id - 1]);
         D_5897_map_y = MOD_TableValue(8, (D_5893_map_id - 1), D_1eb2[D_5893_map_id - 1]);

@@ -540,3 +540,17 @@ byte 5 for the high map byte on combat terrain and actor bindings, leaving bytes
 for dungeon rooms. The sparse map catalog accepts up to 4096 records, within its
 existing 8 MiB budget. Narrow records retain their wire layout and old packages
 and saves remain readable. New wide data requires the updated engine.
+
+`IMOD0023` supports portable map imports. Ground-floor kind-1 and kind-4 records
+may supply entrance and arrival metadata for native locations and dungeons too.
+New location resources can have contiguous virtual pages for a basement and
+floors 0–3, with entrance metadata on floor zero only. CONTENTS.OVR refill modes
+3 and 4 mean “while the party has no skeleton keys” and “while the party has no
+glass sword,” allowing vanilla conditional discoveries to move without retaining
+an unrelated native discovery identity.
+
+`IMPSAV02` retains the map-state header and cell records from `IMPSAV01`, using
+header bytes 20–23 for a native portal's actual return map, world, X, and Y. It may
+have zero changed cell records when only the return point needs saving. Native
+portals remember the world actually entered from, including across save/load;
+ordinary saves continue using `IMPSAV01`. Both versions remain readable.

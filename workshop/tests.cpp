@@ -1,5 +1,6 @@
 #include "custom_tiles.h"
 #include "map_positions.h"
+#include "map_json.h"
 #include "extended_maps.h"
 #include "mod/npcs.h"
 #include "content_navigation.h"
@@ -99,6 +100,7 @@ static void nativeKeys(Dialogue::NativeTextViewport *viewport, const QString &ke
 }
 int main(int argc, char **argv) {
     std::cout << std::unitbuf;
+    QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
     QApplication app(argc, argv);
     if (qEnvironmentVariableIsSet("IMPERA_WORKSHOP_SCREENSHOT_DIR"))
         Workshop::applyTheme(app);
@@ -108,13 +110,291 @@ int main(int argc, char **argv) {
     app.setOrganizationName("ImperaTests");
     app.setApplicationName("WorkshopTests");
     int count = 0;
+    const bool mapJsonOnly = app.arguments().contains("--map-json-tests");
     auto test = [&](const char *name, auto fn) {
+        if (mapJsonOnly != QString::fromUtf8(name).startsWith("Portable map JSON")) return;
         std::cout << "RUN " << name << "\n";
         fn();
         ++count;
         std::cout << "PASS " << name << "\n";
     };
     try {
+        test("Portable map JSON transfers complete maps and rejects mismatches atomically", [&] {
+            QTemporaryDir a, b;
+            auto prepare = [&](const QString &dir) {
+                fixture(dir);
+                file(dir + "/BRIT.DAT", QByteArray(256, 5));
+                file(dir + "/UNDER.DAT", QByteArray(65536, 5));
+                file(dir + "/DATA.OVL", QByteArray(0x3986, 0));
+                file(dir + "/INIT.OOL", QByteArray(256, 0));
+                file(dir + "/BRIT.OOL", QByteArray(256, 0));
+                file(dir + "/UNDER.OOL", QByteArray(256, 0));
+                file(dir + "/TOWNE.DAT", QByteArray(16384, 5));
+                file(dir + "/TOWNE.NPC", QByteArray(4608, 0));
+                file(dir + "/TOWNE.TLK", U5::writeDialogue({}));
+                file(dir + "/BRIT.CBT", QByteArray(16 * 352, 0));
+                file(dir + "/DUNGEON.DAT", QByteArray(4096, 0));
+                file(dir + "/DUNGEON.CBT", QByteArray(112 * 352, 0));
+                QByteArray signs(67, 0);
+                signs[66] = char(255);
+                file(dir + "/SIGNS.DAT", signs);
+                Project p;
+                p.openGame(dir);
+                return p;
+            };
+            auto source = prepare(a.path()), target = prepare(b.path());
+            auto apply = [&](Project &p, const QMap<QString, QByteArray> &edits) {
+                for (auto it = edits.begin(); it != edits.end(); ++it) {
+                    p.resources[it.key()].edited = it.value();
+                    if (it.key() == "BRIT.OOL" || it.key() == "UNDER.OOL")
+                        p.resources[it.key()].included = true;
+                }
+                Workshop::hydrateExtendedMaps(p);
+                p.validate();
+            };
+            TypeDef tile;
+            TYPES_Vanilla(0, 5, &tile);
+            tile.id = 60000;
+            strcpy(tile.name, "Source floor");
+            QImage image(16, 16, QImage::Format_RGBA8888);
+            image.fill(Qt::white);
+            TypeDef actor, native;
+            TYPES_Vanilla(1, 80, &actor); actor.id = 60001; actor.width = actor.height = 2;
+            strcpy(actor.name, "Source magician");
+            TYPES_Vanilla(0, 5, &native); strcpy(native.name, "Imported grass");
+            QImage actorImage(32, 32, QImage::Format_RGBA8888); actorImage.fill(Qt::white);
+            source.resources["TYPES.OVR"].edited = CustomTiles::library(source, {
+                {tile.id, CustomTiles::record(tile, {{image, 150, 0}})},
+                {actor.id, CustomTiles::record(actor, {{actorImage, 150, 0}, {image, 150, 6}})},
+                {native.id, CustomTiles::record(native, {})}});
+            strcpy(tile.name, "Destination floor");
+            target.resources["TYPES.OVR"].edited = CustomTiles::library(
+                target, {{tile.id, CustomTiles::record(tile, {{image, 150, 0}})}});
+            auto page = source.mapPages("TOWNE.DAT")[0];
+            auto grid = MapDocument(&source, "TOWNE.DAT").rawTerrain(0);
+            auto expanded = CustomTiles::expanded(source, "TOWNE.DAT", page, 0, grid);
+            TYPES_Put32(expanded.data() + (10 * 32 + 10) * 4, 60000);
+            apply(source, CustomTiles::paint(source, "TOWNE.DAT", page, 0, grid, expanded));
+            auto npc = source.data("TOWNE.NPC");
+            for (int i = 0; i < 3; ++i) {
+                npc[16 + i] = 0;
+                npc[19 + i] = 10;
+                npc[22 + i] = 10;
+            }
+            npc[513] = 80;
+            npc[545] = 1;
+            source.resources["TOWNE.NPC"].edited = npc;
+            apply(source, CustomTiles::assignActor(source, "TOWNE.DAT", page, 0, 1, actor.id));
+            auto dialogue =
+                U5::encodeText("Mara<Entry>A mage.<Entry>Hello.<Entry>I "
+                               "study.<Entry>Farewell.\"<End Conversation><Entry><Any><Label 15>@");
+            source.resources["TOWNE.TLK"].edited = U5::writeDialogue({{1, dialogue}});
+            auto targetDialogue = dialogue;
+            targetDialogue[0] = char('D' + 128);
+            target.resources["TOWNE.TLK"].edited = U5::writeDialogue({{1, targetDialogue}});
+            auto otherNpc = target.data("TOWNE.NPC");
+            otherNpc[513] = 80;
+            otherNpc[545] = 1;
+            target.resources["TOWNE.NPC"].edited = otherNpc;
+            source.resources["SIGNS.DAT"].edited =
+                Workshop::writeSigns(source.data("SIGNS.DAT"), {{1, 0, 8, 8, "A portable sign"}});
+            source.resources["CONTENTS.OVR"].edited =
+                Workshop::addContentsAt(source, {0, 1, 0}, {7, 7}, true);
+            auto defs = Workshop::readContents(source.data("CONTENTS.OVR"));
+            auto &chest = defs.last();
+            chest.flags = 3;
+            chest.lockDifficulty = 10;
+            chest.trapDifficulty = 12;
+            chest.count = 1;
+            chest.items[0] = {1, 0, 100};
+            source.resources["CONTENTS.OVR"].edited =
+                Workshop::writeContents(defs, source.data("CONTENTS.OVR"));
+            auto local = Workshop::exportMapJson(source, "TOWNE.DAT", 0);
+            auto beforeOther = target.data("TOWNE.NPC").left(576);
+            apply(target, Workshop::importMapJson(target, "TOWNE.DAT", 2, local));
+            check(target.data("TOWNE.NPC").left(576) == beforeOther &&
+                      U5::byte(target.data("TOWNE.NPC"), 576 + 513) == 80,
+                  "Local import overwrote an unrelated location or lost NPCs");
+            auto actorType = CustomTiles::actorType(target, "TOWNE.DAT", target.mapPages("TOWNE.DAT")[2], 2, 1, 0);
+            auto actorDef = CustomTiles::definition(target, actorType);
+            check(TYPES_Width(&actorDef) == 2 && TYPES_Height(&actorDef) == 2 &&
+                      QString::fromLatin1(CustomTiles::definition(target, 5).name) == "Imported grass",
+                  "Composite actor artwork or shared vanilla type properties did not transfer");
+            auto talk = U5::readDialogue(target.data("TOWNE.TLK"));
+            int speech = U5::byte(target.data("TOWNE.NPC"), 576 + 545);
+            check(speech != 1 && std::any_of(talk.begin(), talk.end(),
+                                             [&](auto c) {
+                                                 return c.id == unsigned(speech) &&
+                                                        c.bytes == dialogue;
+                                             }),
+                  "NPC conversation was not safely remapped");
+            auto imported = CustomTiles::placements(target);
+            bool importedType = false;
+            for (auto c : imported)
+                if (c.map == 2 && c.kind == 0) {
+                    importedType =
+                        c.type != 60000 &&
+                        QString::fromLatin1(CustomTiles::definition(target, c.type).name) ==
+                            "Source floor";
+                }
+            check(importedType &&
+                      QString::fromLatin1(CustomTiles::definition(target, 60000).name) ==
+                          "Destination floor",
+                  "Custom tile ID conflict was not remapped");
+            const int typesAfterFirstImport = CustomTiles::records(target).size();
+            apply(target, Workshop::importMapJson(target, "TOWNE.DAT", 2, local));
+            check(CustomTiles::records(target).size() == typesAfterFirstImport,
+                  "Repeated map imports duplicate identical custom artwork");
+            check(Workshop::readSigns(target.data("SIGNS.DAT")).last().map == 2 &&
+                      Workshop::mapContents(target, {0, 2, 0}).last().items[0].quantity == 100,
+                  "Sign or container contents did not transfer");
+            for (const QString &r :
+                 {QString("BRIT.DAT"), QString("DUNGEON.DAT"), QString("DUNGEON.CBT")})
+                rejects([&] { Workshop::importMapJson(target, r, 0, local); });
+            auto invalid = QJsonDocument::fromJson(local).object();
+            auto rootMap = invalid["map"].toObject();
+            auto floors = rootMap["floors"].toArray();
+            auto floor = floors[0].toObject();
+            floor["width"] = 257;
+            floors[0] = floor;
+            rootMap["floors"] = floors;
+            invalid["map"] = rootMap;
+            auto untouched = target.data("MAPS.OVR");
+            rejects([&] {
+                Workshop::importMapJson(target, "TOWNE.DAT", 2, QJsonDocument(invalid).toJson());
+            });
+            check(target.data("MAPS.OVR") == untouched,
+                  "Rejected import partially changed the project");
+            apply(source, Workshop::addDungeon(source, "BRIT.DAT", "Portable depths", {220, 120}, 9,
+                                               7, 0, 0x18));
+            apply(target, Workshop::addDungeon(target, "BRIT.DAT", "Destination depths", {221, 120},
+                                               8, 8, 0, 0x18));
+            apply(target, Workshop::addLocation(target, "BRIT.DAT", "New portable town", {230, 130},
+                                                16, 16, 5));
+            apply(target, Workshop::importMapJson(target, "LOC043.DAT", 0, local));
+            check(target.mapPages("LOC043.DAT").size() == 2 &&
+                      target.mapPages("LOC043.DAT")[1].floor == 1 &&
+                      U5::byte(target.data("LOC043.NPC"), 513) == 80,
+                  "A new location did not adopt imported floors and NPCs");
+            auto dungeon = Workshop::exportMapJson(source, "DUNGEON.DAT", 64);
+            apply(target, Workshop::importMapJson(target, "DUNGEON.DAT", 64, dungeon));
+            check(Workshop::DungeonDocument(&target).size(9, 7) == QSize(9, 7) &&
+                      target.locationName(42) == "Portable depths",
+                  "Dungeon JSON lost floors or its name");
+            auto combat = Workshop::exportMapJson(source, "DUNGEON.CBT", 112);
+            apply(target, Workshop::importMapJson(target, "DUNGEON.CBT", 113, combat));
+            auto world = Workshop::exportMapJson(source, "UNDER.DAT", 0);
+            apply(target, Workshop::importMapJson(target, "UNDER.DAT", 0, world));
+            check(MapDocument(&target, "UNDER.DAT").rawTerrain(0) ==
+                      MapDocument(&source, "UNDER.DAT").rawTerrain(0),
+                  "World JSON terrain changed");
+            auto worldTerrain = MapDocument(&source, "BRIT.DAT").rawTerrain(0);
+            auto entry = Workshop::mapPositions(source);
+            auto first =
+                *std::find_if(entry.begin(), entry.end(), [](auto p) { return p.id == 100; });
+            worldTerrain[first.cell.y() * 256 + first.cell.x()] = char(0x14);
+            apply(source, MapDocument(&source, "BRIT.DAT").changes(0, worldTerrain));
+            auto surface = Workshop::exportMapJson(source, "BRIT.DAT", 0);
+            apply(target, Workshop::importMapJson(target, "UNDER.DAT", 0, surface));
+            bool linkedDungeon = false, nativePortal = false;
+            for (const auto &m : Workshop::extendedMaps(target)) {
+                linkedDungeon |= m.kind == 4 && m.id != 42 && !m.floor && m.world == -1 &&
+                                 m.name == "Portable depths";
+                nativePortal |= m.kind == 1 && m.id == 1 && m.world == -1;
+            }
+            check(linkedDungeon && nativePortal,
+                  "World JSON did not transfer its linked destinations");
+            auto packed = target.package();
+            check(packed.left(8) == "IMOD0023",
+                  "Portable entrances do not require the updated engine");
+            auto legacy = packed;
+            legacy.replace(0, 8, "IMOD0022");
+            rejects([&] { target.importPackage(legacy); });
+            QTemporaryDir exports;
+            const auto inputPath = exports.path() + "/town.json";
+            file(inputPath, local);
+            WorkshopWindow window;
+            check(window.openGame(b.path()), "Map JSON UI fixture");
+            window.show();
+            window.selectResource("TOWNE.DAT");
+            auto active = [&] {
+                return window.findChild<QStackedWidget *>("workspaces")->currentWidget();
+            };
+            auto map = dynamic_cast<MapWorkspace *>(active()->findChild<QWidget *>("mapWorkspace"));
+            check(map, "Map workspace missing before import");
+            map->openPage(2);
+            const auto beforeNpc = window.projectForTests().data("TOWNE.NPC");
+            QString warning;
+            QTimer watchdog;
+            QObject::connect(&watchdog, &QTimer::timeout, [&] {
+                if (auto dialog = qobject_cast<QMessageBox *>(QApplication::activeModalWidget())) {
+                    warning = dialog->text();
+                    dialog->accept();
+                }
+            });
+            auto selectFile = [&](const QString &path) {
+                QTimer::singleShot(0, [&, path] {
+                    auto dialog = qobject_cast<QFileDialog *>(QApplication::activeModalWidget());
+                    check(dialog, "Map import/export file dialog missing");
+                    dialog->selectFile(path);
+                    QMetaObject::invokeMethod(dialog, "accept", Qt::DirectConnection);
+                });
+            };
+            watchdog.start(10);
+            selectFile(inputPath);
+            active()->findChild<QPushButton *>("mapImport")->click();
+            app.processEvents();
+            watchdog.stop();
+            if (!warning.isEmpty())
+                throw std::runtime_error(warning.toStdString());
+            check(U5::byte(window.projectForTests().data("TOWNE.NPC"), 576 + 513) == 80 &&
+                      active()->findChild<QWidget *>("mapCanvas"),
+                  "Import button did not rebuild the map with its contents");
+            QAction *undo = nullptr, *redo = nullptr;
+            for (auto action : window.findChildren<QAction *>()) {
+                if (action->shortcut() == QKeySequence::Undo)
+                    undo = action;
+                if (action->shortcut() == QKeySequence::Redo)
+                    redo = action;
+            }
+            check(undo && redo, "Map import history missing");
+            undo->trigger();
+            app.processEvents();
+            check(window.projectForTests().data("TOWNE.NPC") == beforeNpc &&
+                      window.projectForTests().data("TYPES.OVR").isEmpty(),
+                  "Map import was not one undoable edit");
+            redo->trigger();
+            app.processEvents();
+            const auto outputPath = exports.path() + "/exported.json";
+            auto exportAction = active()->findChild<QAction *>("mapExportJson");
+            check(exportAction && active()->findChild<QPushButton *>("mapImport"),
+                  "Map JSON toolbar controls missing");
+            watchdog.start(10);
+            selectFile(outputPath);
+            exportAction->trigger();
+            watchdog.stop();
+            if (!warning.isEmpty())
+                throw std::runtime_error(warning.toStdString());
+            QFile output(outputPath);
+            check(
+                output.open(QIODevice::ReadOnly) &&
+                    QJsonDocument::fromJson(output.readAll()).object()["map"].toObject()["kind"] ==
+                        "location",
+                "Export menu did not write location JSON");
+            const auto wrongPath = exports.path() + "/dungeon.json";
+            file(wrongPath, dungeon);
+            const auto beforeWrong = window.projectForTests().data("MAPS.OVR");
+            watchdog.start(10);
+            selectFile(wrongPath);
+            active()->findChild<QPushButton *>("mapImport")->click();
+            watchdog.stop();
+            check(!warning.isEmpty() && window.projectForTests().data("MAPS.OVR") == beforeWrong,
+                  "Wrong-type UI import was not rejected atomically");
+            window.selectResource("DUNGEON.DAT");
+            check(active()->findChild<QPushButton *>("mapImport") &&
+                      active()->findChild<QAction *>("mapExportJson"),
+                  "Dungeon JSON toolbar controls are missing");
+        });
         test("Extended map dimensions preserve native layouts, rectangular edits and crop safety",
              [&] {
                  QTemporaryDir dir;

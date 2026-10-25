@@ -127,10 +127,16 @@ QVector<U5::MapPage> Project::mapPages(const QString &resource) const {
     auto pages = MAPS_LocationResource(resource.toLatin1().constData())
                      ? QVector<U5::MapPage>()
                      : U5::mapPages(resource, data(resource));
-    if (pages.isEmpty())
-        for (const auto &map : extended)
-            if (map.resource == resource && MAPS_NewLocation(map.id))
+    if (MAPS_LocationResource(resource.toLatin1().constData())) {
+        auto virtualPages = extended;
+        std::sort(virtualPages.begin(), virtualPages.end(),
+                  [](const auto &a, const auto &b) { return a.page < b.page; });
+        for (const auto &map : virtualPages)
+            if (map.kind == 1 && map.resource == resource) {
+                require(map.page == pages.size(), "Non-contiguous location floor pages");
                 pages.append({map.name, map.width, 0, map.width, 0, map.floor, map.height});
+            }
+    }
     if (resource == "DUNGEON.DAT") {
         auto additions = extended;
         std::sort(additions.begin(), additions.end(),
@@ -277,11 +283,19 @@ QByteArray Project::package() const {
     const auto bindings = resources.value("TYPEMAP.OVR").edited;
     for (int off = 32; off + 16 <= bindings.size(); off += 16)
         wideRooms |= U5::byte(bindings, off + 5) != 0;
+    bool portableConditions = false;
+    for (const auto &map : Workshop::extendedMaps(*this))
+        portableConditions |= (map.kind == 1 || map.kind == 4) && map.id <= 40 && map.world != -2;
+    for (const auto &map : Workshop::extendedMaps(*this))
+        portableConditions |= map.kind == 1 && MAPS_NewLocation(map.id) && map.floor != 0;
+    for (const auto &contents : Workshop::readContents(resources.value("CONTENTS.OVR").edited))
+        portableConditions |= contents.refill > 2;
     QByteArray out(
-        wideRooms       ? "IMOD0022"
-        : newDungeons   ? "IMOD0021"
-        : dungeonMaps   ? "IMOD0020"
-        : specialActors ? "IMOD0019"
+        portableConditions ? "IMOD0023"
+        : wideRooms        ? "IMOD0022"
+        : newDungeons      ? "IMOD0021"
+        : dungeonMaps      ? "IMOD0020"
+        : specialActors    ? "IMOD0019"
         : (locationObjects || list.contains("MAPS.OVR") ||
            resources.value("SIGNS.DAT").edited.startsWith("ISIG0001"))
             ? "IMOD0018"

@@ -89,7 +89,7 @@ int CONTENTS_Validate(const void *data, size_t size) {
         const unsigned char *r = p + 32 + i * 96;
         ContentsDef d;
         CONTENTS_DecodeRecord(r, p + 8, &d);
-        if (!d.id || d.kind > 2 || d.action > 1 || d.refill > 2 || d.count > 16 || d.flags > 3 ||
+        if (!d.id || d.kind > 2 || d.action > 1 || d.refill > 4 || d.count > 16 || d.flags > 3 ||
             d.trapEffect || d.lockDifficulty > 30 || d.trapDifficulty > 30)
             return 0;
         if (d.kind == 0) {
@@ -253,6 +253,10 @@ int CONTENTS_Available(const ContentsDef *d, ContentsState *s, uint32_t day, con
             return 0; // Import vanilla's already-collected Minoc reward on the first visit.
         return !(s->flags & 1) || s->day != day;
     }
+    if (d->refill == 3)
+        return !keys;
+    if (d->refill == 4)
+        return !questItem;
     if (d->refill == 2) {
         if (d->original == 13)
             return !keys;

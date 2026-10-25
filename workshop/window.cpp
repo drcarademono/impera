@@ -1261,6 +1261,7 @@ QWidget *WorkshopWindow::resourceEditor(const QString &name) {
                 dungeonRoomNavigation = true;
                 selectResource("DUNGEON.CBT");
             });
+        workspace->refreshAfterImport = [this] { rebuildEditor(); };
         flushDraft = [workspace] {
             workspace->canvas->cancelStroke();
             return true;

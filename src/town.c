@@ -24,11 +24,13 @@
 
 int TOWN_ExtendedExit(void) {
     const unsigned char *r = MAPS_Record(1, D_5893_map_id, 0);
-    if (!MAPS_NewLocation(D_5893_map_id) || !r)
+    if (!r || (int8_t)r[14] == -2)
         return 0;
-    D_5895_map_level = r[14];
-    D_5896_map_x = r[15];
-    D_5897_map_y = r[16];
+    int world = (int8_t)r[14], x = r[15], y = r[16];
+    MAPS_ReturnPoint(D_5893_map_id, &world, &x, &y);
+    D_5895_map_level = world;
+    D_5896_map_x = x;
+    D_5897_map_y = y;
     D_5893_map_id = 0;
     D_594f = 0;
     return 1;

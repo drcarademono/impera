@@ -13,6 +13,8 @@ static int cacheValid, cacheFloor;
 static unsigned cacheKind, cacheId;
 static const unsigned char *cacheRecord;
 static unsigned char customDungeons[128];
+static unsigned char returnMap, returnX, returnY;
+static int8_t returnWorld;
 int MAPS_Mount(const void *bytes, size_t size) {
     unsigned char *next = NULL;
     if (bytes) {
@@ -21,6 +23,7 @@ int MAPS_Mount(const void *bytes, size_t size) {
         memcpy(next, bytes, size);
     }
     cacheValid = 0;
+    returnMap = 0;
     memset(customDungeons, 0, sizeof(customDungeons));
     for (size_t off = MAPS_HEADER; next && off < size; off += MAPS_U32(next + off))
         if (next[off + 4] == 4 && MAPS_NewLocation(next[off + 5]))
@@ -34,6 +37,7 @@ int MAPS_Mount(const void *bytes, size_t size) {
     return 1;
 }
 void MAPS_Reset(void) {
+    returnMap = 0;
     if (working)
         memcpy(working, source, catalogSize);
 }
@@ -57,6 +61,21 @@ int MAPS_DungeonRoom(unsigned id, unsigned room) {
         return -1;
     const unsigned char *r = MAPS_Record(4, id, 0);
     return (id > 40 ? (int)MAPS_Word(r + 21) : id > 33 ? (int)(id - 34) * 16 : 0) + room;
+}
+void MAPS_Entered(unsigned map, int world, int x, int y) {
+    const unsigned char *r = MAPS_Record(MAPS_IsDungeon(map) ? 4 : 1, map, 0);
+    returnMap = map <= 40 && r && (int8_t)r[14] != -2 ? map : 0;
+    returnWorld = world;
+    returnX = x;
+    returnY = y;
+}
+int MAPS_ReturnPoint(unsigned map, int *world, int *x, int *y) {
+    if (!returnMap || returnMap != map)
+        return 0;
+    *world = returnWorld;
+    *x = returnX;
+    *y = returnY;
+    return 1;
 }
 void MAPS_Combat(unsigned kind, unsigned id) {
     consumedTriggers = 0;
@@ -138,8 +157,8 @@ unsigned char *MAPS_CombatCell(int x, int y, unsigned char *native) {
 const unsigned char *MAPS_Entrance(int world, int x, int y) {
     for (size_t off = MAPS_HEADER; working && off < catalogSize; off += MAPS_U32(working + off)) {
         const unsigned char *r = working + off;
-        if ((r[4] == 1 || (r[4] == 4 && !r[8])) && MAPS_NewLocation(r[5]) &&
-            (int8_t)r[14] == (int8_t)world && r[15] == x && r[16] == y)
+        if ((r[4] == 1 || r[4] == 4) && !r[8] && (int8_t)r[14] == (int8_t)world && r[15] == x &&
+            r[16] == y)
             return r;
     }
     return NULL;
@@ -154,20 +173,26 @@ int MAPS_WriteState(FILE *f) {
             size += length;
         }
     }
-    if (!count)
+    if (!count && !returnMap)
         return 1;
-    unsigned char *b = malloc(size), h[24] = {0};
+    unsigned char *b = malloc(size ? size : 1), h[24] = {0};
     if (!b)
         return 0;
     size_t dest = 0;
-    for (size_t off = MAPS_HEADER; off < catalogSize; off += MAPS_U32(working + off)) {
+    for (size_t off = MAPS_HEADER; working && off < catalogSize; off += MAPS_U32(working + off)) {
         unsigned length = MAPS_U32(working + off);
         if (memcmp(working + off + MAPS_RECORD, source + off + MAPS_RECORD, length - MAPS_RECORD)) {
             memcpy(b + dest, working + off, length);
             dest += length;
         }
     }
-    memcpy(h, "IMPSAV01", 8);
+    memcpy(h, returnMap ? "IMPSAV02" : "IMPSAV01", 8);
+    if (returnMap) {
+        h[20] = returnMap;
+        h[21] = returnWorld;
+        h[22] = returnX;
+        h[23] = returnY;
+    }
     TYPES_Put32(h + 8, size);
     TYPES_Put32(h + 12, count);
     TYPES_Put32(h + 16, MOD_Crc32(b, size));
@@ -179,7 +204,8 @@ int MAPS_ReadState(FILE *f, int apply) {
     long start = ftell(f);
     unsigned char h[24] = {0};
     size_t n = fread(h, 1, 24, f);
-    if (n < 8 || memcmp(h, "IMPSAV01", 8)) {
+    int v2 = n >= 8 && !memcmp(h, "IMPSAV02", 8);
+    if (n < 8 || (memcmp(h, "IMPSAV01", 8) && !v2)) {
         if (ferror(f) || fseek(f, start, SEEK_SET))
             return 0;
         if (apply)
@@ -187,8 +213,17 @@ int MAPS_ReadState(FILE *f, int apply) {
         return 1;
     }
     unsigned size = MAPS_U32(h + 8), count = MAPS_U32(h + 12);
-    if (n != 24 || size > MAPS_MAX_BYTES || count > MAPS_MAX || !count || MAPS_U32(h + 20))
+    if (n != 24 || size > MAPS_MAX_BYTES || count > MAPS_MAX ||
+        (!v2 && (!count || MAPS_U32(h + 20))))
         return 0;
+    if (v2) {
+        const unsigned char *entry = MAPS_Record(MAPS_IsDungeon(h[20]) ? 4 : 1, h[20], 0);
+        if (!h[20] || !entry || (int8_t)entry[14] == -2 ||
+            ((int8_t)h[21] != 0 && (int8_t)h[21] != -1) ||
+            h[22] >= MAPS_ActiveWidth(0, (int8_t)h[21]) ||
+            h[23] >= MAPS_ActiveHeight(0, (int8_t)h[21]))
+            return 0;
+    }
     unsigned char *b = calloc(1, MAPS_HEADER + size);
     if (!b)
         return 0;
@@ -209,6 +244,12 @@ int MAPS_ReadState(FILE *f, int apply) {
             const unsigned char *r = b + off;
             unsigned char *target = (unsigned char *)MAPS_Record(r[4], MAPS_Id(r), (int8_t)r[8]);
             memcpy(target + MAPS_RECORD, r + MAPS_RECORD, MAPS_U32(r) - MAPS_RECORD);
+        }
+        if (v2) {
+            returnMap = h[20];
+            returnWorld = (int8_t)h[21];
+            returnX = h[22];
+            returnY = h[23];
         }
     }
     free(b);

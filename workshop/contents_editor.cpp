@@ -200,7 +200,8 @@ ContentsEditor::ContentsEditor(Project *p, ContentsTarget t, MapCanvas *c, Commi
     form->addRow("Find items by", interaction);
     refill = new QComboBox;
     refill->setObjectName("contentsRefill");
-    refill->addItems({"Once per game", "Every game day", "Original special condition"});
+    refill->addItems({"Once per game", "Every game day", "Original special condition",
+                      "While party has no skeleton keys", "While party has no glass sword"});
     refill->setToolTip(
         "Controls when collected items return. Unclaimed items never accumulate another batch.");
     form->addRow("Refill", refill);

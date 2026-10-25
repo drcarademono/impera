@@ -30,6 +30,14 @@ static size_t encode(const ContentsDef *d, unsigned n) {
     return 32 + 96 * n;
 }
 int main(void) {
+    ContentsDef portable = definition(900, 0, 2, 0, 1, 1);
+    ContentsState initial = {0};
+    portable.refill = 3;
+    assert(CONTENTS_Available(&portable, &initial, 1, NULL, 0, 0, 0));
+    assert(!CONTENTS_Available(&portable, &initial, 1, NULL, 0, 1, 0));
+    portable.refill = 4;
+    assert(CONTENTS_Available(&portable, &initial, 1, NULL, 0, 0, 0));
+    assert(!CONTENTS_Available(&portable, &initial, 1, NULL, 0, 0, 1));
     assert(U5_Discoveries[14][0] == 7 && U5_Discoveries[14][1] == 133 &&
            U5_Discoveries[14][2] == 5 && U5_Discoveries[14][4] == 2 && U5_Discoveries[14][5] == 2);
     ContentsDef d[4] = {definition(15, 0, 5, 0, 2, 2), definition(100, 0, 0, -1, 130, 150),

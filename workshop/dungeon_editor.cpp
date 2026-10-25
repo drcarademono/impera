@@ -2,6 +2,7 @@
 #include "extended_maps.h"
 #include "dungeon_editor.h"
 #include "map_resize_dialog.h"
+#include "map_json.h"
 #include "contents_editor.h"
 #include "map_entities.h"
 #include "dungeon_names.h"
@@ -693,6 +694,66 @@ DungeonWorkspace::DungeonWorkspace(
         }
     });
     connect(floor, qOverload<int>(&QComboBox::currentIndexChanged), this, [=](int) { load(); });
+    auto exportButton = new QPushButton("Export");
+    exportButton->setObjectName("mapExport");
+    auto exportMenu = new QMenu(exportButton);
+    exportMenu->addAction("Map PNG…", this, [=] {
+        try {
+            auto path =
+                QFileDialog::getSaveFileName(this, "Export dungeon floor", {}, "PNG (*.png)");
+            if (path.isEmpty())
+                return;
+            U5::require(QFileInfo(path).absolutePath() != p->sourceDirectory,
+                        "Export outside the original game folder");
+            auto dims = document->size(dungeon, floor->currentIndex());
+            auto cells = document->level(dungeon, floor->currentIndex());
+            QImage image(dims.width() * 16, dims.height() * 16, QImage::Format_RGB32);
+            image.fill(Qt::black);
+            QPainter painter(&image);
+            for (int y = 0; y < dims.height(); ++y)
+                for (int x = 0; x < dims.width(); ++x)
+                    painter.drawImage(QRect(x * 16, y * 16, 16, 16),
+                                      canvas->tiles[U5::byte(cells, y * dims.width() + x)]);
+            painter.end();
+            U5::require(image.save(path, "PNG"), "Cannot export PNG");
+        } catch (const std::exception &e) {
+            QMessageBox::warning(this, "Cannot export map", QString::fromUtf8(e.what()));
+        }
+    });
+    auto jsonExport = exportMenu->addAction("Map JSON…", this, [=] {
+        try {
+            saveMapJson(this, *p, "DUNGEON.DAT",
+                        document->pageIndex(dungeon, floor->currentIndex()));
+        } catch (const std::exception &e) {
+            QMessageBox::warning(this, "Cannot export map", QString::fromUtf8(e.what()));
+        }
+    });
+    jsonExport->setObjectName("mapExportJson");
+    jsonExport->setToolTip("Export all floors, contents, and linked encounter rooms.");
+    exportButton->setMenu(exportMenu);
+    row->addWidget(exportButton);
+    auto importButton = new QPushButton("Import…");
+    importButton->setObjectName("mapImport");
+    importButton->setToolTip("Replace this dungeon from a dungeon map JSON.");
+    row->addWidget(importButton);
+    connect(importButton, &QPushButton::clicked, this, [=] {
+        try {
+            canvas->cancelStroke();
+            auto json = openMapJson(this);
+            if (json.isEmpty())
+                return;
+            auto edits = importMapJson(*p, "DUNGEON.DAT",
+                                       document->pageIndex(dungeon, floor->currentIndex()), json);
+            if (commit(edits, "Import map")) {
+                if (refreshAfterImport)
+                    refreshAfterImport();
+                else
+                    load();
+            }
+        } catch (const std::exception &e) {
+            QMessageBox::warning(this, "Cannot import map", QString::fromUtf8(e.what()));
+        }
+    });
     load();
     brush(canvas->brush);
 }

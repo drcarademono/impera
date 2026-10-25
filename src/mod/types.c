@@ -377,7 +377,8 @@ static int validCell(const TypeCell *c) {
     return c->kind <= 2 &&
            (c->kind       ? c->floor == 0
             : c->map == 0 ? (c->floor == 0 || c->floor == -1)
-                          : MAPS_Town(c->map) && (!MAPS_NewLocation(c->map) || !c->floor));
+                          : MAPS_Town(c->map) &&
+                                (!MAPS_NewLocation(c->map) || (c->floor >= -1 && c->floor <= 3)));
 }
 int TYPES_ValidateMap(const void *v, size_t size, const void *defs, size_t len) {
     const unsigned char *b = v;

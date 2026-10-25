@@ -26,5 +26,6 @@ class DungeonWorkspace : public QWidget {
                      std::function<bool(const QMap<QString, QByteArray> &, const QString &)> commit,
                      std::function<void(int)> room, QWidget *parent = nullptr);
     MapCanvas *canvas;
+    std::function<void()> refreshAfterImport;
 };
 } // namespace Workshop
