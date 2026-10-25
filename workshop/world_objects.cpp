@@ -115,7 +115,7 @@ QString mapObjectName(int shape, int value, int aux) {
     if (shape == 14)
         return "Sandalwood box";
     if (shape == 31)
-        return NPCS_Blood(shape, value, aux) ? "Blood splatter" : "Corpse";
+        return "Gore";
     if (shape == TILE_ACTOR_CHEST)
         return "Chest";
     if (shape == TILE_ACTOR_GOLD)
@@ -129,7 +129,7 @@ QString mapObjectName(int shape, int value, int aux) {
     if (shape == TILE_ACTOR_CARPET)
         return "Magic carpet";
     if (shape == TILE_ACTOR_SLEEP)
-        return "Corpse (intact)";
+        return "Corpse";
     if ((shape & 0xf8) == TILE_ACTOR_FRIGATE_20)
         return "Frigate";
     if (shape >= TILE_ACTOR_SKIFF && shape <= TILE_ACTOR_SKIFF + 3)
@@ -286,9 +286,7 @@ QWidget *worldObjectEditor(Project *project, int initialWorld, ObjectCommit comm
                 index = type->count() - 1;
             }
             if (auto corpse = type->findData(31); corpse >= 0)
-                type->setItemText(corpse, NPCS_Blood(tile, uchar(r[5]), uchar(r[7]))
-                                              ? "Blood splatter"
-                                              : "Corpse");
+                type->setItemText(corpse, "Gore");
             type->setCurrentIndex(index);
             x->setValue(uchar(r[2]));
             y->setValue(uchar(r[3]));

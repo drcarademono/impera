@@ -232,9 +232,14 @@ QVector<ContentDestination> contentDestinations(const Project &project) {
         QString workspace, group = c.group, title = c.title;
         switch (c.editor) {
         case EditorKind::Dungeon:
-            workspace = "World";
-            group = "Dungeons";
-            break;
+            for (int dungeon = 0; dungeon < 8; ++dungeon) {
+                ContentDestination d{QString("world/dungeon/%1").arg(dungeon), "World", "Dungeons",
+                                     project.locationName(33 + dungeon), name, -1};
+                d.selection["DUNGEON.DAT/dungeon"] = dungeon;
+                d.sources = {name};
+                result.append(d);
+            }
+            continue;
         case EditorKind::LocationText:
             if (name == "SIGNS.DAT") {
                 bool mapAvailable = false;
@@ -534,22 +539,22 @@ QMap<QString, QStringList> contentChanges(const Project &project,
                         original.data(d.resource).mid(map.pages[d.page].offset, 352))
                     parts.append("Encounter details");
             } else if (d.resource == "DUNGEON.DAT") {
-                for (int id = 33; id <= 40; ++id)
-                    if (project.locationName(id) != original.locationName(id)) {
-                        parts.append("Location names");
-                        break;
-                    }
+                const int dungeon = d.selection.value("DUNGEON.DAT/dungeon");
+                const int id = 33 + dungeon;
+                if (project.locationName(id) != original.locationName(id))
+                    parts.append("Location names");
                 if (changed("MAPS.OVR"))
                     for (const auto &m : extendedMaps(project))
-                        if (m.kind == 4) {
+                        if (m.kind == 4 && m.id == unsigned(id)) {
                             parts.append("Dungeon dimensions / terrain");
                             break;
                         }
-                if (changed(d.resource))
+                if (project.data(d.resource).mid(dungeon * 512, 512) !=
+                    original.data(d.resource).mid(dungeon * 512, 512))
                     parts.append("Dungeon terrain");
                 if (changed("CONTENTS.OVR"))
                     for (const auto &entry : readContents(project.data("CONTENTS.OVR")))
-                        if (!entry.kind && entry.map >= 33) {
+                        if (!entry.kind && entry.map == unsigned(id)) {
                             parts.append("Contents");
                             break;
                         }

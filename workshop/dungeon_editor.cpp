@@ -240,12 +240,9 @@ DungeonWorkspace::DungeonWorkspace(
     auto document = std::make_shared<DungeonDocument>(p);
     auto layout = new QVBoxLayout(this);
     auto row = new QHBoxLayout;
-    auto dungeon = new QComboBox;
-    dungeon->setObjectName("dungeonSelector");
-    for (int i = 0; i < 8; ++i)
-        dungeon->addItem(p->locationName(33 + i));
-    dungeon->setToolTip("Choose a dungeon. Every dungeon has eight underground levels.");
-    dungeon->setCurrentIndex(qBound(0, state->value("DUNGEON.DAT/dungeon"), 7));
+    const int dungeon = qBound(0, state->value("DUNGEON.DAT/dungeon"), 7);
+    auto dungeonName = new QLabel(p->locationName(33 + dungeon));
+    dungeonName->setObjectName("dungeonName");
     auto floor = new QComboBox;
     floor->setObjectName("dungeonLevelSelector");
     for (int i = 0; i < 8; ++i)
@@ -253,15 +250,14 @@ DungeonWorkspace::DungeonWorkspace(
     floor->setToolTip(
         "Level 1 is nearest the surface; Level 8 is deepest. Engine indices are 0–7.");
     floor->setCurrentIndex(qBound(0, state->value("DUNGEON.DAT/level"), 7));
-    row->addWidget(new QLabel("Dungeon:"));
-    row->addWidget(dungeon);
+    row->addWidget(dungeonName);
     auto rename = new QToolButton;
     rename->setObjectName("renameLocation");
     rename->setIcon(MapCanvas::toolIcon(MapCanvas::Pencil));
     rename->setToolTip("Rename dungeon");
     row->addWidget(rename);
     connect(rename, &QToolButton::clicked, this, [=] {
-        const int index = dungeon->currentIndex();
+        const int index = dungeon;
         bool ok = false;
         const auto name = QInputDialog::getText(this, "Rename dungeon", "Name", QLineEdit::Normal,
                                                 p->locationName(33 + index), &ok);
@@ -269,7 +265,7 @@ DungeonWorkspace::DungeonWorkspace(
             return;
         try {
             if (commit({{"LOCATIONS.OVR", p->renameLocation(33 + index, name)}}, "Rename dungeon"))
-                dungeon->setItemText(index, p->locationName(33 + index));
+                dungeonName->setText(p->locationName(33 + index));
         } catch (const std::exception &error) {
             QMessageBox::warning(this, "Cannot rename dungeon", QString::fromUtf8(error.what()));
         }
@@ -430,7 +426,7 @@ DungeonWorkspace::DungeonWorkspace(
             delete *contentsPanel;
         }
         *contentsPanel = new ContentsEditor(
-            p, {0, 33 + dungeon->currentIndex(), floor->currentIndex()}, canvas, commit);
+            p, {0, 33 + dungeon, floor->currentIndex()}, canvas, commit);
         inspectors->addWidget(*contentsPanel);
         inspectors->setCurrentWidget(*contentsPanel);
         (*contentsPanel)->selectCell(cell);
@@ -444,7 +440,7 @@ DungeonWorkspace::DungeonWorkspace(
     connect(positions, &QToolButton::clicked, this, [=] {
         canvas->cancelStroke();
         U5::MapPage page{};
-        page.settlement = dungeon->currentIndex();
+        page.settlement = dungeon;
         page.floor = floor->currentIndex();
         auto old = inspectors->findChild<QWidget *>("mapPositionEditor");
         if (old) {
@@ -472,7 +468,7 @@ DungeonWorkspace::DungeonWorkspace(
             canvas->beginPlacement(container ? 0x40 : -1, true, [=](QPoint cell) {
                 try {
                     auto bytes =
-                        addContentsAt(*p, {0, 33 + dungeon->currentIndex(), floor->currentIndex()},
+                        addContentsAt(*p, {0, 33 + dungeon, floor->currentIndex()},
                                       cell, container);
                     if (!commit({{"CONTENTS.OVR", bytes}},
                                 container ? "Add dungeon chest" : "Add container"))
@@ -493,7 +489,7 @@ DungeonWorkspace::DungeonWorkspace(
     tools->insertWidget(7, addMenuButton);
     canvas->deleteItem = [=] {
         try {
-            auto target = ContentsTarget{0, 33 + dungeon->currentIndex(), floor->currentIndex()};
+            auto target = ContentsTarget{0, 33 + dungeon, floor->currentIndex()};
             auto cell = canvas->keyboardCell;
             for (auto actor : canvas->actors)
                 if (actor.npc == canvas->selectedNpc)
@@ -535,7 +531,7 @@ DungeonWorkspace::DungeonWorkspace(
     auto selected = std::make_shared<QPoint>(
         QPoint(qMax(0, state->value("DUNGEON.DAT/x")), qMax(0, state->value("DUNGEON.DAT/y"))));
     auto inspect = [=] {
-        int d = dungeon->currentIndex(), f = floor->currentIndex(),
+        int d = dungeon, f = floor->currentIndex(),
             v = U5::byte(canvas->ids, selected->y() * canvas->side + selected->x());
         (*state)["DUNGEON.DAT/x"] = selected->x();
         (*state)["DUNGEON.DAT/y"] = selected->y();
@@ -575,16 +571,16 @@ DungeonWorkspace::DungeonWorkspace(
         canvas->moveNpc = {};
         canvas->actors.clear();
         canvas->positionMarkers.clear();
-        (*state)["DUNGEON.DAT/dungeon"] = dungeon->currentIndex();
+        (*state)["DUNGEON.DAT/dungeon"] = dungeon;
         (*state)["DUNGEON.DAT/level"] = floor->currentIndex();
         canvas->clearSelection();
-        const auto dims = document->size(dungeon->currentIndex(), floor->currentIndex());
+        const auto dims = document->size(dungeon, floor->currentIndex());
         canvas->side = dims.width();
         canvas->rows = dims.height();
         *selected = {qBound(0, selected->x(), dims.width() - 1),
                      qBound(0, selected->y(), dims.height() - 1)};
-        canvas->ids = document->level(dungeon->currentIndex(), floor->currentIndex());
-        auto original = document->level(dungeon->currentIndex(), floor->currentIndex(), true);
+        canvas->ids = document->level(dungeon, floor->currentIndex());
+        auto original = document->level(dungeon, floor->currentIndex(), true);
         canvas->original = QByteArray(dims.width() * dims.height(), 0);
         for (int y = 0; y < qMin(8, dims.height()); y++)
             memcpy(canvas->original.data() + y * dims.width(), original.constData() + y * 8,
@@ -619,7 +615,7 @@ DungeonWorkspace::DungeonWorkspace(
         inspect();
     };
     canvas->commit = [=](const QByteArray &cells) {
-        return commit(document->changes(dungeon->currentIndex(), floor->currentIndex(), cells),
+        return commit(document->changes(dungeon, floor->currentIndex(), cells),
                       "Edit dungeon level");
     };
     canvas->changed = inspect;
@@ -632,13 +628,13 @@ DungeonWorkspace::DungeonWorkspace(
     connect(apply, &QPushButton::clicked, this, [=] {
         auto cells = canvas->ids;
         cells[selected->y() * canvas->side + selected->x()] = char(canvas->brush);
-        if (commit(document->changes(dungeon->currentIndex(), floor->currentIndex(), cells),
+        if (commit(document->changes(dungeon, floor->currentIndex(), cells),
                    "Configure dungeon cell"))
             load();
     });
     connect(open, &QPushButton::clicked, this, [=] {
         int value = U5::byte(canvas->ids, selected->y() * canvas->side + selected->x());
-        room(DungeonDocument::roomIndex(dungeon->currentIndex(), value));
+        room(DungeonDocument::roomIndex(dungeon, value));
     });
     connect(stack, &QListWidget::currentRowChanged, this, [=](int i) {
         if (i >= 0)
@@ -646,7 +642,7 @@ DungeonWorkspace::DungeonWorkspace(
     });
     connect(resize, &QToolButton::clicked, this, [=] {
         canvas->cancelStroke();
-        const int d = dungeon->currentIndex(), f = floor->currentIndex();
+        const int d = dungeon, f = floor->currentIndex();
         const auto dims = document->size(d, f);
         QDialog dialog(window());
         QPointer<DungeonWorkspace> owner(this);
@@ -696,7 +692,6 @@ DungeonWorkspace::DungeonWorkspace(
             QMessageBox::warning(this, "Cannot resize dungeon floor", e.what());
         }
     });
-    connect(dungeon, qOverload<int>(&QComboBox::currentIndexChanged), this, [=](int) { load(); });
     connect(floor, qOverload<int>(&QComboBox::currentIndexChanged), this, [=](int) { load(); });
     load();
     brush(canvas->brush);

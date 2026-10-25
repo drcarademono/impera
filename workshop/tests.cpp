@@ -695,6 +695,16 @@ int main(int argc, char **argv) {
                  check(shadowLord && shadowLord->isHidden(), "Shadow Lord remains in Special");
                  filter->setCurrentText("Monsters");
                  check(!shadowLord->isHidden(), "Shadow Lord missing from Monsters");
+                 bool pirateFound = false;
+                 for (int i = 0; i < palette->count(); ++i)
+                     if (canvas->specialBrushKinds.value(palette->item(i)->data(Qt::UserRole).toInt(), -1) ==
+                         int(Workshop::MapItemKind::PirateShip)) {
+                         pirateFound = !palette->item(i)->isHidden();
+                         filter->setCurrentText("Special");
+                         check(palette->item(i)->isHidden(), "Pirate ship remains in Special");
+                         break;
+                     }
+                 check(pirateFound, "Pirate ship missing from Monsters");
                  filter->setCurrentText("Special");
                  QSet<int> seen;
                  QString previous;
@@ -718,14 +728,14 @@ int main(int argc, char **argv) {
                  for (auto kind : expected)
                      if (kind != Workshop::MapItemKind::Npc &&
                          kind != Workshop::MapItemKind::Monster &&
-                         kind != Workshop::MapItemKind::ShadowLord)
+                         kind != Workshop::MapItemKind::ShadowLord &&
+                         kind != Workshop::MapItemKind::PirateShip)
                          check(seen.contains(int(kind)), "Special omitted a former Add entry");
-                 check(Workshop::mapItemName(Workshop::MapItemKind::Corpse) == "Corpse (intact)" &&
+                 check(Workshop::mapItemName(Workshop::MapItemKind::Corpse) == "Corpse" &&
                            Workshop::mapItemShape(Workshop::MapItemKind::Corpse) == 30 &&
-                           Workshop::mapItemName(Workshop::MapItemKind::BloodSplatter) ==
-                               "Blood splatter" &&
-                           Workshop::mapItemShape(Workshop::MapItemKind::BloodSplatter) == 31,
-                       "Corpse and blood splatter labels do not match their sprites");
+                           Workshop::mapItemName(Workshop::MapItemKind::MoldyCorpse) == "Gore" &&
+                           !expected.contains(Workshop::MapItemKind::BloodSplatter),
+                       "Corpse labels or removed Blood splatter placement are incorrect");
                  check(goldRow >= 0, "Special Gold missing");
                  palette->setCurrentRow(goldRow);
                  canvas->keyboardCell = {220, 120};
@@ -806,7 +816,7 @@ int main(int argc, char **argv) {
                                    "Decorative blood is still a searchable corpse");
                      }
                  }
-                 check(n == 29 && gold >= 32 && trigger >= 32,
+                 check(n == 28 && gold >= 32 && trigger >= 32,
                        "Special types are still unavailable on locations");
                  check(p.data("TOWNE.NPC").left(4608) == original &&
                            p.data("TOWNE.TLK") == QByteArray::fromHex("0000"),
@@ -2977,6 +2987,14 @@ int main(int argc, char **argv) {
                  file(dir.path() + "/DUNGEON.DAT", native);
                  file(dir.path() + "/DUNGEON.CBT", QByteArray(112 * 352, 0));
                  p.openGame(dir.path());
+                 int dungeonCount = 0;
+                 for (const auto &route : Workshop::contentDestinations(p))
+                     if (route.resource == "DUNGEON.DAT") {
+                         ++dungeonCount;
+                         check(route.title == p.locationName(33 + route.selection.value("DUNGEON.DAT/dungeon")),
+                               "Dungeon navigation name mismatch");
+                     }
+                 check(dungeonCount == 8, "Dungeon navigation does not list each dungeon");
                  auto apply = [&](const QMap<QString, QByteArray> &edits) {
                      for (auto it = edits.begin(); it != edits.end(); ++it)
                          p.resources[it.key()].edited = it.value();
@@ -3027,6 +3045,26 @@ int main(int argc, char **argv) {
                  check(window.openProject(p.projectPath), "Cannot reopen resized dungeons");
                  window.show();
                  window.selectResource("DUNGEON.DAT");
+                 auto chooseDungeon = [&](int dungeon) {
+                     auto tree = window.findChild<QWidget *>("resourceLibrary")->findChild<QTreeWidget *>();
+                     QTreeWidgetItemIterator it(tree);
+                     while (*it) {
+                         if ((*it)->data(0, Qt::UserRole + 2).toString() ==
+                             QString("world/dungeon/%1").arg(dungeon)) {
+                             tree->setCurrentItem(*it);
+                             app.processEvents();
+                             return;
+                         }
+                         ++it;
+                     }
+                     throw std::runtime_error("Dungeon navigation entry missing");
+                 };
+                 chooseDungeon(3);
+                 app.processEvents();
+                 check(window.findChild<QStackedWidget *>("workspaces")->currentWidget()->findChild<QLabel *>("dungeonName")->text() ==
+                           window.projectForTests().locationName(36),
+                       "Dungeon navigation did not open the selected dungeon");
+                 chooseDungeon(0);
                  app.processEvents();
                  auto active = [&] {
                      return window.findChild<QStackedWidget *>("workspaces")->currentWidget();
@@ -3043,6 +3081,9 @@ int main(int argc, char **argv) {
                      dialog->findChild<QSpinBox *>("mapHeight")->setValue(10);
                      dialog->accept();
                  });
+                 check(!active()->findChild<QComboBox *>("dungeonSelector") &&
+                           active()->findChild<QLabel *>("dungeonName"),
+                       "Dungeon picker remains in the editor");
                  active()->findChild<QToolButton *>("resizeDungeonFloor")->click();
                  app.processEvents();
                  check(Workshop::DungeonDocument(&window.projectForTests()).size(0, 0) ==
@@ -3808,7 +3849,7 @@ int main(int argc, char **argv) {
                   Workshop::MapItemKind::Equipment, Workshop::MapItemKind::Gem,
                   Workshop::MapItemKind::Key, Workshop::MapItemKind::SkeletonKey,
                   Workshop::MapItemKind::Torch, Workshop::MapItemKind::SandalwoodBox,
-                  Workshop::MapItemKind::BloodSplatter, Workshop::MapItemKind::PirateShip,
+                  Workshop::MapItemKind::MoldyCorpse, Workshop::MapItemKind::PirateShip,
                   Workshop::MapItemKind::Whirlpool, Workshop::MapItemKind::ShadowLord,
                   Workshop::MapItemKind::Shard, Workshop::MapItemKind::Crown,
                   Workshop::MapItemKind::Sceptre, Workshop::MapItemKind::QuestAmulet}) {

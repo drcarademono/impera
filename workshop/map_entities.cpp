@@ -122,7 +122,7 @@ QString mapItemName(MapItemKind k) {
     case MapItemKind::SandalwoodBox:
         return "Sandalwood box";
     case MapItemKind::BloodSplatter:
-        return "Blood splatter";
+        return "Gore";
     case MapItemKind::Gold:
         return "Gold";
     case MapItemKind::Food:
@@ -130,9 +130,9 @@ QString mapItemName(MapItemKind k) {
     case MapItemKind::Moonstone:
         return "Moonstone";
     case MapItemKind::Corpse:
-        return "Corpse (intact)";
-    case MapItemKind::MoldyCorpse:
         return "Corpse";
+    case MapItemKind::MoldyCorpse:
+        return "Gore";
     case MapItemKind::Npc:
         return "NPC";
     case MapItemKind::Monster:
@@ -269,7 +269,7 @@ QList<MapItemKind> availableMapItems(const Project &p, const QString &r) {
             << MapItemKind::Carpet << MapItemKind::Gold << MapItemKind::Food << MapItemKind::Corpse
             << MapItemKind::Gem << MapItemKind::Key << MapItemKind::SkeletonKey
             << MapItemKind::Torch << MapItemKind::Potion << MapItemKind::Scroll
-            << MapItemKind::Equipment << MapItemKind::SandalwoodBox << MapItemKind::BloodSplatter
+            << MapItemKind::Equipment << MapItemKind::SandalwoodBox
             << MapItemKind::MoldyCorpse << MapItemKind::PirateShip << MapItemKind::Whirlpool
             << MapItemKind::ShadowLord << MapItemKind::Shard << MapItemKind::Crown
             << MapItemKind::Sceptre << MapItemKind::QuestAmulet;
