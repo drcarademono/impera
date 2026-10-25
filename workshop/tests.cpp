@@ -3046,6 +3046,34 @@ int main(int argc, char **argv) {
             imported.load(p.projectPath);
             check(imported.mapPages("DUNGEON.CBT")[300].height() == 13,
                   "Wide room project persistence failed");
+            MapDocument rooms(&p, "DUNGEON.CBT");
+            check(rooms.terrain(112, true).size() == 121 &&
+                      rooms.terrain(300, true).size() == 195 &&
+                      U5::byte(rooms.rawTerrain(300), 194) == 68,
+                  "Appended room comparison reads past vanilla pages");
+            WorkshopWindow window;
+            check(window.openProject(p.projectPath), "Cannot reopen appended rooms in the editor");
+            window.show();
+            for (int room : {112, 116, 300}) {
+                auto tree = window.findChild<QWidget *>("resourceLibrary")->findChild<QTreeWidget *>();
+                QTreeWidgetItemIterator it(tree);
+                bool found = false;
+                while (*it) {
+                    if ((*it)->data(0, Qt::UserRole + 2).toString() ==
+                        QString("world/DUNGEON.CBT/%1").arg(room)) {
+                        tree->setCurrentItem(*it);
+                        app.processEvents();
+                        found = true;
+                        break;
+                    }
+                    ++it;
+                }
+                auto root = window.findChild<QStackedWidget *>("workspaces")->currentWidget();
+                auto canvas = dynamic_cast<MapCanvas *>(root->findChild<QWidget *>("mapCanvas"));
+                check(found && canvas && canvas->side == (room == 300 ? 15 : 11) &&
+                          canvas->original.size() == canvas->ids.size(),
+                      "New encounter room opens the truncated-terrain error instead of its canvas");
+            }
         });
         test("New dungeons own floors and combat rooms, persist and place from world tiles", [&] {
             QTemporaryDir dir;

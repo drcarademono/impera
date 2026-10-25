@@ -44,6 +44,11 @@ QByteArray MapDocument::rawTerrain(int index, bool original) const {
         require(extended, "Missing map terrain");
         return QByteArray(p.side * p.height(), char(extended->background));
     }
+    if (index >= nativePages.size()) {
+        require(original, "Map terrain is truncated");
+        // Appended rooms have no vanilla page to compare against.
+        return QByteArray(p.side * p.height(), char(extended ? extended->background : 0));
+    }
     const auto &source = nativePages.at(index);
     if (!world)
         for (int y = 0; y < source.height(); ++y)
