@@ -394,7 +394,7 @@ DungeonWorkspace::DungeonWorkspace(
         canvas->zoom = scales[index];
         canvas->resizeMap();
     });
-    tools->addWidget(zoom);
+    row->addWidget(zoom);
     layout->addLayout(tools);
     auto split = new QHBoxLayout;
     auto palette = new QListWidget;
@@ -694,6 +694,12 @@ DungeonWorkspace::DungeonWorkspace(
         }
     });
     connect(floor, qOverload<int>(&QComboBox::currentIndexChanged), this, [=](int) { load(); });
+    auto transfer = new QWidget;
+    transfer->setObjectName("mapTransferActions");
+    transfer->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    auto transferLayout = new QHBoxLayout(transfer);
+    transferLayout->setContentsMargins(0, 0, 0, 0);
+    transferLayout->setSpacing(4);
     auto exportButton = new QPushButton("Export");
     exportButton->setObjectName("mapExport");
     auto exportMenu = new QMenu(exportButton);
@@ -731,11 +737,12 @@ DungeonWorkspace::DungeonWorkspace(
     jsonExport->setObjectName("mapExportJson");
     jsonExport->setToolTip("Export all floors, contents, and linked encounter rooms.");
     exportButton->setMenu(exportMenu);
-    row->addWidget(exportButton);
     auto importButton = new QPushButton("Import…");
     importButton->setObjectName("mapImport");
     importButton->setToolTip("Replace this dungeon from a dungeon map JSON.");
-    row->addWidget(importButton);
+    transferLayout->addWidget(importButton);
+    transferLayout->addWidget(exportButton);
+    row->addWidget(transfer);
     connect(importButton, &QPushButton::clicked, this, [=] {
         try {
             canvas->cancelStroke();

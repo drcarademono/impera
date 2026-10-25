@@ -369,6 +369,12 @@ int main(int argc, char **argv) {
             auto exportAction = active()->findChild<QAction *>("mapExportJson");
             check(exportAction && active()->findChild<QPushButton *>("mapImport"),
                   "Map JSON toolbar controls missing");
+            auto importButton = active()->findChild<QPushButton *>("mapImport");
+            auto exportButton = active()->findChild<QPushButton *>("mapExport");
+            check(exportButton && importButton->parentWidget() == exportButton->parentWidget() &&
+                      importButton->parentWidget()->objectName() == "mapTransferActions" &&
+                      importButton->geometry().right() < exportButton->geometry().left(),
+                  "Map transfer actions must stay adjacent in Import / Export order");
             watchdog.start(10);
             selectFile(outputPath);
             exportAction->trigger();

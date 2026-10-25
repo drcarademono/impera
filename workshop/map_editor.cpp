@@ -1380,8 +1380,14 @@ MapWorkspace::MapWorkspace(
         }
     });
 
+    auto transfer = new QWidget;
+    transfer->setObjectName("mapTransferActions");
+    transfer->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    auto transferLayout = new QHBoxLayout(transfer);
+    transferLayout->setContentsMargins(0, 0, 0, 0);
+    transferLayout->setSpacing(4);
     auto exportButton = new QPushButton("Export");
-    exportButton->setToolTip("Export terrain, tile IDs, or the visible preview as a PNG.");
+    exportButton->setToolTip("Export the complete map as JSON, or export PNG images.");
     auto exportMenu = new QMenu(exportButton);
     exportMenu->addAction("Terrain PNG", this, [this] { exportImage(false); })
         ->setToolTip("Export map terrain artwork without grid or character overlays.");
@@ -1406,11 +1412,12 @@ MapWorkspace::MapWorkspace(
     jsonExport->setToolTip("Export all floors, map contents, and custom artwork.");
     exportButton->setMenu(exportMenu);
     exportButton->setObjectName("mapExport");
-    row->addWidget(exportButton);
     auto importButton = new QPushButton("Import…");
     importButton->setObjectName("mapImport");
     importButton->setToolTip("Replace this map with a map JSON of the same type.");
-    row->addWidget(importButton);
+    transferLayout->addWidget(importButton);
+    transferLayout->addWidget(exportButton);
+    row->addWidget(transfer);
     connect(importButton, &QPushButton::clicked, this, [this, navigate] {
         try {
             if (!flushLocationMode())
