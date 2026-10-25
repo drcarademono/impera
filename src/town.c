@@ -2,6 +2,8 @@
 #include "common/common.h"
 #include "common/movement.h"
 #include "mod/runtime.h"
+#include "mod/gates.h"
+#include <stdlib.h>
 #include "mod/types_game.h"
 #if defined(TARGET_SDL)
 #include "key/mouse.h"
@@ -104,36 +106,85 @@ int TOWN_011e(int param_1)
     return local_2;
 }
 
-void TOWN_0170(void)
-{
-    int local_4;
-    int local_6;
-
-    for (local_4 = 0; local_4 < MAP_WIDTH; local_4++) {
-        for (local_6 = 0; local_6 < MAP_HEIGHT; local_6++) {
-            if (*ULTIMA_4402_GetTileAddr(local_4, local_6) == TILE_MAP_87)
-            {
-                TYPES_GAME_Write(local_4, local_6 + 1,
-                                 *ULTIMA_4402_GetTileAddr(local_4, local_6 + 1) ^ (TILE_MAP_DD));
+/* Rebuilt from the loaded floor, never from the currently raised/lowered state. */
+static unsigned char townGates[GATES_MAX][GATES_RECORD];
+static unsigned townGateCount;
+void TOWN_ConfigureGates(const void *bytes, size_t size) {
+    const unsigned char *data = bytes;
+    static int overrides[256 * 256];
+    memset(overrides, -1, sizeof(overrides));
+    townGateCount = 0;
+    if (data && GATES_Validate(data, size))
+        for (unsigned i = 0; i < GATES_Count(data); ++i) {
+            const unsigned char *r = data + GATES_HEADER + i * GATES_RECORD;
+            if (r[0] == D_5893_map_id && r[1] == D_5895_map_level && r[2] < MAP_WIDTH &&
+                r[3] < MAP_HEIGHT) {
+                overrides[r[3] * MAP_WIDTH + r[2]] = townGateCount;
+                memcpy(townGates[townGateCount++], r, GATES_RECORD);
             }
         }
-    }
-
-    if ((*ULTIMA_4402_GetTileAddr(D_5896_map_x, D_5897_map_y) & 0xfe) != TILE_MAP_48)
-    {
-        for (local_4 = 0; local_4 < D_594e; local_4++)
-        {
-            if (D_587f == 5)
-            {
-                TYPES_GAME_Write(D_58ee[local_4], D_590e[local_4], D_592e[local_4]);
-            }
-            else
-            {
-                TYPES_GAME_Write(D_58ee[local_4], D_590e[local_4], TILE_MAP_WATER_3);
+    const unsigned char *original = MAPS_OriginalRecord(1, D_5893_map_id, (int8_t)D_5895_map_level);
+    const unsigned char *terrain = original ? original + MAPS_RECORD : NULL;
+    for (int y = 0; y < MAP_HEIGHT; ++y)
+        for (int x = 0; x < MAP_WIDTH; ++x) {
+            if (overrides[y * MAP_WIDTH + x] >= 0)
+                continue;
+            unsigned tile = terrain ? terrain[y * MAP_WIDTH + x] : *ULTIMA_4402_GetTileAddr(x, y);
+            int bridge = (tile & 0xfe) == TILE_MAP_48;
+            int gate = y && (terrain ? terrain[(y - 1) * MAP_WIDTH + x]
+                                     : *ULTIMA_4402_GetTileAddr(x, y - 1)) == TILE_MAP_87;
+            if (!bridge && !gate)
+                continue;
+            unsigned char *r = townGates[townGateCount++];
+            memset(r, 0, GATES_RECORD);
+            r[0] = D_5893_map_id;
+            r[1] = D_5895_map_level;
+            r[2] = x;
+            r[3] = y;
+            r[4] = bridge ? 2 : 1;
+            r[5] = 1;
+            r[6] = tile;
+            r[7] = bridge ? TILE_MAP_WATER_3 : tile ^ TILE_MAP_DD;
+            r[8] = 5;
+            r[9] = 20;
+        }
+}
+static void TOWN_LoadGates(void) {
+    int found = 0;
+    unsigned char *data = NULL;
+    size_t size = 0;
+    FILE *file = MOD_OpenResource("GATES.OVR", &found);
+    if (file) {
+        if (!fseek(file, 0, SEEK_END)) {
+            long n = ftell(file);
+            if (n >= GATES_HEADER && n <= GATES_HEADER + GATES_MAX * GATES_RECORD) {
+                data = malloc((size_t)n);
+                rewind(file);
+                if (data && fread(data, 1, (size_t)n, file) == (size_t)n)
+                    size = (size_t)n;
             }
         }
+        fclose(file);
     }
-
+    TOWN_ConfigureGates(data, size);
+    free(data);
+}
+void TOWN_0170(void) {
+    int onBridge = 0;
+    for (unsigned i = 0; i < townGateCount; ++i) {
+        const unsigned char *r = townGates[i];
+        if (r[0] == D_5893_map_id && r[1] == D_5895_map_level && r[4] == 2 &&
+            r[2] == D_5896_map_x && r[3] == D_5897_map_y)
+            onBridge = 1;
+    }
+    for (unsigned i = 0; i < townGateCount; ++i) {
+        const unsigned char *r = townGates[i];
+        if (r[0] != D_5893_map_id || r[1] != D_5895_map_level)
+            continue;
+        if (r[4] == 2 && onBridge)
+            continue;
+        TYPES_GAME_Write(r[2], r[3], GATES_Open(r, D_587f) ? r[6] : r[7]);
+    }
     D_24e6 |= 2;
 }
 
@@ -284,17 +335,10 @@ static void TOWN_0408(int param_1)
         ULTIMA_256e_ReadFileFromDisk(local_2, D_6608, 0x400, local_6 << 10);
     }
 
-    D_594e = 0;
     D_217e = D_2180 = D_2182 = D_2184 = -1;
 
     for (local_4 = 0; local_4 < MAP_WIDTH; local_4++) {
         for (local_8 = 0; local_8 < MAP_HEIGHT; local_8++) {
-            if (D_594e < 32 && (*ULTIMA_4402_GetTileAddr(local_4, local_8) & 0xfe) == TILE_MAP_48) {
-                D_58ee[D_594e] = (char)local_4;
-                D_590e[D_594e] = (char)local_8;
-                D_592e[D_594e] = *ULTIMA_4402_GetTileAddr(local_4, local_8);
-                D_594e++;
-            }
             if (*ULTIMA_4402_GetTileAddr(local_4, local_8) == TILE_MAP_2A)
             {
                 if (D_217e == -1)
@@ -311,10 +355,8 @@ static void TOWN_0408(int param_1)
         }
     }
 
-    if (D_587f < 5 || D_587f > 0x13)
-    {
-        TOWN_0170();
-    }
+    TOWN_LoadGates();
+    TOWN_0170();
 
     ULTIMA_5e4a();
     ULTIMA_4f7c(0);
@@ -1510,8 +1552,7 @@ void TOWN_141e_MainLoop(void)
         {
             local_12 = D_587f;
             ULTIMA_4f7c(1);
-            if ((D_587f != local_12) && (D_587f == 20 || D_587f == 5))
-            {
+            if (D_587f != local_12) {
                 TOWN_0170();
             }
             // 15ec

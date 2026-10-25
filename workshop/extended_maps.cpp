@@ -2,6 +2,7 @@
 #include "dungeon_editor.h"
 #include "mod/npcs.h"
 #include "extended_maps.h"
+#include "gates_editor.h"
 #include "map_editor.h"
 #include "map_positions.h"
 #include "contents_editor.h"
@@ -241,6 +242,10 @@ QMap<QString, QByteArray> resizeMap(const Project &p, const QString &resource, i
         require(x >= 0 && y >= 0 && x < width && y < height,
                 what + " is outside the new dimensions; move it before resizing");
     };
+    if (m.kind == 1)
+        for (const auto &r : readGates(p.resources.value("GATES.OVR").edited))
+            if (U5::byte(r, 0) == unsigned(m.id) && int(int8_t(r[1])) == old.floor)
+                check(U5::byte(r, 2), U5::byte(r, 3), "Town gate / drawbridge");
     if (m.kind == 0)
         for (const auto &entry : maps)
             if (entry.world == (resource == "UNDER.DAT" ? -1 : 0))

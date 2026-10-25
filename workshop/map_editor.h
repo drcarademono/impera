@@ -84,6 +84,9 @@ class MapCanvas : public QWidget {
     bool pasting() const { return !stamp.isEmpty(); }
     void clearSelection();
     int pasteChangedCells() const;
+    QMap<int, int> displayTiles;
+    QRect gateSelection;
+    std::function<void()> prepareDisplay;
     QVector<QImage> tiles;
     int rows = 0;
     int rowCount() const { return rows > 0 ? rows : side; }
@@ -274,6 +277,9 @@ class MapWorkspace : public QWidget {
     QMap<int, int> conversationIndices;
     std::function<bool(const QMap<QString, QByteArray> &, const QString &)> commitResources;
     std::function<void(const QString &)> navigateResource;
+    int gatePreviewHour = -1;
+    void refreshGatePreview();
+    void showGate(const QByteArray &record);
     void refreshNpcs();
     void refreshCombat();
     void beginAdd(int kind, int selectedAppearance = -1, QPoint cell = {-1, -1});

@@ -181,6 +181,7 @@ extern "C" {
 #endif
 int MAPS_Mount(const void *, size_t);
 void MAPS_Reset(void);
+const unsigned char *MAPS_OriginalRecord(unsigned kind, unsigned id, int floor);
 const unsigned char *MAPS_Record(unsigned kind, unsigned id, int floor);
 const unsigned char *MAPS_Entrance(int world, int x, int y);
 void MAPS_Combat(unsigned kind, unsigned id);

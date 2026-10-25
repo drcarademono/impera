@@ -4,6 +4,7 @@
 #include "extended_maps.h"
 #include "custom_tiles.h"
 #include "contents_editor.h"
+#include "gates_editor.h"
 #include "map_entities.h"
 #include "map_positions.h"
 #include "location_text.h"
@@ -192,6 +193,18 @@ struct Exporter {
                 if (d.x < mp.side && d.y < mp.height())
                     contents.append(contentsJson(d));
             f["contents"] = contents;
+            QJsonArray gates;
+            if (kind == "location")
+                for (const auto &record :
+                     mapGates(p, target.map, target.floor, terrain, QSize(mp.side, mp.height()))) {
+                    QJsonArray values;
+                    for (char byte : record)
+                        values.append(int(uint8_t(byte)));
+                    gates.append(values);
+                    type(U5::byte(record, 6));
+                    type(U5::byte(record, 7));
+                }
+            f["gates"] = gates;
             for (const auto &pos : mapPositions(p))
                 if (!pos.id && pos.map == target.map && pos.floor == target.floor && !target.kind)
                     f["partyStart"] = QJsonArray{pos.cell.x(), pos.cell.y()};
@@ -696,6 +709,14 @@ struct Importer {
                     "Outdoor and dungeon encounters use different actor data");
         auto pages = p.mapPages(r);
         const auto selected = pages.at(page);
+        if (kind == "location") {
+            auto records = readGates(p.resources.value("GATES.OVR").edited);
+            int map = positionMap(r, selected);
+            for (int i = records.size() - 1; i >= 0; --i)
+                if (U5::byte(records[i], 0) == unsigned(map))
+                    records.removeAt(i);
+            p.resources["GATES.OVR"].edited = writeGates(records);
+        }
         auto indexes = pagesFor(p, r, page);
         auto source = o["floors"].toArray();
         if (kind == "location" && MAPS_LocationResource(r.toLatin1().constData()) &&
@@ -851,6 +872,27 @@ struct Importer {
             }
             auto target = contentsTarget(r, p.mapPages(r)[index], index);
             replaceContents(target, f["contents"], w, h);
+            if (kind == "location") {
+                auto records = readGates(p.resources.value("GATES.OVR").edited);
+                for (int j = records.size() - 1; j >= 0; --j)
+                    if (U5::byte(records[j], 0) == target.map &&
+                        int(int8_t(records[j][1])) == target.floor)
+                        records.removeAt(j);
+                require(!f.contains("gates") || f["gates"].isArray(), "Invalid map gates");
+                for (auto value : f["gates"].toArray()) {
+                    auto values = value.toArray();
+                    require(values.size() == 16, "Invalid map gate");
+                    QByteArray record;
+                    for (auto byte : values)
+                        record.append(char(number(byte, 0, 255, "gate field")));
+                    record[0] = char(target.map);
+                    record[1] = char(target.floor);
+                    require(U5::byte(record, 2) < unsigned(w) && U5::byte(record, 3) < unsigned(h),
+                            "Map gate is outside its floor");
+                    records.append(record);
+                }
+                p.resources["GATES.OVR"].edited = writeGates(records);
+            }
             if (!target.kind) {
                 require(f["signs"].isArray(), "Map JSON is missing its signs");
                 require(p.resources.contains("SIGNS.DAT") || f["signs"].toArray().isEmpty(),

@@ -34,6 +34,8 @@ enum class MapItemKind {
     Crown = 28,
     Sceptre = 29,
     QuestAmulet = 30,
+    TownGate = 31,
+    Drawbridge = 32,
 };
 struct MapItemEdit {
     QMap<QString, QByteArray> changes;

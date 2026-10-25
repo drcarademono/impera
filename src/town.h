@@ -1,11 +1,14 @@
 #ifndef _TOWN_H
 #define _TOWN_H
+#include <stddef.h>
 
 int TOWN_ExtendedExit(void);
 int TOWN_0000_CheckNpcKilled(int param_1);
 void TOWN_0052_SetNpcKilled(int param_1);
 void TOWN_00b0_DespawnNpc(int param_1);
 int TOWN_011e(int param_1);
+/* Initialize gate state after loading the current floor terrain. */
+void TOWN_ConfigureGates(const void *, size_t);
 void TOWN_0170(void);
 void TOWN_0958(void);
 int TOWN_09e6_AttackCmd(void);

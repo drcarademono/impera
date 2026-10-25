@@ -1,6 +1,7 @@
 #include "extended_maps.h"
 #include "mod/npcs.h"
 #include "map_entities.h"
+#include "gates_editor.h"
 #include "actor_names.h"
 #include "contents_editor.h"
 #include "custom_tiles.h"
@@ -90,6 +91,10 @@ QList<int> monsterShapes() {
     return out;
 }
 QString mapItemName(MapItemKind k) {
+    if (k == MapItemKind::TownGate)
+        return "Town gate";
+    if (k == MapItemKind::Drawbridge)
+        return "Drawbridge";
     switch (k) {
     case MapItemKind::PirateShip:
         return "Pirate ship";
@@ -250,6 +255,8 @@ QList<MapItemKind> availableMapItems(const Project &p, const QString &r) {
     QList<MapItemKind> out;
     if (!MapDocument::supported(r))
         return out;
+    if (r != "BRIT.DAT" && r != "UNDER.DAT" && !r.endsWith(".CBT") && r != "DUNGEON.DAT")
+        out << MapItemKind::TownGate << MapItemKind::Drawbridge;
     const auto npc = r.left(r.size() - 4) + ".NPC";
     const bool worldObjectsAvailable =
         (r == "BRIT.DAT" || r == "UNDER.DAT") && p.resources.contains("INIT.OOL") &&
@@ -428,6 +435,34 @@ MapItemEdit addMapItem(const Project &p, const QString &r, int index, QPoint cel
     const auto page = doc.pages[index];
     require(cell.x() >= 0 && cell.y() >= 0 && cell.x() < page.side && cell.y() < page.height(),
             "Placement outside map");
+    if (kind == MapItemKind::TownGate || kind == MapItemKind::Drawbridge) {
+        auto terrain = doc.terrain(index);
+        bool gate = kind == MapItemKind::TownGate;
+        require(!gate || cell.y() + 1 < page.height(), "A town gate needs two vertical cells");
+        terrain[cell.y() * page.side + cell.x()] = char(gate ? 135 : 72);
+        QPoint target = cell + QPoint(0, gate ? 1 : 0);
+        if (gate)
+            terrain[target.y() * page.side + target.x()] = 68;
+        QByteArray record(16, 0);
+        record[0] = char(positionMap(r, page));
+        record[1] = char(page.floor);
+        record[2] = char(target.x());
+        record[3] = char(target.y());
+        record[4] = gate ? 1 : 2;
+        record[5] = 1;
+        record[6] = gate ? 68 : 72;
+        record[7] = char(gate ? 153 : 3);
+        record[8] = 5;
+        record[9] = 20;
+        MapItemEdit edit;
+        auto expanded = CustomTiles::expanded(p, r, page, index, terrain);
+        TYPES_Put32(expanded.data() + (cell.y() * page.side + cell.x()) * 4, 0);
+        TYPES_Put32(expanded.data() + (target.y() * page.side + target.x()) * 4, 0);
+        edit.changes = doc.changes(index, terrain, expanded);
+        edit.changes["GATES.OVR"] = setGate(p, record);
+        edit.mode = "Gates";
+        return edit;
+    }
     unsigned customType = appearance >= 512 ? unsigned(appearance) : 0;
     if (customType) {
         auto type = CustomTiles::definition(p, customType);

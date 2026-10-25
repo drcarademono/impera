@@ -5,7 +5,8 @@ in the destination project's map editor. Import replaces the selected map in one
 undoable edit. Exporting a location or dungeon includes all of its floors.
 
 Files carry tile grids and dimensions, NPC schedules and conversations, signs,
-objects, container contents and properties, encounter placements and triggers,
+objects, container contents and properties, town gates and drawbridge settings,
+encounter placements and triggers,
 and dungeon encounter rooms. World files include party-start and moonstone
 positions and entrance links. Authored destinations reached by those entrances
 are included; vanilla destinations resolve to their base-game map identities.

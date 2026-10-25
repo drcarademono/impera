@@ -7,6 +7,7 @@
 #include "shop_editor.h"
 #include "mod/tileset_resources.h"
 #include "contents_editor.h"
+#include "gates_editor.h"
 #include "dialogue.h"
 #include "map_editor.h"
 #include "mod/discoveries.h"
@@ -188,7 +189,7 @@ QVector<ContentDestination> contentDestinations(const Project &project) {
             continue;
         if (name == "TYPEMAP.OVR")
             continue;
-        if (name == "CONTENTS.OVR")
+        if (name == "CONTENTS.OVR" || name == "GATES.OVR")
             continue; // Edited through the map inspector.
         if (MAPS_LocationResource(name.toLatin1().constData())) {
             bool exists = false;
@@ -460,6 +461,16 @@ QMap<QString, QStringList> contentChanges(const Project &project,
                             break;
                         }
                     }
+                }
+                if (changed("GATES.OVR") && !d.resource.endsWith(".CBT")) {
+                    int mapId = positionMap(d.resource, map.pages[d.page]);
+                    auto gateRows = [&](const Project &p) {
+                        QList<QByteArray> rows;
+                        for (const auto &r : readGates(p.resources.value("GATES.OVR").edited))
+                            if (U5::byte(r, 0) == unsigned(mapId)) rows.append(r);
+                        return rows;
+                    };
+                    if (gateRows(project) != gateRows(original)) parts.append("Gates");
                 }
                 if (changed("CONTENTS.OVR")) {
                     auto target = contentsTarget(d.resource, map.pages[d.page], d.page);

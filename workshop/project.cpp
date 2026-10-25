@@ -2,6 +2,8 @@
 #include "mod/location_names.h"
 #include "mod/npcs.h"
 #include "project.h"
+#include "gates_editor.h"
+#include "../src/mod/gates.h"
 #include "extended_maps.h"
 #include "contents_editor.h"
 #include "custom_tiles.h"
@@ -49,7 +51,7 @@ void Project::openGame(const QString &directory) {
         if (upper == "TYPES.OVR" || upper == "TYPEMAP.OVR" || upper == "CUTSCENE.OVR" ||
             upper == "MAPS.OVR" || MAPS_LocationResource(upper.toLatin1().constData()) ||
             upper == "LOCATIONS.OVR" || upper == "TEXT.OVR" || upper == "RULES.TBL" ||
-            upper == "CONTENTS.OVR")
+            upper == "GATES.OVR" || upper == "CONTENTS.OVR")
             continue; // Companion resources are package-only.
         if (!MOD_AllowedResource(upper.toLatin1().constData()))
             continue;
@@ -74,6 +76,7 @@ void Project::openGame(const QString &directory) {
     next.resources.insert("TEXT.OVR", {{}, {}});
     next.resources.insert("RULES.TBL", {{}, {}});
     next.resources.insert("CONTENTS.OVR", {{}, {}});
+    next.resources.insert("GATES.OVR", {{}, {}});
     *this = next;
 }
 const QByteArray &Project::data(const QString &name) const {
@@ -175,6 +178,7 @@ QStringList Project::changed() const {
 }
 void Project::validate() const {
     Workshop::validateExtendedMaps(*this);
+    Workshop::validateGates(*this);
     require(!title.trimmed().isEmpty() && title.toUtf8().size() <= 256 && !title.contains(QChar(0)),
             "Mod name must contain 1–256 UTF-8 bytes");
     if (changed().contains("TILE_SHW.PNG") || changed().contains("TILE_SHN.PNG")) {
@@ -291,7 +295,8 @@ QByteArray Project::package() const {
     for (const auto &contents : Workshop::readContents(resources.value("CONTENTS.OVR").edited))
         portableConditions |= contents.refill > 2;
     QByteArray out(
-        portableConditions ? "IMOD0023"
+        list.contains("GATES.OVR") ? "IMOD0024"
+        : portableConditions ? "IMOD0023"
         : wideRooms        ? "IMOD0022"
         : newDungeons      ? "IMOD0021"
         : dungeonMaps      ? "IMOD0020"
@@ -456,6 +461,10 @@ void Project::save(const QString &path) {
         requirements["extendedMaps"] = 1;
         requirements["packageVersion"] = 18;
     }
+    if (changed().contains("GATES.OVR")) {
+        requirements["townGates"] = 1;
+        requirements["packageVersion"] = 24;
+    }
     if (!requirements.isEmpty())
         root["requires"] = requirements;
     QJsonObject annotations;
@@ -562,7 +571,7 @@ QVector<ModDiagnostic> validateMod(const Project &project, const QString &modsDi
             if (name == "TYPES.OVR" || name == "TYPEMAP.OVR" || name == "CUTSCENE.OVR" ||
                 name == "MAPS.OVR" || MAPS_LocationResource(name.toLatin1().constData()) ||
                 name == "LOCATIONS.OVR" || name == "TEXT.OVR" || name == "RULES.TBL" ||
-                name == "CONTENTS.OVR") {
+                name == "GATES.OVR" || name == "CONTENTS.OVR") {
                 require(project.resources[name].original.isEmpty(),
                         "Companion resource must have an empty original base");
             } else if (!MOD_TilesetSheet(name.toLatin1().constData())) {
@@ -892,7 +901,7 @@ QString prepareModTest(const Project &project, const QString &sessionsDirectory)
         if (name == "TYPES.OVR" || name == "TYPEMAP.OVR" || name == "CUTSCENE.OVR" ||
             name == "MAPS.OVR" || MAPS_LocationResource(name.toLatin1().constData()) ||
             name == "LOCATIONS.OVR" || name == "TEXT.OVR" || name == "RULES.TBL" ||
-            name == "CONTENTS.OVR" || MOD_TilesetSheet(name.toLatin1().constData()))
+            name == "GATES.OVR" || name == "CONTENTS.OVR" || MOD_TilesetSheet(name.toLatin1().constData()))
             continue; // Virtual companion exists only inside the package.
         auto bytes = readLimited(destination.filePath(name), MOD_MAX_RESOURCE);
         require(bytes == project.resources[name].original,

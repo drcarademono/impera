@@ -3,6 +3,7 @@
 #include "mod/npcs.h"
 #include "resource_document.h"
 #include "contents_editor.h"
+#include "gates_editor.h"
 #include "custom_tiles.h"
 #include "dialogue.h"
 #include "dungeon_editor.h"
@@ -57,6 +58,8 @@ Capability capability(const QString &resource) {
         return {n == "MISCMSG.DAT" ? "Shrine / Codex / Blackthorn messages"
                                    : "Final rescue messages",
                 "Scenes", "Editable runtime message entries", EditorKind::Narrative};
+    if (n == "GATES.OVR")
+        return {"Town gates", "World", "Edited through the map inspector", EditorKind::Inspector};
     if (n == "MAPS.OVR")
         return {"Maps", "World", "Map geometry", EditorKind::Inspector};
     if (n == "LOCATIONS.OVR")
@@ -216,6 +219,10 @@ void validateResource(const Project &project, const QString &name) {
     const auto kind = capability(name).editor;
     if (name == "TYPES.OVR" || name == "TYPEMAP.OVR") {
         CustomTiles::validate(project);
+        return;
+    }
+    if (name == "GATES.OVR") {
+        validateGates(project);
         return;
     }
     if (name == "MAPS.OVR") {

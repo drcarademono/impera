@@ -16,6 +16,7 @@
 #include "macros.h"
 #include "funcs.h"
 #include "mod/contents.h"
+#include "mod/gates.h"
 #include "mod/types.h"
 #include "tiles.h"
 #include <stdlib.h>
@@ -537,6 +538,87 @@ static void testLocationObjects(void) {
     D_5893_map_id = 0;
 }
 
+static void testTownGates(void) {
+    unsigned char *catalog = calloc(1, 10000);
+    memcpy(catalog, "IMAPS001", 8);
+    TYPES_Put32(catalog + 8, 1);
+    size_t size = appendMap(catalog, MAPS_HEADER, 1, 42, 0, 64, 16, "Gate test", "LOC042.DAT");
+    unsigned char *cells = catalog + MAPS_HEADER + MAPS_RECORD;
+    cells[4 * 64 + 4] = 135;
+    cells[5 * 64 + 4] = 68;
+    for (int x = 0; x < 64; ++x)
+        cells[8 * 64 + x] = 72 + (x & 1);
+    cells[15 * 64 + 63] = 135;
+    assert(MAPS_Mount(catalog, size));
+    D_5893_map_id = 42;
+    D_5895_map_level = 0;
+    D_5896_map_x = D_5897_map_y = 0;
+    for (int y = 0; y < 16; ++y)
+        for (int x = 0; x < 64; ++x)
+            *ULTIMA_4402_BaseAddr(x, y) = 5;
+    *ULTIMA_4402_BaseAddr(4, 4) = 135;
+    *ULTIMA_4402_BaseAddr(4, 5) = 68;
+    for (int x = 0; x < 64; ++x)
+        *ULTIMA_4402_BaseAddr(x, 8) = 72 + (x & 1);
+    /* Bottom-edge arches must not write beyond the floor. */
+    *ULTIMA_4402_BaseAddr(63, 15) = 135;
+    TOWN_ConfigureGates(NULL, 0);
+    D_587f = 20;
+    TOWN_0170();
+    assert(GetMap(4, 5) == 153 && GetMap(63, 8) == 3);
+    TOWN_0170(); /* Idempotent, including repeated inn/rest calls. */
+    assert(GetMap(4, 5) == 153);
+    D_587f = 5;
+    TOWN_0170();
+    assert(GetMap(4, 5) == 68 && GetMap(63, 8) == 73);
+    D_5896_map_x = 3;
+    D_5897_map_y = 8;
+    D_587f = 20;
+    TOWN_0170();
+    assert(GetMap(4, 5) == 153 && GetMap(63, 8) == 73);
+    D_5897_map_y = 9;
+    TOWN_0170();
+    assert(GetMap(63, 8) == 3);
+    unsigned char gates[GATES_HEADER + 2 * GATES_RECORD] = {0};
+    memcpy(gates, "IGAT0001", 8);
+    gates[8] = 2;
+    unsigned char *r = gates + GATES_HEADER;
+    r[0] = 42;
+    r[2] = 4;
+    r[3] = 5;
+    r[4] = 1;
+    r[5] = 1;
+    r[6] = 68;
+    r[7] = 153;
+    r[8] = 22;
+    r[9] = 3;
+    r += GATES_RECORD;
+    r[0] = 42;
+    r[2] = 63;
+    r[3] = 8;
+    r[4] = 2;
+    r[5] = 0;
+    r[6] = 73;
+    r[7] = 3;
+    r[8] = 5;
+    r[9] = 20;
+    assert(GATES_Validate(gates, sizeof(gates)));
+    TOWN_ConfigureGates(gates, sizeof(gates));
+    D_587f = 23;
+    TOWN_0170();
+    assert(GetMap(4, 5) == 68 && GetMap(63, 8) == 73);
+    D_587f = 3;
+    TOWN_0170();
+    assert(GetMap(4, 5) == 153 && GetMap(63, 8) == 73);
+    D_5895_map_level = 1;
+    *ULTIMA_4402_BaseAddr(4, 5) = 6;
+    TOWN_0170();
+    assert(GetMap(4, 5) == 6); /* A stale floor must never receive gate writes. */
+    D_5893_map_id = 0;
+    MAPS_Mount(NULL, 0);
+    free(catalog);
+}
+
 int main(void)
 {
     /* Northeast reproduces the original fortified memcpy overflow first. */
@@ -560,6 +642,7 @@ int main(void)
     testDungeonDimensions();
     testNewDungeon();
     testPortableEntranceReturn();
+    testTownGates();
     puts("World block scrolling and diagonal boundary tests passed.");
     return 0;
 }

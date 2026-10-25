@@ -41,6 +41,9 @@ void MAPS_Reset(void) {
     if (working)
         memcpy(working, source, catalogSize);
 }
+const unsigned char *MAPS_OriginalRecord(unsigned kind, unsigned id, int floor) {
+    return MAPS_Find(source, catalogSize, kind, id, floor);
+}
 const unsigned char *MAPS_Record(unsigned kind, unsigned id, int floor) {
     if (!cacheValid || cacheKind != kind || cacheId != id || cacheFloor != floor) {
         cacheRecord = MAPS_Find(working, catalogSize, kind, id, floor);

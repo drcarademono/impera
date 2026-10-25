@@ -1,6 +1,7 @@
 #include "custom_tiles.h"
 #include "map_positions.h"
 #include "map_json.h"
+#include "gates_editor.h"
 #include "extended_maps.h"
 #include "mod/npcs.h"
 #include "content_navigation.h"
@@ -119,6 +120,133 @@ int main(int argc, char **argv) {
         std::cout << "PASS " << name << "\n";
     };
     try {
+        test("Town gates preserve native rules, edit contextually, preview without painting and "
+             "transfer",
+             [&] {
+                 QTemporaryDir dir;
+                 fixture(dir.path());
+                 QByteArray terrain(16384, 5);
+                 terrain[5 * 32 + 5] = char(135);
+                 terrain[6 * 32 + 5] = 68;
+                 terrain[8 * 32 + 8] = 72;
+                 file(dir.path() + "/TOWNE.DAT", terrain);
+                 file(dir.path() + "/TOWNE.NPC", QByteArray(4608, 0));
+                 file(dir.path() + "/TOWNE.TLK", QByteArray::fromHex("0000"));
+                 WorkshopWindow window;
+                 check(window.openGame(dir.path()), "Gate fixture open");
+                 window.show();
+                 window.selectResource("TOWNE.DAT");
+                 app.processEvents();
+                 auto active = [&] {
+                     return window.findChild<QStackedWidget *>("workspaces")->currentWidget();
+                 };
+                 auto canvas = [&] {
+                     return dynamic_cast<MapCanvas *>(active()->findChild<QWidget *>("mapCanvas"));
+                 };
+                 auto &p = window.projectForTests();
+                 auto page = p.mapPages("TOWNE.DAT")[0];
+                 int map = Workshop::positionMap("TOWNE.DAT", page);
+                 auto native = Workshop::mapGates(
+                     p, map, page.floor, MapDocument(&p, "TOWNE.DAT").terrain(0), {32, 32});
+                 check(native.size() == 2 && p.data("GATES.OVR").isEmpty(),
+                       "Native gates require no overrides");
+                 check(canvas()->prepareSelection({5, 5}), "Gate selection failed");
+                 auto mode = active()->findChild<QComboBox *>("gateMode");
+                 check(mode && mode->currentData().toInt() == 1,
+                       "Gate inspector missing inherited schedule");
+                 mode->setCurrentIndex(mode->findData(3));
+                 check(Workshop::readGates(p.data("GATES.OVR"))[0][5] == 3,
+                       "Closed gate setting lost");
+                 active()->findChild<QAction *>("gatePreviewDay")->trigger();
+                 canvas()->grab();
+                 check(canvas()->displayTiles.value(6 * 32 + 5) == 153 &&
+                           p.data("TOWNE.DAT") == terrain,
+                       "Gate preview changed terrain or failed to close");
+                 mode->setCurrentIndex(mode->findData(2));
+                 active()->findChild<QAction *>("gatePreviewNight")->trigger();
+                 canvas()->grab();
+                 check(canvas()->displayTiles.value(6 * 32 + 5) == 68 &&
+                           canvas()->displayTiles.value(8 * 32 + 8) == 3,
+                       "Decorative gate or drawbridge preview wrong");
+                 auto packed = p.package();
+                 check(packed.startsWith("IMOD0024"), "Gate package version missing");
+                 Project copy;
+                 copy.openGame(dir.path());
+                 copy.importPackage(packed);
+                 check(copy.data("GATES.OVR") == p.data("GATES.OVR"),
+                       "Gate package roundtrip failed");
+                 auto old = packed;
+                 old.replace(0, 8, "IMOD0023");
+                 rejects([&] { copy.importPackage(old); });
+                 const auto projectFile = dir.path() + "/gates.imperaproj";
+                 p.save(projectFile);
+                 Project reopened;
+                 reopened.load(projectFile);
+                 check(reopened.data("GATES.OVR") == p.data("GATES.OVR"),
+                       "Gate project persistence failed");
+                 auto json = Workshop::exportMapJson(p, "TOWNE.DAT", 0);
+                 Project destination;
+                 destination.openGame(dir.path());
+                 auto edits = Workshop::importMapJson(destination, "TOWNE.DAT", 0, json);
+                 for (auto it = edits.begin(); it != edits.end(); ++it)
+                     destination.resources[it.key()].edited = it.value();
+                 destination.validate();
+                 check(Workshop::readGates(destination.data("GATES.OVR")).size() == 2,
+                       "Map transfer lost gate definitions");
+                 check(canvas()->moveNpc(0, {10, 10}), "Gate move failed");
+                 app.processEvents();
+                 check(MapDocument(&p, "TOWNE.DAT").terrain(0)[10 * 32 + 10] == char(135) &&
+                           U5::byte(Workshop::readGates(p.data("GATES.OVR"))[0], 3) == 11,
+                       "Gate move lost its arch or settings");
+                 active()->findChild<QToolButton *>("mapDeleteItem")->click();
+                 app.processEvents();
+                 check(p.data("GATES.OVR").isEmpty() &&
+                           MapDocument(&p, "TOWNE.DAT").terrain(0)[10 * 32 + 10] == 68,
+                       "Deleting gate left an override or arch");
+                 QAction *undo = nullptr;
+                 for (auto action : window.findChildren<QAction *>())
+                     if (action->shortcut() == QKeySequence::Undo)
+                         undo = action;
+                 check(undo, "Gate undo action missing");
+                 undo->trigger();
+                 app.processEvents();
+                 check(!p.data("GATES.OVR").isEmpty(), "Gate delete undo failed");
+                 rejects([&] { Workshop::resizeMap(p, "TOWNE.DAT", 0, 10, 10, 5); });
+                 auto invalid = Workshop::readGates(p.data("GATES.OVR"));
+                 invalid[0][8] = 24;
+                 rejects([&] { Workshop::writeGates(invalid); });
+                 Project custom = p;
+                 TypeDef floor;
+                 TYPES_Vanilla(0, 68, &floor);
+                 floor.id = 60000;
+                 strcpy(floor.name, "Custom floor");
+                 QImage art(16, 16, QImage::Format_RGBA8888);
+                 art.fill(Qt::white);
+                 custom.resources["TYPES.OVR"].edited = CustomTiles::library(
+                     custom, {{60000, CustomTiles::record(floor, {{art, 150, 0}})}});
+                 QMap<quint64, TypeCell> cells;
+                 for (auto point : {QPoint(15, 15), QPoint(15, 16), QPoint(20, 20)}) {
+                     auto c = CustomTiles::cell("TOWNE.DAT", page, 0, point.x(), point.y());
+                     c.type = 60000;
+                     cells[TYPES_CellKey(&c)] = c;
+                 }
+                 custom.resources["TYPEMAP.OVR"].edited = CustomTiles::mapBytes(custom, cells);
+                 auto replace = Workshop::addMapItem(custom, "TOWNE.DAT", 0, {15, 15},
+                                                     Workshop::MapItemKind::TownGate);
+                 for (auto it = replace.changes.begin(); it != replace.changes.end(); ++it)
+                     custom.resources[it.key()].edited = it.value();
+                 custom.validate();
+                 check(CustomTiles::placements(custom).size() == 1,
+                       "Gate placement retained covered custom terrain or erased unrelated tiles");
+                 auto placement = Workshop::addMapItem(p, "TOWNE.DAT", 0, {15, 15},
+                                                       Workshop::MapItemKind::TownGate);
+                 check(placement.mode == "Gates" && placement.changes.contains("GATES.OVR"),
+                       "Town gate placement missing");
+                 rejects([&] {
+                     Workshop::addMapItem(p, "TOWNE.DAT", 0, {15, 31},
+                                          Workshop::MapItemKind::TownGate);
+                 });
+             });
         test("Portable map JSON transfers complete maps and rejects mismatches atomically", [&] {
             QTemporaryDir a, b;
             auto prepare = [&](const QString &dir) {
@@ -1108,7 +1236,7 @@ int main(int argc, char **argv) {
                                    "Decorative blood is still a searchable corpse");
                      }
                  }
-                 check(n == 28 && gold >= 32 && trigger >= 32,
+                 check(n == 30 && gold >= 32 && trigger >= 32,
                        "Special types are still unavailable on locations");
                  check(p.data("TOWNE.NPC").left(4608) == original &&
                            p.data("TOWNE.TLK") == QByteArray::fromHex("0000"),
@@ -1122,14 +1250,14 @@ int main(int argc, char **argv) {
                                           3);
                  });
                  auto blob = p.package();
-                 check(blob.startsWith("IMOD0019"),
-                       "Location objects need an updated engine package");
+                 check(blob.startsWith("IMOD0024"),
+                       "Location objects and gates need an updated engine package");
                  Project imported = fixture(dir.path());
                  imported.importPackage(blob);
                  check(imported.data("TOWNE.NPC") == p.data("TOWNE.NPC"),
                        "Location objects failed package roundtrip");
                  auto old = blob;
-                 old[7] = '8';
+                 old.replace(0, 8, "IMOD0018");
                  rejects([&] {
                      Project copy = p;
                      copy.importPackage(old);
@@ -7456,9 +7584,11 @@ int main(int argc, char **argv) {
             viewWindow.selectResource("TOWNE.DAT");
             auto viewWorkspace = viewWindow.findChild<QStackedWidget *>("workspaces")->currentWidget();
             auto viewMenu = viewWorkspace->findChild<QToolButton *>("mapViewOptions");
-            check(viewMenu && viewMenu->text() == "View" && viewMenu->menu()->actions().size() == 2 &&
+            check(viewMenu && viewMenu->text() == "View" &&
+                      viewMenu->menu()->actions().size() == 3 &&
+                      viewWorkspace->findChild<QAction *>("gatePreviewNight") &&
                       !viewWorkspace->findChild<QToolButton *>("mapItemsMenu"),
-                  "View menu should contain only the two display toggles");
+                  "View menu should contain gate preview and the two display toggles");
             auto highlight = viewWorkspace->findChild<QAction *>("viewHighlightChanges");
             auto markers = viewWorkspace->findChild<QAction *>("viewContentsMarkers");
             check(highlight && markers && highlight->isCheckable() && markers->isCheckable(),

@@ -1,5 +1,7 @@
 #include "mod/npcs.h"
 #include "map_editor.h"
+#include "gates_editor.h"
+#include "../src/mod/gates.h"
 #include "map_resize_dialog.h"
 #include "map_json.h"
 #include "dungeon_editor.h"
@@ -228,7 +230,7 @@ MapCanvas::MapCanvas(QWidget *parent) : QWidget(parent) {
     setFocusPolicy(Qt::StrongFocus);
 }
 QImage MapCanvas::tileImageAt(int offset) const {
-    unsigned id = tileId(offset);
+    unsigned id = displayTiles.value(offset, tileId(offset));
     auto art = tiles.value(id);
     if (!spriteGround.contains(id))
         return art;
@@ -337,6 +339,8 @@ QPoint MapCanvas::cellAt(QPointF p) const {
     return {int(std::floor(p.x() / (16 * zoom))), int(std::floor(p.y() / (16 * zoom)))};
 }
 void MapCanvas::paintEvent(QPaintEvent *e) {
+    if (prepareDisplay)
+        prepareDisplay();
     QPainter p(this);
     p.setRenderHint(QPainter::SmoothPixmapTransform, false);
     double cell = 16 * zoom;
@@ -384,6 +388,12 @@ void MapCanvas::paintEvent(QPaintEvent *e) {
             p.drawImage(QRectF(actor.x * cell, actor.y * cell, actorSize(actor.tile).width() * cell,
                                actorSize(actor.tile).height() * cell),
                         tiles[actor.tile]);
+    if (!gateSelection.isEmpty()) {
+        p.setPen(QPen(QColor("#72caff"), 2));
+        p.drawRect(QRectF(gateSelection.x() * cell, gateSelection.y() * cell,
+                          gateSelection.width() * cell, gateSelection.height() * cell)
+                       .adjusted(1, 1, -1, -1));
+    }
     if (tool == InspectNpc) {
         for (auto marker : positionMarkers) {
             QRectF r(marker.x * cell, marker.y * cell, cell, cell);
@@ -1743,6 +1753,7 @@ MapWorkspace::MapWorkspace(
         if (d.id >= 512 && d.kind)
             actorEntry(d.id, d.kind, QString::fromUtf8(d.name));
     }
+    canvas->prepareDisplay = [this] { refreshGatePreview(); };
     auto specialItems = supportedItems;
     std::sort(specialItems.begin(), specialItems.end(), [](auto a, auto b) {
         return Workshop::mapItemName(a).compare(Workshop::mapItemName(b), Qt::CaseInsensitive) < 0;
@@ -1751,7 +1762,9 @@ MapWorkspace::MapWorkspace(
         if (kind == Workshop::MapItemKind::Npc || kind == Workshop::MapItemKind::Monster)
             continue;
         int id = 65536 + int(kind);
-        int art = kind == Workshop::MapItemKind::Sign             ? 0xf8
+        int art = kind == Workshop::MapItemKind::TownGate         ? 135
+                  : kind == Workshop::MapItemKind::Drawbridge     ? 72
+                  : kind == Workshop::MapItemKind::Sign           ? 0xf8
                   : kind == Workshop::MapItemKind::Container      ? 257
                   : kind == Workshop::MapItemKind::HiddenContents ? 0x5d
                   : kind == Workshop::MapItemKind::Trigger        ? 0x45
@@ -2020,6 +2033,8 @@ void MapWorkspace::clearLocationLayer() {
     canvas->moveNpc = nativeMoveNpc;
     canvas->commit = nativeCommit;
     layerFlush = {};
+    canvas->gateSelection = {};
+    canvas->actorFootprints.remove(unsigned(-1));
     if (locationLayer) {
         inspector->removeWidget(locationLayer);
         delete locationLayer;
@@ -2133,6 +2148,30 @@ void MapWorkspace::enableLocationModes(const QStringList &names, LocationLayerFa
     viewOptions->setAccessibleName("View options");
     viewOptions->setPopupMode(QToolButton::InstantPopup);
     auto viewMenu = new QMenu(viewOptions);
+    if (resource != "BRIT.DAT" && resource != "UNDER.DAT" && !resource.endsWith(".CBT")) {
+        gatePreviewHour = navigation->value("map/gatePreviewHour", -1);
+        auto preview = viewMenu->addMenu("Gate preview");
+        auto group = new QActionGroup(preview);
+        for (auto pair :
+             QList<QPair<QString, int>>{{"Map artwork", -1}, {"Day", 12}, {"Night", 0}}) {
+            auto action = preview->addAction(pair.first);
+            action->setObjectName(pair.second < 0     ? "gatePreviewArtwork"
+                                  : pair.second == 12 ? "gatePreviewDay"
+                                                      : "gatePreviewNight");
+            action->setToolTip(pair.second < 0 ? "Show the map as painted."
+                               : pair.second == 12
+                                   ? "Preview gates at 12:00 without changing terrain."
+                                   : "Preview gates at 00:00 without changing terrain.");
+            action->setCheckable(true);
+            action->setChecked(pair.second == gatePreviewHour);
+            group->addAction(action);
+            connect(action, &QAction::triggered, this, [this, hour = pair.second] {
+                gatePreviewHour = hour;
+                (*navigation)["map/gatePreviewHour"] = hour;
+                canvas->update();
+            });
+        }
+    }
     auto markerAction = viewMenu->addAction("Contents markers");
     markerAction->setObjectName("viewContentsMarkers");
     markerAction->setToolTip(markers->toolTip());
@@ -2456,8 +2495,20 @@ bool MapWorkspace::selectMapItem(QPoint cell) {
     offer(contentsHit || containerTile, "Contents", contentsMode);
     offer(objectHit, "World object", objectMode);
     offer(encounterHit, "Encounter", encounterMode);
+    QByteArray gateRecord;
+    if (signMap > 0 && signMap < 128 && !resource.endsWith(".CBT"))
+        for (const auto &r :
+             Workshop::mapGates(*project, signMap, page.floor, document.terrain(currentPage()),
+                                QSize(page.side, page.height()))) {
+            QPoint position(U5::byte(r, 2), U5::byte(r, 3));
+            if (position == cell || (r[4] == 1 && position - QPoint(0, 1) == cell)) {
+                gateRecord = r;
+                offer(true, r[4] == 1 ? "Town gate" : "Drawbridge", -2);
+                break;
+            }
+        }
     int target = modes.isEmpty() ? contentsMode : modes.first();
-    if (target < 0)
+    if (target == -1)
         target = activeMode;
     if (choices.size() > 1) {
         bool ok = false;
@@ -2466,6 +2517,14 @@ bool MapWorkspace::selectMapItem(QPoint cell) {
         if (!ok)
             return false;
         target = modes[choices.indexOf(choice)];
+    }
+    if (target == -2) {
+        showGate(gateRecord);
+        return true;
+    }
+    if (findChild<QWidget *>("mapGateInspector")) {
+        clearLocationLayer();
+        applyLocationMode();
     }
     if (target != activeMode) {
         locationModes->setCurrentIndex(target);
@@ -2493,6 +2552,195 @@ bool MapWorkspace::selectMapItem(QPoint cell) {
     }
     return true;
 }
+void MapWorkspace::refreshGatePreview() {
+    canvas->displayTiles.clear();
+    if (gatePreviewHour < 0 || resource == "BRIT.DAT" || resource == "UNDER.DAT" ||
+        resource.endsWith(".CBT"))
+        return;
+    const auto &mp = document.pages[currentPage()];
+    int map = Workshop::positionMap(resource, mp);
+    for (const auto &r :
+         Workshop::mapGates(*project, map, mp.floor, canvas->ids, QSize(mp.side, mp.height()))) {
+        auto data = reinterpret_cast<const unsigned char *>(r.constData());
+        canvas->displayTiles.insert(data[3] * mp.side + data[2],
+                                    GATES_Open(data, gatePreviewHour) ? data[6] : data[7]);
+    }
+}
+void MapWorkspace::showGate(const QByteArray &record) {
+    if (record.isEmpty() || !flushLocationMode())
+        return;
+    clearLocationLayer();
+    canvas->tool = MapCanvas::InspectNpc;
+    tool->button(canvas->tool)->setChecked(true);
+    canvas->commit = {};
+    canvas->chooseNpc = [](int) {};
+    canvas->chooseActor = {};
+    canvas->actors.clear();
+    canvas->ghosts.clear();
+    canvas->selectedNpc = 0;
+    bool gate = record[4] == 1;
+    QPoint cell(U5::byte(record, 2), U5::byte(record, 3));
+    QPoint anchor = cell - QPoint(0, gate ? 1 : 0);
+    canvas->keyboardCell = anchor;
+    canvas->gateSelection = QRect(anchor, QSize(1, gate ? 2 : 1));
+    if (gate)
+        canvas->actorFootprints[unsigned(-1)] = QSize(1, 2);
+    canvas->actors.append({anchor.x(), anchor.y(), gate ? -1 : -2, 0, {}});
+    auto current = std::make_shared<QByteArray>(record);
+    auto panel = new QWidget;
+    panel->setObjectName("mapGateInspector");
+    panel->setProperty("gateRecord", record);
+    auto layout = new QVBoxLayout(panel);
+    auto title = new QLabel(gate ? "Town gate" : "Drawbridge");
+    layout->addWidget(title);
+    auto form = new QFormLayout;
+    auto mode = new QComboBox;
+    mode->setObjectName("gateMode");
+    mode->addItem("Scheduled", 1);
+    mode->addItem("Always open", 2);
+    mode->addItem("Always closed", 3);
+    mode->setCurrentIndex(mode->findData(record[5] ? int(U5::byte(record, 5)) : 2));
+    mode->setToolTip("Scheduled follows the opening and closing hours. Use Always open for "
+                     "decorative arches and permanent bridges.");
+    form->addRow("Behavior", mode);
+    auto open = new QSpinBox;
+    auto close = new QSpinBox;
+    open->setObjectName("gateOpenHour");
+    close->setObjectName("gateCloseHour");
+    for (auto hour : {open, close}) {
+        hour->setRange(0, 23);
+        hour->setSuffix(":00");
+    }
+    open->setValue(U5::byte(record, 8));
+    close->setValue(U5::byte(record, 9));
+    open->setToolTip("Hour when the gate opens; schedules can cross midnight.");
+    close->setToolTip(
+        "Hour when the gate closes. Equal opening and closing hours mean always closed.");
+    form->addRow("Opens", open);
+    form->addRow("Closes", close);
+    auto openTile = new QComboBox;
+    auto closedTile = new QComboBox;
+    openTile->setObjectName("gateOpenTile");
+    closedTile->setObjectName("gateClosedTile");
+    for (int tile = 0; tile < 256; ++tile) {
+        QIcon icon(QPixmap::fromImage(canvas->tiles.value(tile)));
+        QString name = QString("%1 · %2").arg(tile).arg(MapDocument::tileName(tile));
+        openTile->addItem(icon, name, tile);
+        closedTile->addItem(icon, name, tile);
+    }
+    for (auto tile : {openTile, closedTile}) {
+        tile->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+        tile->setMinimumContentsLength(14);
+        tile->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+    }
+    openTile->setCurrentIndex(U5::byte(record, 6));
+    closedTile->setCurrentIndex(U5::byte(record, 7));
+    openTile->setToolTip("Terrain shown when open or decorative.");
+    closedTile->setToolTip("Terrain shown when closed; its normal movement rules apply.");
+    form->addRow("Open tile", openTile);
+    form->addRow("Closed tile", closedTile);
+    layout->addLayout(form);
+    auto inherited = new QLabel;
+    inherited->setText(
+        Workshop::readGates(project->resources.value("GATES.OVR").edited).contains(record)
+            ? ""
+            : "Vanilla behavior");
+    layout->addWidget(inherited);
+    auto save = [=] {
+        open->setEnabled(mode->currentData().toInt() == 1);
+        close->setEnabled(mode->currentData().toInt() == 1);
+        auto next = *current;
+        next[5] = char(mode->currentData().toInt());
+        next[6] = char(openTile->currentData().toInt());
+        next[7] = char(closedTile->currentData().toInt());
+        next[8] = char(open->value());
+        next[9] = char(close->value());
+        try {
+            if (commitResources({{"GATES.OVR", Workshop::setGate(*project, next)}}, "Edit gate")) {
+                *current = next;
+                panel->setProperty("gateRecord", next);
+                inherited->clear();
+                canvas->update();
+            }
+        } catch (const std::exception &e) {
+            QMessageBox::warning(this, "Cannot edit gate", e.what());
+        }
+    };
+    open->setEnabled(record[5] == 1);
+    close->setEnabled(record[5] == 1);
+    connect(mode, &QComboBox::currentIndexChanged, panel, [=] { save(); });
+    connect(open, &QSpinBox::editingFinished, panel, save);
+    connect(close, &QSpinBox::editingFinished, panel, save);
+    connect(openTile, &QComboBox::currentIndexChanged, panel, [=] { save(); });
+    connect(closedTile, &QComboBox::currentIndexChanged, panel, [=] { save(); });
+    auto restore = new QPushButton("Use vanilla behavior");
+    restore->setObjectName("gateRestoreVanilla");
+    restore->setToolTip("Remove this override and use the automatic archway or bridge behavior.");
+    layout->addWidget(restore, 0, Qt::AlignLeft);
+    connect(restore, &QPushButton::clicked, panel, [=] {
+        if (commitResources({{"GATES.OVR", Workshop::setGate(*project, *current, true)}},
+                            "Reset gate")) {
+            QTimer::singleShot(0, this, [this, anchor] { selectMapItem(anchor); });
+            canvas->update();
+        }
+    });
+    layout->addStretch();
+    auto scroll = new QScrollArea;
+    scroll->setWidgetResizable(true);
+    scroll->setWidget(panel);
+    locationLayer = scroll;
+    inspector->addWidget(scroll);
+    inspector->setCurrentWidget(scroll);
+    canvas->moveNpc = [this, current, gate, anchor](int, QPoint to) {
+        const auto mp = document.pages[currentPage()];
+        QPoint target = to + QPoint(0, gate ? 1 : 0);
+        if (to.x() < 0 || to.y() < 0 || to.x() >= mp.side || target.y() >= mp.height())
+            return false;
+        try {
+            auto terrain = document.terrain(currentPage());
+            for (const auto &other :
+                 Workshop::mapGates(*project, Workshop::positionMap(resource, mp), mp.floor,
+                                    terrain, {mp.side, mp.height()})) {
+                if (other.left(4) == current->left(4))
+                    continue;
+                bool otherGate = other[4] == 1;
+                QRect area(QPoint(U5::byte(other, 2), U5::byte(other, 3) - (otherGate ? 1 : 0)),
+                           QSize(1, otherGate ? 2 : 1));
+                require(!area.intersects(QRect(to, QSize(1, gate ? 2 : 1))),
+                        "Another gate occupies that position");
+            }
+            terrain[anchor.y() * mp.side + anchor.x()] = gate ? (*current)[6] : (*current)[7];
+            if (gate)
+                terrain[(anchor.y() + 1) * mp.side + anchor.x()] = (*current)[6];
+            terrain[to.y() * mp.side + to.x()] = gate ? char(135) : (*current)[6];
+            if (gate)
+                terrain[target.y() * mp.side + target.x()] = (*current)[6];
+            auto next = *current;
+            next[2] = char(target.x());
+            next[3] = char(target.y());
+            Project staged = *project;
+            staged.resources["GATES.OVR"].edited = Workshop::setGate(staged, *current, true);
+            auto expanded = CustomTiles::expanded(*project, resource, mp, currentPage(), terrain);
+            for (auto cell : {anchor, anchor + QPoint(0, gate ? 1 : 0), to, target})
+                TYPES_Put32(expanded.data() + (cell.y() * mp.side + cell.x()) * 4, 0);
+            auto edits = document.changes(currentPage(), terrain, expanded);
+            edits["GATES.OVR"] = Workshop::setGate(staged, next);
+            if (!commitResources(edits, "Move gate"))
+                return false;
+            document = MapDocument(project, resource);
+            canvas->ids = document.terrain(currentPage());
+            canvas->extended =
+                CustomTiles::expanded(*project, resource, mp, currentPage(), canvas->ids);
+            QTimer::singleShot(0, this, [this, next] { showGate(next); });
+            return true;
+        } catch (const std::exception &e) {
+            QMessageBox::warning(this, "Cannot move gate", e.what());
+            return false;
+        }
+    };
+    canvas->update();
+}
+
 void MapWorkspace::refreshContextActors() {
     canvas->contextActors.clear();
     canvas->positionMarkers.clear();
@@ -4170,20 +4418,24 @@ void MapWorkspace::beginAdd(int value, int selectedAppearance, QPoint cell) {
             if (name.isEmpty())
                 name = "New NPC";
         }
-        int tile = kind == Workshop::MapItemKind::Gold        ? 258
-                   : kind == Workshop::MapItemKind::Food      ? 271
-                   : kind == Workshop::MapItemKind::Moonstone ? 281
-                   : kind == Workshop::MapItemKind::Corpse    ? 286
-                   : kind == Workshop::MapItemKind::Sign      ? 0xf8
-                   : kind == Workshop::MapItemKind::Container ? 257
-                   : kind == Workshop::MapItemKind::Horse     ? 272
-                   : kind == Workshop::MapItemKind::Skiff     ? 296
-                   : kind == Workshop::MapItemKind::Frigate   ? 288
-                   : kind == Workshop::MapItemKind::Carpet    ? 283
-                   : appearance >= 0                          ? 256 + appearance
-                                                              : -1;
+        int tile = kind == Workshop::MapItemKind::TownGate     ? 135
+                   : kind == Workshop::MapItemKind::Drawbridge ? 72
+                   : kind == Workshop::MapItemKind::Gold       ? 258
+                   : kind == Workshop::MapItemKind::Food       ? 271
+                   : kind == Workshop::MapItemKind::Moonstone  ? 281
+                   : kind == Workshop::MapItemKind::Corpse     ? 286
+                   : kind == Workshop::MapItemKind::Sign       ? 0xf8
+                   : kind == Workshop::MapItemKind::Container  ? 257
+                   : kind == Workshop::MapItemKind::Horse      ? 272
+                   : kind == Workshop::MapItemKind::Skiff      ? 296
+                   : kind == Workshop::MapItemKind::Frigate    ? 288
+                   : kind == Workshop::MapItemKind::Carpet     ? 283
+                   : appearance >= 0                           ? 256 + appearance
+                                                               : -1;
         if (kind != Workshop::MapItemKind::Sign && kind != Workshop::MapItemKind::Container &&
-            kind != Workshop::MapItemKind::HiddenContents && kind != Workshop::MapItemKind::Trigger)
+            kind != Workshop::MapItemKind::HiddenContents &&
+            kind != Workshop::MapItemKind::Trigger && kind != Workshop::MapItemKind::TownGate &&
+            kind != Workshop::MapItemKind::Drawbridge)
             tile = 256 + Workshop::mapItemShape(kind, appearance);
         if (appearance >= 512 &&
             (kind == Workshop::MapItemKind::Npc || kind == Workshop::MapItemKind::Monster))
@@ -4220,6 +4472,18 @@ bool MapWorkspace::placeAddedItem(int value, int appearance, int conversation, Q
             (*navigation)["positions/selected"] = edit.slot;
         if (edit.mode == "Starting Objects")
             (*navigation)["objects/slot"] = edit.slot;
+        if (edit.mode == "Gates") {
+            document = MapDocument(project, resource);
+            canvas->ids = document.terrain(currentPage());
+            canvas->extended = CustomTiles::expanded(
+                *project, resource, document.pages[currentPage()], currentPage(), canvas->ids);
+            canvas->cancelStroke();
+            canvas->tool = MapCanvas::InspectNpc;
+            tool->button(canvas->tool)->setChecked(true);
+            selectMapItem(cell);
+            canvas->update();
+            return true;
+        }
         setItemMode(edit.mode);
         canvas->keyboardCell = cell;
         if (edit.mode == "NPCs / Schedules" || edit.mode == "Encounter")
@@ -4247,6 +4511,25 @@ bool MapWorkspace::placeAddedItem(int value, int appearance, int conversation, Q
     }
 }
 void MapWorkspace::deleteSelectedItem() {
+    if (auto panel = findChild<QWidget *>("mapGateInspector")) {
+        const auto record = panel->property("gateRecord").toByteArray();
+        const auto mp = document.pages[currentPage()];
+        int x = U5::byte(record, 2), y = U5::byte(record, 3);
+        bool gate = record[4] == 1;
+        auto terrain = document.terrain(currentPage());
+        terrain[y * mp.side + x] = gate ? record[6] : record[7];
+        if (gate && y)
+            terrain[(y - 1) * mp.side + x] = record[6];
+        auto edits = document.changes(currentPage(), terrain);
+        edits["GATES.OVR"] = Workshop::setGate(*project, record, true);
+        if (commitResources(edits, "Delete gate")) {
+            clearLocationLayer();
+            document = MapDocument(project, resource);
+            applyLocationMode();
+            canvas->update();
+        }
+        return;
+    }
     if (!locationModes || !flushLocationMode())
         return;
     try {

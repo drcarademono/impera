@@ -554,3 +554,22 @@ header bytes 20–23 for a native portal's actual return map, world, X, and Y. I
 have zero changed cell records when only the return point needs saving. Native
 portals remember the world actually entered from, including across save/load;
 ordinary saves continue using `IMPSAV01`. Both versions remain readable.
+
+### Town gates (`IMOD0024`)
+
+`GATES.OVR` is an empty-base companion resource. Its `IGAT0001` header holds a
+little-endian 32-bit record count after the eight-byte signature. Each sorted
+16-byte record contains map ID, signed floor, X, Y, kind (1 portcullis, 2
+drawbridge), behavior (0 decorative, 1 scheduled, 2 always open, 3 always
+closed), open tile, closed tile, opening hour, closing hour, and six zero bytes.
+Records sort by map, signed floor, Y, X; duplicate cells are rejected. The gate
+coordinate is the lower cell, immediately south of the archway. Hours range
+from 0 to 23; overnight schedules are supported, and equal hours mean closed.
+
+Unlisted cells retain vanilla behavior: archways toggle the cell below them,
+and bridge tiles retract to water at night. Native hours are 05:00–20:00.
+The floor is initialized to the appropriate state on entry; subsequent updates
+are deterministic and occur when the hour changes, including during rest.
+Drawbridges retain vanilla's protection while the party stands on a bridge.
+The former 32-cell drawbridge cap is removed. Overrides are confined to location
+maps and validated against their floor dimensions.

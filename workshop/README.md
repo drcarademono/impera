@@ -711,3 +711,18 @@ These mods require the updated Impera (package version 12). Original NPC files
 retain their first 4608 bytes; extension records hold the additional schedules.
 The extension supports up to 32,767 NPCs per location, across its floors, with
 slot zero reserved for the party. Combat encounter size is unchanged.
+
+### Town gates and drawbridges
+
+The **Special** tile filter includes **Town gate** and **Drawbridge**. A town gate
+places an archway with a brick-floor passage below it. Select either part with
+**Select / Move** to edit its behavior, opening and closing hours, and open/closed
+tiles in the right pane. Drawbridges use the same controls. Drag a selected gate
+to move it; **Delete** removes it, and Undo restores both terrain and settings.
+
+Existing archways and bridges retain vanilla's 05:00–20:00 schedule until edited.
+Choose **Always open** for decorative arches or permanent bridges, or
+**Always closed** for a fixed barrier. **Use vanilla behavior** removes the override.
+**View → Gate preview → Day / Night** previews noon or midnight without changing
+terrain; **Map artwork** returns to the painted map. Gate settings travel with
+location JSON exports, projects, and mod packages.

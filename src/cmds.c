@@ -369,7 +369,7 @@ void CMDS_0552_HoleUpCmd(void)
         while (local_8 != D_587f)
         {
             ULTIMA_4f7c(10);
-            if (local_c != D_587f && (D_587f == 0x14 || D_587f == 0x05))
+            if (local_c != D_587f)
             {
                 TOWN_0170();
             }
