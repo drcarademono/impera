@@ -742,8 +742,17 @@ int MAINOUT_08de_EnterCmd(void)
     const unsigned char *destination =
         MAPS_Entrance((int8_t)D_5895_map_level, D_5896_map_x, D_5897_map_y);
     if (destination) {
+        if (destination[4] == 4 && D_587c_partyTile != TILE_ACTOR_AVATAR) {
+            ULTIMA_1850_PrintString(_TEXT(0x2a24, "\nOn foot!\n"));
+            return 0;
+        }
         ULTIMA_1850_PrintString((char *)destination + 24);
         ULTIMA_1850_PrintString("\n");
+        if (destination[4] == 4) {
+            ULTIMA_25d8_WriteFileToDisk(OUTSUBS_0368_GetWorldSavefile(), D_5c5a, 0x100);
+            memset(D_595a, 0xb0, 512);
+            D_6602 = D_6603 = 0;
+        }
         D_5893_map_id = destination[5];
         D_5895_map_level = 0;
         D_5896_map_x = destination[17];
@@ -1393,7 +1402,7 @@ static void MAINOUT_1248(int param_1)
         }
         else
         {
-            int location = MAPS_Town(D_5893_map_id);
+            int location = MAPS_IsTown(D_5893_map_id);
             if (location)
                 NPC_ConsumeObject(param_1);
             D_5c5a[param_1]._0_tile = D_5c5a[param_1]._1_animTile = 0;
@@ -1438,7 +1447,7 @@ static void MAINOUT_1248(int param_1)
         }
         else
         {
-            if (MAPS_Town(D_5893_map_id))
+            if (MAPS_IsTown(D_5893_map_id))
                 TOWN_AttackPlacedObject(param_1);
             else
                 ULTIMA_6150_Combat(param_1);
@@ -1511,7 +1520,7 @@ static int MAINOUT_131a(int param_1)
 
 static int MAINOUT_1482(int param_1, int param_2, int param_3)
 {
-    if (MAPS_Town(D_5893_map_id) &&
+    if (MAPS_IsTown(D_5893_map_id) &&
         (param_2 < 0 || param_3 < 0 || param_2 >= MAP_WIDTH || param_3 >= MAP_HEIGHT))
         return 0;
     unsigned width, height;
@@ -1877,7 +1886,7 @@ static void MAINOUT_198c(int param_1)
 }
 
 void MAINOUT_UpdateLocationHazard(unsigned actor) {
-    if (!MAPS_Town(D_5893_map_id) || !actor || actor >= (unsigned)MAP_ACTOR_COUNT ||
+    if (!MAPS_IsTown(D_5893_map_id) || !actor || actor >= (unsigned)MAP_ACTOR_COUNT ||
         D_5c5a[actor]._4_z != D_5895_map_level)
         return;
     unsigned shape = D_5c5a[actor]._0_tile & 0xfc;

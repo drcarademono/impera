@@ -19,6 +19,7 @@
 #include "mod/types.h"
 #include "tiles.h"
 #include <stdlib.h>
+#include <SDL3/SDL.h>
 byte *ULTIMA_4402_BaseAddr(int, int);
 
 static int directionSelections;
@@ -283,6 +284,64 @@ static void testDungeonDimensions(void) {
     D_5895_map_level = 0;
 }
 
+static void testNewDungeon(void) {
+    assert(SDL_CreateDirectory("SAVEGAME"));
+    unsigned char *catalog = calloc(1, 20000);
+    assert(catalog);
+    memcpy(catalog, "IMAPS001", 8);
+    TYPES_Put32(catalog + 8, 8);
+    size_t off = MAPS_HEADER;
+    for (unsigned f = 0; f < 8; ++f) {
+        size_t record = off;
+        off = appendMap(catalog, off, 4, 42, f ? -2 : 0, 19, 3, "Crystal depths", "DUNGEON.DAT");
+        catalog[record + 6] = 64 + f;
+        catalog[record + 8] = f;
+        catalog[record + 21] = 112;
+        if (!f) {
+            catalog[record + 15] = 18;
+            catalog[record + 16] = 12;
+            catalog[record + 17] = 9;
+            catalog[record + 18] = 1;
+        }
+    }
+    assert(MAPS_Mount(catalog, off));
+    assert(MAPS_IsDungeon(42) && !MAPS_Outside(42) && !MAPS_IsTown(42));
+    assert(MAPS_DungeonRoom(42, 2) == 114 && MAPS_DungeonRoom(33, 2) == 2);
+    D_5893_map_id = D_5895_map_level = 0;
+    D_5896_map_x = 18;
+    D_5897_map_y = 12;
+    D_587c_partyTile = TILE_ACTOR_HORSE;
+    assert(MAINOUT_08de_EnterCmd() == 0 && !D_5893_map_id);
+    D_587c_partyTile = TILE_ACTOR_AVATAR;
+    assert(MAINOUT_08de_EnterCmd() == 0);
+    assert(D_5893_map_id == 42 && D_5895_map_level == 0 && D_5896_map_x == 9 && D_5897_map_y == 1);
+    assert(MAP_WIDTH == 19 && MAP_HEIGHT == 3);
+    GetDungeonMap(18, 2, 0) = 0xf2;
+    GetDungeonMap(18, 2, 7) = 0xf2;
+    DNGLOOK_0844(2);
+    assert(GetDungeonMap(18, 2, 0) == 0xa2 && GetDungeonMap(18, 2, 7) == 0xa2);
+    FILE *state = tmpfile();
+    assert(state && MAPS_WriteState(state));
+    MAPS_Reset();
+    assert(GetDungeonMap(18, 2, 0) == 5);
+    rewind(state);
+    assert(MAPS_ReadState(state, 1));
+    fclose(state);
+    assert(GetDungeonMap(18, 2, 7) == 0xa2);
+    D_5895_map_level = 3;
+    DUNGEON_1d08_Exit();
+    assert(!D_5893_map_id && !D_5895_map_level && D_5896_map_x == 18 && D_5897_map_y == 12);
+    catalog[MAPS_HEADER + 14] = 255;
+    assert(MAPS_Mount(catalog, off));
+    D_5895_map_level = 255;
+    assert(MAINOUT_08de_EnterCmd() == 0 && D_5893_map_id == 42 && !D_5895_map_level);
+    DUNGEON_1d08_Exit();
+    assert(!D_5893_map_id && D_5895_map_level == 255 && D_5896_map_x == 18 && D_5897_map_y == 12);
+    MAPS_Mount(NULL, 0);
+    assert(!MAPS_IsDungeon(42) && MAPS_IsTown(42));
+    free(catalog);
+}
+
 static void spawnObject(unsigned slot, unsigned kind, unsigned shape, unsigned value,
                         unsigned aux) {
     D_659e[slot] = shape;
@@ -474,6 +533,7 @@ int main(void)
     testExtendedMaps();
     testLocationObjects();
     testDungeonDimensions();
+    testNewDungeon();
     puts("World block scrolling and diagonal boundary tests passed.");
     return 0;
 }

@@ -293,12 +293,12 @@ int MOD_InitializeWorldObjects(void *worlds512) {
 }
 
 const char *MOD_LocationName(unsigned map, const char *fallback) {
-    const unsigned char *extended = MAPS_Record(1, map, 0);
-    if (extended && MAPS_NewLocation(map))
-        return (const char *)extended + 24;
     const ModResource *r = mountedResource("LOCATIONS.OVR");
     const char *name = r ? LOCATIONS_Name(r->data, r->size, map) : NULL;
-    return name ? name : fallback;
+    if (name)
+        return name;
+    const unsigned char *extended = MAPS_Record(MAPS_IsDungeon(map) ? 4 : 1, map, 0);
+    return extended && MAPS_NewLocation(map) ? (const char *)extended + 24 : fallback;
 }
 const char *MOD_NarrativeText(const char *resource, unsigned offset) {
     const ModResource *r = mountedResource("TEXT.OVR");

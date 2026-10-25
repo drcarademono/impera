@@ -12,6 +12,7 @@ static unsigned char outside = 255;
 static int cacheValid, cacheFloor;
 static unsigned cacheKind, cacheId;
 static const unsigned char *cacheRecord;
+static unsigned char customDungeons[128];
 int MAPS_Mount(const void *bytes, size_t size) {
     unsigned char *next = NULL;
     if (bytes) {
@@ -20,6 +21,10 @@ int MAPS_Mount(const void *bytes, size_t size) {
         memcpy(next, bytes, size);
     }
     cacheValid = 0;
+    memset(customDungeons, 0, sizeof(customDungeons));
+    for (size_t off = MAPS_HEADER; next && off < size; off += MAPS_U32(next + off))
+        if (next[off + 4] == 4 && MAPS_NewLocation(next[off + 5]))
+            customDungeons[next[off + 5]] = 1;
     free(working);
     working = next;
     source = bytes;
@@ -42,16 +47,27 @@ const unsigned char *MAPS_Record(unsigned kind, unsigned id, int floor) {
     }
     return cacheRecord;
 }
+int MAPS_IsDungeon(unsigned id) {
+    return (id >= 33 && id <= 40) || (id < 128 && customDungeons[id]);
+}
+int MAPS_IsTown(unsigned id) { return MAPS_Town(id) && !MAPS_IsDungeon(id); }
+int MAPS_Outside(unsigned id) { return !id || MAPS_IsTown(id); }
+int MAPS_DungeonRoom(unsigned id, unsigned room) {
+    if (room > 15 || !MAPS_IsDungeon(id))
+        return -1;
+    const unsigned char *r = MAPS_Record(4, id, 0);
+    return (id > 40 ? (int)MAPS_Word(r + 21) : id > 33 ? (int)(id - 34) * 16 : 0) + room;
+}
 void MAPS_Combat(unsigned kind, unsigned id) {
     consumedTriggers = 0;
     combatKind = kind;
     combatMap = id;
 }
 static const unsigned char *active(unsigned map, int level) {
-    return MAPS_Record(map >= 128               ? combatKind + 1
-                       : map >= 33 && map <= 40 ? 4
-                       : map                    ? 1
-                                                : 0,
+    return MAPS_Record(map >= 128            ? combatKind + 1
+                       : MAPS_IsDungeon(map) ? 4
+                       : map                 ? 1
+                                             : 0,
                        map >= 128 ? combatMap
                        : map      ? map
                                   : !!level,
@@ -68,11 +84,11 @@ void MAPS_ConsumeTrigger(unsigned slot) {
 }
 int MAPS_ActiveWidth(unsigned map, int level) {
     const unsigned char *r = active(map, level);
-    return r ? MAPS_Word(r + 10) : !map ? 256 : map >= 128 ? 11 : map >= 33 && map <= 40 ? 8 : 32;
+    return r ? MAPS_Word(r + 10) : !map ? 256 : map >= 128 ? 11 : MAPS_IsDungeon(map) ? 8 : 32;
 }
 int MAPS_ActiveHeight(unsigned map, int level) {
     const unsigned char *r = active(map, level);
-    return r ? MAPS_Word(r + 12) : !map ? 256 : map >= 128 ? 11 : map >= 33 && map <= 40 ? 8 : 32;
+    return r ? MAPS_Word(r + 12) : !map ? 256 : map >= 128 ? 11 : MAPS_IsDungeon(map) ? 8 : 32;
 }
 int MAPS_Wrap(int value, int size) {
     int n = value % size;
@@ -122,8 +138,8 @@ unsigned char *MAPS_CombatCell(int x, int y, unsigned char *native) {
 const unsigned char *MAPS_Entrance(int world, int x, int y) {
     for (size_t off = MAPS_HEADER; working && off < catalogSize; off += MAPS_U32(working + off)) {
         const unsigned char *r = working + off;
-        if (r[4] == 1 && MAPS_NewLocation(r[5]) && (int8_t)r[14] == (int8_t)world && r[15] == x &&
-            r[16] == y)
+        if ((r[4] == 1 || (r[4] == 4 && !r[8])) && MAPS_NewLocation(r[5]) &&
+            (int8_t)r[14] == (int8_t)world && r[15] == x && r[16] == y)
             return r;
     }
     return NULL;

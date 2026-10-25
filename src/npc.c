@@ -32,7 +32,7 @@ static int NPC_Behavior(int slot, int schedule) {
     return NPC_ObjectKind(slot) == NPCS_OBJECT_SHADOWLORD ? 6 : D_5d5e[slot].type[schedule];
 }
 int NPC_ConsumeObject(unsigned actor) {
-    if (!MAPS_Town(D_5893_map_id) || actor == 0 || actor >= (unsigned)MAP_ACTOR_COUNT)
+    if (!MAPS_IsTown(D_5893_map_id) || actor == 0 || actor >= (unsigned)MAP_ACTOR_COUNT)
         return 0;
     int slot = TOWN_011e(actor);
     if (slot < 1 || NPC_ObjectKind(slot) < 0)

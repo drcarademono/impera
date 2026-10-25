@@ -232,7 +232,8 @@ QVector<ContentDestination> contentDestinations(const Project &project) {
         QString workspace, group = c.group, title = c.title;
         switch (c.editor) {
         case EditorKind::Dungeon:
-            for (int dungeon = 0; dungeon < 8; ++dungeon) {
+            for (int id : dungeonIds(project)) {
+                const int dungeon = id - 33;
                 ContentDestination d{QString("world/dungeon/%1").arg(dungeon), "World", "Dungeons",
                                      project.locationName(33 + dungeon), name, -1};
                 d.selection["DUNGEON.DAT/dungeon"] = dungeon;
@@ -419,6 +420,10 @@ QMap<QString, QStringList> contentChanges(const Project &project,
                 MapDocument map(&original, d.resource);
                 Project live = project;
                 MapDocument edited(&live, d.resource);
+                if (d.page >= map.pages.size()) {
+                    result[d.id] = {"New map"};
+                    continue;
+                }
                 if (!d.resource.endsWith(".CBT")) {
                     int id =
                         d.resource == "UNDER.DAT" ? 41 : positionMap(d.resource, map.pages[d.page]);

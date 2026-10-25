@@ -18,7 +18,7 @@
 
 void DNGLOOK_109e(int param_1);
 static void dungeonNormalizePosition(void) {
-    if (D_5893_map_id >= 33 && D_5893_map_id <= 40 && D_5895_map_level < 8) {
+    if (MAPS_IsDungeon(D_5893_map_id) && D_5895_map_level < 8) {
         D_5896_map_x = DungeonX(D_5896_map_x);
         D_5897_map_y = DungeonY(D_5897_map_y);
     }
@@ -47,13 +47,7 @@ static void DUNGEON_0000(byte param_1)
     local_4 = D_587b;
     D_589e = D_587b = 0xff;
 
-    local_1e = D_5893_map_id - 0x21;
-    if (local_1e >= 1)
-    {
-        local_1e--;
-    }
-
-    local_a = 0x1600 * local_1e + local_1c * 0x160;
+    local_a = MAPS_DungeonRoom(D_5893_map_id, local_1c) * 352;
 
     memset(D_ad14, 0, 0x160);
 
@@ -1012,8 +1006,7 @@ static void DUNGEON_104c(int param_1)
 {
     int local_4;
 
-    if (param_1 <= D_2df0[D_5893_map_id - 0x21])
-    {
+    if (D_5893_map_id <= 40 && param_1 <= D_2df0[D_5893_map_id - 0x21]) {
         // 1063 (ok)
         local_4 = D_2de8[D_5893_map_id - 0x21] + param_1 - 1;
         ULTIMA_1c22_SetTextWindowSize(0, D_2df8[local_4], D_2e04[local_4], 0x27, 0x18);
@@ -1635,8 +1628,16 @@ int DUNGEON_1c6a_Klimb(int param_1, int param_2)
 
 void DUNGEON_1d08_Exit(void)
 {
-    D_5896_map_x = MOD_TableValue(7, (D_5893_map_id - 1), D_1e8a[D_5893_map_id - 1]);
-    D_5897_map_y = MOD_TableValue(8, (D_5893_map_id - 1), D_1eb2[D_5893_map_id - 1]);
+    const unsigned char *custom =
+        MAPS_NewLocation(D_5893_map_id) ? MAPS_Record(4, D_5893_map_id, 0) : NULL;
+    if (custom) {
+        D_5896_map_x = custom[15];
+        D_5897_map_y = custom[16];
+        D_5895_map_level = (int8_t)custom[14] ? 7 : 0;
+    } else {
+        D_5896_map_x = MOD_TableValue(7, (D_5893_map_id - 1), D_1e8a[D_5893_map_id - 1]);
+        D_5897_map_y = MOD_TableValue(8, (D_5893_map_id - 1), D_1eb2[D_5893_map_id - 1]);
+    }
 
     ULTIMA_1850_PrintString(_TEXT(0x6c84, "\nExit to "));
     if (D_5895_map_level != 0)

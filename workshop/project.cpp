@@ -82,20 +82,23 @@ const QByteArray &Project::data(const QString &name) const {
     return it->edited;
 }
 QString Project::locationName(int map) const {
-    if (MAPS_NewLocation(map))
-        for (const auto &entry : Workshop::extendedMaps(*this))
-            if (entry.kind == 1 && int(entry.id) == map)
-                return entry.name;
-    require(map >= 0 && map < LOCATION_NAME_SLOTS, "Invalid location");
+    require(map >= 0 && (map < LOCATION_NAME_SLOTS || MAPS_NewLocation(map)), "Invalid location");
     const auto bytes = resources.value("LOCATIONS.OVR").edited;
     if (const char *name = LOCATIONS_Name(bytes.constData(), bytes.size(), map))
         return QString::fromLatin1(name);
+    if (MAPS_NewLocation(map))
+        for (const auto &entry : Workshop::extendedMaps(*this))
+            if ((entry.kind == 1 || entry.kind == 4) && int(entry.id) == map)
+                return entry.name;
+
     if (!map)
         return "Britannia";
     if (map == 41)
         return "Underworld";
-    if (map >= 33)
+    if (map >= 33 && map <= 40)
         return QString::fromLatin1(engineDungeonNames[map - 33]);
+    if (map >= 42)
+        return QString("Location %1").arg(map);
     const QStringList banks{"TOWNE.DAT", "DWELLING.DAT", "CASTLE.DAT", "KEEP.DAT"};
     for (const auto &page : U5::mapPages(banks[(map - 1) / 8], QByteArray(16384, 0)))
         if (page.settlement == (map - 1) % 8)
@@ -128,6 +131,17 @@ QVector<U5::MapPage> Project::mapPages(const QString &resource) const {
         for (const auto &map : extended)
             if (map.resource == resource && MAPS_NewLocation(map.id))
                 pages.append({map.name, map.width, 0, map.width, 0, map.floor, map.height});
+    if (resource == "DUNGEON.DAT") {
+        auto additions = extended;
+        std::sort(additions.begin(), additions.end(),
+                  [](const auto &a, const auto &b) { return a.page < b.page; });
+        for (const auto &m : additions)
+            if (m.kind == 4 && m.id > 40) {
+                require(m.page == pages.size(), "Non-contiguous dungeon floor pages");
+                pages.append({m.name + QString(" — Level %1").arg(m.floor + 1), m.width, 0, m.width,
+                              int(m.id) - 33, m.floor, m.height});
+            }
+    }
     for (int i = 0; i < pages.size(); ++i)
         if (const auto *map = Workshop::findExtendedMap(extended, resource, i)) {
             pages[i].side = map->width;
@@ -249,11 +263,16 @@ QByteArray Project::package() const {
                 locationObjects |=
                     NPCS_Blood(U5::byte(b, i * 8), U5::byte(b, i * 8 + 5), U5::byte(b, i * 8 + 7));
     }
-    bool dungeonMaps = false;
-    for (const auto &map : Workshop::extendedMaps(*this))
+    bool dungeonMaps = false, newDungeons = false;
+    for (const auto &map : Workshop::extendedMaps(*this)) {
         dungeonMaps |= map.kind == 4;
+        newDungeons |= map.kind == 4 && map.id > 40;
+    }
+    for (const auto &contents : Workshop::readContents(resources.value("CONTENTS.OVR").edited))
+        newDungeons |= contents.kind == 2 && contents.map >= 112;
     QByteArray out(
-        dungeonMaps     ? "IMOD0020"
+        newDungeons     ? "IMOD0021"
+        : dungeonMaps   ? "IMOD0020"
         : specialActors ? "IMOD0019"
         : (locationObjects || list.contains("MAPS.OVR") ||
            resources.value("SIGNS.DAT").edited.startsWith("ISIG0001"))
@@ -775,8 +794,8 @@ QVector<ModDiagnostic> validateMod(const Project &project, const QString &modsDi
         try {
             Workshop::DungeonDocument dungeon(&project);
             int count = 0;
-            for (int d = 0; d < 8 && count < 200; d++)
-                for (int f = 0; f < 8 && count < 200; f++) {
+            for (int id : Workshop::dungeonIds(project))
+                for (int d = id - 33, f = 0; f < 8 && count < 200; f++) {
                     auto dims = dungeon.size(d, f);
                     auto cells = dungeon.level(d, f), original = dungeon.level(d, f, true);
                     for (int y = 0; y < dims.height() && count < 200; y++)

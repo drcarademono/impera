@@ -1,3 +1,4 @@
+#include "extended_maps.h"
 #include "contents_editor.h"
 #include "mod/maps.h"
 #include "custom_tiles.h"
@@ -299,7 +300,7 @@ void ContentsEditor::refresh() {
         canvas->contentsMarkers.append({d.x, d.y, -1, -1, {}});
         canvas->actors.append(
             {d.x, d.y,
-             d.action ? (!target.kind && target.map >= 33 && target.map <= 40 ? 0x40 : 257) : -1, i,
+             d.action ? (!target.kind && isDungeon(*project, target.map) ? 0x40 : 257) : -1, i,
              d.action ? QString() : "·"});
         locations->addItem(
             QString("%1 · %2, %3").arg(d.action ? "Chest" : "Discovery").arg(d.x).arg(d.y));
@@ -323,7 +324,7 @@ void ContentsEditor::selectCell(QPoint point) {
             break;
         }
     int index = point.y() * canvas->side + point.x();
-    if (!selected.id && target.map >= 33 && target.map <= 40 && index >= 0 &&
+    if (!selected.id && isDungeon(*project, target.map) && index >= 0 &&
         index < canvas->ids.size() &&
         ((U5::byte(canvas->ids, index) & 0xf0) == 0x40 ||
          (U5::byte(canvas->ids, index) & 0xf0) == 0x70))

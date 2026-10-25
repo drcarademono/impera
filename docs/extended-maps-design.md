@@ -158,3 +158,26 @@ MAPS save trailer; unchanged floors continue using the original 8×8 storage.
 
 Packages containing dungeon floor records require version 20, so older engines
 reject them rather than reading them as location or combat maps.
+
+### Independent dungeons
+
+Placing a cave, mine, or dungeon entrance on either world creates an independent
+named dungeon. Each starts with eight floors, with the selected dimensions and
+feature fill, and matching ladders at the arrival cell. Floors remain independently
+resizable. The world editor stays open after creation; select the dungeon in the
+left-hand Dungeons list to edit it.
+
+New dungeons share the unused map identity pool with new locations, but use kind-4
+floor records rather than town records. All eight floor records live in MAPS.OVR;
+DUNGEON.DAT remains unchanged. The floor-zero record owns the world entrance and
+arrival position. Bytes 21–22 contain a private combat-room bank's first index.
+Each dungeon appends sixteen independent editable rooms to DUNGEON.CBT. Native
+room banks are never reused or overwritten. The byte-sized combat-room identity
+range permits nine additional sixteen-room banks beyond the native 112 rooms.
+
+Package version 21 is required. Dungeon classification uses the mounted catalog,
+so these identities run the dungeon loop, commands, spells, and renderer rather
+than town behavior. Exiting at either end returns to the authored world entrance.
+Completed alternate room doors are updated in that dungeon's own floor cells;
+those mutations use the existing map-state save trailer instead of vanilla's
+shared fixed room-completion bitset.

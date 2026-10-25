@@ -52,7 +52,8 @@ int FILE_ReadSavegameFile(char* fileName)
 
     unsigned char position[5];
     if (fseek(stream, 0x2ed, SEEK_SET) || fread(position, 1, 5, stream) != 5 ||
-        (MAPS_NewLocation(position[0]) && !MAPS_Record(1, position[0], (int8_t)position[2]))) {
+        (MAPS_NewLocation(position[0]) && !MAPS_Record(1, position[0], (int8_t)position[2]) &&
+         !MAPS_Record(4, position[0], (int8_t)position[2]))) {
         DEBUG_Error("Save needs a location from an unavailable mod");
         fclose(stream);
         return -1;

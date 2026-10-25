@@ -254,7 +254,7 @@ int ULTIMA_3178_ProcessCommand(int param_1)
     case 0x4c:
         /* 'L' Look */
         ULTIMA_1850_PrintString(_TEXT(0xa1a8, "Look"));
-        if (!MAPS_Outside(D_5893_map_id) && D_5893_map_id < 0x29) {
+        if (MAPS_IsDungeon(D_5893_map_id)) {
             /* 0x21..0x28 (Dungeon) */
             ULTIMA_1850_PrintString(_TEXT(0xa1ae, "...\n"));
             DNGLOOK_0000_LookCmdInDungeon();
@@ -280,7 +280,7 @@ int ULTIMA_3178_ProcessCommand(int param_1)
         break;
     case 0x50:
         /* 'P' Push */
-        if (!MAPS_Outside(D_5893_map_id) && D_5893_map_id < 0x29) {
+        if (MAPS_IsDungeon(D_5893_map_id)) {
             /* Cannot push in dungeons */
             ULTIMA_1850_PrintString(_TEXT(0xa1d4, "Push\nNot here!\n"));
             ret = 0;

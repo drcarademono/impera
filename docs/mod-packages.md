@@ -521,3 +521,13 @@ marker metadata is used. The native DUNGEON.DAT remains 4096 bytes. Dungeon
 contents coordinates are validated against these dimensions, or 8×8 for floors
 without an override. Mutations persist through the existing IMPSAV01 map-state
 trailer. Each floor preserves vanilla toroidal wrapping at its new dimensions.
+
+`IMOD0021` adds independent dungeons. MAPS.OVR kind-4 records may use unused map
+identities 42–127 (excluding reserved 64–66), with all eight floors required. Floor
+pages append contiguously after the native 64 pages. Floor zero stores entrance,
+arrival, name, and underlay using the existing position fields. Bytes 21–22 hold a
+16-aligned combat-room bank base, from 112 through 240; other floor records repeat
+that base. The corresponding sixteen DUNGEON.CBT rooms must accompany the catalog.
+Town and dungeon records cannot share an identity, and distinct new dungeons
+cannot share a combat-room bank. Dungeon floor bytes retain the native feature
+encoding. CONTENTS.OVR supports the additional dungeon encounter identities.

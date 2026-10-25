@@ -197,7 +197,7 @@ if(BUILD_TESTING OR U5D_BUILD_TESTS)
     math(EXPR room_length "${room_end}-${room_begin}")
     string(SUBSTRING "${dungeon_source}" ${room_begin} ${room_length} room_calculation)
     file(APPEND "${CMAKE_CURRENT_BINARY_DIR}/engine_match_oracle.c"
-        "int WorkshopEngineDungeonRoom(int mapId, byte param_1){int D_5893_map_id=mapId,D_587b=0,D_589e=0,local_1c,local_4,local_1e,local_a;\n${room_calculation}\nreturn local_a;}\n")
+        "#include \"mod/maps.h\"\nint WorkshopEngineDungeonRoom(int mapId, byte param_1){int D_5893_map_id=mapId,D_587b=0,D_589e=0,local_1c,local_4,local_1e,local_a;\n${room_calculation}\nreturn local_a;}\n")
     add_executable(impera_workshop_test "${CMAKE_CURRENT_BINARY_DIR}/engine_match_oracle.c" tests.cpp window.cpp dialogue_editor.cpp engine_codec_test.c ../src/common/lzw.c)
     target_link_libraries(impera_workshop_test PRIVATE impera_workshop_core)
     add_executable(impera_workshop_custom_types_test custom_tiles_test.cpp window.cpp dialogue_editor.cpp)

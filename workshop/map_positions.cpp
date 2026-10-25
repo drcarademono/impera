@@ -44,7 +44,7 @@ QVector<MapPosition> mapPositions(const Project &p) {
                      TableDocument::value(p.data("RULES.TBL"), 8, i)}});
     }
     for (const auto &m : extendedMaps(p))
-        if (m.kind == 1 && MAPS_NewLocation(m.id)) {
+        if ((m.kind == 1 || (m.kind == 4 && !m.floor)) && MAPS_NewLocation(m.id)) {
             out.append({1000 + int(m.id), m.name + " entrance", 0, m.world, m.entrance});
             out.append({2000 + int(m.id), m.name + " arrival", int(m.id), 0, m.arrival});
         }
@@ -57,6 +57,7 @@ QMap<QString, QByteArray> moveMapPosition(const Project &p, int id, int map, int
                 cell.y() >= 0 && cell.x() < size.width() && cell.y() < size.height(),
             "Position is outside this map");
     require(map == 0                ? (floor == 0 || floor == -1)
+            : isDungeon(p, map)     ? floor >= 0 && floor <= 7
             : MAPS_NewLocation(map) ? floor == 0
             : map >= 33             ? floor >= 0 && floor <= 7
                                     : floor >= -1 && floor <= 3,
@@ -66,7 +67,7 @@ QMap<QString, QByteArray> moveMapPosition(const Project &p, int id, int map, int
         bool found = false;
         ExtendedMap previous;
         for (auto &m : maps)
-            if (m.kind == 1 && MAPS_NewLocation(m.id) &&
+            if ((m.kind == 1 || (m.kind == 4 && !m.floor)) && MAPS_NewLocation(m.id) &&
                 (id == 1000 + int(m.id) || id == 2000 + int(m.id))) {
                 previous = m;
                 if (id < 2000) {
@@ -271,7 +272,7 @@ mapPositionEditor(Project *p, const QString &resource, const U5::MapPage &page, 
         worldRow->setVisible(id >= 1000);
         link->setText(id >= 2000 ? "Show entrance" : "Open location");
         for (const auto &m : extendedMaps(*p))
-            if (m.kind == 1 && MAPS_NewLocation(m.id) &&
+            if ((m.kind == 1 || (m.kind == 4 && !m.floor)) && MAPS_NewLocation(m.id) &&
                 (id == 1000 + int(m.id) || id == 2000 + int(m.id)))
                 worlds->setCurrentIndex(worlds->findData(m.world));
 
@@ -333,7 +334,7 @@ mapPositionEditor(Project *p, const QString &resource, const U5::MapPage &page, 
             return;
         int id = list->currentItem()->data(Qt::UserRole).toInt();
         for (const auto &m : extendedMaps(*p))
-            if (m.kind == 1 && MAPS_NewLocation(m.id) &&
+            if ((m.kind == 1 || (m.kind == 4 && !m.floor)) && MAPS_NewLocation(m.id) &&
                 (id == 1000 + int(m.id) || id == 2000 + int(m.id))) {
                 const QString target =
                     id >= 2000 ? (m.world == -1 ? "UNDER.DAT" : "BRIT.DAT") : m.resource;
@@ -349,7 +350,7 @@ mapPositionEditor(Project *p, const QString &resource, const U5::MapPage &page, 
             return;
         int id = list->currentItem()->data(Qt::UserRole).toInt();
         for (const auto &m : extendedMaps(*p))
-            if (m.kind == 1 && MAPS_NewLocation(m.id) &&
+            if ((m.kind == 1 || (m.kind == 4 && !m.floor)) && MAPS_NewLocation(m.id) &&
                 (id == 1000 + int(m.id) || id == 2000 + int(m.id))) {
                 try {
                     if (commit(moveMapPosition(*p, 1000 + m.id, 0, worlds->currentData().toInt(),

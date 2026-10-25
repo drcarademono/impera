@@ -32,6 +32,7 @@ QVector<ExtendedMap> extendedMaps(const Project &p) {
         m.arrival = {r[17], r[18]};
         m.underlay = r[19];
         m.markerMask = r[20];
+        m.roomBase = MAPS_Word(r + 21);
         m.markers = quint64(MAPS_U32(r + 120)) | (quint64(MAPS_U32(r + 124)) << 32);
         m.name = QString::fromLatin1(reinterpret_cast<const char *>(r + 24));
         m.resource = QString::fromLatin1(reinterpret_cast<const char *>(r + 88));
@@ -84,6 +85,8 @@ QByteArray writeExtendedMaps(const QVector<ExtendedMap> &maps) {
         r[18] = m.arrival.y();
         r[19] = m.underlay;
         r[20] = m.markerMask;
+        r[21] = m.roomBase;
+        r[22] = m.roomBase >> 8;
         TYPES_Put32(r.data() + 120, m.markers);
         TYPES_Put32(r.data() + 124, m.markers >> 32);
         memcpy(r.data() + 24, m.name.toLatin1().constData(), m.name.toLatin1().size());
@@ -104,20 +107,38 @@ const ExtendedMap *findExtendedMap(const QVector<ExtendedMap> &maps, const QStri
             return &m;
     return nullptr;
 }
+bool isDungeon(const Project &p, int map) {
+    if (map >= 33 && map <= 40)
+        return true;
+    for (const auto &m : extendedMaps(p))
+        if (m.kind == 4 && m.id == unsigned(map))
+            return true;
+    return false;
+}
+QVector<int> dungeonIds(const Project &p) {
+    QVector<int> ids;
+    if (p.resources.contains("DUNGEON.DAT"))
+        for (int id = 33; id <= 40; ++id)
+            ids.append(id);
+    for (const auto &m : extendedMaps(p))
+        if (m.kind == 4 && !m.floor && m.id > 40)
+            ids.append(m.id);
+    return ids;
+}
 QSize mapSize(const Project &p, int id, int floor, int kind) {
     auto maps = extendedMaps(p);
     for (const auto &m : maps)
-        if (m.kind == unsigned(kind                   ? kind + 1
-                               : id >= 33 && id <= 40 ? 4
-                               : id                   ? 1
-                                                      : 0) &&
+        if (m.kind == unsigned(kind               ? kind + 1
+                               : isDungeon(p, id) ? 4
+                               : id               ? 1
+                                                  : 0) &&
             m.id == unsigned(kind ? id
                              : id ? id
                                   : floor != 0) &&
             m.floor == (kind || !id ? 0 : floor))
             return {m.width, m.height};
     require(!MAPS_NewLocation(id) || kind, "Missing location map");
-    int side = kind ? 11 : !id ? 256 : id >= 33 && id <= 40 ? 8 : 32;
+    int side = kind ? 11 : !id ? 256 : isDungeon(p, id) ? 8 : 32;
     return {side, side};
 }
 bool mapMarkerActive(const Project &p, const QString &r, int page, int bit, int x, int y) {
@@ -175,7 +196,7 @@ QMap<QString, QByteArray> resizeMap(const Project &p, const QString &resource, i
                  : resource == "DUNGEON.CBT"                       ? 3
                  : resource == "DUNGEON.DAT"                       ? 4
                                                                    : 1;
-        m.id = m.kind == 4   ? 33 + page / 8
+        m.id = m.kind == 4   ? 33 + old.settlement
                : m.kind == 0 ? (resource == "UNDER.DAT")
                : m.kind == 1 ? positionMap(resource, old)
                              : page;
@@ -314,7 +335,7 @@ QMap<QString, QByteArray> addLocation(const Project &p, const QString &world, co
     unsigned id = 42;
     for (; id < 128; ++id)
         if (MAPS_NewLocation(id) && std::none_of(maps.begin(), maps.end(), [&](const auto &m) {
-                return m.kind == 1 && m.id == id;
+                return (m.kind == 1 || m.kind == 4) && m.id == id;
             }))
             break;
     require(id < 128, "The location identity range is full");
@@ -358,6 +379,71 @@ QMap<QString, QByteArray> addLocation(const Project &p, const QString &world, co
     changes[m.resource.section('.', 0, 0) + ".TLK"] = U5::writeDialogue({});
     return changes;
 }
+QMap<QString, QByteArray> addDungeon(const Project &p, const QString &world, const QString &name,
+                                     QPoint entrance, int width, int height, int fill,
+                                     int entranceTile) {
+    require(p.resources.contains("DUNGEON.DAT") && p.resources.contains("DUNGEON.CBT"),
+            "Dungeon resources are missing");
+    require(width >= 1 && width <= 256 && height >= 1 && height <= 256 && fill >= 0 &&
+                fill <= 255 && (fill >> 4) != 9,
+            "Invalid dungeon dimensions or feature");
+    // Reuse entrance validation and terrain painting, then replace the town records atomically.
+    const auto base = addLocation(p, world, name, entrance, width, height, 5, entranceTile);
+    Project candidate = p;
+    for (auto it = base.begin(); it != base.end(); ++it)
+        candidate.resources[it.key()].edited = it.value();
+    auto maps = extendedMaps(candidate);
+    const auto town = std::find_if(maps.begin(), maps.end(), [&](const auto &m) {
+        return m.kind == 1 && m.world == (world == "UNDER.DAT" ? -1 : 0) && m.entrance == entrance;
+    });
+    require(town != maps.end(), "Missing dungeon entrance");
+    const auto entranceRecord = *town;
+    maps.erase(town);
+    auto rooms = p.data("DUNGEON.CBT");
+    const int roomBase = qMax(112, (rooms.size() / 352 + 15) / 16 * 16);
+    require(roomBase <= 240, "No free dungeon combat-room identities remain");
+    const int pageBase = p.mapPages("DUNGEON.DAT").size();
+    for (int floor = 0; floor < 8; ++floor) {
+        ExtendedMap m = entranceRecord;
+        m.kind = 4;
+        m.floor = floor;
+        m.page = pageBase + floor;
+        m.roomBase = roomBase;
+        m.resource = "DUNGEON.DAT";
+        m.background = fill;
+        m.cells = QByteArray(width * height, char(fill));
+        m.arrival = {width / 2, height / 2};
+        // Every new floor starts with a usable ladder connection.
+        m.cells[m.arrival.y() * width + m.arrival.x()] = char(floor == 7 ? 0x10 : 0x30);
+        if (floor) {
+            m.world = -2;
+            m.underlay = 0;
+        }
+        maps.append(m);
+    }
+    QByteArray room(352, char(255));
+    for (int y = 0; y < 11; ++y)
+        for (int x = 0; x < 11; ++x)
+            room[y * 32 + x] = 68;
+    for (int i = 0; i < 16; ++i)
+        room[5 * 32 + 11 + i] = 0;
+    // Native directional party entry positions, with empty monster and trigger lists.
+    for (int direction = 0; direction < 4; ++direction)
+        for (int i = 0; i < 6; ++i) {
+            room[(direction + 1) * 32 + 11 + i] = direction % 2 ? (direction == 1 ? 9 : 1) : 3 + i;
+            room[(direction + 1) * 32 + 17 + i] = direction % 2 ? 3 + i : (direction == 0 ? 1 : 9);
+        }
+    if (rooms.size() < roomBase * 352)
+        rooms.append(QByteArray(roomBase * 352 - rooms.size(), 0));
+    for (int i = 0; i < 16; ++i)
+        rooms.append(room);
+    QMap<QString, QByteArray> changes = base;
+    changes.remove(entranceRecord.resource.section('.', 0, 0) + ".NPC");
+    changes.remove(entranceRecord.resource.section('.', 0, 0) + ".TLK");
+    changes["MAPS.OVR"] = writeExtendedMaps(maps);
+    changes["DUNGEON.CBT"] = rooms;
+    return changes;
+}
 void validateExtendedMaps(const Project &p) {
     const auto maps = extendedMaps(p);
     if (maps.isEmpty())
@@ -369,7 +455,19 @@ void validateExtendedMaps(const Project &p) {
     };
     for (const auto &m : maps) {
         require(p.resources.contains(m.resource), "Missing map resource: " + m.resource);
-        if (m.kind == 1 && MAPS_NewLocation(m.id)) {
+        if (m.kind == 4 && MAPS_NewLocation(m.id)) {
+            for (int f = 0; f < 8; ++f)
+                require(std::any_of(maps.begin(), maps.end(),
+                                    [&](const auto &other) {
+                                        return other.kind == 4 && other.id == m.id &&
+                                               other.floor == f;
+                                    }),
+                        "New dungeon is missing a floor");
+            if (!m.floor)
+                check(0, m.world, 0, m.entrance.x(), m.entrance.y(), "Dungeon entrance");
+            require(m.roomBase + 16 <= unsigned(p.data("DUNGEON.CBT").size() / 352),
+                    "Dungeon combat rooms are missing");
+        } else if (m.kind == 1 && MAPS_NewLocation(m.id)) {
             check(0, m.world, 0, m.entrance.x(), m.entrance.y(), "Entrance");
             const auto stem = m.resource.section('.', 0, 0);
             require(p.resources.contains(stem + ".NPC") && p.resources.contains(stem + ".TLK"),

@@ -10,6 +10,8 @@ class DungeonDocument {
     QMap<QString, QByteArray> changes(int dungeon, int floor, const QByteArray &cells) const;
     static int offset(int dungeon, int floor);
     static int roomIndex(int dungeon, int cell);
+    int room(int dungeon, int cell) const;
+    int pageIndex(int dungeon, int floor) const;
     static QString feature(int cell);
     static QString variant(int cell);
     QStringList warnings(int dungeon, int floor, int x, int y) const;

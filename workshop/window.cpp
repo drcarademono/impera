@@ -1891,8 +1891,8 @@ QWidget *WorkshopWindow::stateEditor() {
                                     [id](auto p) { return p.id == id; });
             require(pos != positions.end(), "Starting position is unavailable");
             int map = pos->map, floor = pos->floor;
-            QString resource = map >= 33 && map <= 40 ? "DUNGEON.DAT"
-                               : map == 0             ? (floor == -1 ? "UNDER.DAT" : "BRIT.DAT")
+            QString resource = Workshop::isDungeon(project, map) ? "DUNGEON.DAT"
+                               : map == 0  ? (floor == -1 ? "UNDER.DAT" : "BRIT.DAT")
                                : map <= 32 ? QStringList{"TOWNE.DAT", "DWELLING.DAT", "CASTLE.DAT",
                                                          "KEEP.DAT"}[(map - 1) / 8]
                                            : QString();

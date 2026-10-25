@@ -20,7 +20,16 @@ static inline int MAPS_NewLocation(unsigned id) {
     return id >= 42 && id < 128 && (id < 64 || id > 66);
 }
 static inline int MAPS_Town(unsigned id) { return (id >= 1 && id <= 32) || MAPS_NewLocation(id); }
-static inline int MAPS_Outside(unsigned id) { return !id || MAPS_Town(id); }
+#ifdef __cplusplus
+extern "C" {
+#endif
+int MAPS_IsDungeon(unsigned id);
+int MAPS_IsTown(unsigned id);
+int MAPS_DungeonRoom(unsigned id, unsigned room);
+int MAPS_Outside(unsigned id);
+#ifdef __cplusplus
+}
+#endif
 /* New maps use independent resources, never a slot in a native town bank. */
 static inline unsigned MAPS_LocationResource(const char *name) {
     if (!name || strlen(name) != 10 || strncmp(name, "LOC", 3) || name[3] < '0' || name[3] > '9' ||
@@ -52,13 +61,13 @@ static inline int MAPS_Validate(const void *v, size_t n) {
         if ((!r[4] && (r[5] > 1 || r[8])) ||
             (r[4] == 1 && (!MAPS_Town(r[5]) || (MAPS_NewLocation(r[5]) && r[8]))) ||
             ((r[4] == 2 || r[4] == 3) && r[8]) ||
-            (r[4] == 4 && (r[5] < 33 || r[5] > 40 || r[8] > 7)) || (int8_t)r[14] < -2 ||
-            (int8_t)r[14] > 0 ||
+            (r[4] == 4 && (!((r[5] >= 33 && r[5] <= 40) || MAPS_NewLocation(r[5])) || r[8] > 7)) ||
+            (int8_t)r[14] < -2 || (int8_t)r[14] > 0 ||
             (MAPS_NewLocation(r[5]) && r[4] == 1 &&
              ((int8_t)r[14] == -2 || r[17] >= w || r[18] >= h)))
             return 0;
         for (unsigned j = 21; j < 24; ++j)
-            if (r[j])
+            if (r[j] && !(r[4] == 4 && MAPS_NewLocation(r[5]) && j < 23))
                 return 0;
         if (r[20] > 1 || (r[20] && (r[4] < 2 || r[4] == 4)))
             return 0;
@@ -89,16 +98,32 @@ static inline int MAPS_Validate(const void *v, size_t n) {
                     return 0;
             }
         } else if (r[4] == 4) {
-            if (page != (r[5] - 33) * 8 + r[8] || strcmp(resource, "DUNGEON.DAT"))
+            if (strcmp(resource, "DUNGEON.DAT") ||
+                (r[5] <= 40 ? page != (r[5] - 33) * 8 + r[8]
+                            : page < 64 || MAPS_Word(r + 21) < 112 || MAPS_Word(r + 21) > 240 ||
+                                  MAPS_Word(r + 21) % 16))
                 return 0;
         } else if (page != r[5] || strcmp(resource, r[4] == 2 ? "BRIT.CBT" : "DUNGEON.CBT"))
             return 0;
-        if (!(r[4] == 1 && MAPS_NewLocation(r[5])) && ((int8_t)r[14] != -2 || r[19]))
+        if (!(MAPS_NewLocation(r[5]) && (r[4] == 1 || (r[4] == 4 && !r[8]))) &&
+            ((int8_t)r[14] != -2 || r[19]))
+            return 0;
+        if (r[4] == 4 && MAPS_NewLocation(r[5]) && !r[8] &&
+            ((int8_t)r[14] == -2 || r[17] >= w || r[18] >= h))
             return 0;
         /* Disallow page aliases and duplicate entrance coordinates. */
         for (size_t earlier = MAPS_HEADER; earlier < off; earlier += MAPS_U32(b + earlier)) {
             const unsigned char *other = b + earlier;
             if (MAPS_Word(other + 6) == page && !strcmp((const char *)other + 88, resource))
+                return 0;
+            if (MAPS_NewLocation(r[5]) && (r[4] == 1 || r[4] == 4) &&
+                (other[4] == 1 || other[4] == 4) && r[5] == other[5] && r[4] != other[4])
+                return 0;
+            if (r[4] == 4 && MAPS_NewLocation(r[5]) && other[4] == 4 &&
+                MAPS_NewLocation(other[5]) &&
+                (r[5] == other[5] ? MAPS_Word(r + 21) != MAPS_Word(other + 21) ||
+                                        page - r[8] != MAPS_Word(other + 6) - other[8]
+                                  : MAPS_Word(r + 21) == MAPS_Word(other + 21)))
                 return 0;
             if ((int8_t)r[14] != -2 && r[14] == other[14] && r[15] == other[15] &&
                 r[16] == other[16])

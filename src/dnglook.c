@@ -526,6 +526,16 @@ void DNGLOOK_0844(int param_1)
     int local_6;
     int local_4;
 
+    if (MAPS_NewLocation(D_5893_map_id)) {
+        for (int floor = 0; floor < 8; ++floor)
+            for (int y = 0; y < MAPS_ActiveHeight(D_5893_map_id, floor); ++y)
+                for (int x = 0; x < MAPS_ActiveWidth(D_5893_map_id, floor); ++x) {
+                    byte *cell = &GetDungeonMap(x, y, floor);
+                    if (*cell == (0xf0 | param_1))
+                        *cell = 0xa0 | param_1;
+                }
+        return;
+    }
     for (local_6 = 0; local_6 < D_3840; local_6++)
     {
         if (D_383a[local_6] == (D_5893_map_id & 0xf) * 0x10 + param_1)
@@ -547,6 +557,8 @@ void DNGLOOK_0844(int param_1)
 
 static int DNGLOOK_08d4(int param_1)
 {
+    if (MAPS_NewLocation(D_5893_map_id))
+        return 0;
     int local_6;
     int local_c;
     int local_a;
@@ -1049,7 +1061,7 @@ void DNGLOOK_0fda(void)
 
 void DNGLOOK_109e(int param_1)
 {
-    if (D_5893_map_id >= 33 && D_5893_map_id <= 40 && D_5895_map_level < 8) {
+    if (MAPS_IsDungeon(D_5893_map_id) && D_5895_map_level < 8) {
         D_5896_map_x = DungeonX(D_5896_map_x);
         D_5897_map_y = DungeonY(D_5897_map_y);
     }

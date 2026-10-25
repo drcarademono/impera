@@ -88,17 +88,21 @@ int DungeonDocument::offset(int dungeon, int floor) {
     return dungeon * 512 + floor * 64;
 }
 QSize DungeonDocument::size(int dungeon, int floor) const {
-    offset(dungeon, floor);
+    U5::require(floor >= 0 && floor < 8 && isDungeon(*project, 33 + dungeon),
+                "Invalid dungeon floor");
     const auto b = project->resources.value("MAPS.OVR").edited;
     const auto r = MAPS_Find(b.constData(), b.size(), 4, 33 + dungeon, floor);
     return r ? QSize(MAPS_Word(r + 10), MAPS_Word(r + 12)) : QSize(8, 8);
 }
 QByteArray DungeonDocument::level(int dungeon, int floor, bool original) const {
+    size(dungeon, floor);
     const auto b = project->resources.value("MAPS.OVR").edited;
     const auto r = original ? nullptr : MAPS_Find(b.constData(), b.size(), 4, 33 + dungeon, floor);
     if (r)
         return b.mid(r - reinterpret_cast<const unsigned char *>(b.constData()) + MAPS_RECORD,
                      MAPS_Word(r + 10) * MAPS_Word(r + 12));
+    if (dungeon >= 8)
+        return QByteArray(64, char(0xb0));
     return (original ? project->resources["DUNGEON.DAT"].original : project->data("DUNGEON.DAT"))
         .mid(offset(dungeon, floor), 64);
 }
@@ -108,6 +112,21 @@ int DungeonDocument::roomIndex(int dungeon, int cell) {
                 "This feature does not enter a combat room");
     // DUNGEON_0000: map ID minus 0x21, then subtract one except for Deceit.
     return qMax(0, dungeon - 1) * 16 + (cell & 15);
+}
+int DungeonDocument::pageIndex(int dungeon, int floor) const {
+    const auto pages = project->mapPages("DUNGEON.DAT");
+    for (int i = 0; i < pages.size(); ++i)
+        if (pages[i].settlement == dungeon && pages[i].floor == floor)
+            return i;
+    throw std::runtime_error("Missing dungeon floor");
+}
+int DungeonDocument::room(int dungeon, int cell) const {
+    if (dungeon < 8)
+        return roomIndex(dungeon, cell);
+    for (const auto &m : extendedMaps(*project))
+        if (m.kind == 4 && m.id == unsigned(33 + dungeon) && !m.floor)
+            return m.roomBase + (cell & 15);
+    throw std::runtime_error("Missing dungeon rooms");
 }
 QString DungeonDocument::feature(int cell) {
     static const QStringList names = {"Passage",
@@ -170,8 +189,8 @@ QMap<QString, QByteArray> DungeonDocument::changes(int dungeon, int floor,
 }
 void DungeonDocument::validate(const Project &p, bool allRoomReferences) {
     DungeonDocument document(&p);
-    for (int d = 0; d < 8; d++)
-        for (int f = 0; f < 8; f++) {
+    for (int id : dungeonIds(p))
+        for (int d = id - 33, f = 0; f < 8; f++) {
             const auto cells = document.level(d, f), original = document.level(d, f, true);
             const auto dims = document.size(d, f);
             for (int y = 0; y < dims.height(); y++)
@@ -183,7 +202,7 @@ void DungeonDocument::validate(const Project &p, bool allRoomReferences) {
                     U5::require(!changed || (value & 0xf0) != 0x90,
                                 "Cannot introduce an unused / impossible dungeon feature");
                     if ((value & 0xf0) == 0xa0 || (value & 0xf0) == 0xf0) {
-                        int room = roomIndex(d, value);
+                        int room = document.room(d, value);
                         U5::require(p.resources.contains("DUNGEON.CBT") &&
                                         p.data("DUNGEON.CBT").size() >= (room + 1) * 352,
                                     "Encounter-room reference has no matching DUNGEON.CBT room");
@@ -221,7 +240,7 @@ QStringList DungeonDocument::warnings(int dungeon, int floor, int x, int y) cons
     if (kind == 9)
         result << "The engine describes this feature as impossible; preserved from the original.";
     if (kind == 10 || kind == 15) {
-        int room = roomIndex(dungeon, value);
+        int room = this->room(dungeon, value);
         if (!project->resources.contains("DUNGEON.CBT") ||
             project->data("DUNGEON.CBT").size() < (room + 1) * 352)
             result << "The linked combat room is missing.";
@@ -241,7 +260,7 @@ DungeonWorkspace::DungeonWorkspace(
     auto document = std::make_shared<DungeonDocument>(p);
     auto layout = new QVBoxLayout(this);
     auto row = new QHBoxLayout;
-    const int dungeon = qBound(0, state->value("DUNGEON.DAT/dungeon"), 7);
+    const int dungeon = state->value("DUNGEON.DAT/dungeon");
     auto dungeonName = new QLabel(p->locationName(33 + dungeon));
     dungeonName->setObjectName("dungeonName");
     auto floor = new QComboBox;
@@ -265,7 +284,16 @@ DungeonWorkspace::DungeonWorkspace(
         if (!ok || name.trimmed() == p->locationName(33 + index))
             return;
         try {
-            if (commit({{"LOCATIONS.OVR", p->renameLocation(33 + index, name)}}, "Rename dungeon"))
+            QMap<QString, QByteArray> edits;
+            if (MAPS_NewLocation(33 + index)) {
+                auto maps = extendedMaps(*p);
+                for (auto &m : maps)
+                    if (m.kind == 4 && m.id == unsigned(33 + index))
+                        m.name = name.trimmed();
+                edits["MAPS.OVR"] = writeExtendedMaps(maps);
+            } else
+                edits["LOCATIONS.OVR"] = p->renameLocation(33 + index, name);
+            if (commit(edits, "Rename dungeon"))
                 dungeonName->setText(p->locationName(33 + index));
         } catch (const std::exception &error) {
             QMessageBox::warning(this, "Cannot rename dungeon", QString::fromUtf8(error.what()));
@@ -542,8 +570,7 @@ DungeonWorkspace::DungeonWorkspace(
                              .arg(DungeonDocument::feature(v) + " · " + DungeonDocument::variant(v))
                              .arg(DungeonDocument::feature(canvas->brush)));
         open->setEnabled((v >> 4 == 10 || v >> 4 == 15) && p->resources.contains("DUNGEON.CBT") &&
-                         p->data("DUNGEON.CBT").size() >=
-                             (DungeonDocument::roomIndex(d, v) + 1) * 352);
+                         p->data("DUNGEON.CBT").size() >= (document->room(d, v) + 1) * 352);
         warning->setText(document->warnings(d, f, selected->x(), selected->y()).join("\n"));
         QSignalBlocker block(stack);
         stack->clear();
@@ -635,7 +662,7 @@ DungeonWorkspace::DungeonWorkspace(
     });
     connect(open, &QPushButton::clicked, this, [=] {
         int value = U5::byte(canvas->ids, selected->y() * canvas->side + selected->x());
-        room(DungeonDocument::roomIndex(dungeon, value));
+        room(document->room(dungeon, value));
     });
     connect(stack, &QListWidget::currentRowChanged, this, [=](int i) {
         if (i >= 0)
@@ -656,8 +683,8 @@ DungeonWorkspace::DungeonWorkspace(
         if (dialog.exec() != QDialog::Accepted || !owner)
             return;
         try {
-            if (commit(resizeMap(*p, "DUNGEON.DAT", d * 8 + f, dialog.width.value(), dialog.height.value(),
-                                 dialog.fill.currentData().toInt()),
+            if (commit(resizeMap(*p, "DUNGEON.DAT", document->pageIndex(d, f), dialog.width.value(),
+                                 dialog.height.value(), dialog.fill.currentData().toInt()),
                        "Resize dungeon floor") &&
                 owner)
                 load();

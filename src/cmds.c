@@ -493,7 +493,7 @@ int CMDS_07f6_BoardCmd(void)
     int local_8;
     int local_6;
 
-    if (!MAPS_Outside(D_5893_map_id) && D_5893_map_id < 0x29) {
+    if (MAPS_IsDungeon(D_5893_map_id)) {
         ULTIMA_1850_PrintString(_TEXT(0x4252, "\nNot here!\n"));
 
         return 1;
@@ -695,8 +695,7 @@ void CMDS_0aea_FireCmd(void)
     int local_a;
     int local_6;
 
-    if (0x20 < D_5893_map_id && D_5893_map_id < 0x29)
-    {
+    if (MAPS_IsDungeon(D_5893_map_id)) {
         ULTIMA_1850_PrintString(_TEXT(0x42e4, "What?\n"));
         return;
     }
@@ -856,7 +855,7 @@ void CMDS_0d98_IgniteTorchCmd(void)
     else
     {
         D_57ae--;
-        if (!MAPS_Outside(D_5893_map_id) && D_5893_map_id < 0x29) {
+        if (MAPS_IsDungeon(D_5893_map_id)) {
             ULTIMA_3ef0_IncreaseByte(&D_58a7, ULTIMA_2092_RandomRange(0, 0xf) + 0x70, 0xff);
         } else {
             D_58a7 = 0xf0;

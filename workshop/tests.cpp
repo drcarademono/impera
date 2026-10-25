@@ -426,7 +426,7 @@ int main(int argc, char **argv) {
                 auto pencil = active()->findChild<QToolButton *>("mapTool0");
                 check(canvas && pencil, "Pencil world workspace is missing");
                 pencil->click();
-                canvas->brush = world == "BRIT.DAT" ? 0x14 : 0x16;
+                canvas->brush = world == "BRIT.DAT" ? 0x14 : 0x12;
                 auto press = [&] {
                     QPointF at((220 + .5) * 16 * canvas->zoom, (120 + .5) * 16 * canvas->zoom);
                     QMouseEvent down(QEvent::MouseButtonPress, at, at, Qt::LeftButton,
@@ -2981,6 +2981,130 @@ int main(int argc, char **argv) {
             check(Workshop::description(w.projectForTests().data("LOOK2.DAT"), 0) ==
                       "a test description",
                   "Description UI did not commit");
+        });
+        test("New dungeons own floors and combat rooms, persist and place from world tiles", [&] {
+            QTemporaryDir dir;
+            auto p = fixture(dir.path());
+            file(dir.path() + "/BRIT.DAT", QByteArray(256, 1));
+            file(dir.path() + "/UNDER.DAT", QByteArray(65536, 1));
+            file(dir.path() + "/DATA.OVL", QByteArray(0x3986, 0));
+            file(dir.path() + "/DUNGEON.DAT", QByteArray(4096, 0));
+            file(dir.path() + "/DUNGEON.CBT", QByteArray(112 * 352, 0));
+            p.openGame(dir.path());
+            const auto native = p.data("DUNGEON.DAT"), nativeRooms = p.data("DUNGEON.CBT");
+            auto changes =
+                Workshop::addDungeon(p, "BRIT.DAT", "Crystal depths", {220, 120}, 13, 9, 0, 0x18);
+            check(!changes.contains("LOC042.NPC") && !changes.contains("LOC042.TLK"),
+                  "Dungeon creation still creates town companions");
+            for (auto it = changes.begin(); it != changes.end(); ++it)
+                p.resources[it.key()].edited = it.value();
+            p.validate();
+            auto ids = Workshop::dungeonIds(p);
+            check(ids.size() == 9 && ids.last() == 42 && p.mapPages("DUNGEON.DAT").size() == 72,
+                  "New dungeon missing from navigation or floor pages");
+            Workshop::DungeonDocument doc(&p);
+            check(doc.size(9, 0) == QSize(13, 9) && doc.room(9, 0xa0) == 112 &&
+                      p.data("DUNGEON.DAT") == native &&
+                      p.data("DUNGEON.CBT").left(nativeRooms.size()) == nativeRooms &&
+                      p.data("DUNGEON.CBT").size() == 128 * 352,
+                  "New dungeon overwrites vanilla floors or rooms");
+            auto cells = doc.level(9, 3);
+            cells[0] = char(0xf2);
+            auto edits = doc.changes(9, 3, cells);
+            for (auto it = edits.begin(); it != edits.end(); ++it)
+                p.resources[it.key()].edited = it.value();
+            auto renamed = Workshop::extendedMaps(p);
+            for (auto &m : renamed)
+                if (m.kind == 4 && m.id == 42)
+                    m.name = "Renamed depths";
+            p.resources["MAPS.OVR"].edited = Workshop::writeExtendedMaps(renamed);
+            check(p.locationName(42) == "Renamed depths",
+                  "New dungeon rename is hidden by its base name");
+            p.resources["CONTENTS.OVR"].edited =
+                Workshop::addContentsAt(p, {0, 42, 3}, {2, 3}, true);
+            p.validate();
+            auto resized = Workshop::resizeMap(p, "DUNGEON.DAT", doc.pageIndex(9, 5), 20, 11, 0);
+            for (auto it = resized.begin(); it != resized.end(); ++it)
+                p.resources[it.key()].edited = it.value();
+            check(doc.size(9, 5) == QSize(20, 11) && doc.size(9, 4) == QSize(13, 9),
+                  "Resizing new dungeon affected the wrong floor");
+            auto malformed = Workshop::extendedMaps(p);
+            malformed.removeLast();
+            Project missing = p;
+            missing.resources["MAPS.OVR"].edited = Workshop::writeExtendedMaps(malformed);
+            rejects([&] { missing.validate(); });
+            auto package = p.package();
+            check(package.left(8) == "IMOD0021",
+                  "New dungeon package does not require updated Impera");
+            Project imported;
+            imported.openGame(dir.path());
+            imported.importPackage(package);
+            check(Workshop::DungeonDocument(&imported).level(9, 3) == cells &&
+                      imported.locationName(42) == "Renamed depths",
+                  "New dungeon package lost terrain or name");
+            auto old = package;
+            old.replace(0, 8, "IMOD0020");
+            rejects([&] { imported.importPackage(old); });
+            p.save(dir.path() + "/new-dungeon.imperaproject");
+            Project reopened;
+            reopened.load(p.projectPath);
+            check(Workshop::DungeonDocument(&reopened).level(9, 3) == cells,
+                  "New dungeon project roundtrip");
+            auto moved = Workshop::moveMapPosition(p, 1042, 0, -1, {221, 121}, true);
+            for (auto it = moved.begin(); it != moved.end(); ++it)
+                p.resources[it.key()].edited = it.value();
+            p.validate();
+            check(Workshop::extendedMaps(p).last().id == 42,
+                  "Moving dungeon entrance changed identity");
+            WorkshopWindow window;
+            check(window.openGame(dir.path()), "Dungeon placement fixture");
+            window.show();
+            auto active = [&] {
+                return window.findChild<QStackedWidget *>("workspaces")->currentWidget();
+            };
+            for (int tile : {0x16, 0x17, 0x18}) {
+                auto canvas = static_cast<MapCanvas *>(active()->findChild<QWidget *>("mapCanvas"));
+                active()->findChild<QToolButton *>("mapTool0")->click();
+                canvas->brush = tile;
+                QTimer::singleShot(0, [&] {
+                    auto dialog = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+                    check(dialog && dialog->windowTitle() == "Add dungeon" &&
+                              dialog->findChild<QComboBox *>("newDungeonFill"),
+                          "Dungeon tile still opens Add location");
+                    dialog->findChild<QLineEdit *>("newLocationName")
+                        ->setText(QString("Dungeon %1").arg(tile));
+                    dialog->accept();
+                });
+                QPointF point((200 + tile + .5) * 16 * canvas->zoom, 120.5 * 16 * canvas->zoom);
+                QMouseEvent press(QEvent::MouseButtonPress, point, point, Qt::LeftButton,
+                                  Qt::LeftButton, Qt::NoModifier);
+                QApplication::sendEvent(canvas, &press);
+                app.processEvents();
+                check(active()->findChild<QWidget *>("mapCanvas") &&
+                          Workshop::dungeonIds(window.projectForTests()).size() == 9 + tile - 0x16,
+                      "Dungeon tile did not create a new dungeon or switched maps");
+            }
+            auto catalog = window.projectForTests().data("MAPS.OVR");
+            auto rooms = window.projectForTests().data("DUNGEON.CBT");
+            QAction *undo = nullptr, *redo = nullptr;
+            for (auto action : window.findChildren<QAction *>()) {
+                if (action->shortcut() == QKeySequence::Undo)
+                    undo = action;
+                if (action->shortcut() == QKeySequence::Redo)
+                    redo = action;
+            }
+            check(undo && redo, "Dungeon creation history missing");
+            undo->trigger();
+            app.processEvents();
+            check(Workshop::dungeonIds(window.projectForTests()).size() == 10 &&
+                      window.projectForTests().data("DUNGEON.CBT").size() ==
+                          rooms.size() - 16 * 352,
+                  "Dungeon undo left floors or combat rooms behind");
+            redo->trigger();
+            app.processEvents();
+            check(window.projectForTests().data("MAPS.OVR") == catalog &&
+                      window.projectForTests().data("DUNGEON.CBT") == rooms,
+                  "Dungeon redo did not restore the complete dungeon");
         });
         test("Dungeon floors resize independently, roundtrip and keep contents, links and undo",
              [&] {

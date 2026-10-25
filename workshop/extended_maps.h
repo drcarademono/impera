@@ -7,6 +7,7 @@ struct ExtendedMap {
     int page = 0, floor = 0, width = 32, height = 32, background = 5, world = -2, underlay = 0;
     bool markerMask = false;
     quint64 markers = 0;
+    unsigned roomBase = 0;
     QPoint entrance, arrival;
     QString name, resource;
     QByteArray cells;
@@ -19,6 +20,11 @@ QMap<QString, QByteArray> resizeMap(const Project &, const QString &, int page, 
 QMap<QString, QByteArray> addLocation(const Project &, const QString &, const QString &,
                                       QPoint entrance, int width, int height, int fill,
                                       int entranceTile = 0x12);
+bool isDungeon(const Project &, int map);
+QVector<int> dungeonIds(const Project &);
+QMap<QString, QByteArray> addDungeon(const Project &, const QString &world, const QString &name,
+                                     QPoint entrance, int width, int height, int fill,
+                                     int entranceTile);
 QSize mapSize(const Project &, int map, int floor, int kind = 0);
 bool mapMarkerActive(const Project &, const QString &, int page, int bit, int x, int y);
 QMap<QString, QByteArray> setMapMarker(const Project &, const QString &, int page, int bit,

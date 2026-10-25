@@ -1,6 +1,7 @@
 #include "mod/npcs.h"
 #include "map_editor.h"
 #include "map_resize_dialog.h"
+#include "dungeon_editor.h"
 #include "extended_maps.h"
 #include "../src/tiles.h"
 #include "contents_editor.h"
@@ -2136,25 +2137,42 @@ void MapWorkspace::enableLocationModes(const QStringList &names, LocationLayerFa
 void MapWorkspace::beginAddLocation(QPoint cell, int entranceTile) {
     if (!flushLocationMode())
         return;
+    const int profile =
+        entranceTile >= 512 ? CustomTiles::definition(*project, entranceTile).base : entranceTile;
+    const bool dungeon =
+        profile == TILE_MAP_CAVE || profile == TILE_MAP_MINE || profile == TILE_MAP_DUNGEON;
     QDialog dialog(window());
     QPointer<MapWorkspace> owner(this);
-    dialog.setWindowTitle("Add location");
+    dialog.setWindowTitle(dungeon ? "Add dungeon" : "Add location");
     QFormLayout form(&dialog);
-    QLineEdit name("New location");
+    QLineEdit name(dungeon ? "New dungeon" : "New location");
     name.setObjectName("newLocationName");
     QSpinBox width, height, fill;
     width.setObjectName("newLocationWidth");
     height.setObjectName("newLocationHeight");
     width.setRange(1, 256);
     height.setRange(1, 256);
-    width.setValue(32);
-    height.setValue(32);
+    width.setValue(dungeon ? 8 : 32);
+    height.setValue(dungeon ? 8 : 32);
     fill.setRange(0, 255);
-    fill.setValue(5);
+    fill.setValue(dungeon ? 0xb0 : 5);
     form.addRow("Name", &name);
     form.addRow("Width (tiles)", &width);
     form.addRow("Height (tiles)", &height);
-    form.addRow("Fill tile", &fill);
+    QComboBox feature;
+    if (dungeon) {
+        const auto art = Workshop::dungeonFeatureImages(canvas->tiles);
+        for (int value = 0; value < 256; ++value)
+            if ((value >> 4) != 9)
+                feature.addItem(QIcon(QPixmap::fromImage(art[value])),
+                                Workshop::DungeonDocument::feature(value) + " · " +
+                                    Workshop::DungeonDocument::variant(value),
+                                value);
+        feature.setCurrentIndex(feature.findData(0));
+        feature.setObjectName("newDungeonFill");
+        form.addRow("Fill", &feature);
+    } else
+        form.addRow("Fill tile", &fill);
     QDialogButtonBox buttons(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
     form.addRow(&buttons);
     connect(&buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
@@ -2162,12 +2180,15 @@ void MapWorkspace::beginAddLocation(QPoint cell, int entranceTile) {
     if (dialog.exec() != QDialog::Accepted || !owner)
         return;
     const QString title = name.text();
-    const int w = width.value(), h = height.value(), tile = fill.value();
-    auto place = [this, title, w, h, tile, entranceTile](QPoint cell) {
+    const int w = width.value(), h = height.value(),
+              tile = dungeon ? feature.currentData().toInt() : fill.value();
+    auto place = [this, title, w, h, tile, entranceTile, dungeon](QPoint cell) {
         try {
-            const auto changes =
-                Workshop::addLocation(*project, resource, title, cell, w, h, tile, entranceTile);
-            if (!commitResources(changes, "Add location"))
+            const auto changes = dungeon ? Workshop::addDungeon(*project, resource, title, cell, w,
+                                                                h, tile, entranceTile)
+                                         : Workshop::addLocation(*project, resource, title, cell, w,
+                                                                 h, tile, entranceTile);
+            if (!commitResources(changes, dungeon ? "Add dungeon" : "Add location"))
                 return false;
             Workshop::hydrateExtendedMaps(*project);
             refreshTerrain();

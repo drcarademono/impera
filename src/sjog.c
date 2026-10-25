@@ -651,7 +651,7 @@ void SJOG_095c_SearchCmd(void)
 
     local_4 = 0;
 
-    if (!MAPS_Outside(D_5893_map_id) && D_5893_map_id < 0x29) {
+    if (MAPS_IsDungeon(D_5893_map_id)) {
         SJOG_0646_SearchInDungeon();
         return;
     }
@@ -888,7 +888,7 @@ void SJOG_0d4a_JimmyCmd(void)
     int local_8;
     int local_a;
 
-    if (!MAPS_Outside(D_5893_map_id) && D_5893_map_id < 0x29) {
+    if (MAPS_IsDungeon(D_5893_map_id)) {
         SJOG_0c3e_JimmyInDungeon();
         return;
     }
@@ -1247,7 +1247,7 @@ void SJOG_1374_OpenCmd(void)
     int local_6;
     int local_8;
 
-    if (!MAPS_Outside(D_5893_map_id) && D_5893_map_id < 0x29) {
+    if (MAPS_IsDungeon(D_5893_map_id)) {
         SJOG_12d4_OpenInDungeon();
         return;
     }
@@ -1479,7 +1479,7 @@ static void SJOG_1458_GetObject(int param_1, int param_2, int param_3)
     case TILE_ACTOR_CROWN:
         D_57b4 = 0xff;
         ULTIMA_1850_PrintString(_TEXT(0x8d3a, "The Crown of Lord British!\n"));
-        if (MAPS_Town(D_5893_map_id)) {
+        if (MAPS_IsTown(D_5893_map_id)) {
             int slot = TOWN_011e(param_3);
             if (slot > 0) {
                 TOWN_0052_SetNpcKilled(slot);
@@ -1584,7 +1584,7 @@ void SJOG_18ce_GetCmd(void)
     int local_6;
     int local_4;
 
-    if (!MAPS_Outside(D_5893_map_id) && D_5893_map_id < 0x29) {
+    if (MAPS_IsDungeon(D_5893_map_id)) {
         SJOG_179e_GetInDungeon();
         return;
     }
@@ -2114,7 +2114,7 @@ void SJOG_203e(int param_1)
 
     if ((D_58a1 & 0x82) == 0)
     {
-        if (param_1 >= 0 && param_1 < (MAPS_Town(D_5894) ? LOCATION_NPC_COUNT : 32)) {
+        if (param_1 >= 0 && param_1 < (MAPS_IsTown(D_5894) ? LOCATION_NPC_COUNT : 32)) {
             local_4 = &D_5c5a[param_1];
 
             if (D_58a3 != 0 && (local_4->_0_tile & 0xfc) == TILE_ACTOR_PIRATE)

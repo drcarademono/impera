@@ -1762,7 +1762,7 @@ void CAST_1792_UseCmd(void)
             ULTIMA_2192_AudioPulse(0x1450, 1, 50000, 5000, 1);
 
             local_4 = 0;
-            if (MAPS_Outside(D_5893_map_id) || D_5893_map_id > 0x28) {
+            if (!MAPS_IsDungeon(D_5893_map_id)) {
                 for (local_e = -1; local_e <= 1; local_e++)
                 {
                     for (local_12 = -1; local_12 <= 1; local_12++)

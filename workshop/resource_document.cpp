@@ -241,7 +241,7 @@ void validateResource(const Project &project, const QString &name) {
                             "Contents need the combat map: " + map);
                 U5::require(d.map < project.mapPages(map).size(),
                             "Contents reference a missing encounter");
-            } else if (MAPS_NewLocation(d.map)) {
+            } else if (MAPS_NewLocation(d.map) && !isDungeon(project, d.map)) {
                 require(
                     project.resources.contains(QString("LOC%1.DAT").arg(d.map, 3, 10, QChar('0'))),
                     "Contents reference a missing location");

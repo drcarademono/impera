@@ -934,7 +934,7 @@ STUB u8 D_bd3e;
  * combat keep the original 32 actor slots. */
 STUB unsigned D_imperaNpcCount;
 #define LOCATION_NPC_COUNT ((int)(D_imperaNpcCount < 32 ? 32 : D_imperaNpcCount))
-#define MAP_ACTOR_COUNT (MAPS_Town(D_5893_map_id) ? LOCATION_NPC_COUNT : 32)
+#define MAP_ACTOR_COUNT (MAPS_IsTown(D_5893_map_id) ? LOCATION_NPC_COUNT : 32)
 
 #define MAP_WIDTH MAPS_ActiveWidth(D_5893_map_id, D_5895_map_level)
 #define MAP_HEIGHT MAPS_ActiveHeight(D_5893_map_id, D_5895_map_level)
