@@ -687,6 +687,15 @@ int main(int argc, char **argv) {
                      }
                  check(npcCount > 0, "World NPC filter is empty");
                  filter->setCurrentText("Special");
+                 QListWidgetItem *shadowLord = nullptr;
+                 for (int i = 0; i < palette->count(); ++i)
+                     if (canvas->specialBrushKinds.value(palette->item(i)->data(Qt::UserRole).toInt(), -1) ==
+                         int(Workshop::MapItemKind::ShadowLord))
+                         shadowLord = palette->item(i);
+                 check(shadowLord && shadowLord->isHidden(), "Shadow Lord remains in Special");
+                 filter->setCurrentText("Monsters");
+                 check(!shadowLord->isHidden(), "Shadow Lord missing from Monsters");
+                 filter->setCurrentText("Special");
                  QSet<int> seen;
                  QString previous;
                  int goldRow = -1;
@@ -708,7 +717,8 @@ int main(int argc, char **argv) {
                  auto expected = Workshop::availableMapItems(window.projectForTests(), "BRIT.DAT");
                  for (auto kind : expected)
                      if (kind != Workshop::MapItemKind::Npc &&
-                         kind != Workshop::MapItemKind::Monster)
+                         kind != Workshop::MapItemKind::Monster &&
+                         kind != Workshop::MapItemKind::ShadowLord)
                          check(seen.contains(int(kind)), "Special omitted a former Add entry");
                  check(Workshop::mapItemName(Workshop::MapItemKind::Corpse) == "Corpse (intact)" &&
                            Workshop::mapItemShape(Workshop::MapItemKind::Corpse) == 30 &&

@@ -1766,7 +1766,8 @@ MapWorkspace::MapWorkspace(
         item->setData(Qt::UserRole, id);
         item->setData(Qt::UserRole + 1, name);
         item->setData(Qt::AccessibleTextRole, name);
-        item->setToolTip(name + " · Special");
+        item->setToolTip(name + (kind == Workshop::MapItemKind::ShadowLord ? " · Monster"
+                                                                       : " · Special"));
     }
     rightLayout->addWidget(palette, 1);
     npcResource = companion;
@@ -2604,7 +2605,9 @@ void MapWorkspace::setBrush(int id) {
 QStringList MapWorkspace::tileCategories(int id) const {
     QStringList categories;
     if (canvas->specialBrushKinds.contains(id))
-        return {"Special"};
+        return {canvas->specialBrushKinds.value(id) == int(Workshop::MapItemKind::ShadowLord)
+                    ? "Monsters"
+                    : "Special"};
     if (canvas->actorBrushKinds.contains(id))
         return {canvas->actorBrushKinds.value(id) == 1 ? "NPCs" : "Monsters"};
     const int profile = id >= 512 ? CustomTiles::definition(*project, id).base : id;
