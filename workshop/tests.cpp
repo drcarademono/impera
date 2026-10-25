@@ -312,6 +312,10 @@ int main(int argc, char **argv) {
                     dialog->reject();
                     return;
                 }
+                auto fill = dialog->findChild<QComboBox *>("mapFill");
+                check(dialog->windowTitle() == "Resize map" && fill && fill->count() == 256 &&
+                          !fill->itemIcon(0).isNull(),
+                      "Map resize lacks the shared visual fill picker");
                 w->setValue(70);
                 h->setValue(100);
                 handled = true;
@@ -3077,6 +3081,10 @@ int main(int argc, char **argv) {
                  QTimer::singleShot(0, [] {
                      auto dialog = qobject_cast<QDialog *>(QApplication::activeModalWidget());
                      check(dialog, "Resize dialog missing");
+                     auto fill = dialog->findChild<QComboBox *>("mapFill");
+                     check(dialog->windowTitle() == "Resize map" && fill && fill->count() == 240 &&
+                               !fill->itemIcon(0).isNull() && fill->findData(0x90) < 0,
+                           "Dungeon resize lacks the shared visual fill picker");
                      dialog->findChild<QSpinBox *>("mapWidth")->setValue(16);
                      dialog->findChild<QSpinBox *>("mapHeight")->setValue(10);
                      dialog->accept();

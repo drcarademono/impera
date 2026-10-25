@@ -1,5 +1,6 @@
 #include "mod/npcs.h"
 #include "map_editor.h"
+#include "map_resize_dialog.h"
 #include "extended_maps.h"
 #include "../src/tiles.h"
 #include "contents_editor.h"
@@ -1349,44 +1350,18 @@ MapWorkspace::MapWorkspace(
         if (!flushLocationMode())
             return;
         const auto mp = document.pages[currentPage()];
-        QDialog dialog(window());
+        Workshop::MapResizeDialog dialog(window(), QSize(mp.side, mp.height()));
         QPointer<MapWorkspace> owner(this);
-        dialog.setWindowTitle("Resize map");
-        QFormLayout form(&dialog);
-        QSpinBox width, height;
-        width.setObjectName("mapWidth");
-        height.setObjectName("mapHeight");
-        width.setRange(1, 256);
-        height.setRange(1, 256);
-        width.setValue(mp.side);
-        height.setValue(mp.height());
-        QSpinBox fill;
-        fill.setObjectName("mapFill");
-        fill.setRange(0, 255);
-        fill.setValue(canvas->brush < 256 ? canvas->brush : 5);
-        fill.setToolTip("Terrain tile used for newly added cells.");
-        form.addRow("Width (tiles)", &width);
-        form.addRow("Height (tiles)", &height);
-        form.addRow("Fill tile", &fill);
-        QLabel crop;
-        form.addRow(&crop);
-        auto preview = [&] {
-            int n = mp.side * mp.height() -
-                    qMin(mp.side, width.value()) * qMin(mp.height(), height.value());
-            crop.setText(n ? QString("%1 terrain cells will be cropped.").arg(n) : QString());
-        };
-        connect(&width, &QSpinBox::valueChanged, &dialog, preview);
-        connect(&height, &QSpinBox::valueChanged, &dialog, preview);
-        preview();
-        QDialogButtonBox buttons(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-        form.addRow(&buttons);
-        connect(&buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-        connect(&buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+        for (int tile = 0; tile < 256; ++tile)
+            dialog.fill.addItem(QIcon(QPixmap::fromImage(canvas->tiles.value(tile))),
+                                QString("%1 · %2").arg(tile).arg(MapDocument::tileName(tile)), tile);
+        dialog.fill.setCurrentIndex(canvas->brush < 256 ? canvas->brush : 5);
         if (dialog.exec() != QDialog::Accepted || !owner)
             return;
         try {
             if (commitResources(Workshop::resizeMap(*project, resource, currentPage(),
-                                                    width.value(), height.value(), fill.value()),
+                                                    dialog.width.value(), dialog.height.value(),
+                                                    dialog.fill.currentData().toInt()),
                                 "Resize map")) {
                 document = MapDocument(project, resource);
                 loadPage();
@@ -2707,6 +2682,11 @@ void MapWorkspace::saveView() {
         s.center = view->mapCenter();
 }
 void MapWorkspace::loadPage() {
+    if (auto resize = findChild<QToolButton *>("resizeMap")) {
+        const auto size = document.pages[currentPage()];
+        resize->setText(QString("%1 × %2…").arg(size.side).arg(size.height()));
+    }
+
     restoring = true;
     key = resource + "/" + QString::number(currentPage());
     auto state = states->value(key);

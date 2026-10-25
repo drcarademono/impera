@@ -1,6 +1,7 @@
 #include "map_positions.h"
 #include "extended_maps.h"
 #include "dungeon_editor.h"
+#include "map_resize_dialog.h"
 #include "contents_editor.h"
 #include "map_entities.h"
 #include "dungeon_names.h"
@@ -644,47 +645,19 @@ DungeonWorkspace::DungeonWorkspace(
         canvas->cancelStroke();
         const int d = dungeon, f = floor->currentIndex();
         const auto dims = document->size(d, f);
-        QDialog dialog(window());
+        MapResizeDialog dialog(window(), dims);
         QPointer<DungeonWorkspace> owner(this);
-        dialog.setWindowTitle("Resize dungeon floor");
-        QFormLayout form(&dialog);
-        QSpinBox width, height;
-        width.setObjectName("mapWidth");
-        height.setObjectName("mapHeight");
-        width.setRange(1, 256);
-        height.setRange(1, 256);
-        width.setValue(dims.width());
-        height.setValue(dims.height());
-        QComboBox fill;
-        fill.setObjectName("dungeonResizeFill");
         for (int value = 0; value < 256; value++)
             if ((value >> 4) != 9)
-                fill.addItem(DungeonDocument::feature(value) + " · " +
-                                 DungeonDocument::variant(value),
-                             value);
-        fill.setCurrentIndex(fill.findData(canvas->brush));
-        form.addRow("Width (tiles)", &width);
-        form.addRow("Height (tiles)", &height);
-        form.addRow("Fill feature", &fill);
-        QLabel crop;
-        form.addRow(&crop);
-        auto preview = [&] {
-            int n = dims.width() * dims.height() -
-                    qMin(dims.width(), width.value()) * qMin(dims.height(), height.value());
-            crop.setText(n ? QString("%1 cells will be cropped.").arg(n) : QString());
-        };
-        connect(&width, &QSpinBox::valueChanged, &dialog, preview);
-        connect(&height, &QSpinBox::valueChanged, &dialog, preview);
-        preview();
-        QDialogButtonBox buttons(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-        form.addRow(&buttons);
-        connect(&buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-        connect(&buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+                dialog.fill.addItem(QIcon(QPixmap::fromImage(canvas->tiles.value(value))),
+                                    DungeonDocument::feature(value) + " · " +
+                                        DungeonDocument::variant(value), value);
+        dialog.fill.setCurrentIndex(dialog.fill.findData(canvas->brush));
         if (dialog.exec() != QDialog::Accepted || !owner)
             return;
         try {
-            if (commit(resizeMap(*p, "DUNGEON.DAT", d * 8 + f, width.value(), height.value(),
-                                 fill.currentData().toInt()),
+            if (commit(resizeMap(*p, "DUNGEON.DAT", d * 8 + f, dialog.width.value(), dialog.height.value(),
+                                 dialog.fill.currentData().toInt()),
                        "Resize dungeon floor") &&
                 owner)
                 load();
