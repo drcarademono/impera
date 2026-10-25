@@ -56,7 +56,48 @@ static u16 KeyboardEventToUltimaKeycode(SDL_KeyboardEvent ev)
         return (u8)ev.key;
     }
 
+    if (ev.key == SDLK_KP_ENTER)
+    {
+        return (u8)SDLK_RETURN;
+    }
+
     u8 extendedKeycode;
+
+    bool numlock = (ev.mod & SDL_KMOD_NUM) != 0;
+    if (ev.key >= SDLK_KP_1 && ev.key <= SDLK_KP_0)
+    {
+        if (numlock)
+        {
+            switch (ev.key)
+            {
+            case SDLK_KP_1: return '1';
+            case SDLK_KP_2: return '2';
+            case SDLK_KP_3: return '3';
+            case SDLK_KP_4: return '4';
+            case SDLK_KP_5: return '5';
+            case SDLK_KP_6: return '6';
+            case SDLK_KP_7: return '7';
+            case SDLK_KP_8: return '8';
+            case SDLK_KP_9: return '9';
+            case SDLK_KP_0: return '0';
+            }
+        }
+        else
+        {
+            switch (ev.key)
+            {
+            case SDLK_KP_7: ev.key = SDLK_HOME; break;
+            case SDLK_KP_8: ev.key = SDLK_UP; break;
+            case SDLK_KP_9: ev.key = SDLK_PAGEUP; break;
+            case SDLK_KP_4: ev.key = SDLK_LEFT; break;
+            case SDLK_KP_6: ev.key = SDLK_RIGHT; break;
+            case SDLK_KP_1: ev.key = SDLK_END; break;
+            case SDLK_KP_2: ev.key = SDLK_DOWN; break;
+            case SDLK_KP_3: ev.key = SDLK_PAGEDOWN; break;
+            }
+        }
+    }
+
     switch (ev.key)
     {
     case SDLK_HOME: extendedKeycode = KBD_HOME; break;
