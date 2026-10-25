@@ -6,7 +6,7 @@
 #include <string.h>
 #define MAPS_HEADER 16u
 #define MAPS_RECORD 128u
-#define MAPS_MAX 512u
+#define MAPS_MAX 4096u
 #define MAPS_MAX_BYTES (8u * 1024u * 1024u)
 static inline unsigned MAPS_Word(const void *v) {
     const unsigned char *p = (const unsigned char *)v;
@@ -39,8 +39,12 @@ static inline unsigned MAPS_LocationResource(const char *name) {
     unsigned id = (name[3] - '0') * 100 + (name[4] - '0') * 10 + name[5] - '0';
     return MAPS_NewLocation(id) ? id : 0;
 }
+/* Combat maps use the previously reserved byte 23 for the high identity byte. */
+static inline unsigned MAPS_Id(const unsigned char *r) {
+    return r[5] | (r[4] == 2 || r[4] == 3 ? (unsigned)r[23] << 8 : 0);
+}
 static inline uint32_t MAPS_Key(const unsigned char *r) {
-    return (uint32_t)r[4] << 24 | (uint32_t)r[5] << 16 | (uint8_t)(r[8] + 128);
+    return (uint32_t)r[4] << 24 | (uint32_t)MAPS_Id(r) << 8 | (uint8_t)(r[8] + 128);
 }
 static inline int MAPS_Validate(const void *v, size_t n) {
     const unsigned char *b = (const unsigned char *)v;
@@ -67,7 +71,8 @@ static inline int MAPS_Validate(const void *v, size_t n) {
              ((int8_t)r[14] == -2 || r[17] >= w || r[18] >= h)))
             return 0;
         for (unsigned j = 21; j < 24; ++j)
-            if (r[j] && !(r[4] == 4 && MAPS_NewLocation(r[5]) && j < 23))
+            if (r[j] && !(r[4] == 4 && MAPS_NewLocation(r[5]) && j < 23) &&
+                !(j == 23 && (r[4] == 2 || r[4] == 3)))
                 return 0;
         if (r[20] > 1 || (r[20] && (r[4] < 2 || r[4] == 4)))
             return 0;
@@ -100,10 +105,10 @@ static inline int MAPS_Validate(const void *v, size_t n) {
         } else if (r[4] == 4) {
             if (strcmp(resource, "DUNGEON.DAT") ||
                 (r[5] <= 40 ? page != (r[5] - 33) * 8 + r[8]
-                            : page < 64 || MAPS_Word(r + 21) < 112 || MAPS_Word(r + 21) > 240 ||
+                            : page < 64 || MAPS_Word(r + 21) < 112 || MAPS_Word(r + 21) > 65520 ||
                                   MAPS_Word(r + 21) % 16))
                 return 0;
-        } else if (page != r[5] || strcmp(resource, r[4] == 2 ? "BRIT.CBT" : "DUNGEON.CBT"))
+        } else if (page != MAPS_Id(r) || strcmp(resource, r[4] == 2 ? "BRIT.CBT" : "DUNGEON.CBT"))
             return 0;
         if (!(MAPS_NewLocation(r[5]) && (r[4] == 1 || (r[4] == 4 && !r[8]))) &&
             ((int8_t)r[14] != -2 || r[19]))
@@ -145,7 +150,7 @@ static inline const unsigned char *MAPS_Find(const void *v, size_t n, unsigned k
         unsigned length = MAPS_U32(r);
         if (length < MAPS_RECORD || length > n - off)
             return NULL;
-        if (r[4] == kind && r[5] == id && (int8_t)r[8] == floor)
+        if (r[4] == kind && MAPS_Id(r) == id && (int8_t)r[8] == floor)
             return r;
         off += length;
     }

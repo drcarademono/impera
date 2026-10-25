@@ -172,10 +172,12 @@ floor records rather than town records. All eight floor records live in MAPS.OVR
 DUNGEON.DAT remains unchanged. The floor-zero record owns the world entrance and
 arrival position. Bytes 21–22 contain a private combat-room bank's first index.
 Each dungeon appends sixteen independent editable rooms to DUNGEON.CBT. Native
-room banks are never reused or overwritten. The byte-sized combat-room identity
-range permits nine additional sixteen-room banks beyond the native 112 rooms.
+room banks are never reused or overwritten. Combat-room identities use 16 bits,
+so new dungeons are no longer limited to nine banks. The shared map identity pool and map-data budget still apply.
 
-Package version 21 is required. Dungeon classification uses the mounted catalog,
+Package version 21 supports the original independent dungeon format; version 22
+is required when room identities exceed the old byte range. Dungeon classification
+uses the mounted catalog,
 so these identities run the dungeon loop, commands, spells, and renderer rather
 than town behavior. Exiting at either end returns to the authored world entrance.
 Completed alternate room doors are updated in that dungeon's own floor cells;

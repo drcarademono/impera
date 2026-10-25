@@ -263,15 +263,23 @@ QByteArray Project::package() const {
                 locationObjects |=
                     NPCS_Blood(U5::byte(b, i * 8), U5::byte(b, i * 8 + 5), U5::byte(b, i * 8 + 7));
     }
-    bool dungeonMaps = false, newDungeons = false;
+    bool dungeonMaps = false, newDungeons = false, wideRooms = false;
     for (const auto &map : Workshop::extendedMaps(*this)) {
         dungeonMaps |= map.kind == 4;
         newDungeons |= map.kind == 4 && map.id > 40;
+        wideRooms |= ((map.kind == 2 || map.kind == 3) && map.id > 255) || map.roomBase > 240;
     }
     for (const auto &contents : Workshop::readContents(resources.value("CONTENTS.OVR").edited))
         newDungeons |= contents.kind == 2 && contents.map >= 112;
+    wideRooms |= Workshop::extendedMaps(*this).size() > 512;
+    for (const auto &contents : Workshop::readContents(resources.value("CONTENTS.OVR").edited))
+        wideRooms |= contents.map > 255;
+    const auto bindings = resources.value("TYPEMAP.OVR").edited;
+    for (int off = 32; off + 16 <= bindings.size(); off += 16)
+        wideRooms |= U5::byte(bindings, off + 5) != 0;
     QByteArray out(
-        newDungeons     ? "IMOD0021"
+        wideRooms       ? "IMOD0022"
+        : newDungeons   ? "IMOD0021"
         : dungeonMaps   ? "IMOD0020"
         : specialActors ? "IMOD0019"
         : (locationObjects || list.contains("MAPS.OVR") ||

@@ -2982,6 +2982,71 @@ int main(int argc, char **argv) {
                       "a test description",
                   "Description UI did not commit");
         });
+        test("Dungeons beyond nine keep wide rooms, contents and custom bindings distinct", [&] {
+            QTemporaryDir dir;
+            auto p = fixture(dir.path());
+            file(dir.path() + "/BRIT.DAT", QByteArray(256, 1));
+            file(dir.path() + "/DATA.OVL", QByteArray(0x3986, 0));
+            file(dir.path() + "/DUNGEON.DAT", QByteArray(4096, 0));
+            file(dir.path() + "/DUNGEON.CBT", QByteArray(112 * 352, 0));
+            p.openGame(dir.path());
+            auto apply = [&](const QMap<QString, QByteArray> &edits) {
+                for (auto it = edits.begin(); it != edits.end(); ++it)
+                    p.resources[it.key()].edited = it.value();
+                p.validate();
+            };
+            for (int i = 0; i < 12; ++i)
+                apply(Workshop::addDungeon(p, "BRIT.DAT", QString("Depths %1").arg(i),
+                                           {220, 100 + i}, 8, 8, 0, 0x18));
+            check(Workshop::dungeonIds(p).size() == 20 && p.data("DUNGEON.CBT").size() == 304 * 352,
+                  "Dungeon creation is still capped at nine");
+            check(Workshop::DungeonDocument(&p).room(20, 0xa0) == 288,
+                  "New dungeon bank truncated its room identity");
+            auto lowRoom = p.mapPages("DUNGEON.CBT")[44];
+            apply(Workshop::resizeMap(p, "DUNGEON.CBT", 300, 15, 13, 68));
+            apply({{"CONTENTS.OVR", Workshop::addContentsAt(p, {2, 300, 0}, {12, 12}, true)}});
+            TypeDef tile, monster;
+            TYPES_Vanilla(0, 5, &tile);
+            tile.id = 40000;
+            TYPES_Vanilla(1, 144, &monster);
+            monster.kind = 2;
+            monster.id = 40001;
+            QImage art(16, 16, QImage::Format_RGBA8888);
+            art.fill(Qt::white);
+            apply({{"TYPES.OVR",
+                    CustomTiles::library(
+                        p, {{tile.id, CustomTiles::record(tile, {{art, 150, 0}})},
+                            {monster.id, CustomTiles::record(monster, {{art, 150, 0}})}})}});
+            auto placements = CustomTiles::placements(p);
+            auto cell =
+                CustomTiles::cell("DUNGEON.CBT", p.mapPages("DUNGEON.CBT")[300], 300, 12, 12);
+            cell.type = tile.id;
+            placements[TYPES_CellKey(&cell)] = cell;
+            apply({{"TYPEMAP.OVR", CustomTiles::mapBytes(p, placements)}});
+            apply(CustomTiles::assignActor(p, "DUNGEON.CBT", p.mapPages("DUNGEON.CBT")[300], 300, 1,
+                                           monster.id));
+            check(CustomTiles::actorType(p, "DUNGEON.CBT", lowRoom, 44, 1, 0) == 0 &&
+                      CustomTiles::actorType(p, "DUNGEON.CBT", p.mapPages("DUNGEON.CBT")[300], 300,
+                                             1, 0) == monster.id,
+                  "Wide actor bindings aliased room 44");
+            auto package = p.package();
+            check(package.left(8) == "IMOD0022", "Wide rooms do not require the updated engine");
+            Project imported;
+            imported.openGame(dir.path());
+            imported.importPackage(package);
+            check(imported.mapPages("DUNGEON.CBT")[300].side == 15 &&
+                      imported.mapPages("DUNGEON.CBT")[44].side == 11 &&
+                      Workshop::readContents(imported.data("CONTENTS.OVR")).first().map == 300 &&
+                      CustomTiles::placements(imported).size() == 2,
+                  "Wide room package lost identities or bindings");
+            auto old = package;
+            old.replace(0, 8, "IMOD0021");
+            rejects([&] { imported.importPackage(old); });
+            p.save(dir.path() + "/wide.imperaproject");
+            imported.load(p.projectPath);
+            check(imported.mapPages("DUNGEON.CBT")[300].height() == 13,
+                  "Wide room project persistence failed");
+        });
         test("New dungeons own floors and combat rooms, persist and place from world tiles", [&] {
             QTemporaryDir dir;
             auto p = fixture(dir.path());

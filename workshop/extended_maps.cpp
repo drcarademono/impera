@@ -21,7 +21,7 @@ QVector<ExtendedMap> extendedMaps(const Project &p) {
         const auto r = reinterpret_cast<const unsigned char *>(b.constData() + off);
         ExtendedMap m;
         m.kind = r[4];
-        m.id = r[5];
+        m.id = MAPS_Id(r);
         m.page = MAPS_Word(r + 6);
         m.floor = int8_t(r[8]);
         m.background = r[9];
@@ -51,8 +51,9 @@ QByteArray writeExtendedMaps(const QVector<ExtendedMap> &maps) {
     memcpy(b.data(), "IMAPS001", 8);
     TYPES_Put32(b.data() + 8, sorted.size());
     for (const auto &m : sorted) {
-        require(m.kind <= 4 && m.id <= 255 && m.page >= 0 && m.page <= 65535 && m.floor >= -128 &&
-                    m.floor <= 127 && m.underlay >= 0 && m.underlay <= 255 && m.background >= 0 &&
+        require(m.kind <= 4 && m.id <= ((m.kind == 2 || m.kind == 3) ? 65535u : 255u) &&
+                    m.page >= 0 && m.page <= 65535 && m.floor >= -128 && m.floor <= 127 &&
+                    m.underlay >= 0 && m.underlay <= 255 && m.background >= 0 &&
                     m.background <= 255 && m.world >= -2 && m.world <= 0 && m.entrance.x() >= 0 &&
                     m.entrance.x() <= 255 && m.entrance.y() >= 0 && m.entrance.y() <= 255 &&
                     m.arrival.x() >= 0 && m.arrival.x() <= 255 && m.arrival.y() >= 0 &&
@@ -70,6 +71,8 @@ QByteArray writeExtendedMaps(const QVector<ExtendedMap> &maps) {
         TYPES_Put32(r.data(), MAPS_RECORD + m.cells.size());
         r[4] = m.kind;
         r[5] = m.id;
+        if (m.kind == 2 || m.kind == 3)
+            r[23] = m.id >> 8;
         r[6] = m.page;
         r[7] = m.page >> 8;
         r[8] = m.floor;
@@ -401,7 +404,7 @@ QMap<QString, QByteArray> addDungeon(const Project &p, const QString &world, con
     maps.erase(town);
     auto rooms = p.data("DUNGEON.CBT");
     const int roomBase = qMax(112, (rooms.size() / 352 + 15) / 16 * 16);
-    require(roomBase <= 240, "No free dungeon combat-room identities remain");
+    require(roomBase <= 65520, "Dungeon combat-room identity range is full");
     const int pageBase = p.mapPages("DUNGEON.DAT").size();
     for (int floor = 0; floor < 8; ++floor) {
         ExtendedMap m = entranceRecord;

@@ -531,3 +531,12 @@ that base. The corresponding sixteen DUNGEON.CBT rooms must accompany the catalo
 Town and dungeon records cannot share an identity, and distinct new dungeons
 cannot share a combat-room bank. Dungeon floor bytes retain the native feature
 encoding. CONTENTS.OVR supports the additional dungeon encounter identities.
+
+`IMOD0022` widens combat-room identities to 16 bits. MAPS.OVR kind-2/3 records
+store the high identity byte in byte 23; the page field carries the matching full
+identity. Kind-4 room-bank bases may range through 65520. TYPEMAP.OVR records use
+byte 5 for the high map byte on combat terrain and actor bindings, leaving bytes
+6–7 reserved. CONTENTS.OVR already has a 16-bit map field and now accepts that range
+for dungeon rooms. The sparse map catalog accepts up to 4096 records, within its
+existing 8 MiB budget. Narrow records retain their wire layout and old packages
+and saves remain readable. New wide data requires the updated engine.

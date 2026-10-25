@@ -331,7 +331,7 @@ int TYPES_Validate(const void *v, size_t size) {
 }
 void TYPES_CellDecode(const unsigned char *p, TypeCell *c) {
     c->kind = p[0];
-    c->map = p[1];
+    c->map = p[1] | (unsigned)p[5] << 8;
     c->floor = (int8_t)p[2];
     c->x = p[3];
     c->y = p[4];
@@ -342,6 +342,7 @@ void TYPES_CellEncode(unsigned char *p, const TypeCell *c) {
     memset(p, 0, 16);
     p[0] = c->kind;
     p[1] = c->map;
+    p[5] = c->map >> 8;
     p[2] = (uint8_t)c->floor;
     p[3] = c->x;
     p[4] = c->y;
@@ -349,10 +350,12 @@ void TYPES_CellEncode(unsigned char *p, const TypeCell *c) {
     TYPES_Put32(p + 12, c->restoreType);
 }
 uint64_t TYPES_CellKey(const TypeCell *c) {
-    return (uint64_t)c->kind << 32 | (uint64_t)c->map << 24 | (uint64_t)(uint8_t)c->floor << 16 |
+    return (uint64_t)c->kind << 40 | (uint64_t)c->map << 24 | (uint64_t)(uint8_t)c->floor << 16 |
            (uint64_t)c->y << 8 | c->x;
 }
 static int validCell(const TypeCell *c) {
+    if (c->map > 255 && !(c->kind == 1 || c->kind == 2 || c->kind == 5 || c->kind == 6))
+        return 0;
     /* Actor placements use stable instance slots, never terrain coordinates. */
     if (c->kind == 3)
         return MAPS_Town(c->map) && c->floor == 0 && (c->x || c->y) && c->y < 128;
@@ -391,7 +394,7 @@ int TYPES_ValidateMap(const void *v, size_t size, const void *defs, size_t len) 
         TYPES_CellDecode(p, &c);
         uint64_t key = TYPES_CellKey(&c);
         const unsigned char *r = TYPES_Find(defs, len, c.type);
-        if (!validCell(&c) || !zeros(p + 5, 3) || !zeros(p + 12, 4) || (i && key <= prev) ||
+        if (!validCell(&c) || !zeros(p + 6, 2) || !zeros(p + 12, 4) || (i && key <= prev) ||
             c.type < 512 || !r || (!!r[8] != (c.kind >= 3)))
             return 0;
         prev = key;
@@ -658,7 +661,7 @@ int TYPES_ReadState(FILE *f, int apply) {
         TYPES_CellDecode(b + i * 16, &c);
         TypeDef d;
         uint64_t key = TYPES_CellKey(&c);
-        ok = validCell(&c) && zeros(b + i * 16 + 5, 3) &&
+        ok = validCell(&c) && zeros(b + i * 16 + 6, 2) &&
              (!c.restoreType || (TYPES_Get(c.restoreType, &d) && !d.kind)) && (!i || key > prev) &&
              TYPES_Get(c.type, &d) && (!!d.kind == (c.kind >= 3));
         prev = key;

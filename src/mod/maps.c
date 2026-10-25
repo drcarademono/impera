@@ -199,7 +199,7 @@ int MAPS_ReadState(FILE *f, int apply) {
              MAPS_Validate(b, MAPS_HEADER + size);
     for (size_t off = MAPS_HEADER; ok && off < MAPS_HEADER + size; off += MAPS_U32(b + off)) {
         const unsigned char *r = b + off,
-                            *orig = MAPS_Find(source, catalogSize, r[4], r[5], (int8_t)r[8]);
+                            *orig = MAPS_Find(source, catalogSize, r[4], MAPS_Id(r), (int8_t)r[8]);
         if (!orig || memcmp(orig, r, MAPS_RECORD))
             ok = 0;
     }
@@ -207,7 +207,7 @@ int MAPS_ReadState(FILE *f, int apply) {
         MAPS_Reset();
         for (size_t off = MAPS_HEADER; off < MAPS_HEADER + size; off += MAPS_U32(b + off)) {
             const unsigned char *r = b + off;
-            unsigned char *target = (unsigned char *)MAPS_Record(r[4], r[5], (int8_t)r[8]);
+            unsigned char *target = (unsigned char *)MAPS_Record(r[4], MAPS_Id(r), (int8_t)r[8]);
             memcpy(target + MAPS_RECORD, r + MAPS_RECORD, MAPS_U32(r) - MAPS_RECORD);
         }
     }

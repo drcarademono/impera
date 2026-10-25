@@ -99,7 +99,7 @@ int CONTENTS_Validate(const void *data, size_t size) {
             if (d.map >= 33 && d.map <= 40 && (d.floor < 0))
                 return 0;
 
-        } else if (d.map >= (d.kind == 1 ? 16 : 256) || d.floor || d.slot != 255 || d.refill != 0)
+        } else if (d.map >= (d.kind == 1 ? 16 : 65536) || d.floor || d.slot != 255 || d.refill != 0)
             return 0;
         if (d.slot != 255 && (d.slot < 1 || d.slot > 31 || d.kind || d.map || d.action != 1))
             return 0;

@@ -33,7 +33,7 @@ extern "C" {
  * frame count; the two groups animate independently. ITYMAP01 header: UUID[16],
  * count:u32,reserved[4]. Sorted cells: kind:u8 (0 map,1 BRIT.CBT,2 DUNGEON.CBT),
  * map:u8,floor:i8,x:u8,y:u8, kinds 3 NPC slots, 4 world actor slots, 5/6 encounter actor slots;
- * x=slot,y=0. reserved[3],type:u32,reserved[4]. Save records reuse the final word for a temporary
+ * x=slot,y=0. mapHigh:u8,reserved[2],type:u32,reserved[4]. Save records reuse the final word for a temporary
  * door’s restore type. */
 typedef struct TypeDef {
     uint32_t id, ground, result[4];
@@ -44,7 +44,8 @@ typedef struct TypeDef {
     char name[64], description[128];
 } TypeDef;
 typedef struct TypeCell {
-    uint8_t kind, map;
+    uint8_t kind;
+    uint16_t map;
     int8_t floor;
     uint8_t x, y;
     uint32_t type, restoreType;
