@@ -206,7 +206,9 @@ if(BUILD_TESTING OR U5D_BUILD_TESTS)
     add_test(NAME workshop_custom_types COMMAND impera_workshop_custom_types_test)
     set_tests_properties(workshop_custom_types PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 60)
     add_test(NAME workshop COMMAND impera_workshop_test)
-    set_tests_properties(workshop PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 60)
+    # This aggregate GUI suite includes many project and map-editor roundtrips.
+    # Intel macOS runners need more time than Linux and Apple Silicon hosts.
+    set_tests_properties(workshop PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 180)
 endif()
 
 if(MSVC)

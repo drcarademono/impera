@@ -98,6 +98,7 @@ static void nativeKeys(Dialogue::NativeTextViewport *viewport, const QString &ke
     }
 }
 int main(int argc, char **argv) {
+    std::cout << std::unitbuf;
     QApplication app(argc, argv);
     if (qEnvironmentVariableIsSet("IMPERA_WORKSHOP_SCREENSHOT_DIR"))
         Workshop::applyTheme(app);
@@ -108,6 +109,7 @@ int main(int argc, char **argv) {
     app.setApplicationName("WorkshopTests");
     int count = 0;
     auto test = [&](const char *name, auto fn) {
+        std::cout << "RUN " << name << "\n";
         fn();
         ++count;
         std::cout << "PASS " << name << "\n";
