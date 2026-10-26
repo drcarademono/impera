@@ -11,6 +11,7 @@
 #include "reveal.h"
 #include "widescreen.h"
 #include "tileset.h"
+#include "sprite_order.h"
 #include "text/text_window.h"
 #if defined(TARGET_SDL)
 #include "grap_sdl.h"
@@ -580,6 +581,140 @@ void GRAP_BUF_PutMapSprite(int x, int y, int tile)
         y-(D_5893_map_id>=128?D_5897_map_y:5));
     s_dirty = true;
 }
+
+#if defined(TARGET_SDL)
+/* Scripted vignettes have a fixed camera and their own terrain. Do not consult
+ * the party's map, LOS, or combat state when compositing their actors. */
+static GrapSceneSprite previousSceneSprites[32];
+static int previousSceneKey, previousSceneCount;
+static bool previousSceneValid;
+void GRAP_BUF_ResetScene(void) { previousSceneValid = false; }
+static byte SceneGround(const byte *ground, int stride, int columns, int rows, int x, int y) {
+    byte tile = ground[y * stride + x];
+    byte neighbors[] = {
+        y + 1 < rows ? ground[(y + 1) * stride + x] : tile, y ? ground[(y - 1) * stride + x] : tile,
+        x + 1 < columns ? ground[y * stride + x + 1] : tile, x ? ground[y * stride + x - 1] : tile};
+    return WIDE_GroundFromNeighbors(tile, neighbors);
+}
+static void DrawSceneSprite(byte *pixels, unsigned tile, int originX, int originY, int left,
+                            int top, int right, int bottom) {
+    unsigned w = 1, h = 1;
+    if (TYPES_ArtSlot(tile))
+        TYPES_ArtSize(tile, 0, &w, &h);
+    for (int y = -1; y <= (int)h * 16; ++y)
+        for (int x = -1; x <= (int)w * 16; ++x) {
+            int tx = originX + x, ty = originY + y;
+            if (tx < left || tx >= right || ty < top || ty >= bottom)
+                continue;
+            int color = GRAP_BUF_SpritePixel(tile, x, y);
+            if (color < 0)
+                continue;
+            TILESET_RecordSprite(pixels + ty * 320 + tx, color, GRAP_BUF_SpriteIsTransparent(tile));
+            pixels[ty * 320 + tx] = (byte)color;
+        }
+}
+void GRAP_BUF_DrawScene(int key, const byte *ground, int stride, int columns, int rows, int left,
+                        int right, int originX, int originY, const GrapSceneSprite *sprites,
+                        int count) {
+    if (!ground || columns < 1 || rows < 1 || count < 0 || count > 32 || stride < columns ||
+        (count && !sprites))
+        return;
+    left = SDL_max(0, left);
+    right = SDL_min(columns - 1, right);
+    int clipLeft = SDL_max(0, originX + left * 16),
+        clipRight = SDL_min(320, originX + (right + 1) * 16);
+    int clipTop = SDL_max(0, originY), clipBottom = SDL_min(200, originY + rows * 16);
+    bool compatible = previousSceneValid && previousSceneKey == key && previousSceneCount == count;
+    bool moving[32] = {false}, animate = false;
+    if (compatible && GRAP_SDL_SmoothMovementEnabled())
+        for (int i = 0; i < count; ++i) {
+            const GrapSceneSprite *old = &previousSceneSprites[i], *next = &sprites[i];
+            int dx = next->x - old->x, dy = next->y - old->y;
+            unsigned w = 1, h = 1;
+            if (TYPES_ArtSlot(next->tile))
+                TYPES_ArtSize(next->tile, 0, &w, &h);
+            bool visible =
+                (originX + next->x + (int)w * 16 > clipLeft && originX + next->x < clipRight &&
+                 originY + next->y + (int)h * 16 > clipTop && originY + next->y < clipBottom) ||
+                (originX + old->x + (int)w * 16 > clipLeft && originX + old->x < clipRight &&
+                 originY + old->y + (int)h * 16 > clipTop && originY + old->y < clipBottom);
+            moving[i] = visible && old->tile && next->tile && old->identity == next->identity &&
+                        abs(dx) <= 16 && abs(dy) <= 16 && (dx || dy);
+            animate |= moving[i];
+        }
+    int frames = animate ? 8 : 1;
+    byte *pixels = GetPage(D_52ba_vdp._52d8_page);
+    for (int frame = 1; frame <= frames; ++frame) {
+        Uint64 started = SDL_GetTicks();
+        for (int y = 0; y < rows; ++y)
+            for (int x = left; x <= right; ++x) {
+                unsigned tile = ground[y * stride + x];
+                if (tile == TILE_MAP_FE)
+                    continue; /* Script owns active reveal/gate effects. */
+                byte floor = SceneGround(ground, stride, columns, rows, x, y);
+                for (int py = 0; py < 16; ++py)
+                    for (int px = 0; px < 16; ++px) {
+                        int tx = originX + x * 16 + px, ty = originY + y * 16 + py;
+                        if (tx < clipLeft || tx >= clipRight || ty < clipTop || ty >= clipBottom)
+                            continue;
+                        int color = GRAP_BUF_TilePixel(D_b11e[floor], px, py);
+                        TILESET_Record(pixels + ty * 320 + tx, color);
+                        pixels[ty * 320 + tx] = (byte)color;
+                    }
+            }
+        for (int y = 0; y < rows; ++y)
+            for (int x = left; x <= right; ++x) {
+                byte tile = ground[y * stride + x];
+                if (tile != TILE_MAP_FE && SceneGround(ground, stride, columns, rows, x, y) != tile)
+                    DrawSceneSprite(pixels, D_b11e[tile], originX + x * 16, originY + y * 16,
+                                    clipLeft, clipTop, clipRight, clipBottom);
+            }
+        typedef struct {
+            SpriteOrder order;
+            int index, x, y;
+        } OrderedSceneActor;
+        OrderedSceneActor order[32];
+        int n = 0;
+        for (int i = 0; i < count; ++i) {
+            if (!sprites[i].tile)
+                continue;
+            unsigned w = 1, h = 1;
+            if (TYPES_ArtSlot(sprites[i].tile))
+                TYPES_ArtSize(sprites[i].tile, 0, &w, &h);
+            int x = sprites[i].x, y = sprites[i].y;
+            if (moving[i]) {
+                x = previousSceneSprites[i].x + (x - previousSceneSprites[i].x) * frame / frames;
+                y = previousSceneSprites[i].y + (y - previousSceneSprites[i].y) * frame / frames;
+            }
+            order[n++] = (OrderedSceneActor){
+                {SPRITES_Layer(sprites[i].tile), y + (int)(h - 1) * 16, x, -i}, i, x, y};
+        }
+        qsort(order, n, sizeof(order[0]), SPRITES_Compare);
+        for (int i = 0; i < n; ++i) {
+            const GrapSceneSprite *actor = &sprites[order[i].index];
+            DrawSceneSprite(pixels, actor->tile, originX + order[i].x, originY + order[i].y,
+                            clipLeft, clipTop, clipRight, clipBottom);
+        }
+        s_dirty = true;
+        if (frame < frames) {
+            GRAP_BUF_Present();
+            if (EVT_ImmediateExitEnabled())
+                EVT_PollMessages();
+            else
+                SDL_PumpEvents();
+            Uint32 interval = (Uint32)SDL_roundf(16.0f / GRAP_SDL_MovementSpeed());
+            Uint64 elapsed = SDL_GetTicks() - started;
+            if (elapsed < interval)
+                SDL_Delay(interval - (Uint32)elapsed);
+        }
+    }
+    if (count)
+        memcpy(previousSceneSprites, sprites, (size_t)count * sizeof(*sprites));
+    previousSceneKey = key;
+    previousSceneCount = count;
+    previousSceneValid = true;
+}
+#endif
 
 void GRAP_BUF_UnloadTileset(void)
 {

@@ -2,6 +2,7 @@
 #include "common/engine_settings.h"
 #include "common/file.h"
 #include "mod/runtime.h"
+#include "event/event.h"
 #include "mod/tileset_resources.h"
 #include "common/file_picker.h"
 #include "graphics/grap.h"
@@ -79,9 +80,28 @@ static void verifySheet(SDL_Surface *image, int choice, int first)
 #ifdef TEST_TILESET_PRESENT
 static SDL_Surface *expectedActor;
 static int checkedFrames;
+static bool checkingSharedScene;
+static int sharedSceneFrames;
+static bool checkingSceneMovement;
+static int sceneMovementFrames;
+static int sceneMovementY, sceneMovementStart;
+
 bool __real_SDL_RenderPresent(SDL_Renderer *renderer);
 bool __wrap_SDL_RenderPresent(SDL_Renderer *renderer)
 {
+    if (checkingSharedScene)
+        ++sharedSceneFrames;
+    if (checkingSceneMovement) {
+        int first = -1;
+        for (int x = 8; x < 312; ++x)
+            if (g_linearEgaBuffer0[sceneMovementY * 320 + x] == 12) {
+                first = x;
+                break;
+            }
+        ++sceneMovementFrames;
+        assert(first == sceneMovementStart + sceneMovementFrames * 2);
+    }
+
     if (expectedActor)
     {
         SDL_Surface *frame = SDL_RenderReadPixels(renderer, NULL);
@@ -480,6 +500,153 @@ static void compositionPixels(void) {
 }
 #include "custom_type_game_fixture.h"
 
+static void scriptedSceneOptions(byte *bank) {
+    assert(TILESET_Select(TILESET_DOS));
+    int oldMap = D_5893_map_id, oldActive = D_58a4, oldPage = D_52ba_vdp._52d8_page;
+    bool oldTransparent = GRAP_BUF_TransparentSprites(),
+         oldSmooth = GRAP_SDL_SmoothMovementEnabled();
+    byte animation[256];
+    memcpy(animation, D_b11e, 256);
+    for (int i = 0; i < 256; ++i)
+        D_b11e[i] = i;
+    byte backup[128];
+    memcpy(backup, bank + 336 * 128, 128);
+    memset(bank + 336 * 128, 0, 128);
+    for (int y = 6; y < 10; ++y) {
+        bank[336 * 128 + y * 8 + 3] = 0xcc;
+        bank[336 * 128 + y * 8 + 4] = 0xcc;
+    }
+    byte wellBackup[128];
+    memcpy(wellBackup, bank + TILE_MAP_WELL * 128, 128);
+    memset(bank + TILE_MAP_WELL * 128, 0, 128);
+    for (int y = 6; y < 10; ++y) {
+        bank[TILE_MAP_WELL * 128 + y * 8 + 3] = 0x99;
+        bank[TILE_MAP_WELL * 128 + y * 8 + 4] = 0x99;
+    }
+    byte ground[19 * 4];
+    memset(ground, 5, sizeof(ground));
+    ground[19 + 1] = TILE_MAP_WELL;
+    GrapSceneSprite actor = {336, 80, 32, 16};
+    D_5893_map_id = 66;
+    D_58a4 = 0;
+    D_52ba_vdp._52d8_page = 0;
+    int oldImmediate = EVT_SetImmediateExit(1); /* Main Menu -> Return to the View. */
+    GRAP_SDL_SetSmoothMovement(false);
+    GRAP_BUF_SetTransparentSprites(true);
+    GRAP_BUF_ResetScene();
+    GRAP_BUF_DrawScene(66, ground, 19, 19, 4, 0, 18, 8, 128, &actor, 1);
+    assert(g_linearEgaBuffer0[144 * 320 + 40] == 5);
+    assert(g_linearEgaBuffer0[144 * 320 + 24] == 5);
+    assert(g_linearEgaBuffer0[150 * 320 + 46] == 12);
+    GRAP_BUF_SetTransparentSprites(false);
+    GRAP_BUF_DrawScene(66, ground, 19, 19, 4, 0, 18, 8, 128, &actor, 1);
+    assert(g_linearEgaBuffer0[144 * 320 + 40] == 0);
+    assert(g_linearEgaBuffer0[144 * 320 + 24] == 0);
+    GRAP_BUF_SetTransparentSprites(true);
+    GRAP_SDL_SetSmoothMovement(true);
+#ifdef TEST_TILESET_PRESENT
+    sceneMovementFrames = 0;
+    checkingSceneMovement = true;
+    sceneMovementY = 150;
+    sceneMovementStart = 46;
+#endif
+    actor.x += 16;
+    GRAP_BUF_DrawScene(66, ground, 19, 19, 4, 0, 18, 8, 128, &actor, 1);
+#ifdef TEST_TILESET_PRESENT
+    checkingSceneMovement = false;
+    assert(sceneMovementFrames == 7);
+#endif
+    assert(g_linearEgaBuffer0[150 * 320 + 46] == 5); /* Old position restored. */
+    assert(g_linearEgaBuffer0[150 * 320 + 62] == 12);
+    /* A stage reset and teleport must never interpolate across unrelated frames. */
+    GRAP_BUF_ResetScene();
+    actor.x += 32;
+#ifdef TEST_TILESET_PRESENT
+    sceneMovementFrames = 0;
+    checkingSceneMovement = true;
+#endif
+    GRAP_BUF_DrawScene(67, ground, 19, 19, 4, 0, 18, 8, 128, &actor, 1);
+#ifdef TEST_TILESET_PRESENT
+    checkingSceneMovement = false;
+    assert(sceneMovementFrames == 0);
+#endif
+    /* Movement hidden by the opening reveal must not add interpolation delays. */
+#ifdef TEST_TILESET_PRESENT
+    checkingSceneMovement = true;
+    sceneMovementFrames = 0;
+#endif
+    actor.x += 16;
+    GRAP_BUF_DrawScene(67, ground, 19, 19, 4, 15, 18, 8, 128, &actor, 1);
+#ifdef TEST_TILESET_PRESENT
+    checkingSceneMovement = false;
+    assert(sceneMovementFrames == 0);
+#endif
+    /* Script-owned reveal cells and unrevealed columns must remain untouched. */
+    ground[2 * 19 + 4] = TILE_MAP_FE;
+    g_linearEgaBuffer0[160 * 320 + 72] = 10;
+    g_linearEgaBuffer0[128 * 320 + 8] = 7;
+    GRAP_BUF_DrawScene(68, ground, 19, 19, 4, 2, 18, 8, 128, NULL, 0);
+    assert(g_linearEgaBuffer0[160 * 320 + 72] == 10 && g_linearEgaBuffer0[128 * 320 + 8] == 7);
+    /* The shared combat-style renderer used by rescue/shrine/Codex/Blackthorn
+     * already composites actor sprites over the scene's actual terrain. */
+    GRAP_SDL_SetSmoothMovement(false);
+    D_5893_map_id = 255;
+    D_58a4 = 1;
+    D_5896_map_x = D_5897_map_y = 5;
+    D_589e = 255;
+    memset(D_5c5a, 0, 32 * sizeof(D_5c5a[0]));
+    D_5c5a[1]._0_tile = D_5c5a[1]._1_animTile = 80;
+    D_5c5a[1]._2_x = D_5c5a[1]._3_y = 2;
+    byte groundBackup[4 * 128];
+    memcpy(groundBackup, bank + 5 * 128, sizeof(groundBackup));
+    for (int scene = 0; scene < 4; ++scene) {
+        EVT_SetImmediateExit(scene == 0);
+        GRAP_SDL_SetSmoothMovement(false);
+        D_5c5a[1]._2_x = 2;
+        memset(bank + (5 + scene) * 128, (5 + scene) * 17, 128);
+        memset(D_ad14, 5 + scene, 352);
+        memset(D_ab02, 5 + scene, 352);
+        memset(D_ac64, 0, sizeof(D_ac64));
+        GetMapViewport(2, 2) = 0;
+        GetActorMap(2, 2) = 80;
+        GRAP_BUF_SetTransparentSprites(true);
+        ULTIMA_56ac_DrawMap();
+        assert(g_linearEgaBuffer0[40 * 320 + 40] == 5 + scene);
+        GRAP_BUF_SetTransparentSprites(false);
+        ULTIMA_56ac_DrawMap();
+        assert(g_linearEgaBuffer0[40 * 320 + 40] == 0);
+        GRAP_BUF_SetTransparentSprites(true);
+        GRAP_SDL_SetSmoothMovement(true);
+        ULTIMA_56ac_DrawMap();
+        GRAP_BUF_Present();
+        D_5c5a[1]._2_x = 3;
+        GetMapViewport(2, 2) = 5 + scene;
+        GetMapViewport(3, 2) = 0;
+        GetActorMap(3, 2) = 80;
+#ifdef TEST_TILESET_PRESENT
+        checkingSharedScene = true;
+        sharedSceneFrames = 0;
+#endif
+        ULTIMA_56ac_DrawMap();
+        GRAP_BUF_Present();
+#ifdef TEST_TILESET_PRESENT
+        checkingSharedScene = false;
+        assert(sharedSceneFrames >= 8);
+#endif
+    }
+    memset(D_5c5a, 0, 32 * sizeof(D_5c5a[0]));
+    memcpy(bank + 5 * 128, groundBackup, sizeof(groundBackup));
+    memcpy(bank + TILE_MAP_WELL * 128, wellBackup, 128);
+    memcpy(bank + 336 * 128, backup, 128);
+    memcpy(D_b11e, animation, 256);
+    D_5893_map_id = oldMap;
+    D_58a4 = oldActive;
+    D_52ba_vdp._52d8_page = oldPage;
+    GRAP_BUF_SetTransparentSprites(oldTransparent);
+    GRAP_SDL_SetSmoothMovement(oldSmooth);
+    EVT_SetImmediateExit(oldImmediate);
+    GRAP_BUF_ResetScene();
+}
 static void nativeProtectionMasks(byte *bank) {
     bool oldTransparency = GRAP_BUF_TransparentSprites();
     char *original = SDL_strdup(SDL_getenv("IMPERA_TILESETS"));
@@ -607,6 +774,7 @@ int main(void)
     GRAP_BUF_LoadTileset(bank);
     for (int i = 0; i < 16; i++)
         ega[i] = 0xff000000u | i * 0x111111u;
+    scriptedSceneOptions(bank);
     nativeProtectionMasks(bank);
     customTypeGame();
     vanillaActorOverrideIdentity();

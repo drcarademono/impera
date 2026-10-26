@@ -366,7 +366,10 @@ icon centered and the interface fixed. NPCs and monsters also animate their
 visible tile steps, including combat actors. Their motion stays coordinated
 with camera scrolling; the combat camera stays fixed. This works with keyboard
 or mouse movement; collisions and actions still use the original tile and turn
-rules. Teleports, spawns, map changes, and dungeon perspective views snap to
+rules. Scripted character-creation scenes, including **Return to the View**, also
+use smooth actor steps, sprite transparency and protection masks. Final rescue,
+Codex, shrine and Blackthorn scenes use the same options through their shared
+map renderer. Scene changes and appearance/reveal effects remain discrete. Teleports, spawns, map changes, and dungeon perspective views snap to
 their new state without interpolation.
 Use **Movement Speed** to set the held mouse and keyboard movement speed,
 and **Animation Speed** to set animated sprite playback independently,

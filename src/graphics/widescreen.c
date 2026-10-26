@@ -124,24 +124,30 @@ static bool HasObjectBackground(byte tile)
         (tile >= TILE_MAP_CANNON_B4 && tile <= TILE_MAP_CANNON_B7);
 }
 
-byte WIDE_GroundTile(int dx, int dy)
-{
-    byte object = WIDE_MapTile(dx,dy);
-    if (!GRAP_BUF_TransparentSprites() ||
-        !HasObjectBackground(object)) return object;
-    /* Maps have no lower terrain layer. Infer only recognized ground from
-     * immediate cardinal neighbors; keep isolated objects opaque. */
-    const byte floors[] = {TILE_MAP_44, TILE_MAP_GRASS, TILE_MAP_45, 0x40 /* wooden floor */};
-    const int offsets[4][2] = {{0,1},{0,-1},{1,0},{-1,0}};
-    int best=0;
-    byte ground=object;
-    for (size_t i=0;i<sizeof(floors);i++) {
-        int count=0;
-        for (int j=0;j<4;j++)
-            count += WIDE_MapTile(dx+offsets[j][0],dy+offsets[j][1]) == floors[i];
-        if(count>best) {best=count;ground=floors[i];}
+byte WIDE_GroundFromNeighbors(byte object, const byte neighbors[4]) {
+    if (!GRAP_BUF_TransparentSprites() || !HasObjectBackground(object))
+        return object;
+    const byte floors[] = {TILE_MAP_44, TILE_MAP_GRASS, TILE_MAP_45, 0x40};
+    int best = 0;
+    byte ground = object;
+    for (size_t i = 0; i < sizeof(floors); ++i) {
+        int count = 0;
+        for (int j = 0; j < 4; ++j)
+            count += neighbors[j] == floors[i];
+        if (count > best) {
+            best = count;
+            ground = floors[i];
+        }
     }
     return ground;
+}
+byte WIDE_GroundTile(int dx, int dy) {
+    byte object = WIDE_MapTile(dx, dy);
+    if (!GRAP_BUF_TransparentSprites() || !HasObjectBackground(object))
+        return object;
+    const byte neighbors[] = {WIDE_MapTile(dx, dy + 1), WIDE_MapTile(dx, dy - 1),
+                              WIDE_MapTile(dx + 1, dy), WIDE_MapTile(dx - 1, dy)};
+    return WIDE_GroundFromNeighbors(object, neighbors);
 }
 
 int WIDE_SpritePixel(int tile, int dx, int dy, int x, int y)

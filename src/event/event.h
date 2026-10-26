@@ -7,6 +7,8 @@ typedef void EVT_Callback(void);
 /* Returns the previous mode so presentation screens can restore it. */
 extern int EVT_SetImmediateExit(int enabled);
 extern int EVT_ImmediateExitEnabled(void);
+/* Process presentation-screen input without running game tick callbacks. */
+extern void EVT_PollMessages(void);
 #endif
 
 extern void EVT_Initialize(void);
