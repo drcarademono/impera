@@ -249,11 +249,14 @@ int main(int argc, char** argv)
     assert(TILESET_Selected() == TILESET_ZHELKAS);
     assert(TILESET_Select(TILESET_DOS));
     ENGINE_Set(ENGINE_MOVEMENT_SPEED,0.5f);ENGINE_Set(ENGINE_ANIMATION_SPEED,0.75f);
+    assert(!ENGINE_Get(ENGINE_ENHANCED_LOOK));
+    ENGINE_Set(ENGINE_ENHANCED_LOOK,1);
     ENGINE_Set(ENGINE_MOUSE,1);assert(ENGINE_Get(ENGINE_MOUSE)==1);
     ENGINE_Set(ENGINE_MOUSE,0);
     ENGINE_Set(ENGINE_DITHERED_DARKNESS,1);
     assert(ENGINE_Get(ENGINE_CRT)==0);ENGINE_Set(ENGINE_CRT,1);
     assert(ENGINE_Save());ENGINE_Set(ENGINE_CRT,0);ENGINE_Set(ENGINE_DITHERED_DARKNESS,0);ENGINE_Set(ENGINE_MOVEMENT_SPEED,1);ENGINE_Load();
+    assert(ENGINE_Get(ENGINE_ENHANCED_LOOK)==1);
     assert(ENGINE_Get(ENGINE_DITHERED_DARKNESS)==1);
     assert(ENGINE_Get(ENGINE_CRT)==1);ENGINE_Set(ENGINE_CRT,0);
     ENGINE_Set(ENGINE_DITHERED_DARKNESS,0);
@@ -292,9 +295,9 @@ int main(int argc, char** argv)
     assert(g_linearEgaBuffer0[0*320+8]==1);
     assert(g_linearEgaBuffer0[7*320+7]==15);
     assert(g_linearEgaBuffer0[80*320+0]==1);
-    assert(g_linearEgaBuffer0[143*320+16]==15);
+    assert(g_linearEgaBuffer0[151*320+16]==15);
     for(int y=0;y<8;y++) for(int x=0;x<8;x++)
-        assert(g_linearEgaBuffer0[(144+y)*320+24+x]==((font['M'*8+y]&(0x80>>x))?0:15));
+        assert(g_linearEgaBuffer0[(152+y)*320+24+x]==((font['M'*8+y]&(0x80>>x))?0:15));
     int count;SDL_Window** windows=SDL_GetWindows(&count);assert(count==1);
     SDL_Renderer* renderer=SDL_GetRenderer(windows[0]);SDL_free(windows);
     SDL_Surface* shot=SDL_RenderReadPixels(renderer,NULL);assert(shot);
@@ -334,8 +337,8 @@ int main(int argc, char** argv)
     key(SDLK_LEFT); /* movement 0.75 */
     key(SDLK_DOWN);key(SDLK_LEFT); /* animation 0.75 */
     SDL_Event e={0};e.type=SDL_EVENT_MOUSE_BUTTON_DOWN;e.button.button=SDL_BUTTON_LEFT;
-    e.button.x=184*4;e.button.y=80+144*4;assert(SDL_PushEvent(&e));
-    e.type=SDL_EVENT_MOUSE_MOTION;e.motion.x=248*4;e.motion.y=80+144*4;assert(SDL_PushEvent(&e));
+    e.button.x=184*4;e.button.y=80+152*4;assert(SDL_PushEvent(&e));
+    e.type=SDL_EVENT_MOUSE_MOTION;e.motion.x=248*4;e.motion.y=80+152*4;assert(SDL_PushEvent(&e));
     e.type=SDL_EVENT_MOUSE_BUTTON_UP;assert(SDL_PushEvent(&e));
     key(SDLK_ESCAPE);
     ENGINE_ShowOptions(false);

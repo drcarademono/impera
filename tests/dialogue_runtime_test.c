@@ -15,6 +15,7 @@ void __wrap_ULTIMA_16ba_PrintChar(uint ch) {
     output[length] = 0;
     column = ch == '\n' ? 0 : column + 1;
 }
+void __wrap_ULTIMA_1850_PrintString(char *text) { while (*text) __wrap_ULTIMA_16ba_PrintChar((unsigned char)*text++); }
 void __wrap_ULTIMA_1c9e_SelectCharset(int value) { charset = value; }
 int __wrap_ULTIMA_1f12_GetCurrentTextX(void) { return column; }
 static void reset(void) {
@@ -27,7 +28,84 @@ static void text(const char *s) {
     while (*s)
         assert(TALK_0f32_ProcessChar((byte)*s++ | 128) == 0);
 }
+static int nameInputStep;
+static void nameThenBye(void *host, char *answer, int capacity) {
+    (void)host; (void)capacity;
+    strcpy(answer, nameInputStep++ ? "BYE" : "NAME");
+}
+static int revealName(void *host) { (void)host; return 1; }
+static void enhancedLook(void) {
+    const uint8_t conversation[] = {0xc7,0xe1,0xec,0xec,0xf2,0xef,0xf4,0,
+        0xe1,0xa0,0xe6,0xe1,0xf4,0xa0,0xe1,0xee,0xe4,0xa0,0xe7,0xf2,0xe5,0xe1,0xf3,0xf9,0xa0,0xed,0xe1,0xee,0xae,0,0x82,0};
+    char result[256];
+    size_t required = IMPERA_TalkLookText(conversation,sizeof(conversation),0,"Avatar",result,sizeof(result));
+    assert(required == strlen("a fat and greasy man.") + 1 && !strcmp(result,"a fat and greasy man."));
+    assert(IMPERA_TalkLookText(conversation,sizeof(conversation),1,"Avatar",result,sizeof(result)) == 8);
+    assert(!strcmp(result,"Gallrot"));
+    uint8_t flags[128]; memcpy(flags,conversation,8);
+    memcpy(flags+8,IMPERA_TALK_SKIP_OPENING,4);
+    memcpy(flags+12,conversation+8,sizeof(conversation)-8);
+    assert(IMPERA_TalkLookText(flags,sizeof(conversation)+4,0,"Avatar",result,sizeof(result)) == required);
+    assert(!strcmp(result,"a fat and greasy man."));
+    const uint8_t dictionary[] = {0xc7,0,1,0xed,0xe1,0xee,0};
+    assert(IMPERA_TalkLookText(dictionary,sizeof(dictionary),0,NULL,result,sizeof(result)));
+    assert(!strcmp(result,"the man"));
+    const uint8_t action[] = {0xc7,0,0xe1,0xa0,0xed,0xe1,0xee,0x89,0xae,0};
+    assert(IMPERA_TalkLookText(action,sizeof(action),0,NULL,result,sizeof(result)));
+    assert(!strcmp(result,"a man")); /* No actions run, and trailing action-dependent text is omitted. */
+    /* Real NPC lookup must use learned names, not the NPC-knows-Avatar bit. */
+    const char *savedResource=D_4aa0[0]; D_4aa0[0]="look-test.tlk";
+    FILE *bank=fopen("look-test.tlk","wb"); assert(bank);
+    const unsigned char header[]={1,0,1,0,6,0};
+    assert(fwrite(header,1,6,bank)==6 && fwrite(conversation,1,sizeof(conversation),bank)==sizeof(conversation));
+    assert(!fclose(bank));
+    D_539a_currentTextWindow=&D_535e_textWindows[0]; D_539a_currentTextWindow->right=39;
+    D_539a_currentTextWindow->bottom=24;
+    D_5893_map_id=1; D_bcdc=5; D_659e[5]=0x10;
+    D_5f5e[5]._0=1; D_5f5e[5]._c=1; D_5f5e[5]._a=1;
+    D_5bda[0] |= 32; TALK_ResetKnowledge(); reset();
+    assert(TALK_LookNpc(1) && strstr(output,"You see a fat and greasy man."));
+    assert(!learnedNames[0][0] && (D_5bda[0]&32));
+    s_conversation=(uint8_t*)conversation; s_conversationSize=sizeof(conversation);
+    ImperaTalk session=nativeTalk(); reset();
+    D_5bda[0]&=~32; session.greetingRoll=revealName;
+    assert(IMPERA_TalkDescription(&session)==0); IMPERA_TalkFlush(&session);
+    assert(learnedNames[0][0]&32);
+    reset(); assert(TALK_LookNpc(1) && strstr(output,"You see Gallrot."));
+    const uint8_t eb[] = {0xc5,0xe2,0xa2,0x8d,0x8d,0x82,0,0xe1,0xa0,0xe2,0xef,0xf9,0xae,0};
+    assert(IMPERA_TalkLookText(eb,sizeof(eb),1,NULL,result,sizeof(result)) == 3 && !strcmp(result,"Eb"));
+    learnedNames[0][0]=0;
+    s_conversation=(uint8_t*)eb; s_conversationSize=sizeof(eb);
+    session=nativeTalk(); session.greetingRoll=revealName; reset();
+    assert(IMPERA_TalkDescription(&session)==1); /* Name followed by End conversation. */
+    assert(learnedNames[0][0]&32); /* Nonzero script return must not discard a revealed name. */
+    /* Eb's real Name control pattern: close quote, two newlines, then
+     * return to topics for introduced players; otherwise ask their name. */
+    const uint8_t ebScript[]={0xc5,0xe2,0xa2,0x8d,0x8d,0x8c,0xff,0x88,0,
+        0xe1,0x28,0xe2,0xef,0xf9,0xae,0,0xc8,0xe9,0,
+        0xc2,0xf5,0xf3,0xe2,0xef,0xf9,0,0xc2,0xf9,0xe5,0xa1,0};
+    learnedNames[0][0]=0; D_5bda[0]|=32;
+    s_conversation=(uint8_t*)ebScript; s_conversationSize=sizeof(ebScript);
+    session=nativeTalk(); session.getString=nameThenBye; *session.questionMode=0; nameInputStep=0; reset();
+    assert(IMPERA_TalkTopics(&session)==1 && !session.error);
+    assert(nameInputStep==2 && (learnedNames[0][0]&32));
+    s_conversation=NULL; s_conversationSize=0; D_4aa0[0]=(char*)savedResource;
+    memset(&D_5f5e[5],0,sizeof(D_5f5e[5])); D_659e[5]=0; D_5bda[0]&=~32;
+    assert(!remove("look-test.tlk"));
+    TALK_ResetKnowledge(); D_5893_map_id=25; D_bcdc=40;
+    assert(!learnedNames[24][5]); talkLearnName(NULL); assert(learnedNames[24][5]==1);
+    FILE *f=tmpfile(); assert(f && TALK_WriteKnowledge(f));
+    TALK_ResetKnowledge(); rewind(f); assert(TALK_ReadKnowledge(f,0) && !learnedNames[24][5]);
+    rewind(f); assert(TALK_ReadKnowledge(f,1) && learnedNames[24][5]==1);
+    assert(!fseek(f,16,SEEK_SET)); int byte=fgetc(f); assert(byte>=0);
+    assert(!fseek(f,16,SEEK_SET) && fputc(byte^1,f)!=EOF && !fflush(f));
+    rewind(f); assert(!TALK_ReadKnowledge(f,1) && learnedNames[24][5]==1);
+    fclose(f); f=tmpfile(); assert(f);
+    assert(TALK_ReadKnowledge(f,1) && !learnedNames[24][5]); fclose(f);
+    D_5893_map_id=0; D_bcdc=0; TALK_ResetKnowledge();
+}
 int main(void) {
+    enhancedLook();
     for (int pattern = 0; pattern < 16; ++pattern) {
         for (int i = 0; i < 4; ++i)
             D_5d5e[5].time[i] = (byte)(pattern * 19 + i * 73);

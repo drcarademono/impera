@@ -23,17 +23,19 @@
 #include <math.h>
 
 static const char* keys[]={"video_mode","tileset","crt_filter","transparent","dithered_darkness",
-    "music","sound","mouse","smooth","diagonal","movement_speed","animation_speed"};
+    "music","sound","enhanced_look","mouse","smooth","diagonal","movement_speed","animation_speed"};
 static const char* labels[]={"Video Mode","Tileset","CRT Filter","Transparent Sprites","Dithered Darkness",
-    "Music","Sound Effects","Mouse Control","Smooth Movement","Diagonal Movement","Movement Speed","Animation Speed"};
+    "Music","Sound Effects","Enhanced Look","Mouse Control","Smooth Movement","Diagonal Movement","Movement Speed","Animation Speed"};
 static bool isSpeed(int row) { return row==ENGINE_MOVEMENT_SPEED || row==ENGINE_ANIMATION_SPEED; }
 static const char* optionStatus;
+static bool s_enhancedLook;
 static const float ticks[]={0.5f,0.75f,1.0f};
 float ENGINE_Get(int row)
 {
     switch(row) {
     case ENGINE_FULLSCREEN:return GRAP_SDL_VideoMode();
     case ENGINE_TILESET:return TILESET_Selected();
+    case ENGINE_ENHANCED_LOOK:return s_enhancedLook;
     case ENGINE_MOUSE:return MOUSE_Enabled();
     case ENGINE_SMOOTH:return GRAP_SDL_SmoothMovementEnabled();
     case ENGINE_DIAGONAL:return MOVEMENT_Diagonal();
@@ -58,6 +60,7 @@ void ENGINE_Set(int row,float value)
     switch(row) {
     case ENGINE_FULLSCREEN:GRAP_SDL_SetVideoMode((int)value);break;
     case ENGINE_TILESET:optionStatus=TILESET_Select((int)value)?NULL:"Tileset files unavailable";break;
+    case ENGINE_ENHANCED_LOOK:s_enhancedLook=value!=0;break;
     case ENGINE_MOUSE:MOUSE_SetEnabled(value!=0);break;
     case ENGINE_SMOOTH:GRAP_SDL_SetSmoothMovement(value!=0);break;
     case ENGINE_DIAGONAL:MOVEMENT_SetDiagonal(value!=0);break;
@@ -130,7 +133,7 @@ void ENGINE_UIFrame(void)
 }
 static int rowY(int row)
 {
-    return row == ENGINE_SETTING_COUNT ? 180 : 44 + row * 10;
+    return row == ENGINE_SETTING_COUNT ? 180 : 42 + row * 10;
 }
 static bool s_gameplay;
 static int s_optionsTab, s_modSelected, s_modTop, s_modScroll;
@@ -356,7 +359,7 @@ void ENGINE_DrawSettings(int selected)
 
         }
     }
-    if (optionStatus) ENGINE_UIText(24, 168, optionStatus, 7);
+    if (optionStatus) ENGINE_UIText(24, 172, optionStatus, 7);
     if(s_videoChoice>=0) {
         int left=choiceLeft(),top=choiceTop(),width=choiceWidth(),height=choices()*11+4;
         /* Black surround separates the popup from partially covered settings. */

@@ -640,3 +640,15 @@ Changes made from the main menu remount the enabled packages immediately and
 refresh the menu’s cached fonts and artwork on return. During gameplay, selections
 are saved for the next startup without touching the active resource snapshot.
 Workshop installed-mod validation respects the disabled-file list.
+
+### Learned NPC names in saves
+
+Enhanced Look stores knowledge of spoken NPC names separately from the vanilla
+NPC-knows-Avatar flags. Optional `IKNOW001` save records appear after NPC state
+and before contents/type state: eight-byte magic, little-endian u32 byte count,
+u32 CRC32, then a trailing-zero-trimmed bitmap for 128 locations × 32768 NPCs.
+The maximum bitmap size is 524288 bytes. Missing records clear name knowledge;
+truncated, oversized or corrupt records reject the save before applying it.
+Learning is recorded when the normal name response completes, including the
+automatic “I am called” introduction, whether Enhanced Look is enabled or not.
+Looking never updates this bitmap or executes conversation actions.

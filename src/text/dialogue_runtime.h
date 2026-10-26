@@ -45,6 +45,7 @@ typedef struct ImperaTalk {
     void (*guards)(void *);
     int (*greetingRoll)(void *);
     void (*observe)(void *, const uint8_t *);
+    void (*learnName)(void *);
 } ImperaTalk;
 typedef struct ImperaTalkStorage {
     uint8_t data[1024], *cursor, operands[4], pending, operandCount, mask;
@@ -54,6 +55,9 @@ typedef struct ImperaTalkStorage {
 } ImperaTalkStorage;
 void IMPERA_TalkBind(ImperaTalk *, ImperaTalkStorage *, size_t);
 int IMPERA_TalkRun(ImperaTalk *);
+/* Pure, action-free name/description decoding. Returns required bytes including
+ * NUL (zero for invalid/empty text); pass NULL to measure the output first. */
+size_t IMPERA_TalkLookText(const uint8_t *, size_t, int known, const char *avatar, char *, size_t);
 int IMPERA_TalkDescription(ImperaTalk *);
 int IMPERA_TalkTopics(ImperaTalk *);
 int IMPERA_TalkFarewell(ImperaTalk *);

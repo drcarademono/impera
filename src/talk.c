@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include "common/file.h"
 #include "mod/dialogue_bank.h"
+#include "mod/package.h"
 
 #include "npc.h"
 #include "shoppes.h"
@@ -18,6 +19,41 @@
 #include "text/dialogue_runtime.h"
 #include "text/dialogue_game.h"
 #include "town.h"
+
+static unsigned char learnedNames[128][IMPERA_NPC_CAPACITY / 8];
+void TALK_ResetKnowledge(void) { memset(learnedNames, 0, sizeof(learnedNames)); }
+static void talkLearnName(void *host) {
+    (void)host;
+    if (D_5893_map_id >= 1 && D_5893_map_id <= 128 && D_bcdc >= 0 && D_bcdc < IMPERA_NPC_CAPACITY)
+        learnedNames[D_5893_map_id - 1][D_bcdc / 8] |= 1u << (D_bcdc % 8);
+}
+int TALK_WriteKnowledge(FILE *f) {
+    unsigned size = sizeof(learnedNames);
+    const unsigned char *p = (const unsigned char *)learnedNames;
+    while (size && !p[size - 1]) --size;
+    if (!size) return 1;
+    unsigned char header[16] = "IKNOW001";
+    unsigned crc = MOD_Crc32(p, size);
+    for (int i = 0; i < 4; ++i) { header[8+i] = size >> (8*i); header[12+i] = crc >> (8*i); }
+    return fwrite(header, 1, 16, f) == 16 && fwrite(p, 1, size, f) == size;
+}
+int TALK_ReadKnowledge(FILE *f, int apply) {
+    long start = ftell(f); unsigned char header[16];
+    size_t n = fread(header, 1, 16, f);
+    if (n < 8 || memcmp(header, "IKNOW001", 8)) {
+        if (ferror(f) || fseek(f, start, SEEK_SET)) return 0;
+        if (apply) TALK_ResetKnowledge();
+        return 1;
+    }
+    if (n != 16) return 0;
+    unsigned size = DIALOGUE_U32(header + 8);
+    if (!size || size > sizeof(learnedNames)) return 0;
+    unsigned char *p = malloc(size);
+    if (!p) return 0;
+    int ok = fread(p, 1, size, f) == size && MOD_Crc32(p, size) == DIALOGUE_U32(header + 12);
+    if (ok && apply) { TALK_ResetKnowledge(); memcpy(learnedNames, p, size); }
+    free(p); return ok;
+}
 
 #define TALK_KEY_NAME 0
 #define TALK_KEY_DESC 1
@@ -621,6 +657,7 @@ static ImperaTalk nativeTalk(void) {
     s.clearKeys = talkClear;
     s.introduced = talkIntroduced;
     s.introduce = talkIntroduce;
+    s.learnName = talkLearnName;
     s.partySize = talkParty;
     s.name = talkName;
     s.karma = talkKarma;
@@ -760,6 +797,37 @@ static uint8_t *TALK_LoadConversation(const char *name, unsigned wanted) {
     return bank;
 }
 #endif
+
+int TALK_LookNpc(unsigned actor) {
+#if !defined(TARGET_DOS16)
+    if (D_5893_map_id < 1 || D_5893_map_id > 128 || !MAPS_Outside(D_5893_map_id)) return 0;
+    int slot = TOWN_011e(actor);
+    if (slot < 0 || NPC_ObjectKind(slot) >= 0) return 0;
+    unsigned id = D_5f5e[slot]._a;
+    if (!id || id >= 128) return 0; /* Shops and actors without conversations keep ordinary Look. */
+    char customName[32];
+    const char *resource;
+    if (MAPS_NewLocation(D_5893_map_id)) {
+        snprintf(customName, sizeof(customName), "LOC%03u.TLK", D_5893_map_id); resource = customName;
+    } else resource = D_4aa0[(D_5893_map_id - 1) >> 3];
+    uint8_t *saved = s_conversation; size_t savedSize = s_conversationSize;
+    uint8_t *bank = TALK_LoadConversation(resource, id);
+    if (!bank) { s_conversation = saved; s_conversationSize = savedSize; return 0; }
+    int known = (learnedNames[D_5893_map_id - 1][slot / 8] & (1u << (slot % 8))) != 0;
+    const char *avatar = (const char *)D_55a8_party[0].name;
+    size_t length = IMPERA_TalkLookText(s_conversation, s_conversationSize, known, avatar, NULL, 0);
+    char *text = length ? malloc(length) : NULL;
+    if (text) IMPERA_TalkLookText(s_conversation, s_conversationSize, known, avatar, text, length);
+    s_conversation = saved; s_conversationSize = savedSize; free(bank);
+    if (!text) return 0;
+    ULTIMA_1850_PrintString("\nYou see "); ULTIMA_1850_PrintString(text);
+    size_t n = strlen(text);
+    if (n && text[n-1] != '.' && text[n-1] != '!' && text[n-1] != '?') ULTIMA_16ba_PrintChar('.');
+    ULTIMA_16ba_PrintChar('\n'); free(text); return 1;
+#else
+    (void)actor; return 0;
+#endif
+}
 
 static void TALK_127e_StartTalk(int param_1)
 {

@@ -1,3 +1,4 @@
+#include "talk.h"
 #include "npc.h"
 #include "common/common.h"
 #include "mod/contents.h"
@@ -59,7 +60,7 @@ int FILE_ReadSavegameFile(char* fileName)
         return -1;
     }
     if (fseek(stream, 0x1060, SEEK_SET) || !MAPS_ReadState(stream, 0) ||
-        !NPC_ReadExtraState(stream, 0) || !CONTENTS_ReadState(stream, 0) ||
+        !NPC_ReadExtraState(stream, 0) || !TALK_ReadKnowledge(stream, 0) || !CONTENTS_ReadState(stream, 0) ||
         fseek(stream, 0, SEEK_SET)) {
         DEBUG_Error("Invalid map contents save state");
         fclose(stream);
@@ -209,9 +210,11 @@ int FILE_ReadSavegameFile(char* fileName)
         CONTENTS_Reset();
         TYPES_Reset();
         NPC_ResetExtra();
+        TALK_ResetKnowledge();
     } else {
         MAPS_ReadState(stream, 1);
         NPC_ReadExtraState(stream, 1);
+        TALK_ReadKnowledge(stream, 1);
         CONTENTS_ReadState(stream, 1);
     }
     fclose(stream);
@@ -379,7 +382,7 @@ int FILE_WriteSavegameFile(char* fileName)
     debug("Party serializer file=%s final offset=%d expected=4192",fileName,pos);
 
     int failed = ferror(stream) || !MAPS_WriteState(stream) || !NPC_WriteExtraState(stream) ||
-                 !CONTENTS_WriteState(stream);
+                 !TALK_WriteKnowledge(stream) || !CONTENTS_WriteState(stream);
     if (fclose(stream) != 0) failed = 1;
 
     ASSERT(pos == 0x1060);
