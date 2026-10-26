@@ -118,6 +118,7 @@ static bool HasObjectBackground(byte tile)
         tile == TILE_MAP_84 /* stocks */ ||
         tile == TILE_MAP_86 /* metal grate */ || tile == 0x8b /* torture rack */ ||
         tile == 0x8e /* guillotine */ || tile == 0x99 /* portcullis */ ||
+        (tile >= TILE_MAP_MIRROR && tile <= TILE_MAP_MIRROR_BROKEN) ||
         tile == 0xaa /* carpet */ || tile == TILE_MAP_LADDER_UP ||
         tile == TILE_MAP_LADDER_DOWN ||
         tile == 0x88 /* cannonballs */ || tile == 0xa3 /* stack of logs */ ||
