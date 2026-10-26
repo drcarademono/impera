@@ -52,10 +52,57 @@ def zhelkas_png():
     return (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR',struct.pack('>IIBBBBB',512,256,8,2,0,0,0))
             + chunk(b'IDAT',zlib.compress(rows,9)) + chunk(b'IEND',b''))
 
+def png_payload(data):
+    """Validate our generated RGB PNG and compare pixels independently of zlib."""
+    if data[:8] != b'\x89PNG\r\n\x1a\n':
+        raise ValueError('Invalid PNG signature')
+    offset, header, compressed, ended = 8, None, bytearray(), False
+    while offset < len(data):
+        if len(data) - offset < 12:
+            raise ValueError('Truncated PNG chunk')
+        size = struct.unpack_from('>I', data, offset)[0]
+        end = offset + 12 + size
+        if end > len(data):
+            raise ValueError('Truncated PNG data')
+        name = data[offset+4:offset+8]
+        payload = data[offset+8:end-4]
+        crc = struct.unpack_from('>I', data, end-4)[0]
+        if zlib.crc32(name + payload) != crc:
+            raise ValueError('Invalid PNG checksum')
+        if name == b'IHDR':
+            if header is not None or offset != 8 or size != 13:
+                raise ValueError('Invalid PNG header')
+            header = payload
+        elif name == b'IDAT':
+            compressed.extend(payload)
+        elif name == b'IEND':
+            if size or end != len(data):
+                raise ValueError('Invalid PNG end')
+            ended = True
+        else:
+            raise ValueError('Unexpected generated PNG chunk')
+        offset = end
+    if not ended or header != struct.pack('>IIBBBBB', 512, 256, 8, 2, 0, 0, 0):
+        raise ValueError('Invalid generated PNG dimensions or format')
+    decoder = zlib.decompressobj()
+    pixels = decoder.decompress(compressed) + decoder.flush()
+    if not decoder.eof or decoder.unused_data or len(pixels) != 256 * (1 + 512 * 3):
+        raise ValueError('Invalid PNG pixel data')
+    # The generator uses unfiltered rows. Preserve that contract as well as RGB.
+    if any(pixels[y * (1 + 512 * 3)] != 0 for y in range(256)):
+        raise ValueError('Unexpected generated PNG filter')
+    return header, pixels
+
 zhelkas = ROOT / 'textures/tilesets/Ultima_5_Tiles_Zhelkas.png'
 zhelkas_data = zhelkas_png()
 if '--check' in __import__('sys').argv:
-    if not zhelkas.exists() or zhelkas.read_bytes() != zhelkas_data:
+    try:
+        # Compressor versions may encode identical pixels differently. The
+        # checked-in PNG remains authoritative for the embedded byte check below.
+        valid = zhelkas.exists() and png_payload(zhelkas.read_bytes()) == png_payload(zhelkas_data)
+    except (ValueError, zlib.error):
+        valid = False
+    if not valid:
         raise SystemExit('Zhelkas PNG is stale; run python scripts/embed-tilesets.py')
 else:
     zhelkas.write_bytes(zhelkas_data)

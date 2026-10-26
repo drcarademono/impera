@@ -110,6 +110,7 @@ jobs:
         run: |
           python scripts/embed-cursors.py --check
           python scripts/embed-tilesets.py --check
+          python scripts/test_embed_tilesets.py
       - name: Generated icon consistency
         run: python scripts/generate-icons.py --check
       - name: Packaging regression
