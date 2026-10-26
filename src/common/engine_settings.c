@@ -331,7 +331,6 @@ void ENGINE_DrawSettings(int selected)
     else ENGINE_UIRect(100, 25, 48, 10, 15);
     ENGINE_UIText(24,26,"Options",s_optionsTab ? 7 : 0);
     ENGINE_UIText(104,26,"Mods",s_optionsTab ? 0 : 7);
-    ENGINE_UIText(168,26,"Tab: Switch tabs",7);
     if (s_optionsTab) { drawMods(); GRAP_BUF_MarkDirty(); GRAP_BUF_Present(); return; }
     for(int row=0;row<=ENGINE_SETTING_COUNT;row++) {
         int y=rowY(row);
