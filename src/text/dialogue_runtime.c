@@ -220,7 +220,9 @@ static int TALK_0788_ProcessTalkString(ImperaTalk *s) {
 
 static int TALK_07aa_ProcessNthTalkString(ImperaTalk *s, uint8_t param_1) {
     TALK_075a_SelectNthTalkString(s, param_1);
-    return TALK_0788_ProcessTalkString(s);
+    int result = TALK_0788_ProcessTalkString(s);
+    if (!result && param_1 == TALK_KEY_NAME && s->learnName) s->learnName(s->host);
+    return result;
 }
 
 static int spokenNth(ImperaTalk *s, uint8_t index) {
@@ -921,4 +923,58 @@ int IMPERA_TalkCompare(const char *a, const char *b) {
         if (!*a && !*b)
             return 1;
     }
+}
+
+/* Looking never executes dialogue actions or changes introduction state. */
+size_t IMPERA_TalkLookText(const uint8_t *data, size_t size, int known, const char *avatar,
+                         char *out, size_t capacity) {
+    if (!data || !size) return 0;
+    size_t pos = 0, used = 0;
+    if (!known) {
+        while (pos < size && data[pos]) {
+            unsigned code = data[pos++];
+            unsigned operands = code == 0x85 ? 3 : code == 0x86 || code == 0x8c ? 1 : code == 0xfe ? 2 : 0;
+            if (operands > size - pos) return 0;
+            pos += operands;
+        }
+        if (pos == size) return 0;
+        ++pos;
+    }
+    size_t flags = 0;
+    IMPERA_TalkFlagPrefix(data + pos, size - pos, &flags); pos += flags;
+    if (size - pos >= IMPERA_TALK_EXPLICIT_QUOTES_SIZE &&
+        !memcmp(data + pos, IMPERA_TALK_EXPLICIT_QUOTES, IMPERA_TALK_EXPLICIT_QUOTES_SIZE))
+        pos += IMPERA_TALK_EXPLICIT_QUOTES_SIZE;
+    int boundary = 0, space = 0;
+    while (pos < size && data[pos]) {
+        unsigned code = data[pos++];
+        const char *word = NULL; char literal[2] = {0, 0};
+        if (code < 0x81) {
+            word = IMPERA_TalkDictionary[code - 1];
+            if (!word) return 0;
+            if (used) space = 1;
+            boundary = 1;
+        } else if (code == 0x81) {
+            word = avatar ? avatar : "Avatar";
+        } else if (code == 0x8d) { space = used != 0; continue; }
+        else if (code == 0x8e) continue;
+        else if (code < 0xa0 || code >= 0xfc) break;
+        else {
+            literal[0] = (char)(code & 127); word = literal;
+            if (boundary && used) space = 1;
+            boundary = 0;
+        }
+        for (; *word; ++word) {
+            unsigned char c = (unsigned char)*word;
+            if (c == ' ' || c == '\n' || c == '\r' || c == '\t') { space = used != 0; continue; }
+            if (space) {
+                if (out && used + 1 < capacity) out[used] = ' ';
+                ++used; space = 0;
+            }
+            if (out && used + 1 < capacity) out[used] = (char)c;
+            ++used;
+        }
+    }
+    if (out && capacity) out[used < capacity ? used : capacity - 1] = 0;
+    return used ? used + 1 : 0;
 }

@@ -1,3 +1,5 @@
+#include "common/engine_settings.h"
+#include "talk.h"
 #include "common/common.h"
 #include "mod/signs.h"
 #include "common/file.h"
@@ -708,6 +710,14 @@ void LOOKOBJ_099c_LookCmd(void)
         return;
     }
 
+#if defined(TARGET_SDL)
+    if (local_6 && ENGINE_Get(ENGINE_ENHANCED_LOOK) && !NPC_BloodAt(local_8, local_a, D_5895_map_level))
+        for (unsigned actor = 0; actor < (unsigned)MAP_ACTOR_COUNT; ++actor) {
+            ActorFmt *a = &D_5c5a[actor];
+            if (a->_0_tile && a->_1_animTile && a->_4_z == D_5895_map_level &&
+                ACTORS_Contains(actor, local_8, local_a) && TALK_LookNpc(actor)) return;
+        }
+#endif
     ULTIMA_1850_PrintString(_TEXT(0x751c, "\nThou dost see\n"));
     if (local_6 != 0)
     {

@@ -701,3 +701,10 @@ list uses the same checkboxes as other engine options. Space toggles a mod; Ente
 opens its screenshot and scrollable description. Click a checkbox to toggle it,
 or click the screenshot for details. Main-menu changes apply immediately; changes
 made during gameplay are saved for the next launch. Mod files are kept intact.
+
+Enhanced Look in Engine Options uses an NPC’s dialogue description until their
+name is spoken, then shows their name. It records name knowledge independently
+of whether the NPC knows the Avatar. Knowledge is saved, even while the option
+is off. Older saves start with no recorded NPC names. Actors without an ordinary
+conversation retain their existing Look descriptions. Looking never executes
+dialogue actions or introduces the characters.

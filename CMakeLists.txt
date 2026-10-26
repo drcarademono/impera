@@ -188,7 +188,7 @@ if(U5D_BUILD_TESTS)
         list(APPEND U5D_TARGETS impera_dialogue_test)
         target_link_options(impera_dialogue_test PRIVATE
             "-Wl,--wrap=ULTIMA_16ba_PrintChar" "-Wl,--wrap=ULTIMA_1c9e_SelectCharset"
-            "-Wl,--wrap=ULTIMA_1f12_GetCurrentTextX")
+            "-Wl,--wrap=ULTIMA_1f12_GetCurrentTextX" "-Wl,--wrap=ULTIMA_1850_PrintString")
         add_test(NAME dialogue_runtime COMMAND impera_dialogue_test)
         set_tests_properties(dialogue_runtime PROPERTIES TIMEOUT 10)
         # Independent reference: full native dispatch and framebuffer, observed without a port.
@@ -304,7 +304,7 @@ if(U5D_BUILD_TESTS)
             "#define REFERENCE_SOURCE_ID \"${reference_source_id}\"\n")
         set(REFERENCE_SOURCES ${DIALOGUE_TEST_SOURCES})
         list(REMOVE_ITEM REFERENCE_SOURCES src/1000.c src/graphics/grap_buf.c src/2000.c src/3000.c src/6000.c src/vars.c)
-        add_executable(impera_dialogue_reference tests/dialogue_reference.c ${REFERENCE_SOURCES}
+        add_executable(impera_dialogue_reference tests/dialogue_reference.c tests/enhanced_look_oracle_stubs.c ${REFERENCE_SOURCES}
             "${CMAKE_BINARY_DIR}/reference_1000.c" "${CMAKE_BINARY_DIR}/reference_graphics_grap_buf.c"
             "${CMAKE_BINARY_DIR}/reference_2000.c" "${CMAKE_BINARY_DIR}/reference_3000.c" "${CMAKE_BINARY_DIR}/reference_6000.c"
             "${CMAKE_BINARY_DIR}/reference_vars.c")
