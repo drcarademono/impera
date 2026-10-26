@@ -2,6 +2,7 @@
 #include "common/engine_settings.h"
 #include "common/file.h"
 #include "mod/runtime.h"
+#include "mod/tileset_resources.h"
 #include "common/file_picker.h"
 #include "graphics/grap.h"
 #include "graphics/grap_buf.h"
@@ -479,6 +480,123 @@ static void compositionPixels(void) {
 }
 #include "custom_type_game_fixture.h"
 
+static void nativeProtectionMasks(byte *bank) {
+    bool oldTransparency = GRAP_BUF_TransparentSprites();
+    char *original = SDL_strdup(SDL_getenv("IMPERA_TILESETS"));
+    assert(original && TILESET_Select(TILESET_AMIGA));
+    assert(SDL_CreateDirectory("mask-test-pack"));
+    const char *resources[] = {"MASK_DOS.PNG", "MASK_AMI.PNG", "MASK_APP.PNG", "MASK_GRY.PNG",
+                               "MASK_SHN.PNG"};
+    for (unsigned choice = 0; choice <= TILESET_SHARP; ++choice) {
+        int columns = choice == TILESET_SHARP ? 16 : 32;
+        int width = choice == TILESET_APPLE ? 14 : choice == TILESET_SHARP ? 32 : 16;
+        int height = choice == TILESET_SHARP ? 32 : 16;
+        int tile = 508, local = choice == TILESET_SHARP ? tile - 256 : tile;
+        int px = local % columns * width + width / 2;
+        int py = local / columns * height + height / 2;
+        SDL_Surface *mask = SDL_CreateSurface(columns * width, 16 * height, SDL_PIXELFORMAT_RGBA32);
+        assert(mask);
+        SDL_FillSurfaceRect(mask, NULL, SDL_MapSurfaceRGBA(mask, 0, 0, 0, 255));
+        SDL_WriteSurfacePixel(mask, px, py, 255, 255, 255, 255);
+        if (choice == TILESET_SHARP)
+            SDL_WriteSurfacePixel(mask, px + 2, py + 2, 255, 255, 255, 255);
+        const ModTilesetSheet *spec = MOD_TilesetSheet(resources[choice]);
+        char path[4096];
+        SDL_snprintf(path, sizeof(path), "mask-test-pack/%s", spec->filename);
+        assert(SDL_SavePNG(mask, path));
+        SDL_DestroySurface(mask);
+        if (choice) {
+            const ModTilesetSheet *art =
+                MOD_TilesetSheet(choice == TILESET_SHARP   ? "TILE_SHN.PNG"
+                                 : choice == TILESET_AMIGA ? "TILE_AMI.PNG"
+                                 : choice == TILESET_APPLE ? "TILE_APP.PNG"
+                                                           : "TILE_GRY.PNG");
+            SDL_Surface *image =
+                SDL_CreateSurface(columns * width, 16 * height, SDL_PIXELFORMAT_RGBA32);
+            assert(image);
+            int bg = choice == TILESET_SHARP ? 128 : 0;
+            SDL_FillSurfaceRect(image, NULL, SDL_MapSurfaceRGBA(image, bg, bg, bg, 255));
+            if (choice == TILESET_SHARP) {
+                SDL_WriteSurfacePixel(image, px, py, 0, 0, 0, 255);
+                SDL_WriteSurfacePixel(image, local % columns * width + 4,
+                                      local / columns * height + 4, 0, 0, 0, 255);
+            }
+            SDL_snprintf(path, sizeof(path), "mask-test-pack/%s", art->filename);
+            assert(SDL_SavePNG(image, path));
+            if (choice == TILESET_SHARP) {
+                art = MOD_TilesetSheet("TILE_SHW.PNG");
+                SDL_snprintf(path, sizeof(path), "mask-test-pack/%s", art->filename);
+                assert(SDL_SavePNG(image, path));
+            }
+            SDL_DestroySurface(image);
+        }
+    }
+    assert(SDL_setenv_unsafe("IMPERA_TILESETS", "mask-test-pack", 1) == 0);
+    memset(bank + 508 * 128, 0, 128);
+    GRAP_BUF_SetTransparentSprites(true);
+    for (int choice = 0; choice <= TILESET_SHARP; ++choice) {
+        assert(TILESET_Select(choice));
+        int color = GRAP_BUF_SpritePixel(508, 8, 8);
+        assert(color > 0 && TILESET_LastSpriteColor(color, 0, 0, ega, true) == 0xff000000u);
+        if (choice == TILESET_SHARP) {
+            assert(GRAP_BUF_SpritePixel(508, 2, 2) > 0); /* Native Sharp black is already opaque. */
+            assert(GRAP_BUF_SpritePixel(508, 9, 9) ==
+                   -1); /* White must not turn gray cutouts opaque. */
+        } else
+            assert(GRAP_BUF_SpritePixel(508, 2, 2) == -1);
+        GRAP_BUF_SetTransparentSprites(false);
+        assert(GRAP_BUF_SpritePixel(508, 2, 2) >= 0);
+        GRAP_BUF_SetTransparentSprites(true);
+    }
+    /* Editing a native Sharp mask must retain its gray cutout with either option state. */
+    unsigned size = 32 + 256 + 4 + 16 * 16 * 4 + 4 + 32 * 32 * 5;
+    unsigned char *defs = calloc(1, size), *record = defs + 32;
+    memcpy(defs, "ITYPES01", 8);
+    defs[8] = 1;
+    TYPES_Put32(defs + 24, 1);
+    TypeDef definition;
+    TYPES_Vanilla(1, 252, &definition);
+    definition.id = 508;
+    definition.kind = 1;
+    definition.frames = 2;
+    definition.render = TYPES_SPRITE;
+    TYPES_Encode(record, &definition);
+    TYPES_Put32(record, size - 32);
+    record[256] = 0;
+    record[257] = 16;
+    record[258] = 150;
+    for (unsigned i = 0; i < 256; ++i)
+        record[260 + i * 4 + 3] = 255;
+    unsigned off = 260 + 16 * 16 * 4;
+    record[off] = 4;
+    record[off + 1] = 32 | 128;
+    record[off + 2] = 150;
+    for (unsigned i = 0; i < 1024; ++i) {
+        record[off + 4 + i * 4] = record[off + 5 + i * 4] = record[off + 6 + i * 4] = 128;
+        record[off + 7 + i * 4] = 255;
+    }
+    memset(record + off + 4 + (16 * 32 + 16) * 4, 0, 3);
+    record[off + 4 + 32 * 32 * 4 + 18 * 32 + 18] = 255;
+    assert(TYPES_Validate(defs, size));
+    byte oldMap = D_5893_map_id;
+    D_5893_map_id = 13;
+    TYPES_Mount(defs, size, NULL, 0);
+    int protected = GRAP_BUF_SpritePixel(508, 8, 8);
+    assert(protected > 0 && TILESET_LastSpriteColor(protected, 0, 0, ega, true) == 0xff000000u);
+    assert(GRAP_BUF_SpritePixel(508, 9, 9) == -1);
+    int gray = GRAP_BUF_TilePixel(508, 9, 9);
+    assert(TILESET_LastSpriteColor(gray, 0, 0, ega, false) == ega[0]);
+    TYPES_Mount(NULL, 0, NULL, 0);
+    D_5893_map_id = oldMap;
+    free(defs);
+    assert(SDL_setenv_unsafe("IMPERA_TILESETS", original, 1) == 0);
+    assert(TILESET_Select(TILESET_DOS));
+    assert(GRAP_BUF_SpritePixel(508, 8, 8) == -1);
+    memset(bank + 508 * 128, 0x55, 128);
+    GRAP_BUF_SetTransparentSprites(oldTransparency);
+    SDL_free(original);
+}
+
 int main(void)
 {
     assert(SDL_Init(SDL_INIT_VIDEO));
@@ -489,6 +607,7 @@ int main(void)
     GRAP_BUF_LoadTileset(bank);
     for (int i = 0; i < 16; i++)
         ega[i] = 0xff000000u | i * 0x111111u;
+    nativeProtectionMasks(bank);
     customTypeGame();
     vanillaActorOverrideIdentity();
     multiTileActors();

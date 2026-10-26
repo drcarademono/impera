@@ -64,8 +64,16 @@ void Project::openGame(const QString &directory) {
     U5::readGraphics("TILES.16", next.data("TILES.16"));
     require(next.data("INIT.GAM").size() == 4192, "INIT.GAM must use the 4192-byte DOS layout");
     for (const auto &sheet : modTilesetSheets) {
-        auto bytes =
-            readLimited(":/tilesets/" + QString::fromUtf8(sheet.filename), MOD_MAX_RESOURCE);
+        QByteArray bytes;
+        if (MOD_IsTilesetMask(sheet.resource)) {
+            QImage mask(sheet.columns * sheet.width, 16 * sheet.height, QImage::Format_RGB32);
+            mask.fill(Qt::black);
+            QBuffer buffer(&bytes);
+            buffer.open(QIODevice::WriteOnly);
+            mask.save(&buffer, "PNG");
+        } else
+            bytes =
+                readLimited(":/tilesets/" + QString::fromUtf8(sheet.filename), MOD_MAX_RESOURCE);
         next.resources.insert(QString::fromLatin1(sheet.resource), {bytes, bytes});
     }
     next.resources.insert("TYPES.OVR", {{}, {}});
@@ -200,6 +208,17 @@ static void append32(QByteArray &b, unsigned v) {
     for (int i = 0; i < 4; i++)
         b.append(char(v >> (8 * i)));
 }
+static bool usesMasks(const Project &project) {
+    bool masks = false;
+    for (const auto &name : project.changed())
+        masks |= MOD_IsTilesetMask(name.toLatin1().constData());
+    for (const auto &record : CustomTiles::records(project))
+        for (size_t off = 256; off < size_t(record.size());
+             off +=
+             TYPES_FrameBytes(reinterpret_cast<const unsigned char *>(record.constData()), off))
+            masks |= (uint8_t(record[int(off) + 1]) & 128) != 0;
+    return masks;
+}
 static bool usesExplicitDialogue(const Project &project) {
     for (const auto &name : project.changed()) {
         if (!name.endsWith(".TLK"))
@@ -294,13 +313,15 @@ QByteArray Project::package() const {
         portableConditions |= map.kind == 1 && MAPS_NewLocation(map.id) && map.floor != 0;
     for (const auto &contents : Workshop::readContents(resources.value("CONTENTS.OVR").edited))
         portableConditions |= contents.refill > 2;
+    const bool masks = usesMasks(*this);
     QByteArray out(
-        list.contains("GATES.OVR") ? "IMOD0024"
-        : portableConditions ? "IMOD0023"
-        : wideRooms        ? "IMOD0022"
-        : newDungeons      ? "IMOD0021"
-        : dungeonMaps      ? "IMOD0020"
-        : specialActors    ? "IMOD0019"
+        masks                        ? "IMOD0025"
+        : list.contains("GATES.OVR") ? "IMOD0024"
+        : portableConditions         ? "IMOD0023"
+        : wideRooms                  ? "IMOD0022"
+        : newDungeons                ? "IMOD0021"
+        : dungeonMaps                ? "IMOD0020"
+        : specialActors              ? "IMOD0019"
         : (locationObjects || list.contains("MAPS.OVR") ||
            resources.value("SIGNS.DAT").edited.startsWith("ISIG0001"))
             ? "IMOD0018"
@@ -464,6 +485,10 @@ void Project::save(const QString &path) {
     if (changed().contains("GATES.OVR")) {
         requirements["townGates"] = 1;
         requirements["packageVersion"] = 24;
+    }
+    if (usesMasks(*this)) {
+        requirements["blackPixelMasks"] = 1;
+        requirements["packageVersion"] = 25;
     }
     if (!requirements.isEmpty())
         root["requires"] = requirements;

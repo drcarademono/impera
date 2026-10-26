@@ -686,7 +686,8 @@ void WorkshopWindow::rebuildTree() {
     }
     if (workspaceSelector->currentText() == "Graphics") {
         for (const QString &label :
-             {QString("Tilesets"), QString("Custom tiles"), QString("Illustrations"), QString("Fonts")}) {
+             {QString("Tilesets"), QString("Transparency masks"), QString("Custom tiles"),
+              QString("Illustrations"), QString("Fonts")}) {
             const bool present = std::any_of(destinations.cbegin(), destinations.cend(),
                                             [&](const auto &d) {
                                                 return d.workspace == "Graphics" && d.group == label;
@@ -1575,6 +1576,8 @@ QWidget *WorkshopWindow::graphicsEditor(const QString &name) {
     });
     auto palette = new Workshop::ColorPalette(16);
     palette->setObjectName("artworkPalette");
+    if (MOD_IsTilesetMask(name.toLatin1().constData()))
+        palette->setToolTip("White keeps black sprite pixels opaque. Black allows normal transparency.");
     auto colors = Workshop::artworkColors(U5::readGraphics(name, project.resources.value(name).original));
     canvas->allowedColors = colors;
     canvas->brush = Workshop::paletteColor(canvas->brush, colors);

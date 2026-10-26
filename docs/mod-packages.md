@@ -573,3 +573,34 @@ are deterministic and occur when the hour changes, including during rest.
 Drawbridges retain vanilla's protection while the party stands on a bridge.
 The former 32-cell drawbridge cap is removed. Overrides are confined to location
 maps and validated against their floor dimensions.
+
+### Black-pixel protection masks (`IMOD0025`)
+
+Optional opaque black/white PNG sheets protect selected black sprite pixels from
+color-key transparency. White protects black; black leaves existing rules intact.
+They do not change nonblack colors, alpha transparency, sprite characteristics,
+or draw order. Missing masks behave as entirely black sheets.
+
+| Resource | External tileset-directory filename | Dimensions |
+|---|---|---|
+| `MASK_DOS.PNG` | `Ultima_5_Mask_DOS.png` | 512 × 256 |
+| `MASK_AMI.PNG` | `Ultima_5_Mask_Amiga.png` | 512 × 256 |
+| `MASK_APP.PNG` | `Ultima_5_Mask_AppleII.png` | 448 × 256 |
+| `MASK_GRY.PNG` | `Ultima_5_Mask_Grayscale.png` | 512 × 256 |
+| `MASK_SHW.PNG` | `Ultima_5_Mask_Sharp_World.png` | 512 × 512 |
+| `MASK_SHN.PNG` | `Ultima_5_Mask_Sharp_NPC.png` | 512 × 512 |
+| `MASK_CUS.PNG` | `Ultima_5_Mask_Custom.png` | 512 × 256 |
+
+Slot ordering matches each corresponding artwork sheet. Sharp keeps separate
+terrain and actor masks and preserves native subpixel precision. Custom atlas
+masks use the standard 32-column layout, sampled alongside the selected artwork.
+These resources use the existing empty-base PNG package mechanism. Workshop
+provides blank masks and includes edited masks in packages and map transfers.
+
+Custom artwork can also carry an independent mask per frame and variant. Bit 7
+of the frame cell-width byte signals `width × height` mask bytes immediately
+after RGBA data, each 0 or 255. Bits 0–6 retain the native cell width. Frame size
+and iteration include these bytes. Masks follow artwork fallback and native
+animation pose selection, and cover the complete multi-tile frame. Explicit
+frame masks take precedence over sheet masks for edited vanilla slots; new
+custom identities use their own frame masks.

@@ -22,7 +22,8 @@
 #define TILE_SPRITE_FLAG 0x800000u
 static int selected;
 static unsigned revision;
-static unsigned mountedRevision;
+static unsigned mountedRevision = ~0u;
+static byte protection[512][1024];
 static char customPath[FILE_PATH_SIZE];
 enum
 {
@@ -217,7 +218,14 @@ static Uint32 sampledColor(int color, int subX, int subY, const Uint32 *ega, boo
             Uint32 value = (Uint32)p[3] << 24 | (Uint32)p[0] << 16 | (Uint32)p[1] << 8 | p[2];
             /* The engine transparency option keys black in sprite artwork, just
              * as in native DOS sprites. Raw tiles and editor pixels keep it. */
-            if (transparent && !(value & 0xffffffu))
+            bool keepBlack = TYPES_MaskPixel(rgba, width, height, px, py);
+            unsigned native = TYPES_ArtSlotType(512 + token / 4096);
+            if (!(rgba[-3] & 128) && native < 512)
+                keepBlack = protection[native][(y * 2 + subY) * 32 + x * 2 + subX];
+            bool sharpActor = native >= 256 && native < 512 && rgba[-4] % 6 == TILESET_SHARP;
+            if (sharpActor && (value & 0xffffffu) == 0x808080u)
+                value = 0;
+            if (transparent && !sharpActor && !(value & 0xffffffu) && !keepBlack)
                 return 0;
             return transparent ? value : over(value, ega[0]);
         }
@@ -313,6 +321,40 @@ static SDL_Surface *load(const char *filename)
     }
     return NULL;
 }
+static bool readProtection(int choice, int first, byte *output) {
+    const ModTilesetSheet *spec = MOD_TilesetMask(choice, first);
+    SDL_Surface *image = load(spec->filename);
+    if (!image) {
+        int found = 0;
+        FILE *f = MOD_OpenResource(spec->resource, &found);
+        if (f)
+            fclose(f);
+        return !found;
+    }
+    bool ok = image->w == spec->columns * spec->width && image->h == 16 * spec->height;
+    for (int y = 0; ok && y < image->h; ++y)
+        for (int x = 0; ok && x < image->w; ++x) {
+            Uint8 r, g, b, a;
+            ok = SDL_ReadSurfacePixel(image, x, y, &r, &g, &b, &a) && a == 255 &&
+                 ((r == 0 && g == 0 && b == 0) || (r == 255 && g == 255 && b == 255));
+        }
+    for (int t = first; ok && t < first + (choice == TILESET_SHARP ? 256 : 512); ++t)
+        for (int y = 0; y < 32; ++y)
+            for (int x = 0; x < 32; ++x) {
+                int local = t - first;
+                Uint8 r, g, b, a;
+                SDL_ReadSurfacePixel(
+                    image, (local % spec->columns) * spec->width + x * spec->width / 32,
+                    (local / spec->columns) * spec->height + y * spec->height / 32, &r, &g, &b, &a);
+                output[t * 1024 + y * 32 + x] = r == 255;
+            }
+    SDL_DestroySurface(image);
+    return ok;
+}
+bool TILESET_ProtectedBlack(int tile, int x, int y) {
+    return !selected && tile >= 0 && tile < 512 && x >= 0 && x < 16 && y >= 0 && y < 16 &&
+           protection[tile][y * 64 + x * 2];
+}
 static int colorIndex(Uint32 value)
 {
     for (int i = 16; i < 256; i++)
@@ -342,8 +384,7 @@ static bool detectCustomMask(SDL_Surface *image)
     customMask = mask;
     return true;
 }
-static bool readSheet(SDL_Surface *image, int choice, int first)
-{
+static bool readSheet(SDL_Surface *image, int choice, int first, const byte *mask) {
     /* Apple II artwork has narrower source pixels, not missing tile columns. */
     int tileWidth = choice == TILESET_APPLE ? 14 : choice == TILESET_SHARP ? 32 : 16;
     int tileHeight = choice == TILESET_SHARP ? 32 : 16;
@@ -395,6 +436,8 @@ static bool readSheet(SDL_Surface *image, int choice, int first)
                     else
                         background = r == 0 && g == 0 && b == 0;
                 }
+                if (!r && !g && !b && a && mask[t * 1024 + y * 32 + x])
+                    background = false;
                 Uint32 opacity = choice == TILESET_CUSTOM && customMask == CUSTOM_ALPHA ? a : 255;
                 Uint32 color = background ? 0 : (opacity << 24) | ((Uint32)r << 16) | ((Uint32)g << 8) | b;
                 art[t][y * 32 + x] = color;
@@ -441,8 +484,20 @@ bool TILESET_Select(int choice)
         return false;
     if (choice == selected && choice != TILESET_CUSTOM && mountedRevision == MOD_Revision())
         return true;
+    byte *nextProtection = calloc(1, sizeof(protection));
+    if (!nextProtection)
+        return false;
+    if (!readProtection(choice, 0, nextProtection) ||
+        (choice == TILESET_SHARP && !readProtection(choice, 256, nextProtection))) {
+        free(nextProtection);
+        DEBUG_Error("Tileset %s has an invalid transparency mask", names[choice]);
+        return false;
+    }
     if (choice == 0)
     {
+        memcpy(protection, nextProtection, sizeof(protection));
+        free(nextProtection);
+        palette[16] = 0xff000000u;
         selected = 0;
         mountedRevision = MOD_Revision();
         revision++;
@@ -457,6 +512,7 @@ bool TILESET_Select(int choice)
     {
         SDL_DestroySurface(world);
         SDL_DestroySurface(actors);
+        free(nextProtection);
         DEBUG_Error("Tileset %s unavailable: %s", names[choice], SDL_GetError());
         return false;
     }
@@ -470,6 +526,7 @@ bool TILESET_Select(int choice)
     {
         SDL_DestroySurface(world);
         SDL_DestroySurface(actors);
+        free(nextProtection);
         DEBUG_Error("Cannot allocate tileset loading buffer");
         return false;
     }
@@ -478,7 +535,8 @@ bool TILESET_Select(int choice)
     memcpy(oldAvailable, available, sizeof(available));
     memset(available, 0, sizeof(available));
     memset(palette, 0, sizeof(palette));
-    bool ok = readSheet(world, choice, 0) && (choice != TILESET_SHARP || readSheet(actors, choice, 256));
+    bool ok = readSheet(world, choice, 0, nextProtection) &&
+              (choice != TILESET_SHARP || readSheet(actors, choice, 256, nextProtection));
     SDL_DestroySurface(world);
     SDL_DestroySurface(actors);
     if (!ok)
@@ -491,12 +549,14 @@ bool TILESET_Select(int choice)
     }
     else
     {
+        memcpy(protection, nextProtection, sizeof(protection));
         selected = choice;
         mountedRevision = MOD_Revision();
         revision++;
         TILESET_Refresh();
         debug("Selected %s tileset", names[choice]);
     }
+    free(nextProtection);
     free(oldArt);
     return ok;
 }

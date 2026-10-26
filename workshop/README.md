@@ -726,3 +726,21 @@ Choose **Always open** for decorative arches or permanent bridges, or
 **View → Gate preview → Day / Night** previews noon or midnight without changing
 terrain; **Map artwork** returns to the painted map. Gate settings travel with
 location JSON exports, projects, and mod packages.
+
+### Sprite transparency masks
+
+Under **Graphics → Transparency masks**, choose a tileset and paint or import its
+mask. **White keeps black sprite pixels opaque; black allows normal transparency.**
+Use **Import tilesheet** / **Export tilesheet** for a complete mask PNG, or the
+slot controls for a single tile. Each mask matches its tileset’s native dimensions.
+Sharp has separate terrain and actor sheets. Masks initially contain only black.
+
+In **Graphics → Custom tiles**, the **Mask** tool toggles between artwork and its
+black-pixel protection mask. Artwork appears faintly behind the mask for reference.
+Choose an animation frame and tileset normally; paint white or black, or import a
+PNG for one frame or the complete animation. Export and frame copying respect the
+current artwork/mask view. Masks resize with multi-tile actors and follow DOS
+artwork fallback. Editing a mask leaves artwork colors and PNG alpha unchanged.
+
+Masks apply when sprite transparency is enabled and the tile’s Transparent
+characteristic applies. They never make transparent PNG pixels opaque.

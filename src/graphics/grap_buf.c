@@ -470,6 +470,9 @@ void GRAP_BUF_FillWindow(int x1, int y1, int x2, int y2, int xorMode)
 void GRAP_BUF_LoadTileset(byte* tileset)
 {
     s_tileset = tileset;
+    /* Settings load before mod mounting. Refresh artwork and masks once the
+     * game's tile bank is ready, using the new mount revision. */
+    TILESET_Select(TILESET_Selected());
 }
 
 bool GRAP_BUF_HasTileset(void) { return s_tileset != NULL; }
@@ -519,6 +522,10 @@ static int CustomSpritePixel(int tile, int x, int y) {
                 return color;
     return 0;
 }
+static int NativeSpritePixel(int tile, int x, int y) {
+    int color = GRAP_BUF_TilePixel(tile, x, y);
+    return !color && TILESET_ProtectedBlack(tile, x, y) ? 16 : color;
+}
 int GRAP_BUF_SpritePixel(int tile, int x, int y)
 {
     bool authored = TYPES_ArtSlot(tile) != 0;
@@ -529,13 +536,13 @@ int GRAP_BUF_SpritePixel(int tile, int x, int y)
         return x < 0 || y < 0 || x >= (int)(16 * w) || y >= (int)(16 * h)
                    ? -1
                    : GRAP_BUF_TilePixel(tile, x, y);
-    int color = authored ? CustomSpritePixel(tile, x, y) : GRAP_BUF_TilePixel(tile, x, y);
+    int color = authored ? CustomSpritePixel(tile, x, y) : NativeSpritePixel(tile, x, y);
     if (color) return color;
     if (!TILESET_SpriteOutline()) return -1;
     for (int dy = -1; dy <= 1; dy++)
         for (int dx = -1; dx <= 1; dx++)
             if (authored ? CustomSpritePixel(tile, x + dx, y + dy)
-                         : GRAP_BUF_TilePixel(tile, x + dx, y + dy)) {
+                         : NativeSpritePixel(tile, x + dx, y + dy)) {
                 TILESET_SetSample(0);
                 return 0;
             }

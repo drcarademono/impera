@@ -2028,12 +2028,17 @@ int main(int argc, char **argv) {
                           g.images[0].size() == QSize(sheet.width, sheet.height),
                       "Native tileset layout was normalized or lost");
                 check(U5::writeGraphics(g) == p.data(name), "Unedited PNG changed bytes");
-                g.images[0].setPixel(0, 0, qRgb(12, 34, 56));
+                auto color =
+                    MOD_IsTilesetMask(sheet.resource) ? qRgb(255, 255, 255) : qRgb(12, 34, 56);
+                g.images[0].setPixel(0, 0, color);
                 auto edited = U5::writeGraphics(g);
-                check(U5::readGraphics(name, edited).images[0].pixel(0, 0) == qRgb(12, 34, 56),
+                check(U5::readGraphics(name, edited).images[0].pixel(0, 0) == color,
                       "RGB artwork edit lost its native color");
                 p.resources[name].edited = edited;
             }
+            auto badMask = U5::readGraphics("MASK_DOS.PNG", p.data("MASK_DOS.PNG"));
+            badMask.images[0].setPixel(0, 0, qRgb(255, 0, 0));
+            rejects([&] { U5::writeGraphics(badMask); });
             p.validate();
             auto package = p.package();
             auto base = fixture(dir.path());

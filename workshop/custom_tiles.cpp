@@ -130,6 +130,19 @@ TypeDef definition(const Project &p, unsigned id) {
         TYPES_Decode(reinterpret_cast<const unsigned char *>(r.constData()), &d);
     return d;
 }
+static QImage frameMask(const Frame &frame, QSize size) {
+    if (!frame.mask.isNull())
+        return frame.mask.scaled(size, Qt::IgnoreAspectRatio, Qt::FastTransformation);
+    QImage mask(size, QImage::Format_RGB32);
+    mask.fill(Qt::black);
+    return mask;
+}
+static void validateMask(const QImage &mask) {
+    for (int y = 0; y < mask.height(); ++y)
+        for (int x = 0; x < mask.width(); ++x)
+            require(mask.pixel(x, y) == qRgb(0, 0, 0) || mask.pixel(x, y) == qRgb(255, 255, 255),
+                    "Masks require opaque black and white pixels");
+}
 QVector<Frame> frames(const QByteArray &r) {
     QVector<Frame> result;
     if (r.isEmpty())
@@ -137,10 +150,18 @@ QVector<Frame> frames(const QByteArray &r) {
     const auto *p = reinterpret_cast<const unsigned char *>(r.constData());
     int off = 256;
     for (unsigned i = 0; i < U5::word(r, 248); i++) {
-        int side = p[off + 1];
+        int side = p[off + 1] & 127;
         int width = TYPES_FrameWidth(p, p[off], side), height = TYPES_FrameRows(p, p[off], side);
         QImage img(p + off + 4, width, height, width * 4, QImage::Format_RGBA8888);
         result.append({img.copy(), U5::word(r, off + 2), p[off]});
+        if (p[off + 1] & 128) {
+            QImage mask(width, height, QImage::Format_RGB32);
+            const auto *data = p + off + 4 + width * height * 4;
+            for (int y = 0; y < height; ++y)
+                for (int x = 0; x < width; ++x)
+                    mask.setPixel(x, y, data[y * width + x] ? qRgb(255, 255, 255) : qRgb(0, 0, 0));
+            result.last().mask = mask;
+        }
         off += TYPES_FrameBytes(p, off);
     }
     return result;
@@ -209,11 +230,18 @@ QByteArray record(TypeDef d, const QVector<Frame> &f) {
                     img.height() == int(TYPES_FrameHeight(cell) * fh),
                 "Artwork dimensions do not match actor size");
         b.append(char(frame.variant));
-        b.append(char(cell));
+        b.append(char(cell | (frame.mask.isNull() ? 0 : 128)));
         b.append(char(frame.duration));
         b.append(char(frame.duration >> 8));
         for (int y = 0; y < img.height(); y++)
             b.append(reinterpret_cast<const char *>(img.constScanLine(y)), img.width() * 4);
+        if (!frame.mask.isNull()) {
+            validateMask(frame.mask);
+            require(frame.mask.size() == img.size(), "Mask dimensions must match the frame");
+            for (int y = 0; y < img.height(); ++y)
+                for (int x = 0; x < img.width(); ++x)
+                    b.append(qRed(frame.mask.pixel(x, y)) == 255 ? char(255) : char(0));
+        }
     }
     TYPES_Put32(b.data(), b.size());
     return b;
@@ -461,7 +489,7 @@ QMap<QString, QByteArray> moveScenery(const Project &p, const QString &resource,
 }
 class Canvas : public QWidget {
   public:
-    QImage pixels, before;
+    QImage pixels, before, reference;
     QRgb color = qRgb(255, 255, 255);
     int tool = 0;
     std::function<void()> changed, colorChanged;
@@ -477,8 +505,24 @@ class Canvas : public QWidget {
             for (int x = 0; x < width(); x += 12)
                 p.fillRect(x, y, 12, 12,
                            (x / 12 + y / 12) % 2 ? QColor("#333e4e") : QColor("#151c27"));
-        if (!pixels.isNull())
-            p.drawImage(rect(), pixels);
+        if (!pixels.isNull()) {
+            if (reference.isNull())
+                p.drawImage(rect(), pixels);
+            else {
+                p.fillRect(rect(), Qt::black);
+                p.setOpacity(0.45);
+                p.drawImage(rect(), reference);
+                p.setOpacity(1);
+                for (int y = 0; y < pixels.height(); ++y)
+                    for (int x = 0; x < pixels.width(); ++x)
+                        if (qRed(pixels.pixel(x, y)) == 255)
+                            p.fillRect(QRectF(double(x) * width() / pixels.width(),
+                                              double(y) * height() / pixels.height(),
+                                              double(width()) / pixels.width(),
+                                              double(height()) / pixels.height()),
+                                       Qt::white);
+            }
+        }
     }
     void point(QMouseEvent *e) {
         if (pixels.isNull())
@@ -553,7 +597,28 @@ static QVector<Frame> originalActorFrames(const Project &p, unsigned id) {
             if (!override.isEmpty() && rgba)
                 art = QImage(rgba, side, TYPES_FrameHeight(side), side * 4, QImage::Format_RGBA8888)
                           .copy();
-            result.append({art, 150, variant});
+            Frame f{art, 150, variant};
+            if (!override.isEmpty()) {
+                for (const auto &edited : frames(override))
+                    if (edited.variant == variant) {
+                        f.mask = edited.mask;
+                        break;
+                    }
+            } else {
+                const auto *spec = MOD_TilesetMask(variant, 256);
+                const auto masks =
+                    p.resources.contains(spec->resource)
+                        ? U5::readGraphics(spec->resource, p.data(spec->resource)).images
+                        : QVector<QImage>();
+                auto mask = masks.value(int(id + frame) - spec->offset);
+                bool any = false;
+                for (int y = 0; y < mask.height(); ++y)
+                    for (int x = 0; x < mask.width(); ++x)
+                        any |= qRed(mask.pixel(x, y)) == 255;
+                if (any)
+                    f.mask = mask;
+            }
+            result.append(f);
         }
     }
     return result;
@@ -639,6 +704,13 @@ QWidget *editor(Project *p, Workshop::TextCommit commit, QMap<QString, int> *sta
     if (canvas->tool == 1)
         canvas->tool = 0;
     tools->button(canvas->tool)->setChecked(true);
+    auto maskMode = new QToolButton;
+    maskMode->setText("Mask");
+    maskMode->setObjectName("customTileMaskMode");
+    maskMode->setCheckable(true);
+    maskMode->setToolTip("Edit the black-pixel protection mask. White keeps black pixels opaque; "
+                         "black allows normal transparency. Artwork is shown faintly underneath.");
+    toolRow->addWidget(maskMode);
     toolRow->addStretch();
     middle->addLayout(toolRow);
     middle->addWidget(canvas, 0, Qt::AlignTop);
@@ -658,6 +730,13 @@ QWidget *editor(Project *p, Workshop::TextCommit commit, QMap<QString, int> *sta
         palette->select(canvas->color);
     };
     auto reloadPalette = [=] {
+        if (maskMode->isChecked()) {
+            *allowedColors = {qRgb(0, 0, 0), qRgb(255, 255, 255)};
+            palette->setEditable(false);
+            palette->setColors(*allowedColors, false);
+            canvas->colorChanged();
+            return;
+        }
         const QStringList resources{"TILES.16",
                                     "TILE_AMI.PNG",
                                     "TILE_APP.PNG",
@@ -1431,7 +1510,9 @@ QWidget *editor(Project *p, Workshop::TextCommit commit, QMap<QString, int> *sta
         for (auto button : {frameAdd, frameDelete, frameLeft, frameRight})
             button->setEnabled(!draft->originalAnimation);
         palette->setToolTip(
-            draft->originalAnimation
+            maskMode->isChecked()
+                ? "White keeps black pixels opaque; black allows normal transparency."
+            : draft->originalAnimation
                 ? "Choose a drawing color. Black is opaque; only pixels with zero alpha are "
                   "transparent."
                 : "Choose a drawing color from the selected tileset’s palette. The crossed swatch "
@@ -1471,7 +1552,10 @@ QWidget *editor(Project *p, Workshop::TextCommit commit, QMap<QString, int> *sta
         if (frameList->currentItem()) {
             auto f = draft->frames[frameList->currentItem()->data(Qt::UserRole).toInt()];
             canvas->pixels =
-                f.image.scaled(selectedSize(), Qt::IgnoreAspectRatio, Qt::FastTransformation);
+                maskMode->isChecked()
+                    ? frameMask(f, selectedSize())
+                    : f.image.scaled(selectedSize(), Qt::IgnoreAspectRatio, Qt::FastTransformation);
+            canvas->reference = maskMode->isChecked() ? f.image : QImage();
 
         } else
             canvas->pixels = image(*p, draft->id, selectedVariant());
@@ -1906,14 +1990,18 @@ QWidget *editor(Project *p, Workshop::TextCommit commit, QMap<QString, int> *sta
                     f.variant = variant;
                     f.image = f.image.scaled(selectedSize(), Qt::IgnoreAspectRatio,
                                              Qt::FastTransformation);
+                    if (!f.mask.isNull())
+                        f.mask = f.mask.scaled(selectedSize(), Qt::IgnoreAspectRatio,
+                                               Qt::FastTransformation);
                     draft->frames.append(f);
                 }
             std::stable_sort(draft->frames.begin(), draft->frames.end(),
                              [](const Frame &a, const Frame &b) { return a.variant < b.variant; });
         }
-        for (auto &f : draft->frames)
-            if (f.variant == variant)
-                f.image = Workshop::paletteImage(f.image, *allowedColors);
+        if (!maskMode->isChecked())
+            for (auto &f : draft->frames)
+                if (f.variant == variant)
+                    f.image = Workshop::paletteImage(f.image, *allowedColors);
         int n = 0;
         for (int i = 0; i < draft->frames.size(); i++)
             if (draft->frames[i].variant == variant && n++ == row)
@@ -1922,8 +2010,19 @@ QWidget *editor(Project *p, Workshop::TextCommit commit, QMap<QString, int> *sta
         return draft->frames.size() - 1;
     };
     QObject::connect(frameCopy, &QToolButton::clicked, w, [=] {
-        if (frameList->currentItem())
-            QApplication::clipboard()->setImage(canvas->pixels);
+        if (frameList->currentItem()) {
+            auto mime = new QMimeData;
+            mime->setImageData(canvas->pixels);
+            const auto &f = draft->frames[frameList->currentItem()->data(Qt::UserRole).toInt()];
+            if (!maskMode->isChecked() && !f.mask.isNull()) {
+                QByteArray bytes;
+                QBuffer out(&bytes);
+                out.open(QIODevice::WriteOnly);
+                frameMask(f, canvas->pixels.size()).save(&out, "PNG");
+                mime->setData("application/x-impera-black-mask", bytes);
+            }
+            QApplication::clipboard()->setMimeData(mime);
+        }
     });
     QObject::connect(framePaste, &QToolButton::clicked, w, [=] {
         if (!frameList->currentItem())
@@ -1937,8 +2036,16 @@ QWidget *editor(Project *p, Workshop::TextCommit commit, QMap<QString, int> *sta
                         .arg(selectedSize().height()));
             auto old = draft->frames;
             try {
-                draft->frames[editableFrame()].image =
-                    Workshop::paletteImage(pasted, *allowedColors);
+                if (maskMode->isChecked()) {
+                    validateMask(pasted);
+                    draft->frames[editableFrame()].mask = pasted;
+                } else {
+                    auto &frame = draft->frames[editableFrame()];
+                    frame.image = Workshop::paletteImage(pasted, *allowedColors);
+                    auto mime = QApplication::clipboard()->mimeData();
+                    frame.mask =
+                        QImage::fromData(mime->data("application/x-impera-black-mask"), "PNG");
+                }
                 saveArtwork("Paste animation frame");
             } catch (...) {
                 draft->frames = old;
@@ -1965,17 +2072,33 @@ QWidget *editor(Project *p, Workshop::TextCommit commit, QMap<QString, int> *sta
         (*state)[QString("customTiles/%1/frame").arg(draft->id)] = frameList->row(item);
         const auto &f = draft->frames[item->data(Qt::UserRole).toInt()];
         canvas->pixels =
-            f.image.scaled(selectedSize(), Qt::IgnoreAspectRatio, Qt::FastTransformation);
+            maskMode->isChecked()
+                ? frameMask(f, selectedSize())
+                : f.image.scaled(selectedSize(), Qt::IgnoreAspectRatio, Qt::FastTransformation);
+        canvas->reference = maskMode->isChecked() ? f.image : QImage();
         canvas->update();
     });
     canvas->changed = [=] {
         report([&] {
-            draft->frames[editableFrame()].image =
-                Workshop::paletteImage(canvas->pixels, *allowedColors);
+            if (maskMode->isChecked())
+                draft->frames[editableFrame()].mask = canvas->pixels.copy();
+            else
+                draft->frames[editableFrame()].image =
+                    Workshop::paletteImage(canvas->pixels, *allowedColors);
             saveArtwork("Paint tile");
             reloadFrames();
         });
     };
+    QObject::connect(maskMode, &QToolButton::toggled, w, [=](bool mask) {
+        if (timer->isActive())
+            play->click();
+        play->setEnabled(!mask);
+        palette->setToolTip(
+            mask ? "White keeps black pixels opaque. Black allows normal transparency."
+                 : "Choose an artwork color.");
+        reloadPalette();
+        reloadFrames();
+    });
     QObject::connect(variants, &QComboBox::currentIndexChanged, w, [=](int variant) {
         (*state)["customTiles/variant"] = variant;
         reloadPalette();
@@ -2002,6 +2125,8 @@ QWidget *editor(Project *p, Workshop::TextCommit commit, QMap<QString, int> *sta
                     auto cell = artworkSize(frame.variant);
                     frame.variant += 6;
                     frame.image = frame.image.copy(0, 0, cell.width(), cell.height());
+                    if (!frame.mask.isNull())
+                        frame.mask = frame.mask.copy(0, 0, cell.width(), cell.height());
                     next.append(frame);
                 }
             }
@@ -2016,6 +2141,14 @@ QWidget *editor(Project *p, Workshop::TextCommit commit, QMap<QString, int> *sta
                     painter.drawImage(0, 0, frame.image);
                     painter.end();
                     frame.image = resized;
+                    if (!frame.mask.isNull()) {
+                        QImage mask(resized.size(), QImage::Format_RGB32);
+                        mask.fill(Qt::black);
+                        QPainter painter(&mask);
+                        painter.drawImage(0, 0, frame.mask);
+                        painter.end();
+                        frame.mask = mask;
+                    }
                 }
             std::stable_sort(next.begin(), next.end(),
                              [](const Frame &a, const Frame &b) { return a.variant < b.variant; });
@@ -2110,8 +2243,12 @@ QWidget *editor(Project *p, Workshop::TextCommit commit, QMap<QString, int> *sta
                 painter.setCompositionMode(QPainter::CompositionMode_Source);
                 for (int i = 0; i < count; ++i) {
                     auto item = sheet ? frameList->item(i) : frameList->currentItem();
-                    const auto pixels = item ? draft->frames[item->data(Qt::UserRole).toInt()].image
-                                             : canvas->pixels;
+                    const auto pixels =
+                        item ? (maskMode->isChecked()
+                                    ? frameMask(draft->frames[item->data(Qt::UserRole).toInt()],
+                                                size)
+                                    : draft->frames[item->data(Qt::UserRole).toInt()].image)
+                             : canvas->pixels;
                     painter.drawImage(
                         i * size.width(), 0,
                         pixels.scaled(size, Qt::IgnoreAspectRatio, Qt::FastTransformation));
@@ -2141,6 +2278,32 @@ QWidget *editor(Project *p, Workshop::TextCommit commit, QMap<QString, int> *sta
                     "PNG dimensions are too large");
             auto img = reader.read().convertToFormat(QImage::Format_RGBA8888);
             require(!img.isNull(), "Cannot decode PNG");
+            if (maskMode->isChecked()) {
+                const auto size = selectedSize();
+                require(img.width() % size.width() == 0 && img.height() % size.height() == 0,
+                        "Mask dimensions must match this tileset’s frame size");
+                validateMask(img);
+                int columns = img.width() / size.width(),
+                    count = columns * (img.height() / size.height());
+                require(count == 1 || count == frameList->count(),
+                        "Import one mask or a mask for every animation frame");
+                int selected = editableFrame();
+                if (count == 1)
+                    draft->frames[selected].mask = img;
+                else {
+                    int i = 0;
+                    for (auto &frame : draft->frames)
+                        if (frame.variant == selectedVariant()) {
+                            frame.mask = img.copy((i % columns) * size.width(),
+                                                  (i / columns) * size.height(), size.width(),
+                                                  size.height());
+                            ++i;
+                        }
+                }
+                saveArtwork("Import sprite mask");
+                reloadFrames();
+                return;
+            }
             img = Workshop::paletteImage(img, *allowedColors);
             const QSize frameSize = selectedSize();
             const int width = frameSize.width(), height = frameSize.height();

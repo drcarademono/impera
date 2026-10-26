@@ -276,7 +276,8 @@ QVector<ContentDestination> contentDestinations(const Project &project) {
         case EditorKind::Artwork:
             workspace = "Graphics";
             title = artworkTitle(name);
-            group = name == "TILES.16" || MOD_TilesetSheet(name.toLatin1().constData())
+            group = MOD_IsTilesetMask(name.toLatin1().constData()) ? "Transparency masks"
+                    : name == "TILES.16" || MOD_TilesetSheet(name.toLatin1().constData())
                         ? "Tilesets"
                         : "Illustrations";
             break;

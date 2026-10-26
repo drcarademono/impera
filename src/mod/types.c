@@ -268,7 +268,7 @@ int TYPES_Validate(const void *v, size_t size) {
         for (unsigned j = 0; j < d.frames; j++) {
             if (len - f < 4)
                 return 0;
-            unsigned variant = p[f], side = p[f + 1], ms = word(p + f + 2);
+            unsigned variant = p[f], side = p[f + 1] & 127, ms = word(p + f + 2);
             if (variant > 11 || (j && variant < last) ||
                 (side != 16 && side != 32 && !(variant % 6 == 2 && side == 14)) || ms < 10 ||
                 ms > 60000)
@@ -276,6 +276,13 @@ int TYPES_Validate(const void *v, size_t size) {
             size_t bytes = TYPES_FrameBytes(p, f);
             if (bytes > len - f)
                 return 0;
+            if (p[f + 1] & 128) {
+                size_t pixels =
+                    (size_t)TYPES_FrameWidth(p, variant, side) * TYPES_FrameRows(p, variant, side);
+                for (size_t k = 0; k < pixels; ++k)
+                    if (p[f + 4 + pixels * 4 + k] != 0 && p[f + 4 + pixels * 4 + k] != 255)
+                        return 0;
+            }
             if (++variants[variant] > 64)
                 return 0;
             last = variant;
@@ -520,6 +527,9 @@ static size_t initialSize;
 static const unsigned char *artRecords[TYPES_MAX];
 static unsigned artCount;
 static unsigned char inheritedAnimation[TYPES_MAX];
+unsigned TYPES_ArtSlotType(unsigned slot) {
+    return slot >= 512 && slot < 512 + artCount ? TYPES_U32(artRecords[slot - 512] + 4) : 65536;
+}
 static unsigned actorPoseCount(const unsigned char *record);
 static uint16_t byId[TYPES_LAST_CUSTOM + 1];
 typedef struct FrameCache {

@@ -60,18 +60,25 @@ int TYPES_DefWalkable(unsigned actorShape, const TypeDef *);
 int TYPES_Validate(const void *, size_t);
 int TYPES_ValidateMap(const void *, size_t, const void *, size_t);
 const unsigned char *TYPES_Find(const void *, size_t, uint32_t);
-static inline unsigned TYPES_FrameHeight(unsigned width) { return width == 14 ? 16 : width; }
+static inline unsigned TYPES_FrameHeight(unsigned width) {
+    width &= 127;
+    return width == 14 ? 16 : width;
+}
 static inline unsigned TYPES_Width(const TypeDef *d) { return d->width ? d->width : 1; }
 static inline unsigned TYPES_Height(const TypeDef *d) { return d->height ? d->height : 1; }
 static inline unsigned TYPES_FrameWidth(const unsigned char *p, unsigned variant, unsigned cell) {
-    return cell * (variant < 6 ? 1u + p[253] : 1u);
+    return (cell & 127) * (variant < 6 ? 1u + p[253] : 1u);
 }
 static inline unsigned TYPES_FrameRows(const unsigned char *p, unsigned variant, unsigned cell) {
     return TYPES_FrameHeight(cell) * (variant < 6 ? 1u + p[254] : 1u);
 }
 static inline size_t TYPES_FrameBytes(const unsigned char *p, size_t off) {
     return 4 + (size_t)TYPES_FrameWidth(p, p[off], p[off + 1]) *
-                   TYPES_FrameRows(p, p[off], p[off + 1]) * 4;
+                   TYPES_FrameRows(p, p[off], p[off + 1]) * ((p[off + 1] & 128) ? 5 : 4);
+}
+static inline int TYPES_MaskPixel(const unsigned char *rgba, unsigned w, unsigned h, unsigned x,
+                                  unsigned y) {
+    return rgba && (rgba[-3] & 128) && x < w && y < h && rgba[(size_t)w * h * 4 + y * w + x] != 0;
 }
 /* Shared native animation interpreter. Random callback returns a byte. */
 void TYPES_AdvanceAnimation(unsigned base, unsigned char *tile, unsigned char *state,
@@ -103,6 +110,7 @@ void TYPES_Remove(TypeCell);
 int TYPES_WriteState(FILE *);
 int TYPES_ReadState(FILE *, int apply);
 unsigned TYPES_ArtSlot(uint32_t);
+unsigned TYPES_ArtSlotType(unsigned slot);
 /* Resolve fixed native actor frame overrides without replacing engine animation. */
 unsigned TYPES_ActorArt(uint32_t type, unsigned nativeTile);
 const unsigned char *TYPES_SampleArt(unsigned slot, unsigned variant, uint64_t ms, unsigned *side);
