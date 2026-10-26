@@ -981,7 +981,7 @@ void ULTIMA_2e96_SetWindDirection(int direction)
         // level < 0
         ULTIMA_0a70_GRAP_2d_SetPenColor(D_13b0_brightWhiteColor);
         ULTIMA_0b10_GRAP_Line(0x30, 0xb8, 0x98, 0xb8);
-        ULTIMA_0a70_GRAP_2d_SetPenColor(D_13b2_blueColor);
+        ULTIMA_0a70_GRAP_2d_SetPenColor(MOD_FrameColor());
         ULTIMA_0aa6_GRAP_3f_FillRect(0x30, 0xb9, 0x98, 0xbf);
     }
 }

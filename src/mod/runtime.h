@@ -8,6 +8,7 @@
 void MOD_MountDirectory(const char *directory);
 FILE *MOD_OpenResource(const char *name, int *found);
 unsigned MOD_LoadedCount(void);
+unsigned MOD_FrameColor(void);
 unsigned MOD_Revision(void);
 const char *MOD_LocationName(unsigned map, const char *fallback);
 unsigned MOD_TableValue(unsigned table, unsigned index, unsigned fallback);

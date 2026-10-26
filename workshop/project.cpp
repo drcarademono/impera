@@ -51,7 +51,7 @@ void Project::openGame(const QString &directory) {
         if (upper == "TYPES.OVR" || upper == "TYPEMAP.OVR" || upper == "CUTSCENE.OVR" ||
             upper == "MAPS.OVR" || MAPS_LocationResource(upper.toLatin1().constData()) ||
             upper == "LOCATIONS.OVR" || upper == "TEXT.OVR" || upper == "RULES.TBL" ||
-            upper == "GATES.OVR" || upper == "CONTENTS.OVR")
+            upper == "INTERFACE.OVR" || upper == "GATES.OVR" || upper == "CONTENTS.OVR")
             continue; // Companion resources are package-only.
         if (!MOD_AllowedResource(upper.toLatin1().constData()))
             continue;
@@ -85,6 +85,7 @@ void Project::openGame(const QString &directory) {
     next.resources.insert("RULES.TBL", {{}, {}});
     next.resources.insert("CONTENTS.OVR", {{}, {}});
     next.resources.insert("GATES.OVR", {{}, {}});
+    next.resources.insert("INTERFACE.OVR", {{}, {}});
     *this = next;
 }
 const QByteArray &Project::data(const QString &name) const {
@@ -315,7 +316,8 @@ QByteArray Project::package() const {
         portableConditions |= contents.refill > 2;
     const bool masks = usesMasks(*this);
     QByteArray out(
-        masks                        ? "IMOD0025"
+        list.contains("INTERFACE.OVR") ? "IMOD0026"
+        : masks                        ? "IMOD0025"
         : list.contains("GATES.OVR") ? "IMOD0024"
         : portableConditions         ? "IMOD0023"
         : wideRooms                  ? "IMOD0022"
@@ -490,6 +492,10 @@ void Project::save(const QString &path) {
         requirements["blackPixelMasks"] = 1;
         requirements["packageVersion"] = 25;
     }
+    if (changed().contains("INTERFACE.OVR")) {
+        requirements["interfaceColors"] = 1;
+        requirements["packageVersion"] = 26;
+    }
     if (!requirements.isEmpty())
         root["requires"] = requirements;
     QJsonObject annotations;
@@ -596,7 +602,7 @@ QVector<ModDiagnostic> validateMod(const Project &project, const QString &modsDi
             if (name == "TYPES.OVR" || name == "TYPEMAP.OVR" || name == "CUTSCENE.OVR" ||
                 name == "MAPS.OVR" || MAPS_LocationResource(name.toLatin1().constData()) ||
                 name == "LOCATIONS.OVR" || name == "TEXT.OVR" || name == "RULES.TBL" ||
-                name == "GATES.OVR" || name == "CONTENTS.OVR") {
+                name == "INTERFACE.OVR" || name == "GATES.OVR" || name == "CONTENTS.OVR") {
                 require(project.resources[name].original.isEmpty(),
                         "Companion resource must have an empty original base");
             } else if (!MOD_TilesetSheet(name.toLatin1().constData())) {
@@ -926,7 +932,7 @@ QString prepareModTest(const Project &project, const QString &sessionsDirectory)
         if (name == "TYPES.OVR" || name == "TYPEMAP.OVR" || name == "CUTSCENE.OVR" ||
             name == "MAPS.OVR" || MAPS_LocationResource(name.toLatin1().constData()) ||
             name == "LOCATIONS.OVR" || name == "TEXT.OVR" || name == "RULES.TBL" ||
-            name == "GATES.OVR" || name == "CONTENTS.OVR" || MOD_TilesetSheet(name.toLatin1().constData()))
+            name == "INTERFACE.OVR" || name == "GATES.OVR" || name == "CONTENTS.OVR" || MOD_TilesetSheet(name.toLatin1().constData()))
             continue; // Virtual companion exists only inside the package.
         auto bytes = readLimited(destination.filePath(name), MOD_MAX_RESOURCE);
         require(bytes == project.resources[name].original,

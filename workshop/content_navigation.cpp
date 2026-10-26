@@ -161,6 +161,7 @@ QVector<ContentDestination> contentDestinations(const Project &project) {
         if (destination.conversation >= 0)
             result.append(destination);
     result.append({"overview", "Mod Overview", "Project", "Mod overview", "@overview"});
+    result.append({"interface", "Graphics", "Interface", "Frame color", "INTERFACE.OVR"});
     bool usableScenes = false;
     if (project.resources.contains("MISCMAPS.DAT")) {
         try {
@@ -189,6 +190,7 @@ QVector<ContentDestination> contentDestinations(const Project &project) {
             continue;
         if (name == "TYPEMAP.OVR")
             continue;
+        if (name == "INTERFACE.OVR") continue;
         if (name == "CONTENTS.OVR" || name == "GATES.OVR")
             continue; // Edited through the map inspector.
         if (MAPS_LocationResource(name.toLatin1().constData())) {

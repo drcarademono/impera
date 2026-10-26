@@ -1,3 +1,4 @@
+#include "mod/runtime.h"
 #include "engine_settings.h"
 #include "graphics/crt.h"
 #include "graphics/tileset.h"
@@ -115,14 +116,15 @@ void ENGINE_UIText(int x,int y,const char* s,byte color)
 /* Reuse the original IBM.CH border glyphs from the title menu. */
 void ENGINE_UIFrame(void)
 {
+    byte color = (byte)MOD_FrameColor();
     for(int x=8;x<312;x+=8) {
-        ENGINE_UIText(x,0,"\x7f",1);ENGINE_UIText(x,192,"\x7f",1);
+        ENGINE_UIText(x,0,"\x7f",color);ENGINE_UIText(x,192,"\x7f",color);
     }
     for(int y=8;y<192;y+=8) {
-        ENGINE_UIText(0,y,"\x7f",1);ENGINE_UIText(312,y,"\x7f",1);
+        ENGINE_UIText(0,y,"\x7f",color);ENGINE_UIText(312,y,"\x7f",color);
     }
-    ENGINE_UIText(0,0,"\x7b",1);ENGINE_UIText(312,0,"\x7c",1);
-    ENGINE_UIText(0,192,"\x7d",1);ENGINE_UIText(312,192,"\x7e",1);
+    ENGINE_UIText(0,0,"\x7b",color);ENGINE_UIText(312,0,"\x7c",color);
+    ENGINE_UIText(0,192,"\x7d",color);ENGINE_UIText(312,192,"\x7e",color);
     ENGINE_UIRect(7,7,306,1,15);ENGINE_UIRect(7,7,1,186,15);
     ENGINE_UIRect(312,7,1,186,15);ENGINE_UIRect(7,192,306,1,15);
 }

@@ -30,7 +30,7 @@ All integers are unsigned little-endian 32-bit values; there is no padding.
 
 | Header | Encoding |
 | --- | --- |
-| Magic/version | Eight ASCII bytes `IMOD0001` through `IMOD0020` |
+| Magic/version | Eight ASCII bytes `IMOD0001` through `IMOD0026` |
 | Title length | 1–256 UTF-8 bytes |
 | Resource count | 1–512 |
 | Title | Length bytes; embedded NUL forbidden |
@@ -604,3 +604,12 @@ and iteration include these bytes. Masks follow artwork fallback and native
 animation pose selection, and cover the complete multi-tile frame. Explicit
 frame masks take precedence over sheet masks for edited vanilla slots; new
 custom identities use their own frame masks.
+
+### Interface frame color (package version 26)
+
+`IMOD0026` adds optional `INTERFACE.OVR`, with an empty original base. Its nine
+bytes are the ASCII signature `IUI00001` followed by one EGA palette index
+(0–15). Missing settings retain the original blue (1). Menu, character creation,
+gameplay and engine-menu frames use this color; white outlines, text, artwork
+and spell colors remain unchanged. Packages with invalid indices, signatures
+or sizes are rejected. Earlier package features remain valid in version 26.

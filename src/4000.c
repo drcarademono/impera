@@ -1,3 +1,4 @@
+#include "mod/runtime.h"
 #include "mod/types.h"
 #include "common/common.h"
 
@@ -660,7 +661,7 @@ void ULTIMA_4a84(void)
                 ULTIMA_1cca_SetTextForegroundColor(D_13b0_brightWhiteColor);
             } else {
                 // 4ba2
-                ULTIMA_0a70_GRAP_2d_SetPenColor(D_13b2_blueColor);
+                ULTIMA_0a70_GRAP_2d_SetPenColor(MOD_FrameColor());
                 ULTIMA_0aa6_GRAP_3f_FillRect(0x28, 0, 0x98, 6);
                 ULTIMA_0a70_GRAP_2d_SetPenColor(D_13b0_brightWhiteColor);
                 ULTIMA_0b10_GRAP_Line(0x28, 7, 0x98, 7);
@@ -705,7 +706,7 @@ void ULTIMA_4c2a(void)
 	local_8 = ((uint)win->top + ULTIMA_1cee_GetCurrentTextY()) * 8;
 
 	local_4 = (uint)win->colors;
-	ULTIMA_1cca_SetTextForegroundColor(D_13b2_blueColor);
+	ULTIMA_1cca_SetTextForegroundColor(MOD_FrameColor());
 	ULTIMA_1f26_SetTextBackgroundColor(0);
 	ULTIMA_16ba_PrintChar(2);
 	ULTIMA_0a70_GRAP_2d_SetPenColor(D_13b0_brightWhiteColor);
@@ -729,7 +730,7 @@ void ULTIMA_4cce(void)
 	local_8 = ((uint)win->top + ULTIMA_1cee_GetCurrentTextY()) * 8;
 
 	local_4 = (uint)win->colors;
-	ULTIMA_1cca_SetTextForegroundColor(D_13b2_blueColor);
+	ULTIMA_1cca_SetTextForegroundColor(MOD_FrameColor());
 	ULTIMA_1f26_SetTextBackgroundColor(0);
 	ULTIMA_16ba_PrintChar(1);
 	ULTIMA_0a70_GRAP_2d_SetPenColor(D_13b0_brightWhiteColor);
@@ -756,7 +757,7 @@ int ULTIMA_4d76_FindIndex(char* param_2, int param_1)
 
 void ULTIMA_4daa(void)
 {
-	ULTIMA_0a70_GRAP_2d_SetPenColor(D_13b2_blueColor);
+	ULTIMA_0a70_GRAP_2d_SetPenColor(MOD_FrameColor());
 	ULTIMA_0aa6_GRAP_3f_FillRect(0xf0, 0x51, 0x107, 0x56);
 	ULTIMA_0a70_GRAP_2d_SetPenColor(D_13b0_brightWhiteColor);
 	ULTIMA_0c9c_GRAP_39_HorizLine(0xf0, 0x50, 0x107);
@@ -778,7 +779,7 @@ void ULTIMA_4dea(int param_1)
 
 void ULTIMA_4e20(void)
 {
-	ULTIMA_0a70_GRAP_2d_SetPenColor(D_13b2_blueColor);
+	ULTIMA_0a70_GRAP_2d_SetPenColor(MOD_FrameColor());
 	ULTIMA_0aa6_GRAP_3f_FillRect(0xc0, 0, 0x137, 0x6);
 	ULTIMA_0a70_GRAP_2d_SetPenColor(D_13b0_brightWhiteColor);
 	ULTIMA_0c9c_GRAP_39_HorizLine(0xc0, 0x7, 0x137);
@@ -792,7 +793,7 @@ void ULTIMA_4e50(char* param_1)
 
 	local_6 = -(ULTIMA_216c_strlen(param_1) / 2 - 30);
 	local_2 = ULTIMA_216c_strlen(param_1) + local_6 + 2;
-	ULTIMA_0a70_GRAP_2d_SetPenColor(D_13b2_blueColor);
+	ULTIMA_0a70_GRAP_2d_SetPenColor(MOD_FrameColor());
 	ULTIMA_0aa6_GRAP_3f_FillRect(192, 0, local_6 * 8, 6);
 	ULTIMA_0aa6_GRAP_3f_FillRect(local_2 * 8, 0, 311, 6);
 	ULTIMA_0a70_GRAP_2d_SetPenColor(D_13b0_brightWhiteColor);
@@ -818,7 +819,7 @@ void ULTIMA_4efc(void)
 
 void ULTIMA_4f3c(void)
 {
-	ULTIMA_0a70_GRAP_2d_SetPenColor(D_13b2_blueColor);
+	ULTIMA_0a70_GRAP_2d_SetPenColor(MOD_FrameColor());
 	ULTIMA_0aa6_GRAP_3f_FillRect(0xbf, 0x39, 0x138, 0x3e);
 	ULTIMA_0a70_GRAP_2d_SetPenColor(D_13b0_brightWhiteColor);
 	ULTIMA_0c9c_GRAP_39_HorizLine(0xc0, 0x38, 0x137);

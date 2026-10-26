@@ -744,3 +744,7 @@ artwork fallback. Editing a mask leaves artwork colors and PNG alpha unchanged.
 
 Masks apply when sprite transparency is enabled and the tile’s Transparent
 characteristic applies. They never make transparent PNG pixels opaque.
+
+Graphics → Interface provides frame-color palette swatches and a preview drawn
+with Impera’s frame renderer and the project’s font. Changes support undo/redo
+and travel with the project and exported mod.

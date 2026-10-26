@@ -1,3 +1,4 @@
+#include "mod/runtime.h"
 #include "mod/actors.h"
 #include "mod/types_game.h"
 #include "mod/contents.h"
@@ -220,7 +221,7 @@ static void frameCorner(void *host, uint8_t color, int x, int y, uint8_t ch) {
 }
 void ULTIMA_637e_DrawFrame(void) {
     ImperaGameFrame frame = {0};
-    frame.blue = D_13b2_blueColor;
+    frame.blue = MOD_FrameColor();
     frame.white = D_13b0_brightWhiteColor;
     frame.fill = frameFill;
     frame.line = frameLine;

@@ -1,3 +1,4 @@
+#include "interface.h"
 #include "signs.h"
 #include "location_names.h"
 #include "maps.h"
@@ -58,7 +59,7 @@ int MOD_AllowedResource(const char *name) {
         return 0;
     if (MOD_TilesetSheet(name))
         return 1;
-    if (!strcmp(name, "GATES.OVR"))
+    if (!strcmp(name, "INTERFACE.OVR") || !strcmp(name, "GATES.OVR"))
         return 1;
     if (!strcmp(name, "MAPS.OVR") || !strcmp(name, "LOCATIONS.OVR") || !strcmp(name, "TYPES.OVR") ||
         !strcmp(name, "TYPEMAP.OVR"))
@@ -108,7 +109,7 @@ int MOD_Decode(const void *bytes, size_t size, ModBaseReader reader, void *conte
                      (memcmp(bytes, "IMOD0022", 8) &&
                       (memcmp(bytes, "IMOD0023", 8) &&
                        (memcmp(bytes, "IMOD0024", 8) &&
-                        memcmp(bytes, "IMOD0025", 8)))))))))))))))))) {
+                        (memcmp(bytes, "IMOD0025", 8) && memcmp(bytes, "IMOD0026", 8))))))))))))))))))) {
         reason = "Unsupported mod package version; update Impera";
         goto fail;
     }
@@ -133,7 +134,7 @@ int MOD_Decode(const void *bytes, size_t size, ModBaseReader reader, void *conte
                       (memcmp(magic, "IMOD0022", 8) &&
                        (memcmp(magic, "IMOD0023", 8) &&
                         (memcmp(magic, "IMOD0024", 8) &&
-                         memcmp(magic, "IMOD0025", 8)))))))))))))))))) ||
+                         (memcmp(magic, "IMOD0025", 8) && memcmp(magic, "IMOD0026", 8))))))))))))))))))) ||
         !number(&c, &titleLength) || titleLength == 0 || titleLength > 256 || !number(&c, &count) ||
         count == 0 || count > MOD_MAX_ENTRIES || !take(&c, result->title, titleLength) ||
         memchr(result->title, 0, titleLength))
@@ -160,8 +161,15 @@ int MOD_Decode(const void *bytes, size_t size, ModBaseReader reader, void *conte
                 reason = "Duplicate resource in mod package";
                 goto fail;
             }
-        if (!strcmp(entry->name, "GATES.OVR")) {
-            if ((memcmp(magic, "IMOD0024", 8) && memcmp(magic, "IMOD0025", 8)) || baseSize ||
+        if (!strcmp(entry->name, "INTERFACE.OVR")) {
+            if (memcmp(magic, "IMOD0026", 8) || baseSize || baseCrc) {
+                reason = "Interface colors require package version 26 and an empty base";
+                goto fail;
+            }
+            base = calloc(1, 1);
+            if (!base) goto fail;
+        } else if (!strcmp(entry->name, "GATES.OVR")) {
+            if ((memcmp(magic, "IMOD0024", 8) && (memcmp(magic, "IMOD0025", 8) && memcmp(magic, "IMOD0026", 8))) || baseSize ||
                 baseCrc) {
                 reason = "Town gates require package version 24 and an empty base";
                 goto fail;
@@ -175,7 +183,7 @@ int MOD_Decode(const void *bytes, size_t size, ModBaseReader reader, void *conte
                    (memcmp(magic, "IMOD0021", 8) &&
                     (memcmp(magic, "IMOD0022", 8) &&
                      (memcmp(magic, "IMOD0023", 8) &&
-                      (memcmp(magic, "IMOD0024", 8) && memcmp(magic, "IMOD0025", 8)))))))) ||
+                      (memcmp(magic, "IMOD0024", 8) && (memcmp(magic, "IMOD0025", 8) && memcmp(magic, "IMOD0026", 8))))))))) ||
                 baseSize || baseCrc ||
                 (MAPS_LocationResource(entry->name) &&
                  !strcmp(strrchr(entry->name, '.'), ".DAT"))) {
@@ -193,7 +201,7 @@ int MOD_Decode(const void *bytes, size_t size, ModBaseReader reader, void *conte
                     (memcmp(magic, "IMOD0021", 8) &&
                      (memcmp(magic, "IMOD0022", 8) &&
                       (memcmp(magic, "IMOD0023", 8) &&
-                       (memcmp(magic, "IMOD0024", 8) && memcmp(magic, "IMOD0025", 8))))))))) ||
+                       (memcmp(magic, "IMOD0024", 8) && (memcmp(magic, "IMOD0025", 8) && memcmp(magic, "IMOD0026", 8)))))))))) ||
                 baseSize || baseCrc) {
                 reason = "Location names require package version 17 and an empty base";
                 goto fail;
@@ -218,7 +226,7 @@ int MOD_Decode(const void *bytes, size_t size, ModBaseReader reader, void *conte
                              (memcmp(magic, "IMOD0022", 8) &&
                               (memcmp(magic, "IMOD0023", 8) &&
                                (memcmp(magic, "IMOD0024", 8) &&
-                                memcmp(magic, "IMOD0025", 8))))))))))))))))) ||
+                                (memcmp(magic, "IMOD0025", 8) && memcmp(magic, "IMOD0026", 8)))))))))))))))))) ||
                 baseSize || baseCrc) {
                 reason = "Custom types require package version 9 and an empty base";
                 goto fail;
@@ -258,7 +266,7 @@ int MOD_Decode(const void *bytes, size_t size, ModBaseReader reader, void *conte
                               (memcmp(magic, "IMOD0022", 8) &&
                                (memcmp(magic, "IMOD0023", 8) &&
                                 (memcmp(magic, "IMOD0024", 8) &&
-                                 memcmp(magic, "IMOD0025", 8)))))))))))))))))) ||
+                                 (memcmp(magic, "IMOD0025", 8) && memcmp(magic, "IMOD0026", 8))))))))))))))))))) ||
                 (!strcmp(entry->name, "RULES.TBL") && memcmp(magic, "IMOD0003", 8) &&
                  memcmp(magic, "IMOD0004", 8) && memcmp(magic, "IMOD0005", 8) &&
                  memcmp(magic, "IMOD0006", 8) && memcmp(magic, "IMOD0007", 8) &&
@@ -279,7 +287,7 @@ int MOD_Decode(const void *bytes, size_t size, ModBaseReader reader, void *conte
                               (memcmp(magic, "IMOD0022", 8) &&
                                (memcmp(magic, "IMOD0023", 8) &&
                                 (memcmp(magic, "IMOD0024", 8) &&
-                                 memcmp(magic, "IMOD0025", 8)))))))))))))))))) ||
+                                 (memcmp(magic, "IMOD0025", 8) && memcmp(magic, "IMOD0026", 8))))))))))))))))))) ||
                 (!strcmp(entry->name, "CONTENTS.OVR") && memcmp(magic, "IMOD0004", 8) &&
                  memcmp(magic, "IMOD0005", 8) && memcmp(magic, "IMOD0006", 8) &&
                  memcmp(magic, "IMOD0007", 8) && memcmp(magic, "IMOD0008", 8) &&
@@ -299,7 +307,7 @@ int MOD_Decode(const void *bytes, size_t size, ModBaseReader reader, void *conte
                               (memcmp(magic, "IMOD0022", 8) &&
                                (memcmp(magic, "IMOD0023", 8) &&
                                 (memcmp(magic, "IMOD0024", 8) &&
-                                 memcmp(magic, "IMOD0025", 8)))))))))))))))))) ||
+                                 (memcmp(magic, "IMOD0025", 8) && memcmp(magic, "IMOD0026", 8))))))))))))))))))) ||
                 (!strcmp(entry->name, "CUTSCENE.OVR") && memcmp(magic, "IMOD0006", 8) &&
                  memcmp(magic, "IMOD0007", 8) && memcmp(magic, "IMOD0008", 8) &&
                  (memcmp(magic, "IMOD0009", 8) &&
@@ -318,7 +326,7 @@ int MOD_Decode(const void *bytes, size_t size, ModBaseReader reader, void *conte
                               (memcmp(magic, "IMOD0022", 8) &&
                                (memcmp(magic, "IMOD0023", 8) &&
                                 (memcmp(magic, "IMOD0024", 8) &&
-                                 memcmp(magic, "IMOD0025", 8)))))))))))))))))) ||
+                                 (memcmp(magic, "IMOD0025", 8) && memcmp(magic, "IMOD0026", 8))))))))))))))))))) ||
                 baseSize || baseCrc) {
                 reason =
                     "Companion overrides require a supported package version and an empty base";
@@ -357,7 +365,7 @@ int MOD_Decode(const void *bytes, size_t size, ModBaseReader reader, void *conte
                 goto fail;
             end = offset + length;
         }
-        if (MOD_IsTilesetMask(entry->name) && memcmp(magic, "IMOD0025", 8)) {
+        if (MOD_IsTilesetMask(entry->name) && (memcmp(magic, "IMOD0025", 8) && memcmp(magic, "IMOD0026", 8))) {
             reason = "Transparency masks require package version 25";
             goto fail;
         }
@@ -388,9 +396,13 @@ int MOD_Decode(const void *bytes, size_t size, ModBaseReader reader, void *conte
                 (memcmp(magic, "IMOD0021", 8) &&
                  (memcmp(magic, "IMOD0022", 8) &&
                   (memcmp(magic, "IMOD0023", 8) &&
-                   (memcmp(magic, "IMOD0024", 8) && memcmp(magic, "IMOD0025", 8)))))))) ||
+                   (memcmp(magic, "IMOD0024", 8) && (memcmp(magic, "IMOD0025", 8) && memcmp(magic, "IMOD0026", 8))))))))) ||
              !SIGNS_Validate(entry->data, outSize))) {
             reason = "Invalid extended signs";
+            goto fail;
+        }
+        if (!strcmp(entry->name, "INTERFACE.OVR") && !INTERFACE_Validate(entry->data, entry->size)) {
+            reason = "Invalid interface colors";
             goto fail;
         }
         if (!strcmp(entry->name, "GATES.OVR") && !GATES_Validate(entry->data, entry->size)) {
@@ -406,7 +418,7 @@ int MOD_Decode(const void *bytes, size_t size, ModBaseReader reader, void *conte
              (memcmp(magic, "IMOD0021", 8) &&
               (memcmp(magic, "IMOD0022", 8) &&
                (memcmp(magic, "IMOD0023", 8) &&
-                (memcmp(magic, "IMOD0024", 8) && memcmp(magic, "IMOD0025", 8)))))))
+                (memcmp(magic, "IMOD0024", 8) && (memcmp(magic, "IMOD0025", 8) && memcmp(magic, "IMOD0026", 8))))))))
             for (size_t off = MAPS_HEADER; off < entry->size; off += MAPS_U32(entry->data + off))
                 if (entry->data[off + 4] == 4) {
                     reason = "Resized dungeon floors require version 20; update Impera";
@@ -416,7 +428,7 @@ int MOD_Decode(const void *bytes, size_t size, ModBaseReader reader, void *conte
             (memcmp(magic, "IMOD0021", 8) &&
              (memcmp(magic, "IMOD0022", 8) &&
               (memcmp(magic, "IMOD0023", 8) &&
-               (memcmp(magic, "IMOD0024", 8) && memcmp(magic, "IMOD0025", 8))))))
+               (memcmp(magic, "IMOD0024", 8) && (memcmp(magic, "IMOD0025", 8) && memcmp(magic, "IMOD0026", 8)))))))
             for (size_t off = MAPS_HEADER; off < entry->size; off += MAPS_U32(entry->data + off))
                 if (entry->data[off + 4] == 4 && entry->data[off + 5] > 40) {
                     reason = "New dungeons require version 21; update Impera";
@@ -425,7 +437,7 @@ int MOD_Decode(const void *bytes, size_t size, ModBaseReader reader, void *conte
         if (!strcmp(entry->name, "MAPS.OVR") &&
             (memcmp(magic, "IMOD0022", 8) &&
              (memcmp(magic, "IMOD0023", 8) &&
-              (memcmp(magic, "IMOD0024", 8) && memcmp(magic, "IMOD0025", 8)))))
+              (memcmp(magic, "IMOD0024", 8) && (memcmp(magic, "IMOD0025", 8) && memcmp(magic, "IMOD0026", 8))))))
             for (size_t off = MAPS_HEADER; off < entry->size; off += MAPS_U32(entry->data + off)) {
                 const unsigned char *m = entry->data + off;
                 if (((m[4] == 2 || m[4] == 3) && MAPS_Id(m) > 255) ||
@@ -436,7 +448,7 @@ int MOD_Decode(const void *bytes, size_t size, ModBaseReader reader, void *conte
             }
         if (!strcmp(entry->name, "MAPS.OVR") &&
             (memcmp(magic, "IMOD0023", 8) &&
-             (memcmp(magic, "IMOD0024", 8) && memcmp(magic, "IMOD0025", 8))))
+             (memcmp(magic, "IMOD0024", 8) && (memcmp(magic, "IMOD0025", 8) && memcmp(magic, "IMOD0026", 8)))))
             for (size_t off = MAPS_HEADER; off < entry->size; off += MAPS_U32(entry->data + off)) {
                 const unsigned char *m = entry->data + off;
                 if (((m[4] == 1 || m[4] == 4) && m[5] <= 40 && (int8_t)m[14] != -2) ||
@@ -448,7 +460,7 @@ int MOD_Decode(const void *bytes, size_t size, ModBaseReader reader, void *conte
         if (!strcmp(entry->name, "TYPEMAP.OVR") &&
             (memcmp(magic, "IMOD0022", 8) &&
              (memcmp(magic, "IMOD0023", 8) &&
-              (memcmp(magic, "IMOD0024", 8) && memcmp(magic, "IMOD0025", 8)))))
+              (memcmp(magic, "IMOD0024", 8) && (memcmp(magic, "IMOD0025", 8) && memcmp(magic, "IMOD0026", 8))))))
             for (size_t off = 32; off + 16 <= entry->size; off += 16)
                 if (entry->data[off + 5]) {
                     reason = "Wide custom tile bindings require version 22; update Impera";
@@ -479,7 +491,7 @@ int MOD_Decode(const void *bytes, size_t size, ModBaseReader reader, void *conte
                            (memcmp(magic, "IMOD0022", 8) &&
                             (memcmp(magic, "IMOD0023", 8) &&
                              (memcmp(magic, "IMOD0024", 8) &&
-                              memcmp(magic, "IMOD0025", 8)))))))))))))))))) ||
+                              (memcmp(magic, "IMOD0025", 8) && memcmp(magic, "IMOD0026", 8))))))))))))))))))) ||
              (!memcmp(entry->data, "ICUT0003", 8) && memcmp(magic, "IMOD0008", 8) &&
               (memcmp(magic, "IMOD0009", 8) &&
                (memcmp(magic, "IMOD0010", 8) &&
@@ -497,7 +509,7 @@ int MOD_Decode(const void *bytes, size_t size, ModBaseReader reader, void *conte
                            (memcmp(magic, "IMOD0022", 8) &&
                             (memcmp(magic, "IMOD0023", 8) &&
                              (memcmp(magic, "IMOD0024", 8) &&
-                              memcmp(magic, "IMOD0025", 8)))))))))))))))))))) {
+                              (memcmp(magic, "IMOD0025", 8) && memcmp(magic, "IMOD0026", 8))))))))))))))))))))) {
             reason = "Unsupported or invalid cutscene pages";
             goto fail;
         }
@@ -507,7 +519,7 @@ int MOD_Decode(const void *bytes, size_t size, ModBaseReader reader, void *conte
                (memcmp(magic, "IMOD0021", 8) &&
                 (memcmp(magic, "IMOD0022", 8) &&
                  (memcmp(magic, "IMOD0023", 8) &&
-                  (memcmp(magic, "IMOD0024", 8) && memcmp(magic, "IMOD0025", 8))))))))) {
+                  (memcmp(magic, "IMOD0024", 8) && (memcmp(magic, "IMOD0025", 8) && memcmp(magic, "IMOD0026", 8)))))))))) {
             const char *ext = strrchr(entry->name, '.');
             if (ext && !strcmp(ext, ".NPC") && NPCS_Validate(entry->data, entry->size))
                 for (unsigned town = 0; town < 8; town++)
@@ -534,7 +546,7 @@ int MOD_Decode(const void *bytes, size_t size, ModBaseReader reader, void *conte
               (memcmp(magic, "IMOD0021", 8) &&
                (memcmp(magic, "IMOD0022", 8) &&
                 (memcmp(magic, "IMOD0023", 8) &&
-                 (memcmp(magic, "IMOD0024", 8) && memcmp(magic, "IMOD0025", 8)))))))) {
+                 (memcmp(magic, "IMOD0024", 8) && (memcmp(magic, "IMOD0025", 8) && memcmp(magic, "IMOD0026", 8))))))))) {
             const char *ext = strrchr(entry->name, '.');
             if (ext && !strcmp(ext, ".NPC") && NPCS_Validate(entry->data, entry->size))
                 for (unsigned town = 0; town < 8; town++)
@@ -565,7 +577,7 @@ int MOD_Decode(const void *bytes, size_t size, ModBaseReader reader, void *conte
                       (memcmp(magic, "IMOD0022", 8) &&
                        (memcmp(magic, "IMOD0023", 8) &&
                         (memcmp(magic, "IMOD0024", 8) &&
-                         memcmp(magic, "IMOD0025", 8))))))))))))))) {
+                         (memcmp(magic, "IMOD0025", 8) && memcmp(magic, "IMOD0026", 8)))))))))))))))) {
             reason = "Invalid conversation bank or extended dialogue requires package version 14";
             goto fail;
         }
@@ -579,7 +591,7 @@ int MOD_Decode(const void *bytes, size_t size, ModBaseReader reader, void *conte
                   (memcmp(magic, "IMOD0021", 8) &&
                    (memcmp(magic, "IMOD0022", 8) &&
                     (memcmp(magic, "IMOD0023", 8) &&
-                     (memcmp(magic, "IMOD0024", 8) && memcmp(magic, "IMOD0025", 8)))))))))))) {
+                     (memcmp(magic, "IMOD0024", 8) && (memcmp(magic, "IMOD0025", 8) && memcmp(magic, "IMOD0026", 8))))))))))))) {
             unsigned count = DIALOGUE_Extended(entry->data, entry->size)
                                  ? DIALOGUE_U32(entry->data + 8)
                                  : DIALOGUE_U16(entry->data);
@@ -603,7 +615,7 @@ int MOD_Decode(const void *bytes, size_t size, ModBaseReader reader, void *conte
                  (memcmp(magic, "IMOD0021", 8) &&
                   (memcmp(magic, "IMOD0022", 8) &&
                    (memcmp(magic, "IMOD0023", 8) &&
-                    (memcmp(magic, "IMOD0024", 8) && memcmp(magic, "IMOD0025", 8))))))))))) {
+                    (memcmp(magic, "IMOD0024", 8) && (memcmp(magic, "IMOD0025", 8) && memcmp(magic, "IMOD0026", 8)))))))))))) {
             unsigned count = DIALOGUE_Extended(entry->data, entry->size)
                                  ? DIALOGUE_U32(entry->data + 8)
                                  : DIALOGUE_U16(entry->data);
@@ -633,7 +645,7 @@ int MOD_Decode(const void *bytes, size_t size, ModBaseReader reader, void *conte
                         (memcmp(magic, "IMOD0022", 8) &&
                          (memcmp(magic, "IMOD0023", 8) &&
                           (memcmp(magic, "IMOD0024", 8) &&
-                           memcmp(magic, "IMOD0025", 8))))))))))))))))) {
+                           (memcmp(magic, "IMOD0025", 8) && memcmp(magic, "IMOD0026", 8)))))))))))))))))) {
             reason = "Extended NPC records require package version 12 and valid schedules; update "
                      "Impera";
             goto fail;
@@ -673,7 +685,7 @@ int MOD_Decode(const void *bytes, size_t size, ModBaseReader reader, void *conte
             for (size_t off = 32; off < types->size; off += TYPES_U32(types->data + off)) {
                 const unsigned char *record = types->data + off;
                 for (size_t f = 256; f < TYPES_U32(record); f += TYPES_FrameBytes(record, f))
-                    if ((record[f + 1] & 128) && memcmp(magic, "IMOD0025", 8)) {
+                    if ((record[f + 1] & 128) && (memcmp(magic, "IMOD0025", 8) && memcmp(magic, "IMOD0026", 8))) {
                         reason = "Custom sprite masks require package version 25";
                         goto fail;
                     }
@@ -752,14 +764,14 @@ int MOD_Decode(const void *bytes, size_t size, ModBaseReader reader, void *conte
                 CONTENTS_DecodeRecord(r->data + off, r->data + 8, &d);
                 if (d.refill > 2 &&
                     (memcmp(magic, "IMOD0023", 8) &&
-                     (memcmp(magic, "IMOD0024", 8) && memcmp(magic, "IMOD0025", 8)))) {
+                     (memcmp(magic, "IMOD0024", 8) && (memcmp(magic, "IMOD0025", 8) && memcmp(magic, "IMOD0026", 8))))) {
                     reason = "Portable discovery conditions require version 23; update Impera";
                     goto fail;
                 }
                 if (d.map > 255 &&
                     (memcmp(magic, "IMOD0022", 8) &&
                      (memcmp(magic, "IMOD0023", 8) &&
-                      (memcmp(magic, "IMOD0024", 8) && memcmp(magic, "IMOD0025", 8))))) {
+                      (memcmp(magic, "IMOD0024", 8) && (memcmp(magic, "IMOD0025", 8) && memcmp(magic, "IMOD0026", 8)))))) {
                     reason = "Wide room contents require version 22; update Impera";
                     goto fail;
                 }
@@ -767,7 +779,7 @@ int MOD_Decode(const void *bytes, size_t size, ModBaseReader reader, void *conte
                     (memcmp(magic, "IMOD0021", 8) &&
                      (memcmp(magic, "IMOD0022", 8) &&
                       (memcmp(magic, "IMOD0023", 8) &&
-                       (memcmp(magic, "IMOD0024", 8) && memcmp(magic, "IMOD0025", 8)))))) {
+                       (memcmp(magic, "IMOD0024", 8) && (memcmp(magic, "IMOD0025", 8) && memcmp(magic, "IMOD0026", 8))))))) {
                     reason = "Additional dungeon room contents require version 21; update Impera";
                     goto fail;
                 }
@@ -842,7 +854,7 @@ int MOD_Decode(const void *bytes, size_t size, ModBaseReader reader, void *conte
                              (memcmp(magic, "IMOD0022", 8) &&
                               (memcmp(magic, "IMOD0023", 8) &&
                                (memcmp(magic, "IMOD0024", 8) &&
-                                memcmp(magic, "IMOD0025", 8))))))))))))))))) {
+                                (memcmp(magic, "IMOD0025", 8) && memcmp(magic, "IMOD0026", 8)))))))))))))))))) {
         size_t off = 32;
         if (TYPES_Validate(types->data, types->size))
             for (unsigned i = 0; i < TYPES_U32(types->data + 24); i++) {
@@ -867,7 +879,7 @@ int MOD_Decode(const void *bytes, size_t size, ModBaseReader reader, void *conte
                   (memcmp(magic, "IMOD0021", 8) &&
                    (memcmp(magic, "IMOD0022", 8) &&
                     (memcmp(magic, "IMOD0023", 8) &&
-                     (memcmp(magic, "IMOD0024", 8) && memcmp(magic, "IMOD0025", 8))))))))))))))) &&
+                     (memcmp(magic, "IMOD0024", 8) && (memcmp(magic, "IMOD0025", 8) && memcmp(magic, "IMOD0026", 8)))))))))))))))) &&
         TYPES_Validate(types->data, types->size)) {
         size_t off = 32;
         for (unsigned i = 0; i < TYPES_U32(types->data + 24); ++i) {
@@ -899,7 +911,7 @@ int MOD_Decode(const void *bytes, size_t size, ModBaseReader reader, void *conte
                 (memcmp(magic, "IMOD0021", 8) &&
                  (memcmp(magic, "IMOD0022", 8) &&
                   (memcmp(magic, "IMOD0023", 8) &&
-                   (memcmp(magic, "IMOD0024", 8) && memcmp(magic, "IMOD0025", 8)))))))))))))) {
+                   (memcmp(magic, "IMOD0024", 8) && (memcmp(magic, "IMOD0025", 8) && memcmp(magic, "IMOD0026", 8))))))))))))))) {
         for (size_t off = 32; off < types->size; off += TYPES_U32(types->data + off))
             if (types->data[off + 255]) {
                 reason = "Custom actor animation options require package version 13; update Impera";
@@ -919,7 +931,7 @@ int MOD_Decode(const void *bytes, size_t size, ModBaseReader reader, void *conte
                  (memcmp(magic, "IMOD0021", 8) &&
                   (memcmp(magic, "IMOD0022", 8) &&
                    (memcmp(magic, "IMOD0023", 8) &&
-                    (memcmp(magic, "IMOD0024", 8) && memcmp(magic, "IMOD0025", 8)))))))))))))) &&
+                    (memcmp(magic, "IMOD0024", 8) && (memcmp(magic, "IMOD0025", 8) && memcmp(magic, "IMOD0026", 8))))))))))))))) &&
         mapTypes->size >= 32) {
         for (size_t off = 32; off + 16 <= mapTypes->size; off += 16)
             if (mapTypes->data[off] == 3 &&
