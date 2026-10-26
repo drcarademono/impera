@@ -1,5 +1,9 @@
 #undef NDEBUG
 #include "common/common.h"
+#include "intro.h"
+#include "funcs.h"
+#include "graphics/wd.h"
+#include "graphics/grap.h"
 #include "mod/package.h"
 #include "mod/runtime.h"
 #include "common/file.h"
@@ -85,6 +89,61 @@ static void modOptions(void) {
     remove("mod-manager-fixture/Mods/mods.cfg");
     assert(SDL_RemovePath("mod-manager-fixture/Mods")); assert(SDL_RemovePath("mod-manager-fixture"));
 }
+static void literalCode(FILE *f, unsigned code, unsigned *bits, int *count) {
+    *bits |= code << *count; *count += 9;
+    while (*count >= 8) { assert(fputc(*bits & 255, f) != EOF); *bits >>= 8; *count -= 8; }
+}
+static void titleFixture(bool small) {
+    unsigned char *data = calloc(1, 50000); assert(data);
+    data[0] = 5; unsigned offset = 22;
+    for (int i = 0; i < 5; ++i) {
+        int width = small ? 8 : i ? 288 : 320;
+        int height = small ? 8 : i ? 49 : 100;
+        data[2+i*4] = offset; data[3+i*4] = offset >> 8;
+        data[offset] = width; data[offset+1] = width >> 8; data[offset+2] = height;
+        memset(data+offset+4, (i+2)*17, width/2*height); offset += 4+width/2*height;
+        if (small && i == 0) {
+            data[4] = offset; data[5] = offset >> 8;
+            data[offset] = 8; data[offset+2] = 8;
+            memset(data+offset+4, 0x80, 8); offset += 12; /* Transparent first column. */
+        }
+    }
+    FILE *f = fopen("ULTIMA.16", "wb"); assert(f); packageNumber(f,offset);
+    unsigned bits = 0; int count = 0;
+    for (unsigned i=0;i<offset;++i) {
+        literalCode(f,256,&bits,&count); literalCode(f,data[i],&bits,&count);
+    }
+    literalCode(f,257,&bits,&count);
+    if(count) assert(fputc(bits & 255,f)!=EOF);
+    assert(!fclose(f)); free(data);
+}
+static void refreshTitle(void) {
+    TextWindow windows[4]; memcpy(windows,D_535e_textWindows,sizeof(windows));
+    TextWindow *oldWindow=D_539a_currentTextWindow;
+    byte *oldFont=D_5398_currentCharset, *oldTitle=D_bb1a;
+    int oldIndex=D_5386_current_text_window_idx;
+    ULTIMA_1c22_SetTextWindowSize(0,1,16,38,23); ULTIMA_1b94_SelectTextWindow(0);
+    ULTIMA_1c9e_SelectCharset(0);
+    D_13b0_brightWhiteColor=15;
+    int oldImmediate = EVT_SetImmediateExit(1);
+    titleFixture(false); INTRO_RefreshTitle();
+    assert(g_linearEgaBuffer0[40*320+100]==2);
+    byte *first=D_bb1a;
+    titleFixture(true); INTRO_RefreshTitle();
+    assert(g_linearEgaBuffer0[40*320+100]==0); /* Old full-width logo removed. */
+    assert(g_linearEgaBuffer0[0]==0 && g_linearEgaBuffer0[1]==2); /* Masked pixels clear to black. */
+    for(int frame=0;frame<4;++frame) {
+        GRAP_BUF_ShowNextWDFrame();
+        assert(g_linearEgaBuffer0[80*320+100]==0); /* No old subtitle between smaller frames. */
+        assert(g_linearEgaBuffer0[66*320+0]==0); /* Atlas margins also cleared. */
+        assert(g_linearEgaBuffer0[66*320+17]>=3 && g_linearEgaBuffer0[66*320+17]<=6);
+    }
+    free(first); free(D_bb1a); D_bb1a=oldTitle;
+    memcpy(D_535e_textWindows,windows,sizeof(windows)); D_539a_currentTextWindow=oldWindow;
+    D_5398_currentCharset=oldFont; D_5386_current_text_window_idx=oldIndex;
+    EVT_SetImmediateExit(oldImmediate);
+    remove("ULTIMA.16");
+}
 static int musicPickerMode,musicInputStep;
 static Uint32 musicInput(void* data,SDL_TimerID timer,Uint32 interval)
 {
@@ -116,7 +175,7 @@ int main(int argc, char** argv)
 {
     remove("ENGINE.CFG");
     assert(SDL_Init(SDL_INIT_VIDEO|SDL_INIT_AUDIO));
-    GRAP_SDL_Initialize();
+    GRAP_Initialize();
     D_5893_map_id=0x40;D_58a4=0;
     byte font[1024];FILE* f=fopen("IBM.CH","rb");assert(f);
     assert(fread(font,1,sizeof(font),f)==sizeof(font));fclose(f);D_539c[0]=font;
@@ -183,6 +242,7 @@ int main(int argc, char** argv)
         return 1;
     }
     modOptions();
+    refreshTitle();
     assert(TILESET_Select(TILESET_DOS));
     assert(SDL_AddTimer(80, selectEnhanced, NULL));
     ENGINE_ShowOptions(false);
