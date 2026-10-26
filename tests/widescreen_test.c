@@ -15,8 +15,10 @@ static byte pixel(byte* pixels, WideLayout l, int dx, int dy)
 {
     return pixels[(l.mapY + (l.rows / 2 + dy) * 16) * l.width + l.mapX + (l.columns / 2 + dx) * 16];
 }
+#include "synthetic_tileset_mask.h"
 int main(void)
 {
+    syntheticMaskBegin();
     WideLayout l = WIDE_Layout(1920, 1080);
     assert(l.scale == 4 && l.columns == 21 && l.rows == 14);
     WideLayout tall = WIDE_Layout(1920, 1200);
@@ -568,6 +570,7 @@ int main(void)
     assert(pixels[(l.height-9)*l.width+edgeX]==1);
     free(pixels);
     GRAP_Cleanup();
+    syntheticMaskEnd();
     puts("Expanded map, sidebar, visibility, actors, and layout tests passed.");
     return 0;
 }

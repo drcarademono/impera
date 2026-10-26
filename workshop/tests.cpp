@@ -2060,6 +2060,12 @@ int main(int argc, char **argv) {
         test("Alternate tilesets preserve native pixels, package loading and editor undo", [&] {
             QTemporaryDir dir;
             auto p = fixture(dir.path());
+            for (const auto &name : {"MASK_DOS.PNG", "MASK_AMI.PNG", "MASK_GRY.PNG"}) {
+                auto mask = U5::readGraphics(name, p.data(name));
+                check(mask.images[508].pixelColor(8, 8) == Qt::white &&
+                          mask.images[508].pixelColor(0, 0) == Qt::black,
+                      "Workshop must inherit the engine's base transparency mask");
+            }
             for (const auto &sheet : modTilesetSheets) {
                 const QString name = QString::fromLatin1(sheet.resource);
                 auto g = U5::readGraphics(name, p.data(name));

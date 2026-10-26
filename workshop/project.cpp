@@ -65,7 +65,10 @@ void Project::openGame(const QString &directory) {
     require(next.data("INIT.GAM").size() == 4192, "INIT.GAM must use the 4192-byte DOS layout");
     for (const auto &sheet : modTilesetSheets) {
         QByteArray bytes;
-        if (MOD_IsTilesetMask(sheet.resource)) {
+        if (!strcmp(sheet.resource, "MASK_DOS.PNG") || !strcmp(sheet.resource, "MASK_AMI.PNG") ||
+            !strcmp(sheet.resource, "MASK_GRY.PNG")) {
+            bytes = readLimited(":/tilesets/Ultima_5_Tiles_TransparencyMask.png", MOD_MAX_RESOURCE);
+        } else if (MOD_IsTilesetMask(sheet.resource)) {
             QImage mask(sheet.columns * sheet.width, 16 * sheet.height, QImage::Format_RGB32);
             mask.fill(Qt::black);
             QBuffer buffer(&bytes);

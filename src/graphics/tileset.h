@@ -10,6 +10,7 @@ enum
     TILESET_GRAY,
     TILESET_SHARP,
     TILESET_CUSTOM,
+    TILESET_ZHELKAS, /* Append: saved engine choices and mod artwork variant IDs stay stable. */
     TILESET_COUNT
 };
 int TILESET_Selected(void);

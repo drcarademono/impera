@@ -579,7 +579,9 @@ maps and validated against their floor dimensions.
 Optional opaque black/white PNG sheets protect selected black sprite pixels from
 color-key transparency. White protects black; black leaves existing rules intact.
 They do not change nonblack colors, alpha transparency, sprite characteristics,
-or draw order. Missing masks behave as entirely black sheets.
+or draw order. Without a per-pack mask override, DOS, DOS Enhanced (Zhelkas), Amiga and
+Grayscale use the bundled `Ultima_5_Tiles_TransparencyMask.png`. Other packs
+retain entirely black defaults. This fix works without installing a mod.
 
 | Resource | External tileset-directory filename | Dimensions |
 |---|---|---|
@@ -595,7 +597,8 @@ Slot ordering matches each corresponding artwork sheet. Sharp keeps separate
 terrain and actor masks and preserves native subpixel precision. Custom atlas
 masks use the standard 32-column layout, sampled alongside the selected artwork.
 These resources use the existing empty-base PNG package mechanism. Workshop
-provides blank masks and includes edited masks in packages and map transfers.
+starts with the same engine defaults and includes edited masks in packages
+and map transfers.
 
 Custom artwork can also carry an independent mask per frame and variant. Bit 7
 of the frame cell-width byte signals `width × height` mask bytes immediately

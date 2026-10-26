@@ -115,6 +115,7 @@ file(APPEND "${CMAKE_CURRENT_BINARY_DIR}/native_npc_properties.h" "${shadowlord_
 add_library(impera_workshop_core STATIC ../src/text/text_window.c ../src/text/text_input.c ../src/text/dialogue_runtime.c ../src/text/dialogue_game.c ../src/text/game_frame.c native_text_viewport.cpp native_dialogue_frame.cpp native_dialogue_session.cpp native_dialogue_context.cpp custom_tiles.cpp gates_editor.cpp map_json.cpp extended_maps.cpp shop_editor.cpp map_positions.cpp map_entities.cpp contents_editor.cpp ../src/mod/contents.c content_navigation.cpp engine_tables.cpp world_objects.cpp font_editor.cpp scene_editor.cpp cutscene_editor.cpp cutscene_composition.cpp composition_editor.cpp narrative_editor.cpp location_text.cpp dungeon_editor.cpp resource_document.cpp text_preview.cpp formats.cpp dialogue.cpp dialogue_preview.cpp dialogue_surface.cpp map_editor.cpp project.cpp ../src/mod/npcs.c ../src/mod/maps.c ../src/mod/package.c ../src/mod/types.c)
 qt_add_resources(impera_workshop_core alternate_tilesets PREFIX "/tilesets"
     BASE ../textures/tilesets FILES
+    ../textures/tilesets/Ultima_5_Tiles_TransparencyMask.png
     ../textures/tilesets/Ultima_5_Tiles_Amiga.png
     ../textures/tilesets/Ultima_5_Tiles_AppleII.png
     ../textures/tilesets/Ultima_5_Tiles_Grayscale.png

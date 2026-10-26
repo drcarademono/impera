@@ -7,6 +7,7 @@
 #include "common/engine_settings.h"
 #include "common/data_setup.h"
 #include "graphics/grap_buf.h"
+#include "graphics/tileset.h"
 #include "graphics/grap_sdl.h"
 #include "vars.h"
 #include "macros.h"
@@ -19,6 +20,13 @@ void GRAP_SDL_Cleanup(void);
 
 static void key(SDL_Keycode code)
 { SDL_Event e={0};e.type=SDL_EVENT_KEY_DOWN;e.key.key=code;assert(SDL_PushEvent(&e)); }
+static Uint32 selectEnhanced(void* data, SDL_TimerID timer, Uint32 interval) {
+    (void)data; (void)timer; (void)interval;
+    key(SDLK_DOWN); key(SDLK_RETURN); /* Tileset popup, initially DOS. */
+    key(SDLK_DOWN); key(SDLK_RETURN); /* Enhanced must be immediately beneath DOS. */
+    key(SDLK_ESCAPE);
+    return 0;
+}
 static int musicPickerMode,musicInputStep;
 static Uint32 musicInput(void* data,SDL_TimerID timer,Uint32 interval)
 {
@@ -116,6 +124,11 @@ int main(int argc, char** argv)
         fputs("Ctrl+E was consumed without exiting\n",stderr);
         return 1;
     }
+    assert(TILESET_Select(TILESET_DOS));
+    assert(SDL_AddTimer(80, selectEnhanced, NULL));
+    ENGINE_ShowOptions(false);
+    assert(TILESET_Selected() == TILESET_ZHELKAS);
+    assert(TILESET_Select(TILESET_DOS));
     ENGINE_Set(ENGINE_MOVEMENT_SPEED,0.5f);ENGINE_Set(ENGINE_ANIMATION_SPEED,0.75f);
     ENGINE_Set(ENGINE_MOUSE,1);assert(ENGINE_Get(ENGINE_MOUSE)==1);
     ENGINE_Set(ENGINE_MOUSE,0);

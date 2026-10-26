@@ -161,7 +161,9 @@ static int videoChoice(void)
     for(int i=0;i<3;i++) if(videoModes[i]==GRAP_SDL_VideoMode()) return i;
     return 0;
 }
-static const char* choiceLabel(int choice) { return s_dropdownRow==ENGINE_TILESET?TILESET_Label(choice):videoLabel(choice); }
+static const int tilesetChoices[] = {TILESET_DOS, TILESET_ZHELKAS, TILESET_AMIGA,
+    TILESET_APPLE, TILESET_GRAY, TILESET_SHARP, TILESET_CUSTOM};
+static const char* choiceLabel(int choice) { return s_dropdownRow==ENGINE_TILESET?TILESET_Label(tilesetChoices[choice]):videoLabel(choice); }
 static int choiceWidth(void)
 {
     int width=0;
@@ -183,7 +185,7 @@ static bool acceptCustomTileset(const char* path,void* user)
 }
 static void acceptChoice(void)
 {
-    int row=s_dropdownRow,choice=s_videoChoice;
+    int row=s_dropdownRow,choice=s_dropdownRow==ENGINE_TILESET?tilesetChoices[s_videoChoice]:s_videoChoice;
     s_videoChoice=-1;
     if(row==ENGINE_TILESET && choice==TILESET_CUSTOM) {
         const char* initial=*TILESET_CustomPath()?TILESET_CustomPath():SDL_GetUserFolder(SDL_FOLDER_HOME);
@@ -191,7 +193,13 @@ static void acceptChoice(void)
                            "Return to Engine Options","Cannot load PNG: needs 2:1 aspect",acceptCustomTileset,NULL);
     } else ENGINE_Set(row,row==ENGINE_TILESET?choice:videoModes[choice]);
 }
-static void openChoice(int row) { s_dropdownRow=row;s_videoChoice=row==ENGINE_TILESET?TILESET_Selected():videoChoice(); }
+static void openChoice(int row) {
+    s_dropdownRow=row;
+    s_videoChoice=videoChoice();
+    if(row==ENGINE_TILESET)
+        for(int i=0;i<TILESET_COUNT;i++)
+            if(tilesetChoices[i]==TILESET_Selected()) { s_videoChoice=i; break; }
+}
 void ENGINE_DrawSettings(int selected)
 {
     memset(g_linearEgaBuffer0,0,320*200);

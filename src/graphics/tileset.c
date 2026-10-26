@@ -47,13 +47,13 @@ typedef struct Layer
     unsigned *backs;
 } Layer;
 static Layer layers[8];
-static const char *names[] = {"DOS", "Amiga", "Apple II", "Grayscale", "Sharp X68000", "Custom"};
+static const char *names[] = {"DOS", "Amiga", "Apple II", "Grayscale", "Sharp X68000", "Custom", "DOS Enhanced (Zhelkas)"};
 static const char *files[] = {NULL,
                               "Ultima_5_Tiles_Amiga.png",
                               "Ultima_5_Tiles_AppleII.png",
                               "Ultima_5_Tiles_Grayscale.png",
                               "Ultima_5_Tiles_SharpX68000_World.png",
-                              NULL};
+                              NULL, "Ultima_5_Tiles_Zhelkas.png"};
 int TILESET_Selected(void)
 {
     return selected;
@@ -209,7 +209,7 @@ static Uint32 sampledColor(int color, int subX, int subY, const Uint32 *ega, boo
         TYPES_ArtSlotSize(512 + token / 4096, !D_5893_map_id, &fw, &fh);
         const unsigned char *rgba = TYPES_SampleArtImage(
             (512 + token / 4096) | (((token >> 10) & 3) << 16),
-            (unsigned)selected + (!D_5893_map_id ? 6 : 0), SDL_GetTicks(), &width, &height);
+            (unsigned)(selected == TILESET_ZHELKAS ? TILESET_DOS : selected) + (!D_5893_map_id ? 6 : 0), SDL_GetTicks(), &width, &height);
         if (rgba) {
             unsigned x = token % 32, y = (token % 1024) / 32;
             unsigned px = (x * 2 + subX) * width / (32 * fw);
@@ -322,14 +322,29 @@ static SDL_Surface *load(const char *filename)
     return NULL;
 }
 static bool readProtection(int choice, int first, byte *output) {
-    const ModTilesetSheet *spec = MOD_TilesetMask(choice, first);
+    const ModTilesetSheet *spec = MOD_TilesetMask(choice == TILESET_ZHELKAS ? TILESET_DOS : choice, first);
     SDL_Surface *image = load(spec->filename);
     if (!image) {
         int found = 0;
         FILE *f = MOD_OpenResource(spec->resource, &found);
         if (f)
             fclose(f);
-        return !found;
+        if (found) return false;
+        /* These packs share DOS pixel geometry. The built-in mask is a base
+         * rendering fix; an explicit per-pack mod mask can replace it. */
+        if (choice == TILESET_DOS || choice == TILESET_ZHELKAS ||
+            choice == TILESET_AMIGA || choice == TILESET_GRAY) {
+            image = load("Ultima_5_Tiles_TransparencyMask.png");
+            if (!image) {
+                for (size_t i = 0; i < sizeof(tileset_pngs) / sizeof(tileset_pngs[0]); ++i)
+                    if (!strcmp(tileset_pngs[i].name, "Ultima_5_Tiles_TransparencyMask.png")) {
+                        SDL_IOStream *stream = SDL_IOFromConstMem(tileset_pngs[i].data, tileset_pngs[i].size);
+                        image = stream ? SDL_LoadPNG_IO(stream, true) : NULL;
+                        break;
+                    }
+            }
+            if (!image) return false;
+        } else return true;
     }
     bool ok = image->w == spec->columns * spec->width && image->h == 16 * spec->height;
     for (int y = 0; ok && y < image->h; ++y)

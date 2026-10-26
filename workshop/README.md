@@ -748,3 +748,7 @@ characteristic applies. They never make transparent PNG pixels opaque.
 Graphics → Interface provides frame-color palette swatches and a preview drawn
 with Impera’s frame renderer and the project’s font. Changes support undo/redo
 and travel with the project and exported mod.
+
+DOS, Amiga and Grayscale transparency masks start from Impera’s bundled base
+mask (also used by DOS Enhanced). Exporting a mask edit replaces that pack’s
+default mask; an untouched mask does not need to be included in a mod.

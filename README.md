@@ -68,11 +68,13 @@ Choosing Custom again lets you replace it. Canceling or selecting an invalid
 image keeps the current artwork. An unavailable custom image falls back to DOS
 on startup. No tile-animation artwork is substituted from DOS.
 
-All alternative tilesets are embedded in Impera and Workshop; no external PNGs
-are needed. Their source sheets live in `textures/tilesets` in this repository:
+All engine tilesets are embedded in Impera; Workshop also bundles its editable
+alternative sheets. No external PNGs are needed. Source sheets live in
+`textures/tilesets` in this repository:
 
 | Choice | Source sheets |
 | --- | --- |
+| DOS Enhanced (Zhelkas) | `TILES_Zhelkas.16` (converted losslessly to the bundled `Ultima_5_Tiles_Zhelkas.png`) |
 | Amiga | `Ultima_5_Tiles_Amiga.png` |
 | Apple II | `Ultima_5_Tiles_AppleII.png` |
 | Grayscale | `Ultima_5_Tiles_Grayscale.png` |
@@ -687,3 +689,9 @@ saved state. See [mod loading and package format](docs/mod-packages.md).
 
 - **[carademono](https://github.com/drcarademono)** — Impera port and enhancements.
 - **[wonst719](https://github.com/wonst719)** — [u5d — Ultima V Decompilation Project](https://github.com/wonst719/u5d), the base engine and original decompilation.
+
+DOS Enhanced (Zhelkas) is bundled and selectable immediately below DOS in Engine
+Options. The bundled transparency-protection mask applies automatically to DOS,
+DOS Enhanced, Amiga and Grayscale when transparent sprites are enabled. No mod
+is required. White mask pixels preserve black ink; ordinary black mask pixels
+retain normal cutouts. Workshop starts those mask editors with the same defaults.
