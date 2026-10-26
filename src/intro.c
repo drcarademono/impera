@@ -305,7 +305,7 @@ void INTRO_043e(char* param_1)
 
     local_4 = -(ULTIMA_216c_strlen(param_1) / 2 - 0x12);
     local_6 = local_4 + ULTIMA_216c_strlen(param_1) + 2;
-    ULTIMA_0a70_GRAP_2d_SetPenColor(D_13b2_blueColor);
+    ULTIMA_0a70_GRAP_2d_SetPenColor(MOD_FrameColor());
     ULTIMA_0aa6_GRAP_3f_FillRect(8, 0xc1, local_4 * 8, 199);
     ULTIMA_0aa6_GRAP_3f_FillRect(local_6 * 8, 0xc1, 0x137, 199);
     ULTIMA_0a70_GRAP_2d_SetPenColor(D_13b0_brightWhiteColor);
@@ -321,7 +321,7 @@ static void INTRO_04e0_DrawMenuBorders(void)
 {
     int local_4;
 
-    ULTIMA_1cca_SetTextForegroundColor(D_13b2_blueColor);
+    ULTIMA_1cca_SetTextForegroundColor(MOD_FrameColor());
     ULTIMA_1bf2_SetTextPosition(0, 0xf);
     ULTIMA_16ba_PrintChar(0x7b);
 
@@ -1717,7 +1717,7 @@ static void INTRO_1e62(void)
 {
     int local_4;
 
-    ULTIMA_1cca_SetTextForegroundColor(D_13b2_blueColor);
+    ULTIMA_1cca_SetTextForegroundColor(MOD_FrameColor());
 
     ULTIMA_1bf2_SetTextPosition(0, 0x13);
     ULTIMA_16ba_PrintChar(0x7b);
@@ -1749,17 +1749,17 @@ static void INTRO_1e62(void)
 
 static void INTRO_1f26(int param_1)
 {
-    ULTIMA_0a70_GRAP_2d_SetPenColor(D_13b2_blueColor);
+    ULTIMA_0a70_GRAP_2d_SetPenColor(MOD_FrameColor());
     ULTIMA_0aa6_GRAP_3f_FillRect(param_1, 0, param_1 + 6, 0x8f);
     ULTIMA_0aa6_GRAP_3f_FillRect(param_1 + 0x8f, 0, param_1 + 0x97, 0x89);
     ULTIMA_0aa6_GRAP_3f_FillRect(param_1 + 7, 0x89, param_1 + 0x96, 0x8f);
-    ULTIMA_1cca_SetTextForegroundColor(D_13b2_blueColor);
+    ULTIMA_1cca_SetTextForegroundColor(MOD_FrameColor());
     ULTIMA_1bf2_SetTextPosition(0, 0);
     ULTIMA_1850_PrintString(_TEXT(0x3676, "\x7b\x7f\x7f"));
     ULTIMA_4c2a();
     ULTIMA_1cca_SetTextForegroundColor(D_13b0_brightWhiteColor);
     ULTIMA_1850_PrintString(_TEXT(0x6d3a, " Ultima IV "));
-    ULTIMA_1cca_SetTextForegroundColor(D_13b2_blueColor);
+    ULTIMA_1cca_SetTextForegroundColor(MOD_FrameColor());
     ULTIMA_4cce();
     ULTIMA_1850_PrintString(_TEXT(0x367a, "\x7f\x7f"));
     ULTIMA_16ba_PrintChar(0x7c);

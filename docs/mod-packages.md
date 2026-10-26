@@ -30,7 +30,7 @@ All integers are unsigned little-endian 32-bit values; there is no padding.
 
 | Header | Encoding |
 | --- | --- |
-| Magic/version | Eight ASCII bytes `IMOD0001` through `IMOD0020` |
+| Magic/version | Eight ASCII bytes `IMOD0001` through `IMOD0026` |
 | Title length | 1–256 UTF-8 bytes |
 | Resource count | 1–512 |
 | Title | Length bytes; embedded NUL forbidden |
@@ -573,3 +573,46 @@ are deterministic and occur when the hour changes, including during rest.
 Drawbridges retain vanilla's protection while the party stands on a bridge.
 The former 32-cell drawbridge cap is removed. Overrides are confined to location
 maps and validated against their floor dimensions.
+
+### Black-pixel protection masks (`IMOD0025`)
+
+Optional opaque black/white PNG sheets protect selected black sprite pixels from
+color-key transparency. White protects black; black leaves existing rules intact.
+They do not change nonblack colors, alpha transparency, sprite characteristics,
+or draw order. Without a per-pack mask override, DOS, DOS Enhanced (Zhelkas), Amiga and
+Grayscale use the bundled `Ultima_5_Tiles_TransparencyMask.png`. Other packs
+retain entirely black defaults. This fix works without installing a mod.
+
+| Resource | External tileset-directory filename | Dimensions |
+|---|---|---|
+| `MASK_DOS.PNG` | `Ultima_5_Mask_DOS.png` | 512 × 256 |
+| `MASK_AMI.PNG` | `Ultima_5_Mask_Amiga.png` | 512 × 256 |
+| `MASK_APP.PNG` | `Ultima_5_Mask_AppleII.png` | 448 × 256 |
+| `MASK_GRY.PNG` | `Ultima_5_Mask_Grayscale.png` | 512 × 256 |
+| `MASK_SHW.PNG` | `Ultima_5_Mask_Sharp_World.png` | 512 × 512 |
+| `MASK_SHN.PNG` | `Ultima_5_Mask_Sharp_NPC.png` | 512 × 512 |
+| `MASK_CUS.PNG` | `Ultima_5_Mask_Custom.png` | 512 × 256 |
+
+Slot ordering matches each corresponding artwork sheet. Sharp keeps separate
+terrain and actor masks and preserves native subpixel precision. Custom atlas
+masks use the standard 32-column layout, sampled alongside the selected artwork.
+These resources use the existing empty-base PNG package mechanism. Workshop
+starts with the same engine defaults and includes edited masks in packages
+and map transfers.
+
+Custom artwork can also carry an independent mask per frame and variant. Bit 7
+of the frame cell-width byte signals `width × height` mask bytes immediately
+after RGBA data, each 0 or 255. Bits 0–6 retain the native cell width. Frame size
+and iteration include these bytes. Masks follow artwork fallback and native
+animation pose selection, and cover the complete multi-tile frame. Explicit
+frame masks take precedence over sheet masks for edited vanilla slots; new
+custom identities use their own frame masks.
+
+### Interface frame color (package version 26)
+
+`IMOD0026` adds optional `INTERFACE.OVR`, with an empty original base. Its nine
+bytes are the ASCII signature `IUI00001` followed by one EGA palette index
+(0–15). Missing settings retain the original blue (1). Menu, character creation,
+gameplay and engine-menu frames use this color; white outlines, text, artwork
+and spell colors remain unchanged. Packages with invalid indices, signatures
+or sizes are rejected. Earlier package features remain valid in version 26.

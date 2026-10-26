@@ -6,6 +6,7 @@ namespace CustomTiles {
 struct Frame {
     QImage image;
     unsigned duration = 150, variant = 0;
+    QImage mask;
 };
 QSize artworkSize(unsigned variant);
 QMap<unsigned, QByteArray> records(const Project &);

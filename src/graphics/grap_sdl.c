@@ -543,8 +543,8 @@ static bool CombatSelectionPixel(int x, int y) { return x < 2 || x >= 14 || y < 
 static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
                         int columns, int rows, SDL_Texture* native, int sourceScale, SDL_FRect dst)
 {
-    if (EVT_ImmediateExitEnabled() || s_pixelUI || !s_smoothMovement || !s_mapDrawn || !D_58a4 ||
-        (!MAPS_Outside(D_5893_map_id) && D_5893_map_id < 128))
+    if ((EVT_ImmediateExitEnabled() && D_5893_map_id != 255) || s_pixelUI || !s_smoothMovement ||
+        !s_mapDrawn || !D_58a4 || (!MAPS_Outside(D_5893_map_id) && D_5893_map_id < 128))
         return;
     s_mapDrawn = false;
     SDL_Surface* clean = SDL_CreateSurface(w*2, h*2, SDL_PIXELFORMAT_ARGB8888);
@@ -812,7 +812,10 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
                 CRT_EndFrame(s_sdlRenderer);
                 SDL_RenderPresent(s_sdlRenderer);
                 CRT_ResumeFrame(s_sdlRenderer);
-                SDL_PumpEvents();
+                if (EVT_ImmediateExitEnabled())
+                    EVT_PollMessages();
+                else
+                    SDL_PumpEvents();
                 MOUSE_UpdateCursor();
                 if (frame < 8) {
                     Uint64 elapsed=SDL_GetTicks()-frameStarted;

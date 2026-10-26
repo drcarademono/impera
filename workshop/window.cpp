@@ -1,3 +1,5 @@
+#include "native_dialogue_frame.h"
+#include "mod/interface.h"
 #include "extended_maps.h"
 #include "mod/npcs.h"
 #include "color_palette.h"
@@ -686,7 +688,8 @@ void WorkshopWindow::rebuildTree() {
     }
     if (workspaceSelector->currentText() == "Graphics") {
         for (const QString &label :
-             {QString("Tilesets"), QString("Custom tiles"), QString("Illustrations"), QString("Fonts")}) {
+             {QString("Tilesets"), QString("Transparency masks"), QString("Custom tiles"),
+              QString("Illustrations"), QString("Fonts"), QString("Interface")}) {
             const bool present = std::any_of(destinations.cbegin(), destinations.cend(),
                                             [&](const auto &d) {
                                                 return d.workspace == "Graphics" && d.group == label;
@@ -1139,6 +1142,54 @@ QWidget *WorkshopWindow::overviewEditor() {
 }
 QWidget *WorkshopWindow::resourceEditor(const QString &name) {
     if (name == "@overview") return overviewEditor();
+    if (name == "INTERFACE.OVR") {
+        auto root = new QWidget;
+        root->setObjectName("interfaceEditor");
+        auto layout = new QVBoxLayout(root);
+        auto heading = new QLabel("Interface");
+        layout->addWidget(heading);
+        auto row = new QHBoxLayout;
+        row->addWidget(new QLabel("Frame color:"));
+        auto group = new QButtonGroup(root);
+        auto bytes = project.resources.value(name).edited;
+        unsigned selected = INTERFACE_Validate(bytes.constData(), bytes.size()) ? uint8_t(bytes[8]) : 1;
+        const auto palette = U5::palette();
+        const QStringList names{"Black", "Blue", "Green", "Cyan", "Red", "Magenta", "Brown", "Light gray",
+                                "Dark gray", "Light blue", "Light green", "Light cyan", "Light red",
+                                "Light magenta", "Yellow", "White"};
+        auto preview = new QLabel;
+        preview->setObjectName("interfaceFramePreview");
+        auto updatePreview = [this, preview, palette](unsigned color) {
+            auto font = project.resources.value("IBM.CH").edited;
+            if (font.size() != 1024) { preview->clear(); return; }
+            auto pixels = Dialogue::nativeGameFramePixels(font, color);
+            QImage image(320, 200, QImage::Format_RGB32);
+            for (int y = 0; y < 200; ++y)
+                for (int x = 0; x < 320; ++x)
+                    image.setPixel(x, y, palette[uint8_t(pixels[y * 320 + x]) & 15]);
+            preview->setPixmap(QPixmap::fromImage(image.scaled(640, 400, Qt::KeepAspectRatio, Qt::FastTransformation)));
+        };
+        for (int i = 0; i < 16; ++i) {
+            auto swatch = new QToolButton;
+            swatch->setObjectName(QString("frameColor%1").arg(i));
+            swatch->setCheckable(true);
+            swatch->setChecked(unsigned(i) == selected);
+            swatch->setAccessibleName(names[i]);
+            swatch->setToolTip(names[i]);
+            QPixmap icon(24, 24); icon.fill(QColor(palette[i]));
+            swatch->setIcon(QIcon(icon)); swatch->setIconSize(QSize(24, 24));
+            group->addButton(swatch, i); row->addWidget(swatch);
+        }
+        row->addStretch(); layout->addLayout(row);
+        layout->addWidget(preview, 0, Qt::AlignLeft); layout->addStretch();
+        updatePreview(selected);
+        connect(group, &QButtonGroup::idClicked, root, [this, updatePreview](int color) {
+            QByteArray bytes("IUI00001", 8); bytes.append(char(color));
+            edit({{"INTERFACE.OVR", bytes}}, "Change frame color");
+            updatePreview(color);
+        });
+        return root;
+    }
     auto root = new QWidget;
     root->setObjectName("resourceWorkspace");
     auto layout = new QVBoxLayout(root);
@@ -1575,6 +1626,8 @@ QWidget *WorkshopWindow::graphicsEditor(const QString &name) {
     });
     auto palette = new Workshop::ColorPalette(16);
     palette->setObjectName("artworkPalette");
+    if (MOD_IsTilesetMask(name.toLatin1().constData()))
+        palette->setToolTip("White keeps black sprite pixels opaque. Black allows normal transparency.");
     auto colors = Workshop::artworkColors(U5::readGraphics(name, project.resources.value(name).original));
     canvas->allowedColors = colors;
     canvas->brush = Workshop::paletteColor(canvas->brush, colors);

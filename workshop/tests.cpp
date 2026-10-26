@@ -120,6 +120,45 @@ int main(int argc, char **argv) {
         std::cout << "PASS " << name << "\n";
     };
     try {
+        test("Interface frame colors preview, undo and transfer without changing artwork", [&] {
+            QTemporaryDir dir;
+            fixture(dir.path());
+            QByteArray font(1024, char(255));
+            file(dir.path() + "/IBM.CH", font);
+            WorkshopWindow window;
+            check(window.openGame(dir.path()), "Interface fixture open");
+            window.selectResource("INTERFACE.OVR");
+            auto swatch = window.findChild<QToolButton *>("frameColor4");
+            check(swatch && window.findChild<QToolButton *>("frameColor1")->isChecked(), "Default blue swatch");
+            auto originalTiles = window.projectForTests().data("TILES.16");
+            swatch->click();
+            auto &p = window.projectForTests();
+            check(p.data("INTERFACE.OVR") == QByteArray("IUI00001\x04", 9), "Color edit missing");
+            auto preview = window.findChild<QLabel *>("interfaceFramePreview");
+            check(preview && preview->pixmap().toImage().pixelColor(40, 4) == QColor(170, 0, 0), "Preview color wrong");
+            auto pixels = Dialogue::nativeGameFramePixels(font, 4);
+            check(uint8_t(pixels[2 * 320 + 20]) == 4 && uint8_t(pixels[7 * 320 + 20]) == 15,
+                  "Frame fill or white outline wrong");
+            auto packaged = p.package();
+            check(packaged.startsWith("IMOD0026"), "Interface version gate missing");
+            auto imported = fixture(dir.path()); imported.importPackage(packaged);
+            check(imported.data("INTERFACE.OVR") == p.data("INTERFACE.OVR"), "Interface package transfer failed");
+            p.save(dir.path() + "/color.imperaproj");
+            Project restored; restored.load(dir.path() + "/color.imperaproj");
+            check(restored.data("INTERFACE.OVR") == p.data("INTERFACE.OVR"), "Interface project reload failed");
+            for (auto action : window.findChildren<QAction *>())
+                if (action->text().startsWith("Undo ")) { action->trigger(); break; }
+            app.processEvents(); app.processEvents();
+            check(p.data("INTERFACE.OVR").isEmpty() && window.findChild<QToolButton *>("frameColor1")->isChecked(),
+                  "Undo did not restore default frame color");
+            check(p.data("TILES.16") == originalTiles, "Frame setting changed artwork");
+            for (auto action : window.findChildren<QAction *>())
+                if (action->text().startsWith("Redo")) { action->trigger(); break; }
+            app.processEvents(); app.processEvents();
+            check(window.findChild<QToolButton *>("frameColor4")->isChecked(), "Redo did not restore frame color");
+            p.resources["INTERFACE.OVR"].edited[8] = 16;
+            rejects([&] { p.validate(); });
+        });
         test("Town gates preserve native rules, edit contextually, preview without painting and "
              "transfer",
              [&] {
@@ -2021,6 +2060,12 @@ int main(int argc, char **argv) {
         test("Alternate tilesets preserve native pixels, package loading and editor undo", [&] {
             QTemporaryDir dir;
             auto p = fixture(dir.path());
+            for (const auto &name : {"MASK_DOS.PNG", "MASK_AMI.PNG", "MASK_GRY.PNG"}) {
+                auto mask = U5::readGraphics(name, p.data(name));
+                check(mask.images[508].pixelColor(8, 8) == Qt::white &&
+                          mask.images[508].pixelColor(0, 0) == Qt::black,
+                      "Workshop must inherit the engine's base transparency mask");
+            }
             for (const auto &sheet : modTilesetSheets) {
                 const QString name = QString::fromLatin1(sheet.resource);
                 auto g = U5::readGraphics(name, p.data(name));
@@ -2028,12 +2073,17 @@ int main(int argc, char **argv) {
                           g.images[0].size() == QSize(sheet.width, sheet.height),
                       "Native tileset layout was normalized or lost");
                 check(U5::writeGraphics(g) == p.data(name), "Unedited PNG changed bytes");
-                g.images[0].setPixel(0, 0, qRgb(12, 34, 56));
+                auto color =
+                    MOD_IsTilesetMask(sheet.resource) ? qRgb(255, 255, 255) : qRgb(12, 34, 56);
+                g.images[0].setPixel(0, 0, color);
                 auto edited = U5::writeGraphics(g);
-                check(U5::readGraphics(name, edited).images[0].pixel(0, 0) == qRgb(12, 34, 56),
+                check(U5::readGraphics(name, edited).images[0].pixel(0, 0) == color,
                       "RGB artwork edit lost its native color");
                 p.resources[name].edited = edited;
             }
+            auto badMask = U5::readGraphics("MASK_DOS.PNG", p.data("MASK_DOS.PNG"));
+            badMask.images[0].setPixel(0, 0, qRgb(255, 0, 0));
+            rejects([&] { U5::writeGraphics(badMask); });
             p.validate();
             auto package = p.package();
             auto base = fixture(dir.path());

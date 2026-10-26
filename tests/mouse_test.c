@@ -268,8 +268,10 @@ static void paintCombatCursor(int x, int y) {
         GRAP_BUF_Line(x + 14 + inset, y, x + 14 + inset, y + 15);
     }
 }
+#include "synthetic_tileset_mask.h"
 int main(int argc, char** argv)
 {
+    syntheticMaskBegin();
     transparentSprites = !(argc > 1 && strcmp(argv[1], "--opaque") == 0);
     GRAP_BUF_SetTransparentSprites(transparentSprites);
     assert(!MOVEMENT_Diagonal());
@@ -1427,6 +1429,7 @@ int main(int argc, char** argv)
     MOUSE_SetCommandInput(false);
     remove("BRIT.DAT");
     MOUSE_Cleanup();
-    GRAP_SDL_Cleanup(); SDL_Quit();
+    GRAP_SDL_Cleanup();
+    syntheticMaskEnd(); SDL_Quit();
     puts("Mouse directions, action ranges, click timing, modal gating, and coordinate mapping passed.");
 }

@@ -299,7 +299,8 @@ static void vanillaActorOverrideIdentity(void) {
 
 static void multiTileActors(void) {
     const unsigned localBytes = 32 * 32 * 4, worldBytes = 16 * 16 * 4;
-    const unsigned recordSize = 256 + 4 + localBytes + 4 + worldBytes, size = 32 + recordSize;
+    const unsigned recordSize = 256 + 4 + localBytes + 32 * 32 + 4 + worldBytes + 16 * 16,
+                   size = 32 + recordSize;
     unsigned char *defs = calloc(1, size);
     assert(defs);
     memcpy(defs, "ITYPES01", 8);
@@ -319,7 +320,7 @@ static void multiTileActors(void) {
     TYPES_Encode(r, &d);
     TYPES_Put32(r, recordSize);
     r[256] = 0;
-    r[257] = 16;
+    r[257] = 16 | 128;
     r[258] = 100;
     for (unsigned pixel = 0; pixel < 32 * 32; ++pixel) {
         unsigned x = pixel % 32, y = pixel / 32;
@@ -327,14 +328,20 @@ static void multiTileActors(void) {
         r[260 + pixel * 4] = black ? 0 : 255;
         r[263 + pixel * 4] = 255;
     }
-    unsigned off = 260 + localBytes;
+    r[260 + localBytes + 3 * 32 + 3] = 255;
+    r[260 + localBytes + 19 * 32 + 19] = 255;
+    r[260 + localBytes + 5 * 32 + 5] = 255;
+    r[263 + (5 * 32 + 5) * 4] = 0; /* White never resurrects PNG transparency. */
+    unsigned off = 260 + localBytes + 32 * 32;
     r[off] = 6;
-    r[off + 1] = 16;
+    r[off + 1] = 16 | 128;
     r[off + 2] = 100;
     for (unsigned pixel = 0; pixel < 256; ++pixel) {
         r[off + 6 + pixel * 4] = 255;
         r[off + 7 + pixel * 4] = 255;
     }
+    r[off + 6 + (3 * 16 + 3) * 4] = 0;
+    r[off + 4 + worldBytes + 3 * 16 + 3] = 255;
     assert(TYPES_Validate(defs, size));
     byte oldMap = D_5893_map_id, oldFloor = D_5895_map_level, oldX = D_5896_map_x,
          oldY = D_5897_map_y;
@@ -390,6 +397,12 @@ static void multiTileActors(void) {
     assert(GRAP_BUF_SpriteIsTransparent(60000));
     assert(GRAP_BUF_SpritePixel(60000, 0, 0) == -1);
     assert(GRAP_BUF_SpritePixel(60000, 17, 17) == -1);
+    assert(GRAP_BUF_SpritePixel(60000, 5, 5) == -1);
+    for (int coordinate = 3; coordinate <= 19; coordinate += 16) {
+        int protectedColor = GRAP_BUF_SpritePixel(60000, coordinate, coordinate);
+        assert(protectedColor > 0 &&
+               TILESET_LastSpriteColor(protectedColor, 0, 0, ega, true) == 0xff000000u);
+    }
     assert(GRAP_BUF_SpritePixel(60000, 10, 5) == 0);  /* Native-style black outline. */
     assert(GRAP_BUF_SpritePixel(60000, 32, 31) == 0); /* Outer body edge, not cell seams. */
     int blackPixel = GRAP_BUF_TilePixel(60000, 0, 0);
@@ -473,6 +486,8 @@ static void multiTileActors(void) {
     assert(!ACTORS_Contains(12, 4, 4));
     color = GRAP_BUF_SpritePixel(60000, 15, 15);
     assert(color >= 0 && TILESET_LastSpriteColor(color, 0, 0, ega, true) == 0xff0000ffu);
+    color = GRAP_BUF_SpritePixel(60000, 3, 3);
+    assert(color > 0 && TILESET_LastSpriteColor(color, 0, 0, ega, true) == 0xff000000u);
     assert(GRAP_BUF_SpritePixel(60000, 16, 15) == -1);
     D_5893_map_id = 128;
     D_ba14[6].flags = COMBAT_FLAGS_MONSTER;

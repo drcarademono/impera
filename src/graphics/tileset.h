@@ -10,6 +10,7 @@ enum
     TILESET_GRAY,
     TILESET_SHARP,
     TILESET_CUSTOM,
+    TILESET_ZHELKAS, /* Append: saved engine choices and mod artwork variant IDs stay stable. */
     TILESET_COUNT
 };
 int TILESET_Selected(void);
@@ -21,6 +22,7 @@ bool TILESET_SetCustomPath(const char *path);
 bool TILESET_SelectCustom(const char *path);
 void TILESET_Animate(void);
 bool TILESET_SpriteOutline(void);
+bool TILESET_ProtectedBlack(int tile, int x, int y);
 int TILESET_Pixel(int tile, int x, int y); /* -1: DOS fallback */
 Uint32 TILESET_Color(int color, const Uint32 *ega);
 Uint32 TILESET_LastColor(int color, int subX, int subY, const Uint32 *ega);

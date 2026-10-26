@@ -51,7 +51,7 @@ void Project::openGame(const QString &directory) {
         if (upper == "TYPES.OVR" || upper == "TYPEMAP.OVR" || upper == "CUTSCENE.OVR" ||
             upper == "MAPS.OVR" || MAPS_LocationResource(upper.toLatin1().constData()) ||
             upper == "LOCATIONS.OVR" || upper == "TEXT.OVR" || upper == "RULES.TBL" ||
-            upper == "GATES.OVR" || upper == "CONTENTS.OVR")
+            upper == "INTERFACE.OVR" || upper == "GATES.OVR" || upper == "CONTENTS.OVR")
             continue; // Companion resources are package-only.
         if (!MOD_AllowedResource(upper.toLatin1().constData()))
             continue;
@@ -64,8 +64,19 @@ void Project::openGame(const QString &directory) {
     U5::readGraphics("TILES.16", next.data("TILES.16"));
     require(next.data("INIT.GAM").size() == 4192, "INIT.GAM must use the 4192-byte DOS layout");
     for (const auto &sheet : modTilesetSheets) {
-        auto bytes =
-            readLimited(":/tilesets/" + QString::fromUtf8(sheet.filename), MOD_MAX_RESOURCE);
+        QByteArray bytes;
+        if (!strcmp(sheet.resource, "MASK_DOS.PNG") || !strcmp(sheet.resource, "MASK_AMI.PNG") ||
+            !strcmp(sheet.resource, "MASK_GRY.PNG")) {
+            bytes = readLimited(":/tilesets/Ultima_5_Tiles_TransparencyMask.png", MOD_MAX_RESOURCE);
+        } else if (MOD_IsTilesetMask(sheet.resource)) {
+            QImage mask(sheet.columns * sheet.width, 16 * sheet.height, QImage::Format_RGB32);
+            mask.fill(Qt::black);
+            QBuffer buffer(&bytes);
+            buffer.open(QIODevice::WriteOnly);
+            mask.save(&buffer, "PNG");
+        } else
+            bytes =
+                readLimited(":/tilesets/" + QString::fromUtf8(sheet.filename), MOD_MAX_RESOURCE);
         next.resources.insert(QString::fromLatin1(sheet.resource), {bytes, bytes});
     }
     next.resources.insert("TYPES.OVR", {{}, {}});
@@ -77,6 +88,7 @@ void Project::openGame(const QString &directory) {
     next.resources.insert("RULES.TBL", {{}, {}});
     next.resources.insert("CONTENTS.OVR", {{}, {}});
     next.resources.insert("GATES.OVR", {{}, {}});
+    next.resources.insert("INTERFACE.OVR", {{}, {}});
     *this = next;
 }
 const QByteArray &Project::data(const QString &name) const {
@@ -200,6 +212,17 @@ static void append32(QByteArray &b, unsigned v) {
     for (int i = 0; i < 4; i++)
         b.append(char(v >> (8 * i)));
 }
+static bool usesMasks(const Project &project) {
+    bool masks = false;
+    for (const auto &name : project.changed())
+        masks |= MOD_IsTilesetMask(name.toLatin1().constData());
+    for (const auto &record : CustomTiles::records(project))
+        for (size_t off = 256; off < size_t(record.size());
+             off +=
+             TYPES_FrameBytes(reinterpret_cast<const unsigned char *>(record.constData()), off))
+            masks |= (uint8_t(record[int(off) + 1]) & 128) != 0;
+    return masks;
+}
 static bool usesExplicitDialogue(const Project &project) {
     for (const auto &name : project.changed()) {
         if (!name.endsWith(".TLK"))
@@ -294,13 +317,16 @@ QByteArray Project::package() const {
         portableConditions |= map.kind == 1 && MAPS_NewLocation(map.id) && map.floor != 0;
     for (const auto &contents : Workshop::readContents(resources.value("CONTENTS.OVR").edited))
         portableConditions |= contents.refill > 2;
+    const bool masks = usesMasks(*this);
     QByteArray out(
-        list.contains("GATES.OVR") ? "IMOD0024"
-        : portableConditions ? "IMOD0023"
-        : wideRooms        ? "IMOD0022"
-        : newDungeons      ? "IMOD0021"
-        : dungeonMaps      ? "IMOD0020"
-        : specialActors    ? "IMOD0019"
+        list.contains("INTERFACE.OVR") ? "IMOD0026"
+        : masks                        ? "IMOD0025"
+        : list.contains("GATES.OVR") ? "IMOD0024"
+        : portableConditions         ? "IMOD0023"
+        : wideRooms                  ? "IMOD0022"
+        : newDungeons                ? "IMOD0021"
+        : dungeonMaps                ? "IMOD0020"
+        : specialActors              ? "IMOD0019"
         : (locationObjects || list.contains("MAPS.OVR") ||
            resources.value("SIGNS.DAT").edited.startsWith("ISIG0001"))
             ? "IMOD0018"
@@ -465,6 +491,14 @@ void Project::save(const QString &path) {
         requirements["townGates"] = 1;
         requirements["packageVersion"] = 24;
     }
+    if (usesMasks(*this)) {
+        requirements["blackPixelMasks"] = 1;
+        requirements["packageVersion"] = 25;
+    }
+    if (changed().contains("INTERFACE.OVR")) {
+        requirements["interfaceColors"] = 1;
+        requirements["packageVersion"] = 26;
+    }
     if (!requirements.isEmpty())
         root["requires"] = requirements;
     QJsonObject annotations;
@@ -571,7 +605,7 @@ QVector<ModDiagnostic> validateMod(const Project &project, const QString &modsDi
             if (name == "TYPES.OVR" || name == "TYPEMAP.OVR" || name == "CUTSCENE.OVR" ||
                 name == "MAPS.OVR" || MAPS_LocationResource(name.toLatin1().constData()) ||
                 name == "LOCATIONS.OVR" || name == "TEXT.OVR" || name == "RULES.TBL" ||
-                name == "GATES.OVR" || name == "CONTENTS.OVR") {
+                name == "INTERFACE.OVR" || name == "GATES.OVR" || name == "CONTENTS.OVR") {
                 require(project.resources[name].original.isEmpty(),
                         "Companion resource must have an empty original base");
             } else if (!MOD_TilesetSheet(name.toLatin1().constData())) {
@@ -901,7 +935,7 @@ QString prepareModTest(const Project &project, const QString &sessionsDirectory)
         if (name == "TYPES.OVR" || name == "TYPEMAP.OVR" || name == "CUTSCENE.OVR" ||
             name == "MAPS.OVR" || MAPS_LocationResource(name.toLatin1().constData()) ||
             name == "LOCATIONS.OVR" || name == "TEXT.OVR" || name == "RULES.TBL" ||
-            name == "GATES.OVR" || name == "CONTENTS.OVR" || MOD_TilesetSheet(name.toLatin1().constData()))
+            name == "INTERFACE.OVR" || name == "GATES.OVR" || name == "CONTENTS.OVR" || MOD_TilesetSheet(name.toLatin1().constData()))
             continue; // Virtual companion exists only inside the package.
         auto bytes = readLimited(destination.filePath(name), MOD_MAX_RESOURCE);
         require(bytes == project.resources[name].original,

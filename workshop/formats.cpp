@@ -165,6 +165,9 @@ Graphics readGraphics(const QString &name, const QByteArray &b) {
         for (int y = 0; y < image.height(); y++)
             for (int x = 0; x < image.width(); x++) {
                 auto color = image.pixel(x, y);
+                if (MOD_IsTilesetMask(sheet->resource))
+                    require(color == qRgb(0, 0, 0) || color == qRgb(255, 255, 255),
+                            "Masks require opaque black and white pixels");
                 require(qAlpha(color) == 255,
                         "Alternate tilesets require opaque PNG pixels; "
                         "black (or Sharp actor gray) supplies sprite transparency");

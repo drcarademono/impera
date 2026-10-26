@@ -1,5 +1,6 @@
 #pragma once
 #include "formats.h"
+#include "mod/tileset_resources.h"
 #include <QtWidgets>
 #include <algorithm>
 #include <functional>
@@ -7,6 +8,8 @@
 
 namespace Workshop {
 inline QVector<QRgb> artworkColors(const U5::Graphics &graphics) {
+    if (MOD_IsTilesetMask(graphics.pngResource.toLatin1().constData()))
+        return {qRgb(0, 0, 0), qRgb(255, 255, 255)};
     if (graphics.pngResource.isEmpty())
         return U5::palette();
     QSet<QRgb> unique;

@@ -1,3 +1,4 @@
+#include "mod/interface.h"
 #include "mod/location_names.h"
 #undef NDEBUG
 #include "common/common.h"
@@ -467,9 +468,43 @@ static void compositionResources(void) {
     assert(composition&&size==data.size&&MOD_CutsceneCount(0)==1&&!MOD_CutsceneComposition(1,&size));
     FILE_SetDataDirectory(NULL);remove("application/Mods/composition.imperamod");
 }
+static void interfaceColors(void) {
+    Buffer package;
+    ModPackage decoded;
+    char error[256];
+    unsigned char settings[9] = "IUI00001";
+    assert(MOD_FrameColor() == 1);
+    for (unsigned color = 0; color < 16; ++color) {
+        settings[8] = color;
+        assert(INTERFACE_Validate(settings, sizeof(settings)));
+        header(&package, 1);
+        memcpy(package.bytes, "IMOD0026", 8);
+        rawEntry(&package, "INTERFACE.OVR", "", 0, settings, sizeof(settings));
+        assert(MOD_Decode(package.bytes, package.size, readBase, NULL, &decoded, error, sizeof(error)));
+        MOD_Free(&decoded);
+        put("application/Mods/interface.imperamod", package.bytes, package.size);
+        FILE_SetDataDirectory("game");
+        assert(MOD_FrameColor() == color);
+        FILE_SetDataDirectory(NULL);
+        assert(MOD_FrameColor() == 1);
+        remove("application/Mods/interface.imperamod");
+        memcpy(package.bytes, "IMOD0025", 8);
+        assert(!MOD_Decode(package.bytes, package.size, readBase, NULL, &decoded, error, sizeof(error)));
+    }
+    settings[8] = 16;
+    assert(!INTERFACE_Validate(settings, sizeof(settings)));
+    header(&package, 1); memcpy(package.bytes, "IMOD0026", 8);
+    rawEntry(&package, "INTERFACE.OVR", "", 0, settings, sizeof(settings));
+    assert(!MOD_Decode(package.bytes, package.size, readBase, NULL, &decoded, error, sizeof(error)));
+    settings[8] = 1; settings[0] = 'x';
+    assert(!INTERFACE_Validate(settings, sizeof(settings)));
+    assert(!INTERFACE_Validate(settings, 8));
+}
+
 int main(void) {
     assert(SDL_CreateDirectory("application/Mods"));
     assert(SDL_SetEnvironmentVariable(SDL_GetEnvironment(), "APPIMAGE", "application/Impera.AppImage", true));
+    interfaceColors();
     assert(MOD_AllowedResource("INIT.GAM"));
     assert(MOD_AllowedResource("BRIT.CBT"));
     assert(!MOD_AllowedResource("../INIT.GAM"));

@@ -1,3 +1,4 @@
+#include "interface.h"
 #include "location_names.h"
 #include "maps.h"
 #include "runtime.h"
@@ -311,6 +312,11 @@ const char *MOD_NarrativeText(const char *resource, unsigned offset) {
 const char *MOD_SceneMessage(const char *resource, unsigned offset, const char *fallback) {
     const char *text = MOD_NarrativeText(resource, offset);
     return text ? text : fallback;
+}
+
+unsigned MOD_FrameColor(void) {
+    const ModResource *r = mountedResource("INTERFACE.OVR");
+    return r && INTERFACE_Validate(r->data, r->size) ? r->data[8] : 1;
 }
 
 unsigned MOD_TableValue(unsigned table, unsigned index, unsigned fallback) {

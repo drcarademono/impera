@@ -8,6 +8,7 @@ typedef struct WideLayout {
 WideLayout WIDE_Layout(int width, int height);
 byte WIDE_MapTile(int dx, int dy);
 byte WIDE_GroundTile(int dx, int dy);
+byte WIDE_GroundFromNeighbors(byte object, const byte neighbors[4]);
 int WIDE_SpritePixel(int tile, int dx, int dy, int x, int y);
 byte WIDE_TerrainPixel(int dx, int dy, int x, int y);
 void WIDE_SetDitheredDarkness(bool enabled);

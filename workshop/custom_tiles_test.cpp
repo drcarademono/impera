@@ -1,5 +1,6 @@
 #include "custom_tiles.h"
 #include "color_palette.h"
+#include "mod/tileset_resources.h"
 #include "window.h"
 #include "map_entities.h"
 #include "mod/npcs.h"
@@ -143,6 +144,48 @@ int main(int argc, char **argv) {
         records[d.id] = CustomTiles::record(d, frames);
         p.resources["TYPES.OVR"].edited = CustomTiles::library(p, records);
         p.validate();
+        {
+            Project masked = p;
+            auto protectedFrames = frames;
+            protectedFrames[0].mask = QImage(16, 16, QImage::Format_RGB32);
+            protectedFrames[0].mask.fill(Qt::black);
+            protectedFrames[0].mask.setPixelColor(0, 0, Qt::white);
+            auto encoded = CustomTiles::record(d, protectedFrames);
+            CHECK(CustomTiles::frames(encoded)[0].mask.pixelColor(0, 0) == Qt::white);
+            masked.resources["TYPES.OVR"].edited = CustomTiles::library(masked, {{d.id, encoded}});
+            auto masks = U5::readGraphics("MASK_DOS.PNG", masked.data("MASK_DOS.PNG"));
+            masks.images[508].setPixelColor(8, 8, Qt::white);
+            masked.resources["MASK_DOS.PNG"].edited = U5::writeGraphics(masks);
+            masked.validate();
+            auto bytes = masked.package();
+            CHECK(bytes.startsWith("IMOD0025"));
+            Project imported;
+            imported.openGame(TEST_GAME_DIR);
+            imported.importPackage(bytes);
+            CHECK(imported.data("MASK_DOS.PNG") == masked.data("MASK_DOS.PNG"));
+            CHECK(CustomTiles::frames(CustomTiles::records(imported)[d.id])[0].mask ==
+                  protectedFrames[0].mask);
+            auto old = bytes;
+            old.replace(0, 8, "IMOD0024");
+            bool rejected = false;
+            try {
+                imported.importPackage(old);
+            } catch (...) {
+                rejected = true;
+            }
+            CHECK(rejected);
+            QTemporaryDir store;
+            auto path = store.filePath("masks.imperaproject");
+            masked.save(path);
+            Project reopened;
+            reopened.load(path);
+            CHECK(reopened.data("MASK_DOS.PNG") == masked.data("MASK_DOS.PNG"));
+            for (const auto &sheet : modTilesetSheets)
+                if (MOD_IsTilesetMask(sheet.resource)) {
+                    auto graphics = U5::readGraphics(sheet.resource, p.data(sheet.resource));
+                    CHECK(Workshop::artworkColors(graphics).size() == 2);
+                }
+        }
         CHECK(CustomTiles::image(p, 40000).pixelColor(0, 0) == Qt::black);
         CHECK(CustomTiles::image(p, 40000).pixelColor(1, 0).alpha() == 128);
         CHECK(CustomTiles::image(p, 40000, 4, 100).pixelColor(15, 0) == Qt::black);
@@ -331,6 +374,26 @@ int main(int argc, char **argv) {
         QApplication::sendEvent(customCanvas, &customDown);
         QApplication::sendEvent(customCanvas, &customUp);
         CHECK(CustomTiles::image(p, 40000, 5).pixelColor(0, 0) == QColor(13, 72, 123));
+        auto maskMode = ui->findChild<QToolButton *>("customTileMaskMode");
+        CHECK(maskMode);
+        auto beforeMaskArtwork = CustomTiles::image(p, 40000, 5);
+        maskMode->click();
+        for (auto swatch : customPalette->findChildren<QToolButton *>())
+            if (swatch->property("rgba").isValid() &&
+                swatch->property("rgba").toUInt() == qRgb(255, 255, 255))
+                swatch->click();
+        QApplication::sendEvent(customCanvas, &customDown);
+        QApplication::sendEvent(customCanvas, &customUp);
+        bool hasMask = false;
+        int maskRow = ui->findChild<QListWidget *>("customTileFrames")->currentRow();
+        for (const auto &frame : CustomTiles::frames(CustomTiles::records(p)[40000]))
+            if (frame.variant == 5 && maskRow-- == 0) {
+                hasMask = frame.mask.pixelColor(0, 0) == Qt::white;
+                break;
+            }
+        CHECK(hasMask && CustomTiles::image(p, 40000, 5) == beforeMaskArtwork);
+        maskMode->click();
+
         QTemporaryDir palettes;
         QImage palettePng(2, 1, QImage::Format_ARGB32);
         palettePng.setPixel(0, 0, qRgb(1, 2, 3));
@@ -473,7 +536,7 @@ int main(int argc, char **argv) {
             CHECK(playtest.npcRecords.size() == 258 * 16 &&
                   playtest.actorRecords.size() == 258 * 8);
             auto packaged = crowded.package();
-            CHECK(packaged.startsWith("IMOD0013"));
+            CHECK(packaged.startsWith("IMOD0025"));
             auto oldPackage = packaged;
             oldPackage.replace(0, 8, "IMOD0011");
             bool oldRejected = false;
@@ -508,7 +571,7 @@ int main(int argc, char **argv) {
         applyChanges(CustomTiles::assignActor(p, "DUNGEON.CBT", roomPage, 0, 0, 40011));
         CHECK(CustomTiles::actorType(p, "DUNGEON.CBT", roomPage, 0, 0, 0) == 40011);
         p.validate();
-        CHECK(p.package().startsWith("IMOD0013"));
+        CHECK(p.package().startsWith("IMOD0025"));
         Project actorImported;
         actorImported.openGame(TEST_GAME_DIR);
         actorImported.importPackage(p.package());

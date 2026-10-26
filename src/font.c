@@ -1,3 +1,4 @@
+#include "mod/runtime.h"
 #include "common/common.h"
 #include "common/save_slots.h"
 #include "funcs.h"
@@ -192,6 +193,24 @@ int FONT_02fc(int param_1)
             }
         }
 
+#if defined(TARGET_SDL)
+        GrapSceneSprite sprites[32] = {{0}};
+        byte background[128];
+        memcpy(background, D_6708, sizeof(background));
+        for (int actor = 0; actor < 32; ++actor) {
+            const ActorFmt *a = &D_5c5a[actor];
+            if (a->_0_tile && a->_1_animTile && a->_2_x < 19 && a->_3_y < 4) {
+                if (a->_1_animTile == TILE_ACTOR_CIRCLE)
+                    background[a->_3_y * 32 + a->_2_x] = TILE_MAP_FE;
+                else
+                    sprites[actor] = (GrapSceneSprite){256u + a->_1_animTile, a->_0_tile,
+                                                       a->_2_x * 16, a->_3_y * 16};
+            }
+        }
+        GRAP_BUF_DrawScene(0x4200 + D_bd29, background, 32, 19, 4, D_bd26, D_bd27,
+                           D_52ba_vdp._52bc_tileXOffset, D_52ba_vdp._52be_tileYOffset + 7 * 16,
+                           sprites, 32);
+#else
         // NOT MATCHING (loop)
         for (local_6 = D_bd26; local_6 <= D_bd27; local_6++)
         {
@@ -203,6 +222,8 @@ int FONT_02fc(int param_1)
                 }
             }
         }
+
+#endif
 
         if (D_bd26 != 0 && D_bd28 != 0)
         {
@@ -256,6 +277,9 @@ static void FONT_0418(int param_1)
 
     ASSERT(param_1 < 4);
 
+#if defined(TARGET_SDL)
+    GRAP_BUF_ResetScene();
+#endif
     INTRO_043e(D_515c[param_1]);
 
     for (local_4 = 0; local_4 < 0x13; local_4++)
@@ -294,11 +318,14 @@ void FONT_04a4(void)
 
     int i;
 
+#if defined(TARGET_SDL)
+    GRAP_BUF_ResetScene();
+#endif
     D_52ba_vdp._52be_tileYOffset = 0x10;
     D_bd26 = D_bd27 = 9;
     D_bd28 = 0;
 
-    ULTIMA_0a70_GRAP_2d_SetPenColor(D_13b2_blueColor);
+    ULTIMA_0a70_GRAP_2d_SetPenColor(MOD_FrameColor());
     ULTIMA_0aa6_GRAP_3f_FillRect(0x78, 0x78, 199, 0x7e);
     ULTIMA_0a70_GRAP_2d_SetPenColor(D_13b0_brightWhiteColor);
     ULTIMA_0b10_GRAP_Line(0x78, 0x7f, 199, 0x7f);
@@ -623,7 +650,7 @@ void FONT_0b0a(void)
 #else
     ULTIMA_256e_ReadFileFromDisk(/*0xa060*/ "INIT.GAM", &D_55a6, (int)&D_6606 - (int)&D_55a6, 0);
 #endif
-    ULTIMA_0a70_GRAP_2d_SetPenColor(D_13b2_blueColor);
+    ULTIMA_0a70_GRAP_2d_SetPenColor(MOD_FrameColor());
     ULTIMA_0aa6_GRAP_3f_FillRect(0x78, 0x78, 200, 0x7e);
     ULTIMA_0a70_GRAP_2d_SetPenColor(D_13b0_brightWhiteColor);
     ULTIMA_0b10_GRAP_Line(0x78, 0x7f, 200, 0x7f);

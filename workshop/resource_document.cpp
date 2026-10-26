@@ -1,3 +1,4 @@
+#include "mod/interface.h"
 #include "extended_maps.h"
 #include "mod/location_names.h"
 #include "mod/npcs.h"
@@ -20,6 +21,8 @@
 using U5::require;
 namespace Workshop {
 Capability capability(const QString &resource) {
+    if (resource == "INTERFACE.OVR")
+        return {"Interface", "Graphics", "Frame color", EditorKind::Inspector};
     if (resource == "TYPES.OVR")
         return {"Custom types", "Types", "Tile and creature artwork and properties", EditorKind::TileTypes};
     const QString n = resource.toUpper();
@@ -217,6 +220,10 @@ QMap<QString, QByteArray> ResourceDocument::replace(const Entry &e, const QByteA
 void validateResource(const Project &project, const QString &name) {
     const auto &b = project.data(name);
     const auto kind = capability(name).editor;
+    if (name == "INTERFACE.OVR") {
+        require(INTERFACE_Validate(b.constData(), b.size()), "Invalid interface colors");
+        return;
+    }
     if (name == "TYPES.OVR" || name == "TYPEMAP.OVR") {
         CustomTiles::validate(project);
         return;

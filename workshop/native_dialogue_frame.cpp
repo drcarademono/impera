@@ -22,12 +22,12 @@ QByteArray crop(const QByteArray &pixels) {
     return result;
 }
 } // namespace
-QByteArray nativeGameFramePixels(const QByteArray &normalFont) {
+QByteArray nativeGameFramePixels(const QByteArray &normalFont, unsigned frameColor) {
     U5::require(normalFont.size() == 1024, "Playtest requires IBM.CH");
     Canvas canvas{QByteArray(320 * 200, char(0)), normalFont};
     ImperaGameFrame frame{};
     frame.host = &canvas;
-    frame.blue = 1;
+    frame.blue = frameColor & 15;
     frame.white = 15;
     frame.fill = [](void *host, uint8_t color, int x1, int y1, int x2, int y2) {
         for (int y = y1; y <= y2; ++y)
