@@ -5,10 +5,13 @@ QVector<QImage> dungeonFeatureImages(const QVector<QImage> &tiles);
 class DungeonDocument {
   public:
     explicit DungeonDocument(const Project *project);
+    QSize size(int dungeon, int floor) const;
     QByteArray level(int dungeon, int floor, bool original = false) const;
     QMap<QString, QByteArray> changes(int dungeon, int floor, const QByteArray &cells) const;
     static int offset(int dungeon, int floor);
     static int roomIndex(int dungeon, int cell);
+    int room(int dungeon, int cell) const;
+    int pageIndex(int dungeon, int floor) const;
     static QString feature(int cell);
     static QString variant(int cell);
     QStringList warnings(int dungeon, int floor, int x, int y) const;
@@ -23,5 +26,6 @@ class DungeonWorkspace : public QWidget {
                      std::function<bool(const QMap<QString, QByteArray> &, const QString &)> commit,
                      std::function<void(int)> room, QWidget *parent = nullptr);
     MapCanvas *canvas;
+    std::function<void()> refreshAfterImport;
 };
 } // namespace Workshop

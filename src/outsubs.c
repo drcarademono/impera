@@ -284,6 +284,7 @@ int OUTSUBS_0388_EnterTown(char* param_1)
         }
 
         ULTIMA_25d8_WriteFileToDisk(OUTSUBS_0368_GetWorldSavefile(), D_5c5a, 0x100);
+        MAPS_Entered(local_6 + 1, (int8_t)D_5895_map_level, D_5896_map_x, D_5897_map_y);
         D_5893_map_id = local_6 + 1;
         D_5895_map_level = 0;
         D_5896_map_x = 0xf;

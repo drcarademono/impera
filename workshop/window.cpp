@@ -1,3 +1,4 @@
+#include "extended_maps.h"
 #include "mod/npcs.h"
 #include "color_palette.h"
 #include "window.h"
@@ -645,6 +646,7 @@ void WorkshopWindow::navigateContent(const QString &id) {
     }
 }
 void WorkshopWindow::rebuildTree() {
+    Workshop::hydrateExtendedMaps(project);
     QSignalBlocker block(assets);
     const bool sameWorkspace = assets->property("workspace").toString() == workspaceSelector->currentText();
     const int oldScroll = assets->verticalScrollBar()->value();
@@ -773,7 +775,7 @@ void WorkshopWindow::edit(const QMap<QString, QByteArray> &changes, const QStrin
                           const QMap<QString, bool> &inclusion) {
     QMap<QString, QByteArray> actual;
     for (auto it = changes.begin(); it != changes.end(); ++it)
-        if (it.value() != project.data(it.key()))
+        if (it.value() != project.resources[it.key()].edited)
             actual.insert(it.key(), it.value());
     bool inclusionChanged=false;
     for(auto it=inclusion.begin();it!=inclusion.end();++it)
@@ -861,6 +863,19 @@ void WorkshopWindow::selectResource(const QString &name) {
     syncNavigation();
 }
 void WorkshopWindow::rebuildEditor() {
+    if (auto id = MAPS_LocationResource(current.toLatin1().constData())) {
+        bool found = false;
+        for (const auto &m : Workshop::extendedMaps(project))
+            found |= m.id == id && m.kind == 1;
+        if (!found) {
+            current = editorState.value(current + "/entranceWorld", 0) == -1 &&
+                              project.resources.contains("UNDER.DAT")
+                          ? "UNDER.DAT"
+                          : "BRIT.DAT";
+            lastMap = current;
+            rebuildTree();
+        }
+    }
     if (current.isEmpty())
         return;
     // A conversation-link edit (or undo) can move a character between a
@@ -1246,6 +1261,7 @@ QWidget *WorkshopWindow::resourceEditor(const QString &name) {
                 dungeonRoomNavigation = true;
                 selectResource("DUNGEON.CBT");
             });
+        workspace->refreshAfterImport = [this] { rebuildEditor(); };
         flushDraft = [workspace] {
             workspace->canvas->cancelStroke();
             return true;
@@ -1311,6 +1327,7 @@ QWidget *WorkshopWindow::mapEditor(const QString &name) {
                         candidate.resources[it.key()].included = true;
                     }
                 }
+                Workshop::hydrateExtendedMaps(candidate);
                 candidate.validate();
                 edit(changes, description, inclusion);
             });
@@ -1333,8 +1350,9 @@ QWidget *WorkshopWindow::mapEditor(const QString &name) {
     else if (project.resources.contains(npc))
         modes.append("NPCs / Schedules");
     if (project.resources.contains("SIGNS.DAT") &&
-        QStringList{"BRIT.DAT", "UNDER.DAT", "TOWNE.DAT", "DWELLING.DAT", "CASTLE.DAT", "KEEP.DAT"}
-            .contains(name))
+        (MAPS_LocationResource(name.toLatin1().constData()) ||
+         QStringList{"BRIT.DAT", "UNDER.DAT", "TOWNE.DAT", "DWELLING.DAT", "CASTLE.DAT", "KEEP.DAT"}
+             .contains(name)))
         modes.append("Signs");
     if ((name == "BRIT.DAT" || name == "UNDER.DAT") && project.resources.contains("INIT.OOL") &&
         project.resources.contains("BRIT.OOL") && project.resources.contains("UNDER.OOL"))
@@ -1356,11 +1374,12 @@ QWidget *WorkshopWindow::mapEditor(const QString &name) {
                     [this, workspace, name](const auto &changes, const QString &title) {
                         return guard([&] {
                             edit(changes, title);
-                            if (changes.contains(name))
+                            if (changes.contains(name) || changes.contains("MAPS.OVR"))
                                 workspace->refreshTerrain();
                         });
                     },
-                    &editorState, [workspace](QPoint cell) { workspace->centerOnCell(cell); });
+                    &editorState, [workspace](QPoint cell) { workspace->centerOnCell(cell); },
+                    [this](const QString &resource) { selectResource(resource); });
             }
             if (mode == "Contents") {
                 *flush = [] { return true; };
@@ -1873,8 +1892,8 @@ QWidget *WorkshopWindow::stateEditor() {
                                     [id](auto p) { return p.id == id; });
             require(pos != positions.end(), "Starting position is unavailable");
             int map = pos->map, floor = pos->floor;
-            QString resource = map >= 33 && map <= 40 ? "DUNGEON.DAT"
-                               : map == 0             ? (floor == -1 ? "UNDER.DAT" : "BRIT.DAT")
+            QString resource = Workshop::isDungeon(project, map) ? "DUNGEON.DAT"
+                               : map == 0  ? (floor == -1 ? "UNDER.DAT" : "BRIT.DAT")
                                : map <= 32 ? QStringList{"TOWNE.DAT", "DWELLING.DAT", "CASTLE.DAT",
                                                          "KEEP.DAT"}[(map - 1) / 8]
                                            : QString();
@@ -2313,8 +2332,10 @@ bool WorkshopWindow::reviewPackage(bool launch) {
                             parts[4] == "cell") {
                             editorState["DUNGEON.DAT/dungeon"] = parts[1].toInt();
                             editorState["DUNGEON.DAT/level"] = parts[3].toInt();
-                            editorState["DUNGEON.DAT/x"] = parts[5].toInt() % 8;
-                            editorState["DUNGEON.DAT/y"] = parts[5].toInt() / 8;
+                            const auto size =
+                                Workshop::mapSize(project, 33 + parts[1].toInt(), parts[3].toInt());
+                            editorState["DUNGEON.DAT/x"] = parts[5].toInt() % size.width();
+                            editorState["DUNGEON.DAT/y"] = parts[5].toInt() / size.width();
                         }
                     }
                     selectResource(item->data(0, Qt::UserRole).toString());

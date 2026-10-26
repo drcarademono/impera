@@ -32,6 +32,8 @@ QByteArray changeStory(const QByteArray &bytes, int page, const QString &text);
 struct MapPage {
     QString name;
     int side, offset, stride, settlement = -1, floor = 0;
+    int rows = 0;
+    int height() const { return rows > 0 ? rows : side; }
 };
 QVector<MapPage> mapPages(const QString &name, const QByteArray &bytes);
 QByteArray worldMap(const QString &name, const QByteArray &bytes, const QByteArray &overlay);

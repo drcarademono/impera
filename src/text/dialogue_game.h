@@ -10,7 +10,8 @@ typedef struct ImperaDialogueGame {
     uint8_t *supplies[11], *karma, *turn, *map, *killed, *met;
     uint8_t *actors, *npcs, *schedules, *shapes, *dirty;
     int npc;
-    unsigned npcCount, actorCount;   /* Zero retains the original 32-record host contract. */
+    unsigned npcCount, actorCount,
+        mapCount;                    /* Zero retains the original 32-record host contract. */
     uint8_t *extraKilled, *extraMet; /* 4096 flag bytes per location, slots >=32. */
     void *host;
     int (*random)(void *, int, int);

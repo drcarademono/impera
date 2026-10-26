@@ -22,7 +22,9 @@ static void ULTIMA_7040(int param_1, int param_2, int param_3, int param_4)
 
     for (local_6 = 0; local_6 < 0x10; local_6++)
     {
-        D_ad14[(local_4->y + param_4) * 0x20 + local_4->x + param_3] = local_8;
+        int x = local_4->x + param_3, y = local_4->y + param_4;
+        if (x >= 0 && x < 32 && y >= 0 && y < 32)
+            D_ad14[y * 32 + x] = local_8;
         local_4++;
     }
 }

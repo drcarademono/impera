@@ -111,7 +111,7 @@ static void CaptureActors(ActorVisual* actors, const byte* indices, int w,
             int cell = i - MAP_ACTOR_COUNT, x = cell % 11, y = cell / 11;
             if (GetMapViewport(x, y) == 255 || GetMapViewport(x, y) == TILE_MAP_87)
                 continue;
-            int shape = CONTENTS_GAME_Shape(x, y);
+            int shape = CONTENTS_GAME_Shape(x + MAP_VIEW_X, y + MAP_VIEW_Y);
             if (!shape && GetMapViewport(x, y) == 0)
                 shape = GetActorMap(x, y);
             if (!shape || SPRITES_Layer(256 + shape))
@@ -126,13 +126,20 @@ static void CaptureActors(ActorVisual* actors, const byte* indices, int w,
             if (duplicate)
                 continue;
             ground._0_tile = ground._1_animTile = shape;
-            ground._2_x = x;
-            ground._3_y = y;
+            ground._2_x = x + MAP_VIEW_X;
+            ground._3_y = y + MAP_VIEW_Y;
             ground._4_z = D_5895_map_level;
             a = &ground;
         }
         if (!a->_0_tile || !a->_1_animTile || (!combat && a->_4_z!=D_5895_map_level)) continue;
-        int dx=a->_2_x-(combat?5:D_5896_map_x), dy=a->_3_y-(combat?5:D_5897_map_y);
+        int dx =
+                a->_2_x -
+                (combat ? (MAP_LARGE_COMBAT ? (s_expandedFrame ? D_5896_map_x : MAP_VIEW_X + 5) : 5)
+                        : D_5896_map_x),
+            dy =
+                a->_3_y -
+                (combat ? (MAP_LARGE_COMBAT ? (s_expandedFrame ? D_5897_map_y : MAP_VIEW_Y + 5) : 5)
+                        : D_5897_map_y);
         if (!D_5893_map_id) { dx=((dx+128)&255)-128; dy=((dy+128)&255)-128; }
         int col=columns/2+dx, row=rows/2+dy;
         ActorVisual* v=&actors[i];
@@ -302,6 +309,14 @@ bool GRAP_SDL_MouseMapPoint(float x, float y, int* dx, int* dy, float* rx, float
     *dy = (int)((gy - mapY) / 16) - rows / 2;
     *rx = (gx - mapX - columns / 2 * 16 - 8) / 16;
     *ry = (gy - mapY - rows / 2 * 16 - 8) / 16;
+    if (MAP_LARGE_COMBAT) {
+        int ox = s_expandedFrame ? (int)D_5896_map_x - 5 : MAP_VIEW_X;
+        int oy = s_expandedFrame ? (int)D_5897_map_y - 5 : MAP_VIEW_Y;
+        *dx += ox;
+        *dy += oy;
+        *rx += ox;
+        *ry += oy;
+    }
     return true;
 }
 
@@ -481,7 +496,8 @@ static void LinearToRGB(void)
 static int s_darknessColumns,s_darknessRows,s_darknessMap,s_darknessLevel;
 static void PrepareDarkness(int columns,int rows,bool completed)
 {
-    if(!WIDE_DitheredDarkness() || EVT_ImmediateExitEnabled() || s_pixelUI || !D_58a4 || D_5893_map_id>32) {
+    if (!WIDE_DitheredDarkness() || EVT_ImmediateExitEnabled() || s_pixelUI || !D_58a4 ||
+        !MAPS_Outside(D_5893_map_id)) {
         SDL_DestroyTexture(s_darknessTexture);s_darknessTexture=NULL;return;
     }
     if(!completed && s_darknessTexture && columns==s_darknessColumns && rows==s_darknessRows && s_darknessMap==D_5893_map_id && s_darknessLevel==D_5895_map_level) return;
@@ -527,7 +543,9 @@ static bool CombatSelectionPixel(int x, int y) { return x < 2 || x >= 14 || y < 
 static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
                         int columns, int rows, SDL_Texture* native, int sourceScale, SDL_FRect dst)
 {
-    if (EVT_ImmediateExitEnabled() || s_pixelUI || !s_smoothMovement || !s_mapDrawn || !D_58a4 || (D_5893_map_id>32 && D_5893_map_id<128)) return;
+    if (EVT_ImmediateExitEnabled() || s_pixelUI || !s_smoothMovement || !s_mapDrawn || !D_58a4 ||
+        (!MAPS_Outside(D_5893_map_id) && D_5893_map_id < 128))
+        return;
     s_mapDrawn = false;
     SDL_Surface* clean = SDL_CreateSurface(w*2, h*2, SDL_PIXELFORMAT_ARGB8888);
     if (!clean) { s_previousValid = false; return; }
@@ -604,8 +622,16 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
     bool combatSelection = combat && D_589e < 32 && D_589f && ULTIMA_5646(D_589e) == 0;
     int selectionX = 0, selectionY = 0;
     if (combatSelection) {
-        selectionX = mapX + (columns / 2 - 5 + D_ba14[D_589e].x) * 16;
-        selectionY = mapY + (rows / 2 - 5 + D_ba14[D_589e].y) * 16;
+        selectionX =
+            mapX +
+            (columns / 2 - 5 + D_ba14[D_589e].x -
+             (MAP_LARGE_COMBAT ? (s_expandedFrame ? (int)D_5896_map_x - 5 : MAP_VIEW_X) : 0)) *
+                16;
+        selectionY =
+            mapY +
+            (rows / 2 - 5 + D_ba14[D_589e].y -
+             (MAP_LARGE_COMBAT ? (s_expandedFrame ? (int)D_5897_map_y - 5 : MAP_VIEW_Y) : 0)) *
+                16;
         /* Manual/modal frames may omit the cursor. Preserve what was actually
          * drawn, rather than introducing one while animating. */
         for (int y = 0; y < 16 && combatSelection; ++y)
@@ -865,7 +891,8 @@ void GRAP_SDL_FlushFrame(void)
     bool completedMap=s_mapDrawn;
     s_expandedFrame = false;
     if(!s_fullscreen || s_pixelUI || !D_58a4) s_completedWideValid=false;
-    if (!D_58a4 || (D_5893_map_id>32 && D_5893_map_id<128)) s_previousValid = false;
+    if (!D_58a4 || (!MAPS_Outside(D_5893_map_id) && D_5893_map_id < 128))
+        s_previousValid = false;
     LinearToRGB();
 
     SDL_UpdateTexture(s_sdlTexture, NULL, s_sdlSurface->pixels, s_sdlSurface->pitch);

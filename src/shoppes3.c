@@ -129,10 +129,7 @@ static int SHOPPES3_0072(int param_1, int param_2, int param_3)
                     ULTIMA_400c();
                     ULTIMA_2900_UpdateVitalsDisplay();
                     ULTIMA_4f7c(9);
-                    if (D_587f == 0x14 || D_587f == 0x05)
-                    {
-                        TOWN_0170();
-                    }
+                    TOWN_0170();
                 }
 
                 ULTIMA_1850_PrintString(_TEXT(0x4e51, "Morning!\n"));

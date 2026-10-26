@@ -505,6 +505,14 @@ QVector<MapPage> mapPages(const QString &name, const QByteArray &b) {
     QVector<MapPage> out;
     if (name == "BRIT.DAT" || name == "UNDER.DAT")
         return {{name == "BRIT.DAT" ? "Britannia" : "Underworld", 256, 0, 256}};
+    if (name == "DUNGEON.DAT") {
+        require(b.size() == 4096, "Dungeons must contain eight 512-byte blocks");
+        for (int d = 0; d < 8; d++)
+            for (int f = 0; f < 8; f++)
+                out.append({QString("Dungeon %1 — Level %2").arg(d + 1).arg(f + 1), 8,
+                            d * 512 + f * 64, 8, d, f, 8});
+        return out;
+    }
     if (name.endsWith(".CBT")) {
         require(!b.isEmpty() && b.size() % 352 == 0, "Combat map must contain 352-byte blocks");
         for (int i = 0; i < b.size() / 352; i++)

@@ -1,5 +1,8 @@
 #include "map_positions.h"
+#include "extended_maps.h"
 #include "dungeon_editor.h"
+#include "map_resize_dialog.h"
+#include "map_json.h"
 #include "contents_editor.h"
 #include "map_entities.h"
 #include "dungeon_names.h"
@@ -85,7 +88,22 @@ int DungeonDocument::offset(int dungeon, int floor) {
                 "Dungeon or level is out of range");
     return dungeon * 512 + floor * 64;
 }
+QSize DungeonDocument::size(int dungeon, int floor) const {
+    U5::require(floor >= 0 && floor < 8 && isDungeon(*project, 33 + dungeon),
+                "Invalid dungeon floor");
+    const auto b = project->resources.value("MAPS.OVR").edited;
+    const auto r = MAPS_Find(b.constData(), b.size(), 4, 33 + dungeon, floor);
+    return r ? QSize(MAPS_Word(r + 10), MAPS_Word(r + 12)) : QSize(8, 8);
+}
 QByteArray DungeonDocument::level(int dungeon, int floor, bool original) const {
+    size(dungeon, floor);
+    const auto b = project->resources.value("MAPS.OVR").edited;
+    const auto r = original ? nullptr : MAPS_Find(b.constData(), b.size(), 4, 33 + dungeon, floor);
+    if (r)
+        return b.mid(r - reinterpret_cast<const unsigned char *>(b.constData()) + MAPS_RECORD,
+                     MAPS_Word(r + 10) * MAPS_Word(r + 12));
+    if (dungeon >= 8)
+        return QByteArray(64, char(0xb0));
     return (original ? project->resources["DUNGEON.DAT"].original : project->data("DUNGEON.DAT"))
         .mid(offset(dungeon, floor), 64);
 }
@@ -95,6 +113,21 @@ int DungeonDocument::roomIndex(int dungeon, int cell) {
                 "This feature does not enter a combat room");
     // DUNGEON_0000: map ID minus 0x21, then subtract one except for Deceit.
     return qMax(0, dungeon - 1) * 16 + (cell & 15);
+}
+int DungeonDocument::pageIndex(int dungeon, int floor) const {
+    const auto pages = project->mapPages("DUNGEON.DAT");
+    for (int i = 0; i < pages.size(); ++i)
+        if (pages[i].settlement == dungeon && pages[i].floor == floor)
+            return i;
+    throw std::runtime_error("Missing dungeon floor");
+}
+int DungeonDocument::room(int dungeon, int cell) const {
+    if (dungeon < 8)
+        return roomIndex(dungeon, cell);
+    for (const auto &m : extendedMaps(*project))
+        if (m.kind == 4 && m.id == unsigned(33 + dungeon) && !m.floor)
+            return m.roomBase + (cell & 15);
+    throw std::runtime_error("Missing dungeon rooms");
 }
 QString DungeonDocument::feature(int cell) {
     static const QStringList names = {"Passage",
@@ -142,36 +175,54 @@ QString DungeonDocument::variant(int cell) {
 }
 QMap<QString, QByteArray> DungeonDocument::changes(int dungeon, int floor,
                                                    const QByteArray &cells) const {
-    U5::require(cells.size() == 64, "Dungeon levels must remain 8 by 8");
+    const auto dimensions = size(dungeon, floor);
+    U5::require(cells.size() == dimensions.width() * dimensions.height(),
+                "Dungeon floor dimensions changed");
+    auto maps = extendedMaps(*project);
+    for (auto &m : maps)
+        if (m.kind == 4 && m.id == unsigned(33 + dungeon) && m.floor == floor) {
+            m.cells = cells;
+            return {{"MAPS.OVR", writeExtendedMaps(maps)}};
+        }
     auto bytes = project->data("DUNGEON.DAT");
     bytes.replace(offset(dungeon, floor), 64, cells);
     return {{"DUNGEON.DAT", bytes}};
 }
 void DungeonDocument::validate(const Project &p, bool allRoomReferences) {
     DungeonDocument document(&p);
-    const auto &bytes = p.data("DUNGEON.DAT");
-    const auto &original = p.resources["DUNGEON.DAT"].original;
-    for (int i = 0; i < bytes.size(); ++i) {
-        int value = U5::byte(bytes, i);
-        const bool changed = i >= original.size() || bytes[i] != original[i];
-        if (!changed && !allRoomReferences)
-            continue;
-        U5::require(!changed || (value & 0xf0) != 0x90,
-                    "Cannot introduce an unused / impossible dungeon feature");
-        if ((value & 0xf0) == 0xa0 || (value & 0xf0) == 0xf0) {
-            int room = roomIndex(i / 512, value);
-            U5::require(p.resources.contains("DUNGEON.CBT") &&
-                            p.data("DUNGEON.CBT").size() >= (room + 1) * 352,
-                        "Encounter-room reference has no matching DUNGEON.CBT room");
+    for (int id : dungeonIds(p))
+        for (int d = id - 33, f = 0; f < 8; f++) {
+            const auto cells = document.level(d, f), original = document.level(d, f, true);
+            const auto dims = document.size(d, f);
+            for (int y = 0; y < dims.height(); y++)
+                for (int x = 0; x < dims.width(); x++) {
+                    int value = U5::byte(cells, y * dims.width() + x);
+                    bool changed = x >= 8 || y >= 8 || value != U5::byte(original, y * 8 + x);
+                    if (!changed && !allRoomReferences)
+                        continue;
+                    U5::require(!changed || (value & 0xf0) != 0x90,
+                                "Cannot introduce an unused / impossible dungeon feature");
+                    if ((value & 0xf0) == 0xa0 || (value & 0xf0) == 0xf0) {
+                        int room = document.room(d, value);
+                        U5::require(p.resources.contains("DUNGEON.CBT") &&
+                                        p.data("DUNGEON.CBT").size() >= (room + 1) * 352,
+                                    "Encounter-room reference has no matching DUNGEON.CBT room");
+                    }
+                }
         }
-    }
 }
+
 QStringList DungeonDocument::warnings(int dungeon, int floor, int x, int y) const {
-    U5::require(x >= 0 && x < 8 && y >= 0 && y < 8, "Dungeon coordinates out of range");
-    int value = U5::byte(level(dungeon, floor), y * 8 + x), kind = value >> 4;
+    const auto dims = size(dungeon, floor);
+    U5::require(x >= 0 && x < dims.width() && y >= 0 && y < dims.height(),
+                "Dungeon coordinates out of range");
+    int value = U5::byte(level(dungeon, floor), y * dims.width() + x), kind = value >> 4;
     QStringList result;
     if ((kind == 1 || kind == 3) && floor > 0) {
-        int other = U5::byte(level(dungeon, floor - 1), y * 8 + x) >> 4;
+        auto otherSize = size(dungeon, floor - 1);
+        int other = x < otherSize.width() && y < otherSize.height()
+                        ? U5::byte(level(dungeon, floor - 1), y * otherSize.width() + x) >> 4
+                        : -1;
         if (other != 2 && other != 3)
             result << "Ladder up has no matching ladder down on the level above.";
     }
@@ -179,7 +230,10 @@ QStringList DungeonDocument::warnings(int dungeon, int floor, int x, int y) cons
         if (floor == 7)
             result << "Ladder down points below the deepest level.";
         else {
-            int other = U5::byte(level(dungeon, floor + 1), y * 8 + x) >> 4;
+            auto otherSize = size(dungeon, floor + 1);
+            int other = x < otherSize.width() && y < otherSize.height()
+                            ? U5::byte(level(dungeon, floor + 1), y * otherSize.width() + x) >> 4
+                            : -1;
             if (other != 1 && other != 3)
                 result << "Ladder down has no matching ladder up on the level below.";
         }
@@ -187,7 +241,7 @@ QStringList DungeonDocument::warnings(int dungeon, int floor, int x, int y) cons
     if (kind == 9)
         result << "The engine describes this feature as impossible; preserved from the original.";
     if (kind == 10 || kind == 15) {
-        int room = roomIndex(dungeon, value);
+        int room = this->room(dungeon, value);
         if (!project->resources.contains("DUNGEON.CBT") ||
             project->data("DUNGEON.CBT").size() < (room + 1) * 352)
             result << "The linked combat room is missing.";
@@ -207,12 +261,9 @@ DungeonWorkspace::DungeonWorkspace(
     auto document = std::make_shared<DungeonDocument>(p);
     auto layout = new QVBoxLayout(this);
     auto row = new QHBoxLayout;
-    auto dungeon = new QComboBox;
-    dungeon->setObjectName("dungeonSelector");
-    for (int i = 0; i < 8; ++i)
-        dungeon->addItem(p->locationName(33 + i));
-    dungeon->setToolTip("Choose a dungeon. Every dungeon has eight underground levels.");
-    dungeon->setCurrentIndex(qBound(0, state->value("DUNGEON.DAT/dungeon"), 7));
+    const int dungeon = state->value("DUNGEON.DAT/dungeon");
+    auto dungeonName = new QLabel(p->locationName(33 + dungeon));
+    dungeonName->setObjectName("dungeonName");
     auto floor = new QComboBox;
     floor->setObjectName("dungeonLevelSelector");
     for (int i = 0; i < 8; ++i)
@@ -220,23 +271,31 @@ DungeonWorkspace::DungeonWorkspace(
     floor->setToolTip(
         "Level 1 is nearest the surface; Level 8 is deepest. Engine indices are 0–7.");
     floor->setCurrentIndex(qBound(0, state->value("DUNGEON.DAT/level"), 7));
-    row->addWidget(new QLabel("Dungeon:"));
-    row->addWidget(dungeon);
+    row->addWidget(dungeonName);
     auto rename = new QToolButton;
     rename->setObjectName("renameLocation");
     rename->setIcon(MapCanvas::toolIcon(MapCanvas::Pencil));
     rename->setToolTip("Rename dungeon");
     row->addWidget(rename);
     connect(rename, &QToolButton::clicked, this, [=] {
-        const int index = dungeon->currentIndex();
+        const int index = dungeon;
         bool ok = false;
         const auto name = QInputDialog::getText(this, "Rename dungeon", "Name", QLineEdit::Normal,
                                                 p->locationName(33 + index), &ok);
         if (!ok || name.trimmed() == p->locationName(33 + index))
             return;
         try {
-            if (commit({{"LOCATIONS.OVR", p->renameLocation(33 + index, name)}}, "Rename dungeon"))
-                dungeon->setItemText(index, p->locationName(33 + index));
+            QMap<QString, QByteArray> edits;
+            if (MAPS_NewLocation(33 + index)) {
+                auto maps = extendedMaps(*p);
+                for (auto &m : maps)
+                    if (m.kind == 4 && m.id == unsigned(33 + index))
+                        m.name = name.trimmed();
+                edits["MAPS.OVR"] = writeExtendedMaps(maps);
+            } else
+                edits["LOCATIONS.OVR"] = p->renameLocation(33 + index, name);
+            if (commit(edits, "Rename dungeon"))
+                dungeonName->setText(p->locationName(33 + index));
         } catch (const std::exception &error) {
             QMessageBox::warning(this, "Cannot rename dungeon", QString::fromUtf8(error.what()));
         }
@@ -244,6 +303,12 @@ DungeonWorkspace::DungeonWorkspace(
 
     row->addWidget(new QLabel("Level:"));
     row->addWidget(floor);
+    auto resize = new QToolButton;
+    resize->setText("Resize…");
+    resize->setObjectName("resizeDungeonFloor");
+    resize->setToolTip(
+        "Change this floor’s width and height while keeping existing cells at their coordinates.");
+    row->addWidget(resize);
     row->addStretch();
     layout->addLayout(row);
     auto tools = new QHBoxLayout;
@@ -329,7 +394,7 @@ DungeonWorkspace::DungeonWorkspace(
         canvas->zoom = scales[index];
         canvas->resizeMap();
     });
-    tools->addWidget(zoom);
+    row->addWidget(zoom);
     layout->addLayout(tools);
     auto split = new QHBoxLayout;
     auto palette = new QListWidget;
@@ -391,7 +456,7 @@ DungeonWorkspace::DungeonWorkspace(
             delete *contentsPanel;
         }
         *contentsPanel = new ContentsEditor(
-            p, {0, 33 + dungeon->currentIndex(), floor->currentIndex()}, canvas, commit);
+            p, {0, 33 + dungeon, floor->currentIndex()}, canvas, commit);
         inspectors->addWidget(*contentsPanel);
         inspectors->setCurrentWidget(*contentsPanel);
         (*contentsPanel)->selectCell(cell);
@@ -405,7 +470,7 @@ DungeonWorkspace::DungeonWorkspace(
     connect(positions, &QToolButton::clicked, this, [=] {
         canvas->cancelStroke();
         U5::MapPage page{};
-        page.settlement = dungeon->currentIndex();
+        page.settlement = dungeon;
         page.floor = floor->currentIndex();
         auto old = inspectors->findChild<QWidget *>("mapPositionEditor");
         if (old) {
@@ -433,7 +498,7 @@ DungeonWorkspace::DungeonWorkspace(
             canvas->beginPlacement(container ? 0x40 : -1, true, [=](QPoint cell) {
                 try {
                     auto bytes =
-                        addContentsAt(*p, {0, 33 + dungeon->currentIndex(), floor->currentIndex()},
+                        addContentsAt(*p, {0, 33 + dungeon, floor->currentIndex()},
                                       cell, container);
                     if (!commit({{"CONTENTS.OVR", bytes}},
                                 container ? "Add dungeon chest" : "Add container"))
@@ -454,7 +519,7 @@ DungeonWorkspace::DungeonWorkspace(
     tools->insertWidget(7, addMenuButton);
     canvas->deleteItem = [=] {
         try {
-            auto target = ContentsTarget{0, 33 + dungeon->currentIndex(), floor->currentIndex()};
+            auto target = ContentsTarget{0, 33 + dungeon, floor->currentIndex()};
             auto cell = canvas->keyboardCell;
             for (auto actor : canvas->actors)
                 if (actor.npc == canvas->selectedNpc)
@@ -493,11 +558,11 @@ DungeonWorkspace::DungeonWorkspace(
             button->setChecked(true);
     };
     toolGroup->button(MapCanvas::Pencil)->setChecked(true);
-    auto selected = std::make_shared<QPoint>(QPoint(qBound(0, state->value("DUNGEON.DAT/x"), 7),
-                                                    qBound(0, state->value("DUNGEON.DAT/y"), 7)));
+    auto selected = std::make_shared<QPoint>(
+        QPoint(qMax(0, state->value("DUNGEON.DAT/x")), qMax(0, state->value("DUNGEON.DAT/y"))));
     auto inspect = [=] {
-        int d = dungeon->currentIndex(), f = floor->currentIndex(),
-            v = U5::byte(canvas->ids, selected->y() * 8 + selected->x());
+        int d = dungeon, f = floor->currentIndex(),
+            v = U5::byte(canvas->ids, selected->y() * canvas->side + selected->x());
         (*state)["DUNGEON.DAT/x"] = selected->x();
         (*state)["DUNGEON.DAT/y"] = selected->y();
         details->setText(QString("X %1 · Y %2\n%3\nBrush: %4")
@@ -506,16 +571,21 @@ DungeonWorkspace::DungeonWorkspace(
                              .arg(DungeonDocument::feature(v) + " · " + DungeonDocument::variant(v))
                              .arg(DungeonDocument::feature(canvas->brush)));
         open->setEnabled((v >> 4 == 10 || v >> 4 == 15) && p->resources.contains("DUNGEON.CBT") &&
-                         p->data("DUNGEON.CBT").size() >=
-                             (DungeonDocument::roomIndex(d, v) + 1) * 352);
+                         p->data("DUNGEON.CBT").size() >= (document->room(d, v) + 1) * 352);
         warning->setText(document->warnings(d, f, selected->x(), selected->y()).join("\n"));
         QSignalBlocker block(stack);
         stack->clear();
-        for (int i = 0; i < 8; ++i)
-            stack->addItem(QString("Level %1 — %2")
-                               .arg(i + 1)
-                               .arg(DungeonDocument::feature(U5::byte(
-                                   document->level(d, i), selected->y() * 8 + selected->x()))));
+        for (int i = 0; i < 8; i++) {
+            const auto otherSize = document->size(d, i);
+            stack->addItem(
+                QString("Level %1 — %2")
+                    .arg(i + 1)
+                    .arg(selected->x() < otherSize.width() && selected->y() < otherSize.height()
+                             ? DungeonDocument::feature(
+                                   U5::byte(document->level(d, i),
+                                            selected->y() * otherSize.width() + selected->x()))
+                             : QString("Outside floor")));
+        }
         stack->setCurrentRow(f);
     };
     auto load = [=] {
@@ -529,11 +599,22 @@ DungeonWorkspace::DungeonWorkspace(
         canvas->chooseNpc = {};
         canvas->moveNpc = {};
         canvas->actors.clear();
-        (*state)["DUNGEON.DAT/dungeon"] = dungeon->currentIndex();
+        canvas->positionMarkers.clear();
+        (*state)["DUNGEON.DAT/dungeon"] = dungeon;
         (*state)["DUNGEON.DAT/level"] = floor->currentIndex();
         canvas->clearSelection();
-        canvas->ids = document->level(dungeon->currentIndex(), floor->currentIndex());
-        canvas->original = document->level(dungeon->currentIndex(), floor->currentIndex(), true);
+        const auto dims = document->size(dungeon, floor->currentIndex());
+        canvas->side = dims.width();
+        canvas->rows = dims.height();
+        *selected = {qBound(0, selected->x(), dims.width() - 1),
+                     qBound(0, selected->y(), dims.height() - 1)};
+        canvas->ids = document->level(dungeon, floor->currentIndex());
+        auto original = document->level(dungeon, floor->currentIndex(), true);
+        canvas->original = QByteArray(dims.width() * dims.height(), 0);
+        for (int y = 0; y < qMin(8, dims.height()); y++)
+            memcpy(canvas->original.data() + y * dims.width(), original.constData() + y * 8,
+                   qMin(8, dims.width()));
+        resize->setText(QString("%1 × %2…").arg(dims.width()).arg(dims.height()));
         canvas->keyboardCell = *selected;
         canvas->resizeMap();
         inspect();
@@ -563,7 +644,7 @@ DungeonWorkspace::DungeonWorkspace(
         inspect();
     };
     canvas->commit = [=](const QByteArray &cells) {
-        return commit(document->changes(dungeon->currentIndex(), floor->currentIndex(), cells),
+        return commit(document->changes(dungeon, floor->currentIndex(), cells),
                       "Edit dungeon level");
     };
     canvas->changed = inspect;
@@ -575,21 +656,111 @@ DungeonWorkspace::DungeonWorkspace(
             [=](int value) { brush((canvas->brush & 0xf0) | value); });
     connect(apply, &QPushButton::clicked, this, [=] {
         auto cells = canvas->ids;
-        cells[selected->y() * 8 + selected->x()] = char(canvas->brush);
-        if (commit(document->changes(dungeon->currentIndex(), floor->currentIndex(), cells),
+        cells[selected->y() * canvas->side + selected->x()] = char(canvas->brush);
+        if (commit(document->changes(dungeon, floor->currentIndex(), cells),
                    "Configure dungeon cell"))
             load();
     });
     connect(open, &QPushButton::clicked, this, [=] {
-        int value = U5::byte(canvas->ids, selected->y() * 8 + selected->x());
-        room(DungeonDocument::roomIndex(dungeon->currentIndex(), value));
+        int value = U5::byte(canvas->ids, selected->y() * canvas->side + selected->x());
+        room(document->room(dungeon, value));
     });
     connect(stack, &QListWidget::currentRowChanged, this, [=](int i) {
         if (i >= 0)
             floor->setCurrentIndex(i);
     });
-    connect(dungeon, qOverload<int>(&QComboBox::currentIndexChanged), this, [=](int) { load(); });
+    connect(resize, &QToolButton::clicked, this, [=] {
+        canvas->cancelStroke();
+        const int d = dungeon, f = floor->currentIndex();
+        const auto dims = document->size(d, f);
+        MapResizeDialog dialog(window(), dims);
+        QPointer<DungeonWorkspace> owner(this);
+        for (int value = 0; value < 256; value++)
+            if ((value >> 4) != 9)
+                dialog.fill.addItem(QIcon(QPixmap::fromImage(canvas->tiles.value(value))),
+                                    DungeonDocument::feature(value) + " · " +
+                                        DungeonDocument::variant(value), value);
+        dialog.fill.setCurrentIndex(dialog.fill.findData(canvas->brush));
+        if (dialog.exec() != QDialog::Accepted || !owner)
+            return;
+        try {
+            if (commit(resizeMap(*p, "DUNGEON.DAT", document->pageIndex(d, f), dialog.width.value(),
+                                 dialog.height.value(), dialog.fill.currentData().toInt()),
+                       "Resize dungeon floor") &&
+                owner)
+                load();
+        } catch (const std::exception &e) {
+            QMessageBox::warning(this, "Cannot resize dungeon floor", e.what());
+        }
+    });
     connect(floor, qOverload<int>(&QComboBox::currentIndexChanged), this, [=](int) { load(); });
+    auto transfer = new QWidget;
+    transfer->setObjectName("mapTransferActions");
+    transfer->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    auto transferLayout = new QHBoxLayout(transfer);
+    transferLayout->setContentsMargins(0, 0, 0, 0);
+    transferLayout->setSpacing(4);
+    auto exportButton = new QPushButton("Export");
+    exportButton->setObjectName("mapExport");
+    auto exportMenu = new QMenu(exportButton);
+    exportMenu->addAction("Map PNG…", this, [=] {
+        try {
+            auto path =
+                QFileDialog::getSaveFileName(this, "Export dungeon floor", {}, "PNG (*.png)");
+            if (path.isEmpty())
+                return;
+            U5::require(QFileInfo(path).absolutePath() != p->sourceDirectory,
+                        "Export outside the original game folder");
+            auto dims = document->size(dungeon, floor->currentIndex());
+            auto cells = document->level(dungeon, floor->currentIndex());
+            QImage image(dims.width() * 16, dims.height() * 16, QImage::Format_RGB32);
+            image.fill(Qt::black);
+            QPainter painter(&image);
+            for (int y = 0; y < dims.height(); ++y)
+                for (int x = 0; x < dims.width(); ++x)
+                    painter.drawImage(QRect(x * 16, y * 16, 16, 16),
+                                      canvas->tiles[U5::byte(cells, y * dims.width() + x)]);
+            painter.end();
+            U5::require(image.save(path, "PNG"), "Cannot export PNG");
+        } catch (const std::exception &e) {
+            QMessageBox::warning(this, "Cannot export map", QString::fromUtf8(e.what()));
+        }
+    });
+    auto jsonExport = exportMenu->addAction("Map JSON…", this, [=] {
+        try {
+            saveMapJson(this, *p, "DUNGEON.DAT",
+                        document->pageIndex(dungeon, floor->currentIndex()));
+        } catch (const std::exception &e) {
+            QMessageBox::warning(this, "Cannot export map", QString::fromUtf8(e.what()));
+        }
+    });
+    jsonExport->setObjectName("mapExportJson");
+    jsonExport->setToolTip("Export all floors, contents, and linked encounter rooms.");
+    exportButton->setMenu(exportMenu);
+    auto importButton = new QPushButton("Import…");
+    importButton->setObjectName("mapImport");
+    importButton->setToolTip("Replace this dungeon from a dungeon map JSON.");
+    transferLayout->addWidget(importButton);
+    transferLayout->addWidget(exportButton);
+    row->addWidget(transfer);
+    connect(importButton, &QPushButton::clicked, this, [=] {
+        try {
+            canvas->cancelStroke();
+            auto json = openMapJson(this);
+            if (json.isEmpty())
+                return;
+            auto edits = importMapJson(*p, "DUNGEON.DAT",
+                                       document->pageIndex(dungeon, floor->currentIndex()), json);
+            if (commit(edits, "Import map")) {
+                if (refreshAfterImport)
+                    refreshAfterImport();
+                else
+                    load();
+            }
+        } catch (const std::exception &e) {
+            QMessageBox::warning(this, "Cannot import map", QString::fromUtf8(e.what()));
+        }
+    });
     load();
     brush(canvas->brush);
 }

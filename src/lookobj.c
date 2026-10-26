@@ -1,3 +1,6 @@
+#include "common/common.h"
+#include "mod/signs.h"
+#include "common/file.h"
 #include "mod/runtime.h"
 #include "mod/actors.h"
 #include "common/common.h"
@@ -12,6 +15,7 @@
 #include <string.h>
 
 #include "lookobj.h"
+#include "npc.h"
 
 void ULTIMA_0c64_GRAP_30_Pset(int param_1, int param_2);
 int ULTIMA_2e8e();
@@ -573,13 +577,52 @@ static void LOOKOBJ_07e4(byte param_1, byte param_2, byte param_3)
     else
     {
 #if !defined(MATCHING_BUILD)
-        if (D_5893_map_id >= 33)
-        {
+        if (!MAPS_Outside(D_5893_map_id)) {
             LOOKOBJ_06f8(-1);
             return;
         }
         memset(local_48, 0, sizeof(local_48));
 #endif
+        FILE *signFile = FILE_Open("SIGNS.DAT", "rb");
+        if (signFile) {
+            unsigned char header[12];
+            size_t got = fread(header, 1, 12, signFile);
+            if (got == 12 && !memcmp(header, "ISIG0001", 8)) {
+                if (fseek(signFile, 0, SEEK_END)) {
+                    fclose(signFile);
+                    LOOKOBJ_06f8(-1);
+                    return;
+                }
+                long size = ftell(signFile);
+                unsigned char *bytes = size >= 12 && size <= MAPS_MAX_BYTES ? malloc(size) : NULL;
+                if (!bytes || fseek(signFile, 0, SEEK_SET) ||
+                    fread(bytes, 1, size, signFile) != (size_t)size) {
+                    free(bytes);
+                    fclose(signFile);
+                    LOOKOBJ_06f8(-1);
+                    return;
+                }
+                size_t at =
+                    SIGNS_Find(bytes, size, D_5893_map_id, (int8_t)param_1, param_2, param_3);
+                memset(D_b21e, 0xff, SCRATCH_SIZE);
+                if (at) {
+                    size_t length = 4 + strlen((char *)bytes + at + 4) + 1;
+                    if (length <= SCRATCH_SIZE)
+                        memcpy(D_b21e, bytes + at, length);
+                    else
+                        at = 0;
+                }
+                free(bytes);
+                fclose(signFile);
+                LOOKOBJ_06f8(at ? 0 : -1);
+                return;
+            }
+            fclose(signFile);
+        }
+        if (D_5893_map_id > 32) {
+            LOOKOBJ_06f8(-1);
+            return;
+        }
         ULTIMA_256e_ReadFileFromDisk(/*0x74e6*/ "SIGNS.DAT", local_48, 0x42, 0);
         local_6 = local_48[D_5893_map_id];
         memset(D_b21e, 0xff, SCRATCH_SIZE);
@@ -668,6 +711,10 @@ void LOOKOBJ_099c_LookCmd(void)
     ULTIMA_1850_PrintString(_TEXT(0x751c, "\nThou dost see\n"));
     if (local_6 != 0)
     {
+        if (NPC_BloodAt(local_8, local_a, D_5895_map_level)) {
+            ULTIMA_1850_PrintString("blood splatter.\n");
+            return;
+        }
         for (unsigned actor = 0; actor < (unsigned)MAP_ACTOR_COUNT; actor++) {
             ActorFmt *a = &D_5c5a[actor];
             if (!a->_0_tile || !a->_1_animTile || a->_4_z != D_5895_map_level ||

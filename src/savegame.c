@@ -50,8 +50,17 @@ int FILE_ReadSavegameFile(char* fileName)
         return -1;
     }
 
-    if (fseek(stream, 0x1060, SEEK_SET) || !NPC_ReadExtraState(stream, 0) ||
-        !CONTENTS_ReadState(stream, 0) || fseek(stream, 0, SEEK_SET)) {
+    unsigned char position[5];
+    if (fseek(stream, 0x2ed, SEEK_SET) || fread(position, 1, 5, stream) != 5 ||
+        (MAPS_NewLocation(position[0]) && !MAPS_Record(1, position[0], (int8_t)position[2]) &&
+         !MAPS_Record(4, position[0], (int8_t)position[2]))) {
+        DEBUG_Error("Save needs a location from an unavailable mod");
+        fclose(stream);
+        return -1;
+    }
+    if (fseek(stream, 0x1060, SEEK_SET) || !MAPS_ReadState(stream, 0) ||
+        !NPC_ReadExtraState(stream, 0) || !CONTENTS_ReadState(stream, 0) ||
+        fseek(stream, 0, SEEK_SET)) {
         DEBUG_Error("Invalid map contents save state");
         fclose(stream);
         return -1;
@@ -196,10 +205,12 @@ int FILE_ReadSavegameFile(char* fileName)
 
     fseek(stream, 0x1060, SEEK_SET);
     if (FILE_NameEqual(fileName, "INIT.GAM")) {
+        MAPS_Reset();
         CONTENTS_Reset();
         TYPES_Reset();
         NPC_ResetExtra();
     } else {
+        MAPS_ReadState(stream, 1);
         NPC_ReadExtraState(stream, 1);
         CONTENTS_ReadState(stream, 1);
     }
@@ -367,7 +378,8 @@ int FILE_WriteSavegameFile(char* fileName)
     int pos = (int)ftell(stream);
     debug("Party serializer file=%s final offset=%d expected=4192",fileName,pos);
 
-    int failed = ferror(stream) || !NPC_WriteExtraState(stream) || !CONTENTS_WriteState(stream);
+    int failed = ferror(stream) || !MAPS_WriteState(stream) || !NPC_WriteExtraState(stream) ||
+                 !CONTENTS_WriteState(stream);
     if (fclose(stream) != 0) failed = 1;
 
     ASSERT(pos == 0x1060);

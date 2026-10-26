@@ -1,3 +1,4 @@
+#include "mod/npcs.h"
 #include "custom_tiles.h"
 #include "world_objects.h"
 #include "map_entities.h"
@@ -44,9 +45,10 @@ void WorldObjects::validate(const QString &name, const QByteArray &b, const QByt
             require(!(shape == 5 || shape == 6 || (shape >= 9 && shape <= 12)) || property < 48,
                     "Equipment type is invalid");
             require(shape != 25 || property < 8, "Moonstone phase is invalid");
+            require(shape != 180 || property < 3, "Shard identity is invalid");
         }
-        if (!QList<int>{1,  2,  15, 16, 17, 25, 27, 30, 32, 33,
-                        34, 35, 36, 37, 38, 39, 40, 41, 42, 43}
+        if (!QList<int>{1,  2,  15, 16, 17, 25, 27, 30, 32, 33,  34,  35,  36,  37,  38,
+                        39, 40, 41, 42, 43, 44, 45, 46, 47, 180, 181, 182, 183, 236, 252}
                  .contains(uchar(r[0])))
             continue; // Unknown object types are retained, with diagnostics rather than invented
                       // semantics.
@@ -55,7 +57,7 @@ void WorldObjects::validate(const QString &name, const QByteArray &b, const QByt
         int tile = uchar(r[0]), anim = uchar(r[1]);
         require(anim == tile || ((tile & 0xfc) == (anim & 0xfc) && tile >= 0x20),
                 "Animated shape must match the object's tile family");
-        if ((tile & 0xf8) == TILE_ACTOR_FRIGATE_20)
+        if ((tile & 0xf8) == TILE_ACTOR_FRIGATE_20 || (tile & 0xfc) == TILE_ACTOR_PIRATE)
             require(uchar(r[5]) <= 100, "Ship hull condition must be between 0 and 100");
     }
 }
@@ -63,7 +65,8 @@ static bool equipmentShape(int shape) {
     return shape == 5 || shape == 6 || (shape >= 9 && shape <= 12);
 }
 static int defaultProperty(int shape) {
-    return shape == 32                                                            ? 99
+    return shape >= 44 && shape <= 47                                             ? 100
+           : (shape & 0xf8) == 0x20                                               ? 99
            : shape == 2 || shape == 7 || shape == 8 || shape == 13 || shape == 15 ? 1
            : shape == 5                                                           ? 16
            : shape == 6                                                           ? 4
@@ -72,7 +75,21 @@ static int defaultProperty(int shape) {
            : shape == 12                                                          ? 45
                                                                                   : 0;
 }
-static QString objectName(int shape) {
+QString mapObjectName(int shape, int value, int aux) {
+    if (shape >= 44 && shape <= 47)
+        return "Pirate ship";
+    if (shape == 236)
+        return "Whirlpool";
+    if (shape == 252)
+        return "Shadow Lord";
+    if (shape == 180)
+        return "Shard";
+    if (shape == 181)
+        return "Lord British’s crown";
+    if (shape == 182)
+        return "Lord British’s sceptre";
+    if (shape == 183)
+        return "Lord British’s amulet";
     if (shape == 5)
         return "Weapon";
     if (shape == 6)
@@ -98,7 +115,7 @@ static QString objectName(int shape) {
     if (shape == 14)
         return "Sandalwood box";
     if (shape == 31)
-        return "Corpse";
+        return "Gore";
     if (shape == TILE_ACTOR_CHEST)
         return "Chest";
     if (shape == TILE_ACTOR_GOLD)
@@ -112,7 +129,7 @@ static QString objectName(int shape) {
     if (shape == TILE_ACTOR_CARPET)
         return "Magic carpet";
     if (shape == TILE_ACTOR_SLEEP)
-        return "Sleeping figure";
+        return "Corpse";
     if ((shape & 0xf8) == TILE_ACTOR_FRIGATE_20)
         return "Frigate";
     if (shape >= TILE_ACTOR_SKIFF && shape <= TILE_ACTOR_SKIFF + 3)
@@ -191,11 +208,12 @@ QWidget *worldObjectEditor(Project *project, int initialWorld, ObjectCommit comm
     auto il = new QFormLayout(inspector);
     auto type = new QComboBox;
     type->setObjectName("worldObjectType");
-    for (int tile : {1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 15, 16, 17,
-                     25, 27, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43})
-        type->addItem(objectName(tile), tile);
+    for (int tile : {1,  2,  3,  4,  5,  6,  7,  8,   9,   10,  11,  12,  13, 14, 15,
+                     16, 17, 25, 27, 30, 31, 32, 33,  34,  35,  36,  37,  38, 39, 40,
+                     41, 42, 43, 44, 45, 46, 47, 180, 181, 182, 183, 236, 252})
+        type->addItem(mapObjectName(tile), tile);
     for (int tile : Workshop::monsterShapes())
-        type->addItem(objectName(tile), tile);
+        type->addItem(mapObjectName(tile), tile);
     if (typedCommit)
         for (auto record : CustomTiles::records(*project)) {
             TypeDef d;
@@ -220,8 +238,9 @@ QWidget *worldObjectEditor(Project *project, int initialWorld, ObjectCommit comm
     auto hull = new QSpinBox;
     hull->setObjectName("shipHull");
     hull->setRange(0, 100);
-    hull->setToolTip("Frigate hull condition. 99 is the engine's usual initial condition; rough "
-                     "seas and combat can damage it.");
+    hull->setToolTip(
+        "Hull condition, from 0 to 100. Frigates start at 99; pirate ships start at 100. "
+        "Rough seas and combat can damage a ship.");
     il->addRow("Ship condition", hull);
     auto itemValue = new QSpinBox;
     itemValue->setObjectName("worldItemValue");
@@ -230,8 +249,7 @@ QWidget *worldObjectEditor(Project *project, int initialWorld, ObjectCommit comm
     il->addRow(itemLabel, itemValue);
     auto variant = new QComboBox;
     variant->setObjectName("worldItemVariant");
-    variant->setToolTip(
-        "Choose the equipment, scroll, or potion received when this item is picked up.");
+    variant->setToolTip("Choose the item variant, shard, or Shadow Lord identity.");
     auto variantLabel = new QLabel("Type");
     il->addRow(variantLabel, variant);
     auto skeletonKey = new QCheckBox("Skeleton key");
@@ -267,6 +285,8 @@ QWidget *worldObjectEditor(Project *project, int initialWorld, ObjectCommit comm
                 type->addItem(QString("Unusual shape %1 (preserved)").arg(tile), tile);
                 index = type->count() - 1;
             }
+            if (auto corpse = type->findData(31); corpse >= 0)
+                type->setItemText(corpse, "Gore");
             type->setCurrentIndex(index);
             x->setValue(uchar(r[2]));
             y->setValue(uchar(r[3]));
@@ -284,20 +304,26 @@ QWidget *worldObjectEditor(Project *project, int initialWorld, ObjectCommit comm
             skeletonKey->setVisible(tile == 7);
             skeletonKey->setChecked(uchar(r[5]) & 128);
             variant->clear();
-            auto variants = Workshop::mapItemVariants(equipmentShape(tile) ? MapItemKind::Equipment
-                                                      : tile == 3          ? MapItemKind::Potion
-                                                                           : MapItemKind::Scroll);
-            const bool typed = equipmentShape(tile) || tile == 3 || tile == 4;
+            auto variants =
+                Workshop::mapItemVariants(tile == 180            ? MapItemKind::Shard
+                                          : tile == 252          ? MapItemKind::ShadowLord
+                                          : equipmentShape(tile) ? MapItemKind::Equipment
+                                          : tile == 3            ? MapItemKind::Potion
+                                                                 : MapItemKind::Scroll);
+            const bool typed =
+                equipmentShape(tile) || tile == 3 || tile == 4 || tile == 180 || tile == 252;
             variant->setVisible(typed);
             variantLabel->setVisible(typed);
             if (typed) {
+                const int variantValue = uchar(r[tile == 252 ? 7 : 5]);
+                variantLabel->setText(tile == 252 ? "Identity" : tile == 180 ? "Shard" : "Type");
                 for (auto entry : variants)
                     variant->addItem(entry.first, entry.second);
-                if (variant->findData(uchar(r[5])) < 0)
-                    variant->addItem("Unassigned (preserved)", uchar(r[5]));
-                variant->setCurrentIndex(variant->findData(uchar(r[5])));
+                if (variant->findData(variantValue) < 0)
+                    variant->addItem("Unassigned (preserved)", variantValue);
+                variant->setCurrentIndex(variant->findData(variantValue));
             }
-            hull->setEnabled((tile & 0xf8) == 0x20);
+            hull->setEnabled((tile & 0xf8) == 0x20 || (tile & 0xfc) == 0x2c);
             hull->setValue(qMin(100, int(uchar(r[5]))));
             details->setText(
                 QString("Slot %1 · %2\nAnimation: %3\nProperty bytes: %4 %5 %6\nFloor: %7")
@@ -333,7 +359,10 @@ QWidget *worldObjectEditor(Project *project, int initialWorld, ObjectCommit comm
             auto mapName = which ? QString("UNDER.DAT") : QString("BRIT.DAT");
             U5::MapPage mapPage{mapName, 256, 0, 256};
             unsigned appearance = CustomTiles::actorType(*project, mapName, mapPage, 0, slot, 256 + tile);
-            QString label = appearance >= 512 ? QString::fromUtf8(CustomTiles::definition(*project, appearance).name) : objectName(tile);
+            QString label =
+                appearance >= 512
+                    ? QString::fromUtf8(CustomTiles::definition(*project, appearance).name)
+                    : mapObjectName(tile, uchar(r[5]), uchar(r[7]));
             auto art = appearance >= 512 ? CustomTiles::image(*project, appearance, 6)
                                          : canvas->tiles.value(appearance);
             auto item = new QListWidgetItem(QIcon(QPixmap::fromImage(art)),
@@ -410,18 +439,20 @@ QWidget *worldObjectEditor(Project *project, int initialWorld, ObjectCommit comm
         if (tile != uchar(r[0])) {
             r[0] = r[1] = char(tile);
             r[5] = char(defaultProperty(tile));
+            r[7] = char((tile & 0xf8) == 0x20 ? 1 : tile == 252 ? 0 : 255);
         }
         r[2] = char(x->value());
         r[3] = char(y->value());
         r[4] = world->currentIndex() == 0 ? 0 : char(255);
-        if ((tile & 0xf8) == 0x20 &&
+        if (((tile & 0xf8) == 0x20 || (tile & 0xfc) == 0x2c) &&
             tile == uchar(WorldObjects::effective(*project, world->currentIndex())[slot * 8]))
             r[5] = char(hull->value());
         if (tile == uchar(WorldObjects::effective(*project, world->currentIndex())[slot * 8])) {
             if (tile == 2 || tile == 15 || tile == 25 || tile == 7 || tile == 8 || tile == 13)
                 r[5] = char(itemValue->value() | (tile == 7 && skeletonKey->isChecked() ? 128 : 0));
-            if ((equipmentShape(tile) || tile == 3 || tile == 4) && variant->currentIndex() >= 0) {
-                r[5] = char(variant->currentData().toInt());
+            if ((equipmentShape(tile) || tile == 3 || tile == 4 || tile == 180 || tile == 252) &&
+                variant->currentIndex() >= 0) {
+                r[tile == 252 ? 7 : 5] = char(variant->currentData().toInt());
                 if (equipmentShape(tile))
                     r[0] = r[1] = char(mapItemShape(MapItemKind::Equipment, uchar(r[5])));
             }

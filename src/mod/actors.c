@@ -64,7 +64,7 @@ unsigned ACTORS_Instance(unsigned actor) {
     } else if (!D_5893_map_id) {
         TypeCell key = {4, 0, (int8_t)D_5895_map_level, actor, 0, 0, 0};
         type = TYPES_At(key, 0);
-    } else if (D_5893_map_id <= 32) {
+    } else if (MAPS_Outside(D_5893_map_id)) {
         for (unsigned slot = actor >= 32 ? actor : 1; slot < (actor >= 32 ? actor + 1 : 32); slot++)
             if (D_5f5e[slot]._0 && D_5f5e[slot]._c == actor) {
                 TypeCell key = {3, D_5893_map_id, 0, slot & 255, slot >> 8, 0, 0};
@@ -96,8 +96,8 @@ int ACTORS_Contains(unsigned actor, int x, int y) {
     ACTORS_Size(actor, &w, &h);
     int dx = x - D_5c5a[actor]._2_x, dy = y - D_5c5a[actor]._3_y;
     if (!D_5893_map_id) {
-        dx = (dx + 256) & 255;
-        dy = (dy + 256) & 255;
+        dx = MAPS_Wrap(dx, MAP_WIDTH);
+        dy = MAPS_Wrap(dy, MAP_HEIGHT);
     }
     return dx >= 0 && dy >= 0 && dx < (int)w && dy < (int)h;
 }
@@ -113,8 +113,8 @@ int ACTORS_CanPlace(unsigned type, int x, int y, unsigned ignoreActor) {
     TypeDef d = ACTORS_Def(type);
     unsigned w = D_5893_map_id ? TYPES_Width(&d) : 1;
     unsigned h = D_5893_map_id ? TYPES_Height(&d) : 1;
-    int limit = D_5893_map_id >= 128 ? 11 : D_5893_map_id ? 32 : 256;
-    if (x < 0 || y < 0 || x + (int)w > limit || y + (int)h > limit)
+
+    if (x < 0 || y < 0 || x + (int)w > MAP_WIDTH || y + (int)h > MAP_HEIGHT)
         return 0;
     unsigned shape = d.base;
     if (ignoreActor < (unsigned)MAP_ACTOR_COUNT)

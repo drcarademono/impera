@@ -9,6 +9,26 @@
  * 24-byte entries: settlement, reserved, slot LE16, schedule[16], shape,
  * dialogue, reserved[2]. Slot zero remains reserved for the party. */
 static inline unsigned NPCS_Word(const unsigned char *p) { return p[0] | ((unsigned)p[1] << 8); }
+/* Authored stationary objects reuse location records. The three behavior bytes
+ * are 0x80|kind, the dialogue byte carries property 5, and time[3] property 7.
+ * Native records are unchanged; kinds match Workshop's stable placement IDs. */
+#define NPCS_OBJECT_MARKER 0x80u
+#define NPCS_OBJECT_TRIGGER 9u
+#define NPCS_OBJECT_BLOOD 22u
+#define NPCS_OBJECT_PIRATE 24u
+#define NPCS_OBJECT_WHIRLPOOL 25u
+#define NPCS_OBJECT_SHADOWLORD 26u
+static inline int NPCS_ObjectKind(const void *v, unsigned shape) {
+    const unsigned char *p = (const unsigned char *)v;
+    unsigned kind = p[0] & 31;
+    return shape > 0 && (shape < 64 || (kind >= 25 && kind <= 30)) && p[0] == p[1] &&
+                   p[1] == p[2] && (p[0] & 0xe0) == NPCS_OBJECT_MARKER && kind >= 5 && kind <= 30
+               ? (int)kind
+               : -1;
+}
+static inline int NPCS_Blood(unsigned shape, unsigned value, unsigned aux) {
+    return shape == 31 && value == 255 && aux == 0xb1;
+}
 #ifdef __cplusplus
 extern "C" {
 #endif

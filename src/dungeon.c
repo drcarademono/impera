@@ -17,6 +17,12 @@
 #include "audio/aud_mus.h"
 
 void DNGLOOK_109e(int param_1);
+static void dungeonNormalizePosition(void) {
+    if (MAPS_IsDungeon(D_5893_map_id) && D_5895_map_level < 8) {
+        D_5896_map_x = DungeonX(D_5896_map_x);
+        D_5897_map_y = DungeonY(D_5897_map_y);
+    }
+}
 
 static void DUNGEON_0000(byte param_1)
 {
@@ -41,13 +47,7 @@ static void DUNGEON_0000(byte param_1)
     local_4 = D_587b;
     D_589e = D_587b = 0xff;
 
-    local_1e = D_5893_map_id - 0x21;
-    if (local_1e >= 1)
-    {
-        local_1e--;
-    }
-
-    local_a = 0x1600 * local_1e + local_1c * 0x160;
+    local_a = MAPS_DungeonRoom(D_5893_map_id, local_1c) * 352;
 
     memset(D_ad14, 0, 0x160);
 
@@ -179,14 +179,14 @@ static int DUNGEON_0252(void)
     {
         // 0262
         local_e = &GetDungeonMap(0, 0, D_5895_map_level);
-        local_a = ULTIMA_2092_RandomRange(0, 0x3f);
+        local_a = ULTIMA_2092_RandomRange(0, MAP_WIDTH * MAP_HEIGHT - 1);
         local_e += local_a;
         local_c = *local_e & 0xf0;
         if (local_c < 0x60 || local_c == 0x70)
         {
             // 0292
-            local_6 = local_a / 8;
-            local_4 = local_a % 8;
+            local_6 = local_a / MAP_WIDTH;
+            local_4 = local_a % MAP_WIDTH;
             if (local_4 != D_5896_map_x && local_6 != D_5897_map_y)
             {
                 D_5c5a[1]._2_x = D_5c5a[2]._2_x = local_4;
@@ -380,27 +380,8 @@ static int DUNGEON_0502(int param_1, byte param_2)
     if (local_6 != 0)
     {
         local_4 = 1;
-        local_8 = D_24d6[D_6603] * local_6 + D_5896_map_x;
-        if (local_8 < 0)
-        {
-            local_8 = 7;
-        }
-
-        if (local_8 > 7)
-        {
-            local_8 = 0;
-        }
-
-        local_a = D_24de[D_6603] * local_6 + D_5897_map_y;
-        if (local_a < 0)
-        {
-            local_a = 7;
-        }
-
-        if (local_a > 7)
-        {
-            local_a = 0;
-        }
+        local_8 = DungeonX(D_24d6[D_6603] * local_6 + D_5896_map_x);
+        local_a = DungeonY(D_24de[D_6603] * local_6 + D_5897_map_y);
 
         // 05bc
         local_c = GetDungeonMap(local_8, local_a, D_5895_map_level);
@@ -423,19 +404,16 @@ static int DUNGEON_0502(int param_1, byte param_2)
         else
         {
             // 067c~: OK
-            if (local_8 == D_5c5a[1]._2_x && local_a == D_5c5a[1]._3_y)
-            {
+            if (D_5c5a[1]._5 != 0xff && local_8 == D_5c5a[1]._2_x && local_a == D_5c5a[1]._3_y) {
                 ULTIMA_1850_PrintString(_TEXT(0x2d23, "Blocked!\n"));
-            }
-            else
-            {
+            } else {
                 // 0694
                 D_a9fb = 0xf;
                 D_24e7 = 0;
                 DUNGEON_1020();
                 D_24e7 = 0;
-                D_5896_map_x = (byte)local_8 & 7;
-                D_5897_map_y = (byte)local_a & 7;
+                D_5896_map_x = DungeonX(local_8);
+                D_5897_map_y = DungeonY(local_a);
             }
         }
     }
@@ -550,26 +528,8 @@ static int DUNGEON_07e2(void)
             {
                 // 083e
                 local_a = ULTIMA_2092_RandomRange(0, 3);
-                local_12 = D_24d6[local_a] + local_4->_2_x;
-                if (local_12 > 7)
-                {
-                    local_12 = 0;
-                }
-                if (local_12 < 0)
-                {
-                    local_12 = 7;
-                }
-
-                // 0866
-                local_14 = D_24de[local_a] + local_4->_3_y;
-                if (local_14 > 7)
-                {
-                    local_14 = 0;
-                }
-                if (local_14 < 0)
-                {
-                    local_14 = 7;
-                }
+                local_12 = DungeonX(D_24d6[local_a] + local_4->_2_x);
+                local_14 = DungeonY(D_24de[local_a] + local_4->_3_y);
 
                 // 0882
                 local_16 = GetDungeonMap(local_12, local_14, D_5895_map_level);
@@ -658,6 +618,7 @@ static void DUNGEON_0a4c(byte param_1)
         GetDungeonMap(D_5896_map_x, D_5897_map_y, D_5895_map_level) &= 0xf8;
 
         D_5895_map_level++;
+        dungeonNormalizePosition();
 
         param_1 = GetDungeonMap(D_5896_map_x, D_5897_map_y, D_5895_map_level);
         if (param_1 < 0x90)
@@ -705,20 +666,13 @@ static void DUNGEON_0b7e(void)
 
     local_4 = &D_5c5a[2];
 
-    if (((local_4->_2_x - 1) & 7) == D_5896_map_x)
-    {
+    if (DungeonX(local_4->_2_x - 1) == D_5896_map_x) {
         D_6602 = 1;
-    }
-    else if (((local_4->_2_x + 1) & 7) == D_5896_map_x)
-    {
+    } else if (DungeonX(local_4->_2_x + 1) == D_5896_map_x) {
         D_6602 = 3;
-    }
-    else if (((local_4->_3_y - 1) & 7) == D_5897_map_y)
-    {
+    } else if (DungeonY(local_4->_3_y - 1) == D_5897_map_y) {
         D_6602 = 2;
-    }
-    else
-    {
+    } else {
         D_6602 = 0;
     }
 
@@ -831,8 +785,7 @@ void DUNGEON_0c76(byte param_1, int param_2)
         // 0d4a
         DNGLOOK_109e(1);
 
-        if (D_5893_map_id > 0x20)
-        {
+        if (!MAPS_Outside(D_5893_map_id)) {
             // 0d5b
             DUNGEON_1be0();
         }
@@ -897,6 +850,7 @@ void DUNGEON_0e2e_MainLoop(int param_1)
     local_10 = 0;
     local_6 = 0;
     D_bb17 = 2;
+    dungeonNormalizePosition();
     DNGLOOK_093a();
     local_8 = GetDungeonMap(D_5896_map_x, D_5897_map_y, D_5895_map_level);
     local_8 &= 0xf0;
@@ -935,8 +889,7 @@ void DUNGEON_0e2e_MainLoop(int param_1)
         DUNGEON_0000(GetDungeonMap(D_5896_map_x, D_5897_map_y, D_5895_map_level));
     }
 
-    if (D_5893_map_id > 0x20)
-    {
+    if (!MAPS_Outside(D_5893_map_id)) {
         DNGLOOK_109e(param_1);
         DUNGEON_0134(param_1);
         DUNGEON_1be0();
@@ -947,7 +900,7 @@ void DUNGEON_0e2e_MainLoop(int param_1)
 #endif
 
     // 0f15
-    while (local_e != 0 && D_5893_map_id > 0x20) // 0f93
+    while (local_e != 0 && !MAPS_Outside(D_5893_map_id)) // 0f93
     {
         local_e = 1;
         local_c = 1;
@@ -999,8 +952,7 @@ void DUNGEON_0e2e_MainLoop(int param_1)
             local_c = DUNGEON_06c4_ProcessCommand(local_a);
         }
 
-        if (D_5893_map_id < 0x21)
-        {
+        if (MAPS_Outside(D_5893_map_id)) {
             local_c = 0;
             local_e = local_c;
         }
@@ -1013,8 +965,7 @@ void DUNGEON_0e2e_MainLoop(int param_1)
             DUNGEON_0c76(local_4, local_6);
         }
 
-        if (D_5893_map_id >= 0x21)
-        {
+        if (!MAPS_Outside(D_5893_map_id)) {
             continue;
         }
 
@@ -1055,8 +1006,7 @@ static void DUNGEON_104c(int param_1)
 {
     int local_4;
 
-    if (param_1 <= D_2df0[D_5893_map_id - 0x21])
-    {
+    if (D_5893_map_id <= 40 && param_1 <= D_2df0[D_5893_map_id - 0x21]) {
         // 1063 (ok)
         local_4 = D_2de8[D_5893_map_id - 0x21] + param_1 - 1;
         ULTIMA_1c22_SetTextWindowSize(0, D_2df8[local_4], D_2e04[local_4], 0x27, 0x18);
@@ -1076,7 +1026,7 @@ static int DUNGEON_10dc(int param_1, int param_2)
 {
     int local_4;
 
-    local_4 = GetDungeonMap(param_1 & 7, param_2 & 7, D_5895_map_level);
+    local_4 = GetDungeonMap(DungeonX(param_1), DungeonY(param_2), D_5895_map_level);
     if (local_4 < 0x90)
     {
         local_4 &= 0xf7;
@@ -1331,8 +1281,8 @@ static int DUNGEON_150a(int param_1, int param_2, int param_3)
 
         local_8 = DUNGEON_145c(0x5f, D_2e90[local_8 + (param_3 - 1) * 5] + 0xe, local_8, param_3);
 
-        GetDungeonMap(param_1 & 7, param_2 & 7, D_5895_map_level) &= 0xf8;
-        GetDungeonMap(param_1 & 7, param_2 & 7, D_5895_map_level) += local_8;
+        GetDungeonMap(DungeonX(param_1), DungeonY(param_2), D_5895_map_level) &= 0xf8;
+        GetDungeonMap(DungeonX(param_1), DungeonY(param_2), D_5895_map_level) += local_8;
     }
 
     if (param_3 == 1)
@@ -1407,8 +1357,8 @@ static void DUNGEON_1682(int param_1, int param_2, int param_3, int param_4)
 
             local_a = DUNGEON_145c(local_6, D_2e9a[local_a + param_4 * 5] + 0xe, local_a, param_4);
 
-            GetDungeonMap(param_1 & 7, param_2 & 7, D_5895_map_level) &= 0xf8;
-            GetDungeonMap(param_1 & 7, param_2 & 7, D_5895_map_level) += local_a;
+            GetDungeonMap(DungeonX(param_1), DungeonY(param_2), D_5895_map_level) &= 0xf8;
+            GetDungeonMap(DungeonX(param_1), DungeonY(param_2), D_5895_map_level) += local_a;
             // NOT MATCHING (nop)
             break;
 
@@ -1524,16 +1474,16 @@ static void DUNGEON_1952(int param_1, int param_2, int param_3)
     }
 
     // 1a03
-    if (local_4 < 9 && (GetDungeonMap(param_1 & 7, param_2 & 7, D_5895_map_level) & 8) != 0)
-    {
+    if (local_4 < 9 &&
+        (GetDungeonMap(DungeonX(param_1), DungeonY(param_2), D_5895_map_level) & 8) != 0) {
         // 1a2d
         DUNGEON_134a(D_2f24 + param_3 * 2, 1, 0);
         DUNGEON_134a(D_2f24 + param_3 * 2, 1, 1);
     }
 
     // 1a4f (OK)
-    if (param_3 != 0 && (param_1 & 7) == D_5c5a[1]._2_x && (param_2 & 7) == D_5c5a[1]._3_y)
-    {
+    if (param_3 != 0 && D_5c5a[1]._5 != 0xff && (DungeonX(param_1)) == D_5c5a[1]._2_x &&
+        (DungeonY(param_2)) == D_5c5a[1]._3_y) {
         DUNGEON_111e(param_3);
     }
 
@@ -1605,6 +1555,7 @@ void DUNGEON_1a90(int param_1)
 
 void DUNGEON_1be0(void)
 {
+    dungeonNormalizePosition();
     ULTIMA_2900_UpdateVitalsDisplay();
     DUNGEON_1a90(1);
     ULTIMA_0ace_GRAP_18_TransferArea(1, 0, 0x10, 0xe, 0xaf, 0xb2);
@@ -1652,6 +1603,7 @@ int DUNGEON_1c6a_Klimb(int param_1, int param_2)
         if (DUNGEON_1c0c(param_1 + (uint)D_5895_map_level, param_2) != 0)
         {
             D_5895_map_level += param_1;
+            dungeonNormalizePosition();
             if (param_1 > 0)
             {
                 D_6602 = 5;
@@ -1676,8 +1628,19 @@ int DUNGEON_1c6a_Klimb(int param_1, int param_2)
 
 void DUNGEON_1d08_Exit(void)
 {
-    D_5896_map_x = MOD_TableValue(7, (D_5893_map_id - 1), D_1e8a[D_5893_map_id - 1]);
-    D_5897_map_y = MOD_TableValue(8, (D_5893_map_id - 1), D_1eb2[D_5893_map_id - 1]);
+    const unsigned char *custom = MAPS_Record(4, D_5893_map_id, 0);
+    if (custom && (int8_t)custom[14] == -2)
+        custom = NULL;
+    if (custom) {
+        int world = (int8_t)custom[14], x = custom[15], y = custom[16];
+        MAPS_ReturnPoint(D_5893_map_id, &world, &x, &y);
+        D_5896_map_x = x;
+        D_5897_map_y = y;
+        D_5895_map_level = world ? 7 : 0;
+    } else {
+        D_5896_map_x = MOD_TableValue(7, (D_5893_map_id - 1), D_1e8a[D_5893_map_id - 1]);
+        D_5897_map_y = MOD_TableValue(8, (D_5893_map_id - 1), D_1eb2[D_5893_map_id - 1]);
+    }
 
     ULTIMA_1850_PrintString(_TEXT(0x6c84, "\nExit to "));
     if (D_5895_map_level != 0)
@@ -1712,10 +1675,9 @@ int DUNGEON_1d4a_AttackCmd(void)
 
     ULTIMA_1850_PrintString(_TEXT(0x6caa, "Attack\n"));
 
-    local_6 = (D_24d6[D_6603] + D_5896_map_x) & 7;
-    local_8 = (D_24de[D_6603] + D_5897_map_y) & 7;
-    if (local_6 == D_5c5a[1]._2_x && local_8 == D_5c5a[1]._3_y)
-    {
+    local_6 = DungeonX(D_24d6[D_6603] + D_5896_map_x);
+    local_8 = DungeonY(D_24de[D_6603] + D_5897_map_y);
+    if (D_5c5a[1]._5 != 0xff && local_6 == D_5c5a[1]._2_x && local_8 == D_5c5a[1]._3_y) {
         D_58a1 = 2;
         DNGLOOK_1130();
         DNGLOOK_0c6c();
@@ -1738,6 +1700,7 @@ int DUNGEON_1d4a_AttackCmd(void)
             if (D_5895_map_level < 7)
             {
                 D_5895_map_level++;
+                dungeonNormalizePosition();
             }
             else
             {
@@ -1752,9 +1715,7 @@ int DUNGEON_1d4a_AttackCmd(void)
             DUNGEON_0134(1);
             DUNGEON_1be0();
         }
-    }
-    else
-    {
+    } else {
         ULTIMA_1850_PrintString(_TEXT(0x6cb2, "What?\n"));
     }
 

@@ -22,6 +22,8 @@
 #include "cast2.h"
 #include "comsubs.h"
 #include "mainout.h"
+#include "npc.h"
+#include "town.h"
 #include "outsubs.h"
 
 static void MAINOUT_109e(void);
@@ -254,8 +256,8 @@ void MAINOUT_0354(int param_1, int param_2)
     int local_4;
     int local_6;
 
-    D_5896_map_x += param_1;
-    D_5897_map_y += param_2;
+    D_5896_map_x = MAPS_Wrap(D_5896_map_x + param_1, MAP_WIDTH);
+    D_5897_map_y = MAPS_Wrap(D_5897_map_y + param_2, MAP_HEIGHT);
     D_24e6 = 1;
     local_4 = D_5896_map_x - D_589b & 0x1f;
     local_6 = D_5897_map_y - D_589c & 0x1f;
@@ -704,6 +706,7 @@ static int MAINOUT_0790_LoadDungeon(char* param_1)
         ULTIMA_25d8_WriteFileToDisk(OUTSUBS_0368_GetWorldSavefile(), D_5c5a, 0x100);
         ULTIMA_251e_SwitchDisks(2);
         ULTIMA_256e_ReadFileFromDisk(/*0x2a53*/ "DUNGEON.DAT", D_595a, 0x200, local_4 * 0x200 + -0x4000);
+        MAPS_Entered(local_4 + 1, (int8_t)D_5895_map_level, D_5896_map_x, D_5897_map_y);
         D_5893_map_id = local_4 + 1;
         if (D_5895_map_level != 0 && (byte)(local_4 + 1) != 0x28)
         {
@@ -737,6 +740,31 @@ int MAINOUT_08de_EnterCmd(void)
     local_4 = 1;
 
     ULTIMA_1850_PrintString(_TEXT(0x2a6f, "Enter "));
+    const unsigned char *destination =
+        MAPS_Entrance((int8_t)D_5895_map_level, D_5896_map_x, D_5897_map_y);
+    if (destination) {
+        if (destination[4] == 4 && D_587c_partyTile != TILE_ACTOR_AVATAR) {
+            ULTIMA_1850_PrintString(_TEXT(0x2a24, "\nOn foot!\n"));
+            return 0;
+        }
+        ULTIMA_1850_PrintString((char *)destination + 24);
+        ULTIMA_1850_PrintString("\n");
+        MAPS_Entered(destination[5], (int8_t)D_5895_map_level, D_5896_map_x, D_5897_map_y);
+        ULTIMA_25d8_WriteFileToDisk(OUTSUBS_0368_GetWorldSavefile(), D_5c5a, 0x100);
+        if (destination[4] == 4) {
+            if (destination[5] <= 40)
+                ULTIMA_256e_ReadFileFromDisk("DUNGEON.DAT", D_595a, 512,
+                                             (destination[5] - 33) * 512);
+            else
+                memset(D_595a, 0xb0, 512);
+            D_6602 = D_6603 = 0;
+        }
+        D_5893_map_id = destination[5];
+        D_5895_map_level = 0;
+        D_5896_map_x = destination[17];
+        D_5897_map_y = destination[18];
+        return 0;
+    }
 
     local_8 = *ULTIMA_4402_GetTileAddr(D_5896_map_x, D_5897_map_y);
     switch (local_8)
@@ -1380,6 +1408,9 @@ static void MAINOUT_1248(int param_1)
         }
         else
         {
+            int location = MAPS_IsTown(D_5893_map_id);
+            if (location)
+                NPC_ConsumeObject(param_1);
             D_5c5a[param_1]._0_tile = D_5c5a[param_1]._1_animTile = 0;
             ULTIMA_1850_PrintString(_TEXT(0x6b04, "\nWHIRLPOOL!\n"));
 
@@ -1395,6 +1426,10 @@ static void MAINOUT_1248(int param_1)
             AUDIO_StopBgm();
 #endif
 
+            if (location) {
+                D_5893_map_id = 0;
+                D_594f = 0;
+            }
             D_5895_map_level = 0xff;
             D_5896_map_x = 0x22;
             D_5897_map_y = 0x12;
@@ -1418,7 +1453,10 @@ static void MAINOUT_1248(int param_1)
         }
         else
         {
-            ULTIMA_6150_Combat(param_1);
+            if (MAPS_IsTown(D_5893_map_id))
+                TOWN_AttackPlacedObject(param_1);
+            else
+                ULTIMA_6150_Combat(param_1);
         }
     }
     else
@@ -1488,6 +1526,9 @@ static int MAINOUT_131a(int param_1)
 
 static int MAINOUT_1482(int param_1, int param_2, int param_3)
 {
+    if (MAPS_IsTown(D_5893_map_id) &&
+        (param_2 < 0 || param_3 < 0 || param_2 >= MAP_WIDTH || param_3 >= MAP_HEIGHT))
+        return 0;
     unsigned width, height;
     ACTORS_Size(param_1, &width, &height);
     if (width > 1 || height > 1)
@@ -1602,8 +1643,8 @@ static void MAINOUT_1578(int param_1, int param_2, int param_3)
     D_a526 = D_5c5a[param_1]._2_x;
     D_a527 = D_5c5a[param_1]._3_y;
 
-    D_5c5a[param_1]._2_x = local_8;
-    D_5c5a[param_1]._3_y = local_a;
+    D_5c5a[param_1]._2_x = MAPS_Wrap(local_8, MAP_WIDTH);
+    D_5c5a[param_1]._3_y = MAPS_Wrap(local_a, MAP_HEIGHT);
     D_24e6 |= 2;
 
     if (*ULTIMA_4402_GetTileAddr(local_8, local_a) == TILE_MAP_MOONGATE)
@@ -1683,17 +1724,11 @@ static void MAINOUT_17d4(int param_1, int param_2)
 
     local_8 = D_5c5a[param_1]._2_x;
     local_c = D_5c5a[param_1]._3_y;
-    local_a = (D_5c5a[param_1]._2_x - D_5896_map_x) & 0xff;
-    if (local_a > 0x7f)
-    {
-        local_a -= 0x100;
-    }
+    local_a = MAPS_Wrap(D_5c5a[param_1]._2_x - D_5896_map_x, MAP_WIDTH);
+    if (local_a >= (MAP_WIDTH + 1) / 2) local_a -= MAP_WIDTH;
 
-    local_e = (D_5c5a[param_1]._3_y - D_5897_map_y) & 0xff;
-    if (local_e > 0x7f)
-    {
-        local_e -= 0x100;
-    }
+    local_e = MAPS_Wrap(D_5c5a[param_1]._3_y - D_5897_map_y, MAP_HEIGHT);
+    if (local_e >= (MAP_HEIGHT + 1) / 2) local_e -= MAP_HEIGHT;
 
     // 1828
     if (local_a == 0)
@@ -1854,6 +1889,17 @@ static void MAINOUT_198c(int param_1)
     }
 
     MAINOUT_17d4(param_1, 1);
+}
+
+void MAINOUT_UpdateLocationHazard(unsigned actor) {
+    if (!MAPS_IsTown(D_5893_map_id) || !actor || actor >= (unsigned)MAP_ACTOR_COUNT ||
+        D_5c5a[actor]._4_z != D_5895_map_level)
+        return;
+    unsigned shape = D_5c5a[actor]._0_tile & 0xfc;
+    if (shape != TILE_ACTOR_PIRATE && shape != TILE_ACTOR_WHIRLPOOL)
+        return;
+    if (!MAINOUT_131a(actor))
+        MAINOUT_198c(actor);
 }
 
 int MAINOUT_1a60(void)

@@ -1,3 +1,4 @@
+#include "extended_maps.h"
 #include "mod/npcs.h"
 #include "cutscene_editor.h"
 #include "cutscene_composition.h"
@@ -6,6 +7,7 @@
 #include "shop_editor.h"
 #include "mod/tileset_resources.h"
 #include "contents_editor.h"
+#include "gates_editor.h"
 #include "dialogue.h"
 #include "map_editor.h"
 #include "mod/discoveries.h"
@@ -49,7 +51,11 @@ QStringList contentWorkspaces() {
 }
 QVector<ContentDestination> characterDestinations(const Project &project) {
     QVector<ContentDestination> result;
-    for (const QString stem : {"TOWNE", "CASTLE", "KEEP", "DWELLING"}) {
+    QStringList stems{"TOWNE", "CASTLE", "KEEP", "DWELLING"};
+    for (const auto &m : extendedMaps(project))
+        if (m.kind == 1 && MAPS_NewLocation(m.id))
+            stems.append(m.resource.section('.', 0, 0));
+    for (const QString &stem : stems) {
         const QString talk = stem + ".TLK", schedule = stem + ".NPC", map = stem + ".DAT";
         QVector<U5::Conversation> conversations;
         if (project.resources.contains(talk)) {
@@ -88,6 +94,12 @@ QVector<ContentDestination> characterDestinations(const Project &project) {
                      ++slot) {
                     if (U5::byte(data,
                                  NPCS_ShapeOffset(data.constData(), data.size(), town, slot)) == 0)
+                        continue;
+                    if (NPCS_ObjectKind(
+                            data.constData() +
+                                NPCS_Offset(data.constData(), data.size(), town, slot),
+                            U5::byte(data, NPCS_ShapeOffset(data.constData(), data.size(), town,
+                                                            slot))) >= 0)
                         continue;
                     int id = U5::byte(
                             data, NPCS_DialogueOffset(data.constData(), data.size(), town, slot)),
@@ -177,8 +189,15 @@ QVector<ContentDestination> contentDestinations(const Project &project) {
             continue;
         if (name == "TYPEMAP.OVR")
             continue;
-        if (name == "CONTENTS.OVR")
+        if (name == "CONTENTS.OVR" || name == "GATES.OVR")
             continue; // Edited through the map inspector.
+        if (MAPS_LocationResource(name.toLatin1().constData())) {
+            bool exists = false;
+            for (const auto &m : extendedMaps(project))
+                exists |= m.resource.section('.', 0, 0) == name.section('.', 0, 0);
+            if (!exists)
+                continue;
+        }
         const auto c = capability(name);
         if (MapDocument::supported(name)) {
             const auto pages = project.mapPages(name);
@@ -214,9 +233,15 @@ QVector<ContentDestination> contentDestinations(const Project &project) {
         QString workspace, group = c.group, title = c.title;
         switch (c.editor) {
         case EditorKind::Dungeon:
-            workspace = "World";
-            group = "Dungeons";
-            break;
+            for (int id : dungeonIds(project)) {
+                const int dungeon = id - 33;
+                ContentDestination d{QString("world/dungeon/%1").arg(dungeon), "World", "Dungeons",
+                                     project.locationName(33 + dungeon), name, -1};
+                d.selection["DUNGEON.DAT/dungeon"] = dungeon;
+                d.sources = {name};
+                result.append(d);
+            }
+            continue;
         case EditorKind::LocationText:
             if (name == "SIGNS.DAT") {
                 bool mapAvailable = false;
@@ -320,7 +345,8 @@ QVector<ContentDestination> contentDestinations(const Project &project) {
             group = "Compatibility details";
             break;
         }
-        if (name == "CUTSCENE.OVR") continue;
+        if (name == "CUTSCENE.OVR" || name == "MAPS.OVR")
+            continue;
         ContentDestination d{"content/" + name, workspace, group, title, name, -1};
         d.sources = {name};
         if (name == "STORY.DAT" || name == "END.DAT") d.sources.append("CUTSCENE.OVR");
@@ -395,6 +421,10 @@ QMap<QString, QStringList> contentChanges(const Project &project,
                 MapDocument map(&original, d.resource);
                 Project live = project;
                 MapDocument edited(&live, d.resource);
+                if (d.page >= map.pages.size()) {
+                    result[d.id] = {"New map"};
+                    continue;
+                }
                 if (!d.resource.endsWith(".CBT")) {
                     int id =
                         d.resource == "UNDER.DAT" ? 41 : positionMap(d.resource, map.pages[d.page]);
@@ -431,6 +461,16 @@ QMap<QString, QStringList> contentChanges(const Project &project,
                             break;
                         }
                     }
+                }
+                if (changed("GATES.OVR") && !d.resource.endsWith(".CBT")) {
+                    int mapId = positionMap(d.resource, map.pages[d.page]);
+                    auto gateRows = [&](const Project &p) {
+                        QList<QByteArray> rows;
+                        for (const auto &r : readGates(p.resources.value("GATES.OVR").edited))
+                            if (U5::byte(r, 0) == unsigned(mapId)) rows.append(r);
+                        return rows;
+                    };
+                    if (gateRows(project) != gateRows(original)) parts.append("Gates");
                 }
                 if (changed("CONTENTS.OVR")) {
                     auto target = contentsTarget(d.resource, map.pages[d.page], d.page);
@@ -515,16 +555,22 @@ QMap<QString, QStringList> contentChanges(const Project &project,
                         original.data(d.resource).mid(map.pages[d.page].offset, 352))
                     parts.append("Encounter details");
             } else if (d.resource == "DUNGEON.DAT") {
-                for (int id = 33; id <= 40; ++id)
-                    if (project.locationName(id) != original.locationName(id)) {
-                        parts.append("Location names");
-                        break;
-                    }
-                if (changed(d.resource))
+                const int dungeon = d.selection.value("DUNGEON.DAT/dungeon");
+                const int id = 33 + dungeon;
+                if (project.locationName(id) != original.locationName(id))
+                    parts.append("Location names");
+                if (changed("MAPS.OVR"))
+                    for (const auto &m : extendedMaps(project))
+                        if (m.kind == 4 && m.id == unsigned(id)) {
+                            parts.append("Dungeon dimensions / terrain");
+                            break;
+                        }
+                if (project.data(d.resource).mid(dungeon * 512, 512) !=
+                    original.data(d.resource).mid(dungeon * 512, 512))
                     parts.append("Dungeon terrain");
                 if (changed("CONTENTS.OVR"))
                     for (const auto &entry : readContents(project.data("CONTENTS.OVR")))
-                        if (!entry.kind && entry.map >= 33) {
+                        if (!entry.kind && entry.map == unsigned(id)) {
                             parts.append("Contents");
                             break;
                         }

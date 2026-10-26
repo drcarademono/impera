@@ -422,10 +422,8 @@ int COMSUBS_0504(int param_1, int param_2)
         int footprintTarget = COMSUBS_0748(local_4, local_6);
         if (footprintTarget >= 0 && footprintTarget != param_1)
             local_14 = COMSUBS_04d4(param_1, footprintTarget);
-        if (local_14 <= param_2 &&
-            local_4 >= 0 && local_4 < 0xb &&
-            local_6 >= 0 && local_6 < 0xb)
-        {
+        if (local_14 <= param_2 && local_4 >= 0 && local_4 < MAP_WIDTH && local_6 >= 0 &&
+            local_6 < MAP_HEIGHT) {
             D_5899 = local_4;
             D_589a = local_6;
         }
@@ -486,7 +484,7 @@ void COMSUBS_07d4(int param_1, int param_2)
     {
         D_5876 = ULTIMA_2092_RandomRange(1, 3) + param_1 - 2;
         D_5878 = ULTIMA_2092_RandomRange(1, 3) + param_2 - 2;
-    } while (D_5876 < 0 || D_5876 > 10 || D_5878 < 0 || D_5878 > 10);
+    } while (D_5876 < 0 || D_5876 >= MAP_WIDTH || D_5878 < 0 || D_5878 >= MAP_HEIGHT);
 }
 
 int COMSUBS_0822(int param_1, int param_2, int param_3, int param_4, int param_5)
@@ -1133,12 +1131,9 @@ int COMSUBS_12de(int param_1, int param_2, int param_3, int param_4, int param_5
     local_e = D_a728;
     local_12 = D_a872;
 
-    if (D_5893_map_id != 0 && D_5893_map_id < 0x21)
-    {
+    if (D_5893_map_id != 0 && MAPS_Outside(D_5893_map_id)) {
         local_c = 6;
-    }
-    else
-    {
+    } else {
         if (param_5 == 7)
         {
             local_c = 8;

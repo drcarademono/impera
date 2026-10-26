@@ -2,6 +2,9 @@
 #include "mod/location_names.h"
 #include "mod/npcs.h"
 #include "project.h"
+#include "gates_editor.h"
+#include "../src/mod/gates.h"
+#include "extended_maps.h"
 #include "contents_editor.h"
 #include "custom_tiles.h"
 #include "dialogue.h"
@@ -46,8 +49,9 @@ void Project::openGame(const QString &directory) {
     for (const auto &name : dir.entryList(QDir::Files, QDir::Name)) {
         QString upper = name.toUpper();
         if (upper == "TYPES.OVR" || upper == "TYPEMAP.OVR" || upper == "CUTSCENE.OVR" ||
+            upper == "MAPS.OVR" || MAPS_LocationResource(upper.toLatin1().constData()) ||
             upper == "LOCATIONS.OVR" || upper == "TEXT.OVR" || upper == "RULES.TBL" ||
-            upper == "CONTENTS.OVR")
+            upper == "GATES.OVR" || upper == "CONTENTS.OVR")
             continue; // Companion resources are package-only.
         if (!MOD_AllowedResource(upper.toLatin1().constData()))
             continue;
@@ -68,9 +72,11 @@ void Project::openGame(const QString &directory) {
     next.resources.insert("TYPEMAP.OVR", {{}, {}});
     next.resources.insert("CUTSCENE.OVR", {{}, {}});
     next.resources.insert("LOCATIONS.OVR", {{}, {}});
+    next.resources.insert("MAPS.OVR", {{}, {}});
     next.resources.insert("TEXT.OVR", {{}, {}});
     next.resources.insert("RULES.TBL", {{}, {}});
     next.resources.insert("CONTENTS.OVR", {{}, {}});
+    next.resources.insert("GATES.OVR", {{}, {}});
     *this = next;
 }
 const QByteArray &Project::data(const QString &name) const {
@@ -79,16 +85,23 @@ const QByteArray &Project::data(const QString &name) const {
     return it->edited;
 }
 QString Project::locationName(int map) const {
-    require(map >= 0 && map < LOCATION_NAME_SLOTS, "Invalid location");
+    require(map >= 0 && (map < LOCATION_NAME_SLOTS || MAPS_NewLocation(map)), "Invalid location");
     const auto bytes = resources.value("LOCATIONS.OVR").edited;
     if (const char *name = LOCATIONS_Name(bytes.constData(), bytes.size(), map))
         return QString::fromLatin1(name);
+    if (MAPS_NewLocation(map))
+        for (const auto &entry : Workshop::extendedMaps(*this))
+            if ((entry.kind == 1 || entry.kind == 4) && int(entry.id) == map)
+                return entry.name;
+
     if (!map)
         return "Britannia";
     if (map == 41)
         return "Underworld";
-    if (map >= 33)
+    if (map >= 33 && map <= 40)
         return QString::fromLatin1(engineDungeonNames[map - 33]);
+    if (map >= 42)
+        return QString("Location %1").arg(map);
     const QStringList banks{"TOWNE.DAT", "DWELLING.DAT", "CASTLE.DAT", "KEEP.DAT"};
     for (const auto &page : U5::mapPages(banks[(map - 1) / 8], QByteArray(16384, 0)))
         if (page.settlement == (map - 1) % 8)
@@ -113,11 +126,42 @@ QByteArray Project::renameLocation(int map, const QString &name) const {
     return bytes;
 }
 QVector<U5::MapPage> Project::mapPages(const QString &resource) const {
-    auto pages = U5::mapPages(resource, data(resource));
+    const auto extended = Workshop::extendedMaps(*this);
+    auto pages = MAPS_LocationResource(resource.toLatin1().constData())
+                     ? QVector<U5::MapPage>()
+                     : U5::mapPages(resource, data(resource));
+    if (MAPS_LocationResource(resource.toLatin1().constData())) {
+        auto virtualPages = extended;
+        std::sort(virtualPages.begin(), virtualPages.end(),
+                  [](const auto &a, const auto &b) { return a.page < b.page; });
+        for (const auto &map : virtualPages)
+            if (map.kind == 1 && map.resource == resource) {
+                require(map.page == pages.size(), "Non-contiguous location floor pages");
+                pages.append({map.name, map.width, 0, map.width, 0, map.floor, map.height});
+            }
+    }
+    if (resource == "DUNGEON.DAT") {
+        auto additions = extended;
+        std::sort(additions.begin(), additions.end(),
+                  [](const auto &a, const auto &b) { return a.page < b.page; });
+        for (const auto &m : additions)
+            if (m.kind == 4 && m.id > 40) {
+                require(m.page == pages.size(), "Non-contiguous dungeon floor pages");
+                pages.append({m.name + QString(" — Level %1").arg(m.floor + 1), m.width, 0, m.width,
+                              int(m.id) - 33, m.floor, m.height});
+            }
+    }
+    for (int i = 0; i < pages.size(); ++i)
+        if (const auto *map = Workshop::findExtendedMap(extended, resource, i)) {
+            pages[i].side = map->width;
+            pages[i].rows = map->height;
+        }
     const QStringList banks{"TOWNE.DAT", "DWELLING.DAT", "CASTLE.DAT", "KEEP.DAT"};
     int bank = banks.indexOf(resource);
     for (auto &page : pages) {
-        if (bank >= 0)
+        if (resource == "DUNGEON.DAT")
+            page.name = locationName(33 + page.settlement) + " — " + page.name.section(" — ", 1);
+        else if (bank >= 0)
             page.name =
                 locationName(bank * 8 + page.settlement + 1) + " — " + page.name.section(" — ", 1);
         else if (resource == "BRIT.DAT" || resource == "UNDER.DAT")
@@ -133,6 +177,8 @@ QStringList Project::changed() const {
     return list;
 }
 void Project::validate() const {
+    Workshop::validateExtendedMaps(*this);
+    Workshop::validateGates(*this);
     require(!title.trimmed().isEmpty() && title.toUtf8().size() <= 256 && !title.contains(QChar(0)),
             "Mod name must contain 1–256 UTF-8 bytes");
     if (changed().contains("TILE_SHW.PNG") || changed().contains("TILE_SHN.PNG")) {
@@ -187,6 +233,9 @@ static bool conversationFlag(const Project &project, unsigned flag) {
 QByteArray Project::package() const {
     validate();
     auto list = changed();
+    for (const auto &name : list)
+        require(MOD_AllowedResource(name.toLatin1().constData()),
+                "This engine version does not support exporting " + name);
     require(!list.isEmpty(), "There are no changes to export");
     require(list.size() <= MOD_MAX_ENTRIES, "Too many modified resources");
     bool actorTypes = false, largeActors = false, animationOptions = false;
@@ -203,8 +252,59 @@ QByteArray Project::package() const {
         extraNpcs |= resource.endsWith(".NPC") && data(resource).size() > 4608;
     for (const auto &cell : CustomTiles::placements(*this))
         extraNpcs |= cell.kind == 3 && (cell.x >= 32 || cell.y);
+    bool locationObjects = false, specialActors = false;
+    for (const auto &name : list) {
+        const auto b = data(name);
+        if (name.endsWith(".NPC"))
+            for (unsigned town = 0; town < 8; town++)
+                for (unsigned slot = 1; slot < NPCS_Count(b.constData(), b.size(), town); slot++) {
+                    const auto off = NPCS_Offset(b.constData(), b.size(), town, slot);
+                    specialActors |=
+                        NPCS_ObjectKind(b.constData() + off,
+                                        U5::byte(b, NPCS_ShapeOffset(b.constData(), b.size(), town,
+                                                                     slot))) >= 24;
+                    locationObjects |=
+                        NPCS_ObjectKind(b.constData() + off,
+                                        U5::byte(b, NPCS_ShapeOffset(b.constData(), b.size(), town,
+                                                                     slot))) >= 0;
+                }
+        if (name.endsWith(".OOL"))
+            for (int i = 0; i < 32; i++)
+                locationObjects |=
+                    NPCS_Blood(U5::byte(b, i * 8), U5::byte(b, i * 8 + 5), U5::byte(b, i * 8 + 7));
+    }
+    bool dungeonMaps = false, newDungeons = false, wideRooms = false;
+    for (const auto &map : Workshop::extendedMaps(*this)) {
+        dungeonMaps |= map.kind == 4;
+        newDungeons |= map.kind == 4 && map.id > 40;
+        wideRooms |= ((map.kind == 2 || map.kind == 3) && map.id > 255) || map.roomBase > 240;
+    }
+    for (const auto &contents : Workshop::readContents(resources.value("CONTENTS.OVR").edited))
+        newDungeons |= contents.kind == 2 && contents.map >= 112;
+    wideRooms |= Workshop::extendedMaps(*this).size() > 512;
+    for (const auto &contents : Workshop::readContents(resources.value("CONTENTS.OVR").edited))
+        wideRooms |= contents.map > 255;
+    const auto bindings = resources.value("TYPEMAP.OVR").edited;
+    for (int off = 32; off + 16 <= bindings.size(); off += 16)
+        wideRooms |= U5::byte(bindings, off + 5) != 0;
+    bool portableConditions = false;
+    for (const auto &map : Workshop::extendedMaps(*this))
+        portableConditions |= (map.kind == 1 || map.kind == 4) && map.id <= 40 && map.world != -2;
+    for (const auto &map : Workshop::extendedMaps(*this))
+        portableConditions |= map.kind == 1 && MAPS_NewLocation(map.id) && map.floor != 0;
+    for (const auto &contents : Workshop::readContents(resources.value("CONTENTS.OVR").edited))
+        portableConditions |= contents.refill > 2;
     QByteArray out(
-        list.contains("LOCATIONS.OVR")                               ? "IMOD0017"
+        list.contains("GATES.OVR") ? "IMOD0024"
+        : portableConditions ? "IMOD0023"
+        : wideRooms        ? "IMOD0022"
+        : newDungeons      ? "IMOD0021"
+        : dungeonMaps      ? "IMOD0020"
+        : specialActors    ? "IMOD0019"
+        : (locationObjects || list.contains("MAPS.OVR") ||
+           resources.value("SIGNS.DAT").edited.startsWith("ISIG0001"))
+            ? "IMOD0018"
+        : list.contains("LOCATIONS.OVR")                             ? "IMOD0017"
         : conversationFlag(*this, IMPERA_TALK_FLAG_GARGOYLE_SPEECH)  ? "IMOD0016"
         : conversationFlag(*this, IMPERA_TALK_FLAG_SKIP_OPENING)     ? "IMOD0015"
         : usesExtendedDialogue(*this)                                ? "IMOD0014"
@@ -292,6 +392,7 @@ void Project::importPackage(const QByteArray &bytes) {
             QByteArray(reinterpret_cast<char *>(e.data), e.size);
     }
     MOD_Free(&decoded);
+    Workshop::hydrateExtendedMaps(next);
     next.validate();
     *this = next;
 }
@@ -356,6 +457,14 @@ void Project::save(const QString &path) {
         requirements["locationNames"] = 1;
         requirements["packageVersion"] = 17;
     }
+    if (changed().contains("MAPS.OVR")) {
+        requirements["extendedMaps"] = 1;
+        requirements["packageVersion"] = 18;
+    }
+    if (changed().contains("GATES.OVR")) {
+        requirements["townGates"] = 1;
+        requirements["packageVersion"] = 24;
+    }
     if (!requirements.isEmpty())
         root["requires"] = requirements;
     QJsonObject annotations;
@@ -393,6 +502,16 @@ void Project::load(const QString &path) {
     QSet<QString> names;
     require(root["edits"].isArray() && root["edits"].toArray().size() <= MOD_MAX_ENTRIES,
             "Invalid project edit list");
+    for (auto value : root["edits"].toArray()) {
+        auto e = value.toObject();
+        if (e["name"].toString() == "MAPS.OVR") {
+            auto bytes = QByteArray::fromBase64(e["bytes"].toString().toLatin1());
+            if (bytes.isEmpty())
+                bytes = QByteArray::fromBase64(e["edited"].toString().toLatin1());
+            next.resources["MAPS.OVR"].edited = bytes;
+            Workshop::hydrateExtendedMaps(next);
+        }
+    }
     for (auto value : root["edits"].toArray()) {
         auto edit = value.toObject();
         QString name = edit["name"].toString();
@@ -450,8 +569,9 @@ QVector<ModDiagnostic> validateMod(const Project &project, const QString &modsDi
     for (const auto &name : changes) {
         try {
             if (name == "TYPES.OVR" || name == "TYPEMAP.OVR" || name == "CUTSCENE.OVR" ||
+                name == "MAPS.OVR" || MAPS_LocationResource(name.toLatin1().constData()) ||
                 name == "LOCATIONS.OVR" || name == "TEXT.OVR" || name == "RULES.TBL" ||
-                name == "CONTENTS.OVR") {
+                name == "GATES.OVR" || name == "CONTENTS.OVR") {
                 require(project.resources[name].original.isEmpty(),
                         "Companion resource must have an empty original base");
             } else if (!MOD_TilesetSheet(name.toLatin1().constData())) {
@@ -697,24 +817,39 @@ QVector<ModDiagnostic> validateMod(const Project &project, const QString &modsDi
                            "Package verification: " + QString::fromUtf8(error.what())});
         }
     }
-    if (changes.contains("DUNGEON.DAT")) {
+    bool dungeonDimensionsChanged = false;
+    if (changes.contains("MAPS.OVR"))
+        for (const auto &m : Workshop::extendedMaps(project))
+            dungeonDimensionsChanged |= m.kind == 4;
+    if (changes.contains("DUNGEON.DAT") || dungeonDimensionsChanged) {
         try {
             Workshop::DungeonDocument dungeon(&project);
-            for (int d = 0; d < 8; ++d)
-                for (int f = 0; f < 8; ++f)
-                    for (int y = 0; y < 8; ++y)
-                        for (int x = 0; x < 8; ++x) {
-                            auto changedCell = [&](int level) {
-                                const int at =
-                                    Workshop::DungeonDocument::offset(d, level) + y * 8 + x;
-                                return at >= project.resources["DUNGEON.DAT"].original.size() ||
-                                       project.resources["DUNGEON.DAT"].original[at] !=
-                                           project.data("DUNGEON.DAT")[at];
-                            };
-                            if (!changedCell(f) && !(f > 0 && changedCell(f - 1)) &&
-                                !(f < 7 && changedCell(f + 1)))
+            int count = 0;
+            for (int id : Workshop::dungeonIds(project))
+                for (int d = id - 33, f = 0; f < 8 && count < 200; f++) {
+                    auto dims = dungeon.size(d, f);
+                    auto cells = dungeon.level(d, f), original = dungeon.level(d, f, true);
+                    for (int y = 0; y < dims.height() && count < 200; y++)
+                        for (int x = 0; x < dims.width() && count < 200; x++) {
+                            int value = U5::byte(cells, y * dims.width() + x), kind = value >> 4;
+                            if (kind != 1 && kind != 2 && kind != 3 && kind != 9 && kind != 10 &&
+                                kind != 15 && !(value & 7))
                                 continue;
-                            for (auto warning : dungeon.warnings(d, f, x, y))
+                            if (x < 8 && y < 8 && value == U5::byte(original, y * 8 + x) &&
+                                !dungeonDimensionsChanged) {
+                                auto changedOther = [&](int other) {
+                                    auto size = dungeon.size(d, other);
+                                    if (x >= size.width() || y >= size.height())
+                                        return true;
+                                    return U5::byte(dungeon.level(d, other),
+                                                    y * size.width() + x) !=
+                                           U5::byte(dungeon.level(d, other, true), y * 8 + x);
+                                };
+                                if (!(((kind == 1 || kind == 3) && f > 0 && changedOther(f - 1)) ||
+                                      ((kind == 2 || kind == 3) && f < 7 && changedOther(f + 1))))
+                                    continue;
+                            }
+                            for (auto warning : dungeon.warnings(d, f, x, y)) {
                                 result.append({ModDiagnostic::Warning, "DUNGEON.DAT",
                                                QString("Dungeon %1 · Level %2 · X %3 Y %4: %5")
                                                    .arg(d + 1)
@@ -725,13 +860,12 @@ QVector<ModDiagnostic> validateMod(const Project &project, const QString &modsDi
                                                QString("dungeon/%1/level/%2/cell/%3")
                                                    .arg(d)
                                                    .arg(f)
-                                                   .arg(y * 8 + x)});
+                                                   .arg(y * dims.width() + x)});
+                                count++;
+                            }
                         }
-            result.append({ModDiagnostic::Information, "DUNGEON.DAT",
-                           "Already-loaded dungeon layouts in saves may retain their old cells. "
-                           "Re-enter the dungeon to load the package layout."});
-        } catch (
-            const std::exception &) { /* The main validation pass already reports malformed data. */
+                }
+        } catch (const std::exception &) {
         }
     }
     return result;
@@ -765,8 +899,9 @@ QString prepareModTest(const Project &project, const QString &sessionsDirectory)
     }
     for (const auto &name : project.resources.keys()) {
         if (name == "TYPES.OVR" || name == "TYPEMAP.OVR" || name == "CUTSCENE.OVR" ||
+            name == "MAPS.OVR" || MAPS_LocationResource(name.toLatin1().constData()) ||
             name == "LOCATIONS.OVR" || name == "TEXT.OVR" || name == "RULES.TBL" ||
-            name == "CONTENTS.OVR" || MOD_TilesetSheet(name.toLatin1().constData()))
+            name == "GATES.OVR" || name == "CONTENTS.OVR" || MOD_TilesetSheet(name.toLatin1().constData()))
             continue; // Virtual companion exists only inside the package.
         auto bytes = readLimited(destination.filePath(name), MOD_MAX_RESOURCE);
         require(bytes == project.resources[name].original,

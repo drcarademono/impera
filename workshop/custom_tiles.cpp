@@ -1,4 +1,6 @@
 #include "custom_tiles.h"
+#include "mod/maps.h"
+#include "extended_maps.h"
 #include "color_palette.h"
 #include "map_editor.h"
 #include "map_entities.h"
@@ -256,6 +258,8 @@ TypeCell cell(const QString &resource, const U5::MapPage &mp, int page, int x, i
     } else if (resource == "BRIT.DAT" || resource == "UNDER.DAT") {
         c.map = 0;
         c.floor = resource == "UNDER.DAT" ? -1 : 0;
+    } else if (auto id = MAPS_LocationResource(resource.toLatin1().constData())) {
+        c.map = id;
     } else {
         int bank = resource == "TOWNE.DAT"      ? 0
                    : resource == "DWELLING.DAT" ? 8
@@ -374,6 +378,9 @@ void validate(const Project &p) {
         } else if (!c.map || c.kind == 4) {
             source = c.floor < 0 ? "UNDER.DAT" : "BRIT.DAT";
             page = 0;
+        } else if (MAPS_NewLocation(c.map)) {
+            source = QString("LOC%1.DAT").arg(c.map, 3, 10, QChar('0'));
+            page = 0;
         } else
             source =
                 QStringList{"TOWNE.DAT", "DWELLING.DAT", "CASTLE.DAT", "KEEP.DAT"}[(c.map - 1) / 8];
@@ -381,10 +388,14 @@ void validate(const Project &p) {
         auto pages = p.mapPages(source);
         if (page < 0)
             for (int i = 0; i < pages.size(); i++)
-                if (pages[i].settlement == (c.map - 1) % 8 && pages[i].floor == c.floor)
+                if (pages[i].settlement == (MAPS_NewLocation(c.map) ? 0 : (c.map - 1) % 8) &&
+                    pages[i].floor == c.floor)
                     page = i;
         require(page >= 0 && page < pages.size(),
                 "Custom tile references a missing floor or encounter");
+        if (c.kind <= 2)
+            require(c.x < pages[page].side && c.y < pages[page].height(),
+                    "Custom tile is outside its map");
         auto actor = definition(p, c.type);
         if (actor.kind && (TYPES_Width(&actor) > 1 || TYPES_Height(&actor) > 1)) {
             if (c.kind == 3) {
@@ -392,12 +403,15 @@ void validate(const Project &p) {
                 Project view = p;
                 MapNpcDocument npcs(&view, npcResource);
                 for (int schedule = 0; schedule < 4; ++schedule) {
-                    auto pos = npcs.location((c.map - 1) % 8, c.x + (c.y << 8), schedule);
-                    if (pos.x >= 32 || pos.y >= 32)
+                    auto pos = npcs.location((MAPS_NewLocation(c.map) ? 0 : (c.map - 1) % 8),
+                                             c.x + (c.y << 8), schedule);
+                    if (pos.x >= pages[page].side || pos.y >= pages[page].height())
                         continue; // Preserve scheduled off-map absence.
                     int destPage = -1;
                     for (int i = 0; i < pages.size(); ++i)
-                        if (pages[i].settlement == (c.map - 1) % 8 && pages[i].floor == pos.floor)
+                        if (pages[i].settlement ==
+                                (MAPS_NewLocation(c.map) ? 0 : (c.map - 1) % 8) &&
+                            pages[i].floor == pos.floor)
                             destPage = i;
                     require(destPage >= 0, "Creature schedule references a missing floor");
                     Workshop::validateActorPlacement(p, source, destPage, {pos.x, pos.y}, c.type,
@@ -408,7 +422,8 @@ void validate(const Project &p) {
                 int offset = pages[page].offset;
                 int x = U5::byte(data, offset + 6 * 32 + 11 + c.x),
                     y = U5::byte(data, offset + 7 * 32 + 11 + c.x);
-                if (x < 11 && y < 11)
+                if (x < pages[page].side && y < pages[page].height() &&
+                    Workshop::mapMarkerActive(p,source,page,24+c.x,x,y))
                     Workshop::validateActorPlacement(p, source, page, {x, y}, c.type, c.x);
             }
         }
@@ -420,8 +435,8 @@ QMap<QString, QByteArray> moveScenery(const Project &p, const QString &resource,
     const auto mp = doc.pages.at(page);
     auto base = doc.terrain(page);
     auto ids = expanded(p, resource, mp, page, base);
-    require(QRect(0, 0, mp.side, mp.side).contains(from) &&
-                QRect(0, 0, mp.side, mp.side).contains(to),
+    require(QRect(0, 0, mp.side, mp.height()).contains(from) &&
+                QRect(0, 0, mp.side, mp.height()).contains(to),
             "Scenery move is outside the map");
     int source = from.y() * mp.side + from.x(), dest = to.y() * mp.side + to.x();
     unsigned type = TYPES_U32(ids.constData() + source * 4);

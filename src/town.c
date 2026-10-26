@@ -2,6 +2,8 @@
 #include "common/common.h"
 #include "common/movement.h"
 #include "mod/runtime.h"
+#include "mod/gates.h"
+#include <stdlib.h>
 #include "mod/types_game.h"
 #if defined(TARGET_SDL)
 #include "key/mouse.h"
@@ -22,14 +24,29 @@
 #include "talk.h"
 #include "town.h"
 
+int TOWN_ExtendedExit(void) {
+    const unsigned char *r = MAPS_Record(1, D_5893_map_id, 0);
+    if (!r || (int8_t)r[14] == -2)
+        return 0;
+    int world = (int8_t)r[14], x = r[15], y = r[16];
+    MAPS_ReturnPoint(D_5893_map_id, &world, &x, &y);
+    D_5895_map_level = world;
+    D_5896_map_x = x;
+    D_5897_map_y = y;
+    D_5893_map_id = 0;
+    D_594f = 0;
+    return 1;
+}
+
 // check npc killed flag
 int TOWN_0000_CheckNpcKilled(int param_1)
 {
-    if (param_1 < 0 || param_1 >= LOCATION_NPC_COUNT || D_5893_map_id < 1 || D_5893_map_id > 32)
+    if (param_1 < 0 || param_1 >= LOCATION_NPC_COUNT || D_5893_map_id < 1 ||
+        !MAPS_Outside(D_5893_map_id))
         return 0;
-    if (D_659e[param_1] == TILE_ACTOR_SANDALWOOD_BOX || D_659e[param_1] >= TILE_ACTOR_WIZARD)
-    {
-        if (param_1 >= 32)
+    if (NPC_ObjectKind(param_1) >= 0 || D_659e[param_1] == TILE_ACTOR_SANDALWOOD_BOX ||
+        D_659e[param_1] >= TILE_ACTOR_WIZARD) {
+        if (param_1 >= 32 || MAPS_NewLocation(D_5893_map_id))
             return (D_5b5a[128 + (D_5893_map_id - 1) * (IMPERA_NPC_CAPACITY / 8) + param_1 / 8] &
                     (1u << (param_1 % 8))) != 0;
         return ((*(u32*)&D_5b5a[(D_5893_map_id - 1) * 4]) & ((u32)1 << (byte)param_1)) != 0;
@@ -43,14 +60,15 @@ void TOWN_0052_SetNpcKilled(int param_1)
 {
     int local_4;
 
-    if (param_1 < 0 || param_1 >= LOCATION_NPC_COUNT || D_5893_map_id < 1 || D_5893_map_id > 32)
+    if (param_1 < 0 || param_1 >= LOCATION_NPC_COUNT || D_5893_map_id < 1 ||
+        !MAPS_Outside(D_5893_map_id))
         return;
 
     local_4 = D_659e[param_1] & 0xfc;
 
-    if ((local_4 != TILE_ACTOR_GUARD && local_4 < TILE_ACTOR_80) || local_4 == TILE_ACTOR_SHARD)
-    {
-        if (param_1 >= 32) {
+    if (NPC_ObjectKind(param_1) >= 0 || (local_4 != TILE_ACTOR_GUARD && local_4 < TILE_ACTOR_80) ||
+        local_4 == TILE_ACTOR_SHARD) {
+        if (param_1 >= 32 || MAPS_NewLocation(D_5893_map_id)) {
             D_5b5a[128 + (D_5893_map_id - 1) * (IMPERA_NPC_CAPACITY / 8) + param_1 / 8] |=
                 1u << (param_1 % 8);
             return;
@@ -88,38 +106,85 @@ int TOWN_011e(int param_1)
     return local_2;
 }
 
-void TOWN_0170(void)
-{
-    int local_4;
-    int local_6;
-
-    for (local_4 = 0; local_4 < 0x20; local_4++)
-    {
-        for (local_6 = 0; local_6 < 0x20; local_6++)
-        {
-            if (*ULTIMA_4402_GetTileAddr(local_4, local_6) == TILE_MAP_87)
-            {
-                TYPES_GAME_Write(local_4, local_6 + 1,
-                                 *ULTIMA_4402_GetTileAddr(local_4, local_6 + 1) ^ (TILE_MAP_DD));
+/* Rebuilt from the loaded floor, never from the currently raised/lowered state. */
+static unsigned char townGates[GATES_MAX][GATES_RECORD];
+static unsigned townGateCount;
+void TOWN_ConfigureGates(const void *bytes, size_t size) {
+    const unsigned char *data = bytes;
+    static int overrides[256 * 256];
+    memset(overrides, -1, sizeof(overrides));
+    townGateCount = 0;
+    if (data && GATES_Validate(data, size))
+        for (unsigned i = 0; i < GATES_Count(data); ++i) {
+            const unsigned char *r = data + GATES_HEADER + i * GATES_RECORD;
+            if (r[0] == D_5893_map_id && r[1] == D_5895_map_level && r[2] < MAP_WIDTH &&
+                r[3] < MAP_HEIGHT) {
+                overrides[r[3] * MAP_WIDTH + r[2]] = townGateCount;
+                memcpy(townGates[townGateCount++], r, GATES_RECORD);
             }
         }
-    }
-
-    if ((*ULTIMA_4402_GetTileAddr(D_5896_map_x, D_5897_map_y) & 0xfe) != TILE_MAP_48)
-    {
-        for (local_4 = 0; local_4 < D_594e; local_4++)
-        {
-            if (D_587f == 5)
-            {
-                TYPES_GAME_Write(D_58ee[local_4], D_590e[local_4], D_592e[local_4]);
-            }
-            else
-            {
-                TYPES_GAME_Write(D_58ee[local_4], D_590e[local_4], TILE_MAP_WATER_3);
+    const unsigned char *original = MAPS_OriginalRecord(1, D_5893_map_id, (int8_t)D_5895_map_level);
+    const unsigned char *terrain = original ? original + MAPS_RECORD : NULL;
+    for (int y = 0; y < MAP_HEIGHT; ++y)
+        for (int x = 0; x < MAP_WIDTH; ++x) {
+            if (overrides[y * MAP_WIDTH + x] >= 0)
+                continue;
+            unsigned tile = terrain ? terrain[y * MAP_WIDTH + x] : *ULTIMA_4402_GetTileAddr(x, y);
+            int bridge = (tile & 0xfe) == TILE_MAP_48;
+            int gate = y && (terrain ? terrain[(y - 1) * MAP_WIDTH + x]
+                                     : *ULTIMA_4402_GetTileAddr(x, y - 1)) == TILE_MAP_87;
+            if (!bridge && !gate)
+                continue;
+            unsigned char *r = townGates[townGateCount++];
+            memset(r, 0, GATES_RECORD);
+            r[0] = D_5893_map_id;
+            r[1] = D_5895_map_level;
+            r[2] = x;
+            r[3] = y;
+            r[4] = bridge ? 2 : 1;
+            r[5] = 1;
+            r[6] = tile;
+            r[7] = bridge ? TILE_MAP_WATER_3 : tile ^ TILE_MAP_DD;
+            r[8] = 5;
+            r[9] = 20;
+        }
+}
+static void TOWN_LoadGates(void) {
+    int found = 0;
+    unsigned char *data = NULL;
+    size_t size = 0;
+    FILE *file = MOD_OpenResource("GATES.OVR", &found);
+    if (file) {
+        if (!fseek(file, 0, SEEK_END)) {
+            long n = ftell(file);
+            if (n >= GATES_HEADER && n <= GATES_HEADER + GATES_MAX * GATES_RECORD) {
+                data = malloc((size_t)n);
+                rewind(file);
+                if (data && fread(data, 1, (size_t)n, file) == (size_t)n)
+                    size = (size_t)n;
             }
         }
+        fclose(file);
     }
-
+    TOWN_ConfigureGates(data, size);
+    free(data);
+}
+void TOWN_0170(void) {
+    int onBridge = 0;
+    for (unsigned i = 0; i < townGateCount; ++i) {
+        const unsigned char *r = townGates[i];
+        if (r[0] == D_5893_map_id && r[1] == D_5895_map_level && r[4] == 2 &&
+            r[2] == D_5896_map_x && r[3] == D_5897_map_y)
+            onBridge = 1;
+    }
+    for (unsigned i = 0; i < townGateCount; ++i) {
+        const unsigned char *r = townGates[i];
+        if (r[0] != D_5893_map_id || r[1] != D_5895_map_level)
+            continue;
+        if (r[4] == 2 && onBridge)
+            continue;
+        TYPES_GAME_Write(r[2], r[3], GATES_Open(r, D_587f) ? r[6] : r[7]);
+    }
     D_24e6 |= 2;
 }
 
@@ -132,10 +197,8 @@ static void TOWN_0212(void)
     {
         ULTIMA_207e_srand(D_587e);
 
-        for (local_6 = 0; local_6 < 0x20; local_6++)
-        {
-            for (local_4 = 0; local_4 < 0x20; local_4++)
-            {
+        for (local_6 = 0; local_6 < MAP_HEIGHT; local_6++) {
+            for (local_4 = 0; local_4 < MAP_WIDTH; local_4++) {
                 switch (*ULTIMA_4402_GetTileAddr(local_4, local_6))
                 {
                 case TILE_MAP_TREE:
@@ -169,6 +232,12 @@ static void TOWN_02ae(void)
     ActorFmt* local_6;
 
     D_5958 = 0xff;
+    int placed = NPC_PlacedShadowLord();
+    if (placed >= 0) {
+        D_5958 = placed;
+        TOWN_0212();
+        return;
+    }
     if (D_5897_map_y != 4)
     {
         for (local_8 = 0; local_8 < 3; local_8++)
@@ -249,29 +318,27 @@ static void TOWN_0408(int param_1)
     D_594f = 0;
     D_589b = D_589c = 0;
 
-    local_2 = D_2652[(D_5893_map_id - 1) >> 3];
-    local_6 = (uint)D_1e1a[D_5893_map_id - 1] + (uint)D_5895_map_level;
-    if (D_5895_map_level > 0x7f)
-    {
-        local_6 -= 0x100;
+    const unsigned char *extended = MAPS_Record(1, D_5893_map_id, (int8_t)D_5895_map_level);
+    if (extended) {
+        D_6a07 = extended[9];
+    } else {
+        if (MAPS_NewLocation(D_5893_map_id)) {
+            DEBUG_Error("Unavailable location floor");
+            return;
+        }
+        local_2 = D_2652[(D_5893_map_id - 1) >> 3];
+        local_6 = (uint)D_1e1a[D_5893_map_id - 1] + (uint)D_5895_map_level;
+        if (D_5895_map_level > 0x7f) {
+            local_6 -= 0x100;
+        }
+
+        ULTIMA_256e_ReadFileFromDisk(local_2, D_6608, 0x400, local_6 << 10);
     }
 
-    ULTIMA_256e_ReadFileFromDisk(local_2, D_6608, 0x400, local_6 << 10);
-
-    D_594e = 0;
     D_217e = D_2180 = D_2182 = D_2184 = -1;
 
-    for (local_4 = 0; local_4 < 0x20; local_4++)
-    {
-        for (local_8 = 0; local_8 < 0x20; local_8++)
-        {
-            if ((*ULTIMA_4402_GetTileAddr(local_4, local_8) & 0xfe) == TILE_MAP_48)
-            {
-                D_58ee[D_594e] = (char)local_4;
-                D_590e[D_594e] = (char)local_8;
-                D_592e[D_594e] = *ULTIMA_4402_GetTileAddr(local_4, local_8);
-                D_594e++;
-            }
+    for (local_4 = 0; local_4 < MAP_WIDTH; local_4++) {
+        for (local_8 = 0; local_8 < MAP_HEIGHT; local_8++) {
             if (*ULTIMA_4402_GetTileAddr(local_4, local_8) == TILE_MAP_2A)
             {
                 if (D_217e == -1)
@@ -288,10 +355,8 @@ static void TOWN_0408(int param_1)
         }
     }
 
-    if (D_587f < 5 || D_587f > 0x13)
-    {
-        TOWN_0170();
-    }
+    TOWN_LoadGates();
+    TOWN_0170();
 
     ULTIMA_5e4a();
     ULTIMA_4f7c(0);
@@ -309,6 +374,15 @@ static void TOWN_052e(int param_1, int param_2)
 {
     if ((param_2 & 0xfc) == TILE_MAP_STAIR)
     {
+        int delta = param_2 - TILE_MAP_STAIR == param_1         ? 1
+                    : param_2 - TILE_MAP_STAIR == (param_1 ^ 2) ? -1
+                                                                : 0;
+        if (MAPS_NewLocation(D_5893_map_id) && delta &&
+            !MAPS_Record(1, D_5893_map_id, (int8_t)(D_5895_map_level + delta))) {
+            ULTIMA_1850_PrintString("No passage.\n");
+            return;
+        }
+
         ULTIMA_5910_UpdateFrame();
         if (param_2 - TILE_MAP_STAIR == param_1)
         {
@@ -406,8 +480,8 @@ static bool TOWN_0600(int param_1)
             ULTIMA_1850_PrintString("Blocked!\n");
             return false;
         }
-        local_8 = D_5896_map_x + local_c < 0 || D_5896_map_x + local_c > 31 ||
-                  D_5897_map_y + local_e < 0 || D_5897_map_y + local_e > 31;
+        local_8 = D_5896_map_x + local_c < 0 || D_5896_map_x + local_c >= MAP_WIDTH ||
+                  D_5897_map_y + local_e < 0 || D_5897_map_y + local_e >= MAP_HEIGHT;
         param_1 = local_c < 0 ? 3 : 1;
         TOWN_057c(param_1);
         ULTIMA_1850_PrintString(local_e < 0 ? (local_c < 0 ? "Northwest\n" : "Northeast\n") :
@@ -428,7 +502,7 @@ static bool TOWN_0600(int param_1)
     case DIR_DOWN:
         // 06f8
         local_e++;
-        if (D_5897_map_y > 0x1e)
+        if (D_5897_map_y >= MAP_HEIGHT - 1)
             local_8 = 1;
         param_1 = 2;
         TOWN_057c(2);
@@ -438,7 +512,7 @@ static bool TOWN_0600(int param_1)
     case DIR_RIGHT:
         // 071a
         local_c++;
-        if (0x1e < D_5896_map_x)
+        if (D_5896_map_x >= MAP_WIDTH - 1)
             local_8 = 1;
         param_1 = 1;
         TOWN_057c(1);
@@ -501,6 +575,12 @@ static bool TOWN_0600(int param_1)
             if (local_4 == 'Y')
             {
                 ULTIMA_1850_PrintString(_TEXT(0x26ab, "Yes\n\nExit to\n"));
+                if (TOWN_ExtendedExit()) {
+                    ULTIMA_1850_PrintString((char *)MOD_LocationName(
+                        D_5895_map_level ? 41 : 0, D_5895_map_level ? "Underworld" : "Britannia"));
+                    ULTIMA_1850_PrintString("!\n");
+                    return 1;
+                }
                 if (D_5893_map_id == 0x19)
                 {
                     if (MOD_LocationName(41, NULL)) {
@@ -561,6 +641,8 @@ static bool TOWN_0600(int param_1)
 
 static void TOWN_085e(int param_1)
 {
+    if (NPC_ObjectKind(param_1) >= 0)
+        return;
     int local_4;
     int i;
 
@@ -639,11 +721,26 @@ void TOWN_0958(void)
 // attack npc
 static void TOWN_09bc(int param_1)
 {
+    int pirate = NPC_ObjectKind(param_1) == NPCS_OBJECT_PIRATE;
+    int actor = D_5f5e[param_1]._c;
     TOWN_0052_SetNpcKilled(param_1);
-    ULTIMA_6150_Combat(D_5f5e[param_1]._c);
-    TOWN_00b0_DespawnNpc(param_1);
+    ULTIMA_6150_Combat(actor);
+    if (pirate && (D_5c5a[actor]._0_tile & 0xfc) == TILE_ACTOR_FRIGATE_24) {
+        D_659e[param_1] = D_5c5a[actor]._0_tile;
+        D_5f5e[param_1]._a = D_5c5a[actor]._5;
+        for (int i = 0; i < 3; i++)
+            D_5d5e[param_1].type[i] = NPCS_OBJECT_MARKER | 7;
+        D_5d5e[param_1].time[3] = D_5c5a[actor]._7;
+    } else
+        TOWN_00b0_DespawnNpc(param_1);
     TOWN_0408(0);
     TOWN_02ae();
+}
+
+void TOWN_AttackPlacedObject(int actor) {
+    int slot = TOWN_011e(actor);
+    if (slot > 0 && NPC_ObjectKind(slot) == NPCS_OBJECT_PIRATE)
+        TOWN_09bc(slot);
 }
 
 int TOWN_09e6_AttackCmd(void)
@@ -659,13 +756,12 @@ int TOWN_09e6_AttackCmd(void)
 
     ULTIMA_1850_PrintString(_TEXT(0x26e0, "Attack-"));
 
-    if (*ULTIMA_4402_GetTileAddr(D_5896_map_x, D_5897_map_y) < TILE_MAP_POISON && D_587c_partyTile != TILE_ACTOR_AVATAR)
-    {
+    if (*ULTIMA_4402_GetTileAddr(D_5896_map_x, D_5897_map_y) < TILE_MAP_POISON &&
+        ((D_587c_partyTile & 0xfc) == TILE_ACTOR_SKIFF ||
+         (D_587c_partyTile & 0xfe) == TILE_ACTOR_FLYING_CARPET)) {
         ULTIMA_1850_PrintString(_TEXT(0x26e8, "On foot!\n"));
         local_6 = 0;
-    }
-    else if (ULTIMA_35ec_SelectDirection() != 0)
-    {
+    } else if (ULTIMA_35ec_SelectDirection() != 0) {
         local_a = (uint)D_5896_map_x + D_5876;
         local_c = (uint)D_5897_map_y + D_5878;
         if (*ULTIMA_4402_GetTileAddr(local_a, local_c) == TILE_MAP_MIRROR)
@@ -688,8 +784,10 @@ int TOWN_09e6_AttackCmd(void)
             {
                 local_10 = D_5876;
                 local_4 = TOWN_011e(local_10);
-                if (local_12 >= TILE_ACTOR_WIZARD && (local_12 < TILE_ACTOR_E8 || local_12 >= TILE_ACTOR_F0) && (local_12 & 0xfc) != TILE_ACTOR_SHARD)
-                {
+                if (((local_12 & 0xfc) == TILE_ACTOR_PIRATE ||
+                     (local_12 >= TILE_ACTOR_WIZARD &&
+                      (local_12 < TILE_ACTOR_E8 || local_12 >= TILE_ACTOR_F0))) &&
+                    (local_12 & 0xfc) != TILE_ACTOR_SHARD) {
                     local_8 = 0;
                 }
             }
@@ -702,13 +800,10 @@ int TOWN_09e6_AttackCmd(void)
             }
             else
             {
-                if (local_12 < 0x80)
-                {
+                if (local_12 < 0x80 && (local_12 & 0xfc) != TILE_ACTOR_PIRATE) {
                     ULTIMA_3f36_DecreaseByte(&D_5888, 5);
                     TOWN_0958();
-                }
-                else if ((local_12 & 0xfc) == TILE_ACTOR_D8)
-                {
+                } else if ((local_12 & 0xfc) == TILE_ACTOR_D8) {
                     TOWN_0958();
                 }
 
@@ -872,8 +967,7 @@ static void TOWN_0c78(void)
                     local_8 += ULTIMA_2092_RandomRange(0, 1) * 2 - 1;
                 }
 
-                if (local_6 <= 0x1f && local_8 <= 0x1f && 0 <= local_6 && 0 <= local_8)
-                {
+                if (local_6 < MAP_WIDTH && local_8 < MAP_HEIGHT && 0 <= local_6 && 0 <= local_8) {
                     if ((TYPES_GAME_Walkable(TILE_ACTOR_HORSE, local_6, local_8) != 0) &&
                         (ULTIMA_3702(local_6, local_8, D_5895_map_level) == 0)) {
                         local_4->_0_tile = local_4->_1_animTile = local_e;
@@ -986,6 +1080,8 @@ static void TOWN_0f02(void)
     int local_4;
     int local_6;
 
+    NPC_ApplyObjectTriggers(D_5896_map_x, D_5897_map_y, D_5895_map_level);
+
     for (local_6 = 0; local_6 < D_585b; local_6++)
     {
         if (D_55a8_party[local_6].status == STATUS_SLEEP && ULTIMA_2092_RandomRange(0, 0xf) == 0xf)
@@ -1000,8 +1096,9 @@ static void TOWN_0f02(void)
         local_a = *ULTIMA_4402_GetTileAddr(D_5896_map_x, D_5897_map_y);
         if (TYPES_Defined(TYPES_GAME_At(D_5896_map_x, D_5897_map_y)))
             TYPES_GAME_Effects();
-        if (local_a == TILE_MAP_TRAPDOOR && (D_587c_partyTile & 0xfe) != TILE_ACTOR_FLYING_CARPET)
-        {
+        if (local_a == TILE_MAP_TRAPDOOR && (D_587c_partyTile & 0xfe) != TILE_ACTOR_FLYING_CARPET &&
+            (!MAPS_NewLocation(D_5893_map_id) ||
+             MAPS_Record(1, D_5893_map_id, (int8_t)(D_5895_map_level - 1)))) {
             ULTIMA_1850_PrintString(_TEXT(0x2768, "A TRAPDOOR!\n"));
             local_8 = D_587c_partyTile;
             D_587c_partyTile = 0;
@@ -1455,8 +1552,7 @@ void TOWN_141e_MainLoop(void)
         {
             local_12 = D_587f;
             ULTIMA_4f7c(1);
-            if ((D_587f != local_12) && (D_587f == 20 || D_587f == 5))
-            {
+            if (D_587f != local_12) {
                 TOWN_0170();
             }
             // 15ec
@@ -1478,6 +1574,8 @@ void TOWN_141e_MainLoop(void)
                 if ((int)local_c < 2)
                 {
                     NPC_0db4(D_587f);
+                    if (!D_5893_map_id)
+                        return;
                 }
                 // 1671
                 if (D_65bf != 0 || local_c == 2)
@@ -1524,6 +1622,10 @@ void TOWN_1726(int param_1, int param_2, int param_3, int param_4)
     if (D_659e[param_1] == 0)
         return;
 
+    if (NPC_ObjectKind(param_1) == NPCS_OBJECT_TRIGGER) {
+        D_5f5e[param_1]._0 = 1;
+        return;
+    }
     local_4 = &D_5f5e[param_1];
 
     if (param_4 != D_5895_map_level && local_4->_c != 0)
@@ -1539,7 +1641,8 @@ void TOWN_1726(int param_1, int param_2, int param_3, int param_4)
         if (D_659e[param_1] == 1)
         {
             local_8 = 0x1e;
-        } else if (param_1 < 32 && (D_28c6[D_5893_map_id - 1] & ((u32)1 << param_1)) != 0) {
+        } else if (D_5893_map_id <= 32 && param_1 < 32 &&
+                   (D_28c6[D_5893_map_id - 1] & ((u32)1 << param_1)) != 0) {
             local_8 = 0xff;
         } else {
             local_8 = 0;
@@ -1548,6 +1651,10 @@ void TOWN_1726(int param_1, int param_2, int param_3, int param_4)
         ULTIMA_3a74(D_659e[param_1], D_659e[param_1], param_2, param_3, param_4, local_8, local_6);
 
         D_5c5a[local_6]._6 = 0;
+        if (NPC_ObjectKind(param_1) >= 0) {
+            D_5c5a[local_6]._5 = local_4->_a & 255;
+            D_5c5a[local_6]._7 = D_5d5e[param_1].time[3];
+        }
         local_4->_c = local_6;
     }
 

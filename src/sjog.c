@@ -15,16 +15,16 @@
 #include "sjog.h"
 
 #include "town.h"
+#include "npc.h"
 
 void ULTIMA_6794(int param_1);
 
 static int SJOG_0000(void)
 {
-    int i = 0x20;
+    int i = MAP_ACTOR_COUNT;
 
-    while (--i >= 0)
-    {
-        if (D_5c5a[i]._0_tile == 0)
+    while (--i > 0) {
+        if (D_5c5a[i]._0_tile == 0 && (i < 32 || D_659e[i] == 0))
             return i;
     }
 
@@ -168,6 +168,7 @@ static void SJOG_01f2(int param_1, int param_2)
 {
     if (ULTIMA_2092_RandomRange(0, 7) != 0)
     {
+        NPC_ConsumeObject(param_1);
         ULTIMA_3a74(0, 0, 0, 0, 0, 0, param_1);
         if (ULTIMA_2092_RandomRange(0, 0x1f) == 0x13)
         {
@@ -448,9 +449,9 @@ static void SJOG_0646_SearchInDungeon(void)
 
     local_a = D_5876;
     local_c = D_5878;
-    if (CONTENTS_GAME_Interact(0, local_a & 7, local_c & 7, local_10 - 1))
+    if (CONTENTS_GAME_Interact(0, DungeonX(local_a), DungeonY(local_c), local_10 - 1))
         return;
-    local_e = GetDungeonMap(local_a & 7, local_c & 7, (uint)D_5895_map_level);
+    local_e = GetDungeonMap(DungeonX(local_a), DungeonY(local_c), (uint)D_5895_map_level);
     local_4 = D_55a8_party[local_10].dex;
     local_6 = (D_5895_map_level * 2 - local_4 + 0x1e) >> 1;
     ULTIMA_1850_PrintString(_TEXT(0x86f4, "You find:\n"));
@@ -520,10 +521,11 @@ static void SJOG_0646_SearchInDungeon(void)
         case 0x61:
             // 0782
             ULTIMA_1850_PrintString(_TEXT(0x87a2, "A pit!\n"));
-            GetDungeonMap(local_a & 7, local_c & 7, D_5895_map_level) = (local_e & 0x8) + 0x60;
+            GetDungeonMap(DungeonX(local_a), DungeonY(local_c), D_5895_map_level) =
+                (local_e & 0x8) + 0x60;
             if (D_5895_map_level < 7)
             {
-                GetDungeonMap(local_a & 7, local_c & 7, D_5895_map_level + 1) |= 8;
+                GetDungeonMap(DungeonX(local_a), DungeonY(local_c), D_5895_map_level + 1) |= 8;
             }
 
             DUNGEON_1a90(1);
@@ -535,7 +537,7 @@ static void SJOG_0646_SearchInDungeon(void)
             if (local_6 < ULTIMA_2092_RandomRange(1, 0x1e))
             {
                 ULTIMA_1850_PrintString(_TEXT(0x87aa, "A bomb trap!\n"));
-                GetDungeonMap(local_a & 7, local_c & 7, D_5895_map_level) &= 8;
+                GetDungeonMap(DungeonX(local_a), DungeonY(local_c), D_5895_map_level) &= 8;
             }
             else
             {
@@ -610,7 +612,8 @@ static void SJOG_0646_SearchInDungeon(void)
             ULTIMA_1850_PrintString(_TEXT(0x88c8, "Nothing hidden on the skeleton.\n"));
             ULTIMA_1850_PrintString(_TEXT(0x88ea, "It crumbles away.\n"));
 
-            GetDungeonMap(local_a & 7, local_c & 7, D_5895_map_level) = (local_e & 8) - 0x50;
+            GetDungeonMap(DungeonX(local_a), DungeonY(local_c), D_5895_map_level) =
+                (local_e & 8) - 0x50;
             DUNGEON_1a90(1);
             ULTIMA_0f46_GRAP_66_Reveal(8, 8, 0xb7, 0xb7);
             break;
@@ -621,7 +624,8 @@ static void SJOG_0646_SearchInDungeon(void)
         // 08c2
         ULTIMA_1850_PrintString(_TEXT(0x88fe, "A hidden door!\n"));
 
-        GetDungeonMap(local_a & 7, local_c & 7, D_5895_map_level) = (local_e & 8) - 0x20;
+        GetDungeonMap(DungeonX(local_a), DungeonY(local_c), D_5895_map_level) =
+            (local_e & 8) - 0x20;
         DUNGEON_1a90(1);
         ULTIMA_0f46_GRAP_66_Reveal(8, 8, 0xb7, 0xb7);
         break;
@@ -647,8 +651,7 @@ void SJOG_095c_SearchCmd(void)
 
     local_4 = 0;
 
-    if (D_5893_map_id > 0x20 && D_5893_map_id < 0x29)
-    {
+    if (MAPS_IsDungeon(D_5893_map_id)) {
         SJOG_0646_SearchInDungeon();
         return;
     }
@@ -669,8 +672,7 @@ void SJOG_095c_SearchCmd(void)
         return;
     local_10 = *ULTIMA_4402_GetTileAddr(local_a, local_c);
 
-    for (local_6 = 1; local_6 < 0x20; local_6++)
-    {
+    for (local_6 = 1; local_6 < MAP_ACTOR_COUNT; local_6++) {
         if (D_5c5a[local_6]._2_x == local_a &&
             D_5c5a[local_6]._3_y == local_c &&
             (D_5893_map_id > 0x7f || D_5c5a[local_6]._4_z == D_5895_map_level))
@@ -681,14 +683,17 @@ void SJOG_095c_SearchCmd(void)
         }
     }
 
-    if (local_6 < 0x20)
-    {
+    if (local_6 < MAP_ACTOR_COUNT) {
         ULTIMA_1850_PrintString(_TEXT(0x892c, "\nThou dost find\n"));
         SJOG_02ea(local_6, local_e);
         return;
     }
 
     local_8 = ULTIMA_3702(local_a, local_c, D_5895_map_level);
+    if (NPC_BloodAt(local_a, local_c, D_5895_map_level)) {
+        ULTIMA_1850_PrintString("Nothing of note.\n");
+        return;
+    }
     if (local_8 == 0x1f)
     {
         ULTIMA_1850_PrintString(_TEXT(0x893e, "\nThou dost find\n"));
@@ -827,7 +832,7 @@ static void SJOG_0c3e_JimmyInDungeon(void)
     local_a = D_5897_map_y;
     if (CONTENTS_GAME_Interact(3, local_8, local_a, local_c))
         return;
-    local_e = GetDungeonMap(local_8 & 7, local_a & 7, (uint)D_5895_map_level);
+    local_e = GetDungeonMap(DungeonX(local_8), DungeonY(local_a), (uint)D_5895_map_level);
     local_4 = D_55a8_party[local_c].dex;
     local_6 = (D_5895_map_level * 2 - local_4 + 0x1e) >> 1;
 
@@ -854,7 +859,8 @@ static void SJOG_0c3e_JimmyInDungeon(void)
             if (local_6 < ULTIMA_2092_RandomRange(1, 0x1e))
             {
                 ULTIMA_1850_PrintString(_TEXT(0x8a9c, "Chest unlocked\n"));
-                GetDungeonMap(local_8 & 7, local_a & 7, D_5895_map_level) = (local_e & 8) + 0x40;
+                GetDungeonMap(DungeonX(local_8), DungeonY(local_a), D_5895_map_level) =
+                    (local_e & 8) + 0x40;
             }
             else
             {
@@ -882,8 +888,7 @@ void SJOG_0d4a_JimmyCmd(void)
     int local_8;
     int local_a;
 
-    if (D_5893_map_id > 0x20 && D_5893_map_id < 0x29)
-    {
+    if (MAPS_IsDungeon(D_5893_map_id)) {
         SJOG_0c3e_JimmyInDungeon();
         return;
     }
@@ -1126,8 +1131,7 @@ static void SJOG_112c_OpenChest(int param_1, int param_2, int param_3)
     CombatEntity* local_4;
 
     local_a = 0;
-    for (local_6 = 1; local_6 < 0x20; local_6++)
-    {
+    for (local_6 = 1; local_6 < MAP_ACTOR_COUNT; local_6++) {
         if (D_5c5a[local_6]._2_x == param_1 && D_5c5a[local_6]._3_y == param_2 &&
             (D_5893_map_id > 0x7f || (D_5893_map_id < 0x80 && D_5c5a[local_6]._4_z == param_3)))
         {
@@ -1142,8 +1146,7 @@ static void SJOG_112c_OpenChest(int param_1, int param_2, int param_3)
         }
     }
 
-    if (local_6 == 0x20)
-    {
+    if (local_6 == MAP_ACTOR_COUNT) {
         ULTIMA_1850_PrintString(_TEXT(0x8b6c, "Nothing to open!\n"));
         return;
     }
@@ -1156,8 +1159,7 @@ static void SJOG_112c_OpenChest(int param_1, int param_2, int param_3)
     local_8 = D_5c5a[local_6]._5;
     ULTIMA_3a74(0, 0, 0, 0, 0, 0, local_6);
     D_24e6 = D_24e6 | 2;
-    if (D_5893_map_id >= 1 && D_5893_map_id <= 0x20)
-    {
+    if (D_5893_map_id >= 1 && MAPS_Outside(D_5893_map_id)) {
         if (D_5888 > 2)
         {
             D_5888 -= 2;
@@ -1245,8 +1247,7 @@ void SJOG_1374_OpenCmd(void)
     int local_6;
     int local_8;
 
-    if (D_5893_map_id > 0x20 && D_5893_map_id < 0x29)
-    {
+    if (MAPS_IsDungeon(D_5893_map_id)) {
         SJOG_12d4_OpenInDungeon();
         return;
     }
@@ -1323,7 +1324,8 @@ static void SJOG_1458_GetObject(int param_1, int param_2, int param_3)
             D_57b0 = 99;
         }
 
-        if (D_5893_map_id != 0x11)
+        if (D_5893_map_id != 0x11 ||
+            (TOWN_011e(param_3) > 0 && NPC_ObjectKind(TOWN_011e(param_3)) >= 0))
             break;
 
         TOWN_00b0_DespawnNpc(0x16);
@@ -1338,7 +1340,8 @@ static void SJOG_1458_GetObject(int param_1, int param_2, int param_3)
     case TILE_ACTOR_SANDALWOOD_BOX:
         ULTIMA_1850_PrintString(_TEXT(0x8c76, "A sandalwood box!\n"));
         D_57bf = 0xff;
-        D_5b5a[0x43] |= 0x80;
+        if (TOWN_011e(param_3) < 1 || NPC_ObjectKind(TOWN_011e(param_3)) < 0)
+            D_5b5a[0x43] |= 0x80;
         break;
 
     case TILE_ACTOR_TORCH:
@@ -1476,8 +1479,13 @@ static void SJOG_1458_GetObject(int param_1, int param_2, int param_3)
     case TILE_ACTOR_CROWN:
         D_57b4 = 0xff;
         ULTIMA_1850_PrintString(_TEXT(0x8d3a, "The Crown of Lord British!\n"));
-        TOWN_0052_SetNpcKilled(TOWN_011e(param_3));
-        TOWN_00b0_DespawnNpc(TOWN_011e(param_3));
+        if (MAPS_IsTown(D_5893_map_id)) {
+            int slot = TOWN_011e(param_3);
+            if (slot > 0) {
+                TOWN_0052_SetNpcKilled(slot);
+                TOWN_00b0_DespawnNpc(slot);
+            }
+        }
         break;
 
     case TILE_ACTOR_SCEPTRE:
@@ -1495,8 +1503,8 @@ static void SJOG_1458_GetObject(int param_1, int param_2, int param_3)
         return;
     }
 
-    if (param_3 < 0x20)
-    {
+    if (param_3 < MAP_ACTOR_COUNT) {
+        NPC_ConsumeObject(param_3);
         ULTIMA_3a74(0, 0, 0, 0, 0, 0, param_3);
     }
 
@@ -1576,8 +1584,7 @@ void SJOG_18ce_GetCmd(void)
     int local_6;
     int local_4;
 
-    if (D_5893_map_id > 0x20 && D_5893_map_id < 0x29)
-    {
+    if (MAPS_IsDungeon(D_5893_map_id)) {
         SJOG_179e_GetInDungeon();
         return;
     }
@@ -1596,20 +1603,19 @@ void SJOG_18ce_GetCmd(void)
     if (CONTENTS_GAME_Interact(2, local_a, local_e, -1))
         return;
     // 1921 (NOT MATCHING: loop)
-    for (local_6 = 1; local_6 < 0x20; local_6++)
-    {
+    for (local_6 = 1; local_6 < MAP_ACTOR_COUNT; local_6++) {
         if (D_5c5a[local_6]._2_x == local_a && D_5c5a[local_6]._3_y == local_e &&
-            (D_5893_map_id > 0x7f || (D_5893_map_id < 0x80 && D_5c5a[local_6]._4_z == D_5895_map_level)))
-        {
+            (D_5893_map_id > 0x7f ||
+             (D_5893_map_id < 0x80 && D_5c5a[local_6]._4_z == D_5895_map_level))) {
             local_8 = D_5c5a[local_6]._0_tile;
-            if (local_8 < TILE_ACTOR_HORSE || local_8 == TILE_ACTOR_MOONSTONE || local_8 == TILE_ACTOR_CARPET || (local_8 & 0xfc) == TILE_ACTOR_SHARD)
+            if (local_8 && (local_8 < TILE_ACTOR_HORSE || local_8 == TILE_ACTOR_MOONSTONE ||
+                            local_8 == TILE_ACTOR_CARPET || (local_8 & 0xfc) == TILE_ACTOR_SHARD))
                 break;
         }
     }
 
     // 197f (NOT MATCHING)
-    if (local_6 < 0x20)
-    {
+    if (local_6 < MAP_ACTOR_COUNT) {
         local_4 = D_5c5a[local_6]._5;
         SJOG_1458_GetObject(local_8, local_4, local_6);
         return;
@@ -2108,8 +2114,7 @@ void SJOG_203e(int param_1)
 
     if ((D_58a1 & 0x82) == 0)
     {
-        if (param_1 < 0x20)
-        {
+        if (param_1 >= 0 && param_1 < (MAPS_IsTown(D_5894) ? LOCATION_NPC_COUNT : 32)) {
             local_4 = &D_5c5a[param_1];
 
             if (D_58a3 != 0 && (local_4->_0_tile & 0xfc) == TILE_ACTOR_PIRATE)

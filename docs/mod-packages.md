@@ -30,9 +30,9 @@ All integers are unsigned little-endian 32-bit values; there is no padding.
 
 | Header | Encoding |
 | --- | --- |
-| Magic/version | Eight ASCII bytes `IMOD0001` through `IMOD0017` |
+| Magic/version | Eight ASCII bytes `IMOD0001` through `IMOD0020` |
 | Title length | 1–256 UTF-8 bytes |
-| Resource count | 1–128 |
+| Resource count | 1–512 |
 | Title | Length bytes; embedded NUL forbidden |
 
 Each resource follows in order:
@@ -429,3 +429,147 @@ project persistence, navigation, NPC location filters, and entrance markers.
 Impera uses overrides for entrance announcements and save-slot location names;
 renamed dungeon entrances also use the new name when Look identifies them.
 Authored dialogue, signs, and other prose are not rewritten.
+
+
+## Extended maps and locations (version 18)
+
+`IMOD0018` adds the package-only `MAPS.OVR` catalog (empty original base).
+Native resource banks remain intact. Each overridden world, location floor, or
+combat board has its own width and height, independently 1–256 tiles. Coordinates
+remain bytes. Custom terrain identities continue to use `TYPEMAP.OVR`.
+
+`MAPS.OVR` has a 16-byte header: `IMAPS001`, a u32 record count (at most 512),
+and a zero u32. Records are sorted by kind, ID, then signed floor. Each consists
+of a 128-byte descriptor followed by width × height terrain bytes. The catalog
+is limited to 8 MiB, including descriptors.
+
+| Descriptor offset | Field |
+| --- | --- |
+| 0 | u32 total record length |
+| 4–5 | u8 kind and ID; kinds 0 world, 1 location, 2 BRIT.CBT, 3 DUNGEON.CBT |
+| 6 | u16 native page index; zero for worlds and new locations |
+| 8–9 | i8 floor; u8 background tile |
+| 10, 12 | u16 width and height |
+| 14 | i8 entrance world: 0 Britannia, −1 Underworld, −2 no entrance |
+| 15–16 | u8 world entrance X and Y |
+| 17–18 | u8 arrival X and Y |
+| 19 | u8 terrain originally underneath a new location's entrance |
+| 20 | Combat marker mask present (0 or 1); zero for other maps |
+| 21–23 | Zero reserved bytes |
+| 24–87 | NUL-terminated printable ASCII name, at most 63 characters |
+| 88–119 | NUL-terminated uppercase resource basename |
+| 120–127 | Combat marker bits: party 0–23, monsters 24–39, triggers 40–47, destinations 48–63; zero without a mask |
+
+World IDs are 0 Britannia and 1 Underworld. Native location IDs remain 1–32;
+combat IDs are native board indices. New locations use IDs 42–127 excluding
+64–66, which belong to engine screens. Each new location has independent
+`LOCnnn.NPC` and `LOCnnn.TLK` resources with empty original bases. `LOCnnn.DAT`
+is a virtual Workshop route: terrain lives in the catalog, and an empty DAT
+file is never exported. New locations initially have one ground floor.
+Duplicate identities, entrances, page aliases, missing companion banks and
+out-of-bounds authored placements are rejected.
+
+Signs at extended coordinates or in new locations use `ISIG0001` in SIGNS.DAT:
+eight-byte magic, a u32 record count, then the existing map/floor/X/Y bytes and
+NUL-terminated glyph text per record. Original trailer bytes are retained.
+The engine reads each matching sign with its full location ID; native sign
+resources retain their original encoding when no extension is needed.
+
+Impera stores changed extended terrain in an optional `IMPSAV01` prefix before
+the existing NPC and contents/type save trailers. It has a 24-byte header:
+magic, u32 payload size, u32 record count, u32 CRC32 and a zero u32. The payload
+contains only changed map records. Descriptors must match mounted maps exactly
+before any saved terrain is applied. An absent prefix resets terrain to the mod
+baseline. Old saves remain readable. NPC introduction/death flags for new
+location IDs use the optional `INPSAV02` NPC trailer, while native-only flags
+continue to use `INPSAV01`.
+
+In Workshop, Resize changes the selected map or floor as one undo operation.
+Shrinking refuses to crop placed content; move it first. The World tile-picker
+filter includes native and custom entrances on either world, keeping the world map open. NPCs and
+Monsters filters place actors, including custom types, without painting terrain.
+Special replaces the Add menu for other supported map items.
+Select / Move and the Positions pane edit arrivals and entrances, switch their world, and navigate between them.
+Moving an entrance restores the terrain underneath its old marker. Creation,
+terrain, NPC/dialogue companions, project persistence and package import/export
+participate in the same history.
+
+
+## Location special actors and quest objects (version 19)
+
+`IMOD0019` preserves all version 18 schemas and adds authored location object
+kinds 24–30 to `.NPC` extension records: pirate ship, whirlpool, Shadow Lord,
+shard, crown, sceptre and Lord British’s amulet. As with the earlier placed
+objects, all three behavior bytes are `0x80 | kind`. Shape and property values
+are validated together. Static pickups and bodies do not run NPC AI; pirates and
+whirlpools use the native world actor routines on their location floor, while a
+Shadow Lord uses native hostile NPC behavior. Shadow Lord identity is property
+7 (schedule byte 15), and shard identity is property 5 (the conversation byte).
+Both identities range from 0 to 2. A location has at most one authored Shadow
+Lord to match the engine's single active location-wide influence. Consumed-state
+flags and save records reuse the existing extended NPC state. Earlier package
+versions reject these new location kinds rather than treating them as dialogue.
+
+
+## Resized dungeon floors (version 20)
+
+`IMOD0020` retains previous formats and adds MAPS.OVR kind 4. Its map ID is
+33–40, floor is 0–7, resource is DUNGEON.DAT, and page is
+`(map ID - 33) * 8 + floor`. Width and height independently range from 1 to 256.
+Cells are native dungeon feature bytes, not terrain tiles. No entrance or combat
+marker metadata is used. The native DUNGEON.DAT remains 4096 bytes. Dungeon
+contents coordinates are validated against these dimensions, or 8×8 for floors
+without an override. Mutations persist through the existing IMPSAV01 map-state
+trailer. Each floor preserves vanilla toroidal wrapping at its new dimensions.
+
+`IMOD0021` adds independent dungeons. MAPS.OVR kind-4 records may use unused map
+identities 42–127 (excluding reserved 64–66), with all eight floors required. Floor
+pages append contiguously after the native 64 pages. Floor zero stores entrance,
+arrival, name, and underlay using the existing position fields. Bytes 21–22 hold a
+16-aligned combat-room bank base, from 112 through 240; other floor records repeat
+that base. The corresponding sixteen DUNGEON.CBT rooms must accompany the catalog.
+Town and dungeon records cannot share an identity, and distinct new dungeons
+cannot share a combat-room bank. Dungeon floor bytes retain the native feature
+encoding. CONTENTS.OVR supports the additional dungeon encounter identities.
+
+`IMOD0022` widens combat-room identities to 16 bits. MAPS.OVR kind-2/3 records
+store the high identity byte in byte 23; the page field carries the matching full
+identity. Kind-4 room-bank bases may range through 65520. TYPEMAP.OVR records use
+byte 5 for the high map byte on combat terrain and actor bindings, leaving bytes
+6–7 reserved. CONTENTS.OVR already has a 16-bit map field and now accepts that range
+for dungeon rooms. The sparse map catalog accepts up to 4096 records, within its
+existing 8 MiB budget. Narrow records retain their wire layout and old packages
+and saves remain readable. New wide data requires the updated engine.
+
+`IMOD0023` supports portable map imports. Ground-floor kind-1 and kind-4 records
+may supply entrance and arrival metadata for native locations and dungeons too.
+New location resources can have contiguous virtual pages for a basement and
+floors 0–3, with entrance metadata on floor zero only. CONTENTS.OVR refill modes
+3 and 4 mean “while the party has no skeleton keys” and “while the party has no
+glass sword,” allowing vanilla conditional discoveries to move without retaining
+an unrelated native discovery identity.
+
+`IMPSAV02` retains the map-state header and cell records from `IMPSAV01`, using
+header bytes 20–23 for a native portal's actual return map, world, X, and Y. It may
+have zero changed cell records when only the return point needs saving. Native
+portals remember the world actually entered from, including across save/load;
+ordinary saves continue using `IMPSAV01`. Both versions remain readable.
+
+### Town gates (`IMOD0024`)
+
+`GATES.OVR` is an empty-base companion resource. Its `IGAT0001` header holds a
+little-endian 32-bit record count after the eight-byte signature. Each sorted
+16-byte record contains map ID, signed floor, X, Y, kind (1 portcullis, 2
+drawbridge), behavior (0 decorative, 1 scheduled, 2 always open, 3 always
+closed), open tile, closed tile, opening hour, closing hour, and six zero bytes.
+Records sort by map, signed floor, Y, X; duplicate cells are rejected. The gate
+coordinate is the lower cell, immediately south of the archway. Hours range
+from 0 to 23; overnight schedules are supported, and equal hours mean closed.
+
+Unlisted cells retain vanilla behavior: archways toggle the cell below them,
+and bridge tiles retract to water at night. Native hours are 05:00–20:00.
+The floor is initialized to the appropriate state on entry; subsequent updates
+are deterministic and occur when the hour changes, including during rest.
+Drawbridges retain vanilla's protection while the party stands on a bridge.
+The former 32-cell drawbridge cap is removed. Overrides are confined to location
+maps and validated against their floor dimensions.

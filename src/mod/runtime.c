@@ -1,4 +1,5 @@
 #include "location_names.h"
+#include "maps.h"
 #include "runtime.h"
 #include "common/common.h"
 #include "common/file.h"
@@ -104,6 +105,7 @@ static int compareNames(const void *a, const void *b) {
 }
 unsigned MOD_LoadedCount(void) { return loaded; }
 void MOD_MountDirectory(const char *directory) {
+    MAPS_Mount(NULL, 0);
     TYPES_Mount(NULL, 0, NULL, 0);
     for (unsigned i = 0; i < loaded; i++) {
         MOD_Free(packages[i]);
@@ -209,6 +211,11 @@ void MOD_MountDirectory(const char *directory) {
             ok = 0;
             SDL_strlcpy(error, "Total mod memory limit (64 MiB) exceeded", sizeof(error));
         }
+        const ModResource *maps = resourceIn(p, "MAPS.OVR");
+        if (ok && maps && !MAPS_Mount(maps->data, maps->size)) {
+            ok = 0;
+            SDL_strlcpy(error, "Cannot mount extended maps", sizeof(error));
+        }
         if (ok) {
             totalMemory += packageMemory;
             packages[loaded++] = p;
@@ -288,7 +295,10 @@ int MOD_InitializeWorldObjects(void *worlds512) {
 const char *MOD_LocationName(unsigned map, const char *fallback) {
     const ModResource *r = mountedResource("LOCATIONS.OVR");
     const char *name = r ? LOCATIONS_Name(r->data, r->size, map) : NULL;
-    return name ? name : fallback;
+    if (name)
+        return name;
+    const unsigned char *extended = MAPS_Record(MAPS_IsDungeon(map) ? 4 : 1, map, 0);
+    return extended && MAPS_NewLocation(map) ? (const char *)extended + 24 : fallback;
 }
 const char *MOD_NarrativeText(const char *resource, unsigned offset) {
     const ModResource *r = mountedResource("TEXT.OVR");

@@ -1,6 +1,7 @@
 #pragma once
 #include "map_editor.h"
 namespace Workshop {
+QString mapObjectName(int shape, int value = 0, int aux = 0);
 class WorldObjects {
   public:
     static QString resource(int world);

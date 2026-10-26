@@ -51,7 +51,7 @@ The menu is alphabetical and varies with the map and its available records.
 | Moonstone | One of eight starting buried-stone positions |
 | Sandalwood box | Native quest pickup |
 | Horse, Skiff, Frigate, Magic carpet | Native world objects; frigates retain hull controls |
-| Sleeping figure, Corpse | Native world object artwork and behavior |
+| Corpse, Blood splatter | Native world object artwork and behavior |
 | Trigger | Dungeon combat-room trigger, preserving the room metadata layout |
 
 World objects have 31 non-party slots in Britannia. Underworld placement reserves

@@ -1,3 +1,4 @@
+#include "mod/maps.h"
 #ifndef _MACROS_H
 #define _MACROS_H
 
@@ -130,7 +131,9 @@
 
 // map
 #define GetMapOverworld(x, y, z) (D_6608_map.overworld[z][y][x])
-#define GetMap(x, y) (D_6608_map.town[y][x])
+#define GetMap(x, y)                                                                               \
+    (*MAPS_LocationCell(D_5893_map_id, (int8_t)D_5895_map_level, (x), (y), &D_6608_map.town[0][0], \
+                        &D_6a07))
 #define GetCopiedMap(x, y) (D_6708_map.town[y][x])
 
 // current map viewport (for rendering)
@@ -140,8 +143,10 @@
 #define GetActorMap(x, y) (D_ac64[(y) * 0x10 + (x)])
 
 // dungeon map
-#define GetDungeonMap(x, y, level) (D_595a[(level) * 0x40 + (y) * 8 + (x)])
-#define GetDungeonMap2(x, y, level) (D_595a[((y) & 7) * 8 + ((x) & 7) + (level) * 0x40])
+#define GetDungeonMap(x, y, level) (*MAPS_DungeonCell(D_5893_map_id, (level), (x), (y), D_595a))
+#define GetDungeonMap2(x, y, level) GetDungeonMap(x, y, level)
+#define DungeonX(x) MAPS_Wrap((x), MAP_WIDTH)
+#define DungeonY(y) MAPS_Wrap((y), MAP_HEIGHT)
 
 // combat map
 // ref: https://wiki.ultimacodex.com/wiki/Ultima_V_internal_formats#*.CBT
@@ -168,8 +173,8 @@
 #define COMBAT_MAP_SPECIAL_NEW_TILE_1 9
 #define COMBAT_MAP_SPECIAL_NEW_TILE_2 10
 
-#define GetCombatMap(x, y) (D_ad14[(y) * COMBAT_MAP_STRIDE + (x)])
-#define GetCombatMapSpecial(type, idx) GetCombatMap((idx), (type))
+#define GetCombatMap(x, y) (*MAPS_CombatCell((x), (y), D_ad14))
+#define GetCombatMapSpecial(type, idx) (D_ad14[(type) * COMBAT_MAP_STRIDE + (idx)])
 
 #define GetCombatMapNewTileId(idx) GetCombatMapSpecial(COMBAT_MAP_SPECIAL_NEW_TILES, COMBAT_MAP_SPECIAL_BASE + (idx))
 #define GetCombatMapPartyX(type, idx) GetCombatMapSpecial((type), COMBAT_MAP_PARTY_X_INDEX + (idx))

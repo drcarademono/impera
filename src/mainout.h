@@ -9,5 +9,6 @@ int MAINOUT_08de_EnterCmd(void);
 void MAINOUT_0d22_Entry(void);
 int MAINOUT_105c(int param_1);
 int MAINOUT_1a60(void);
+void MAINOUT_UpdateLocationHazard(unsigned actor);
 
 #endif

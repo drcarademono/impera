@@ -1,3 +1,4 @@
+#include "mod/maps.h"
 #include "common/common.h"
 #include "mod/contents.h"
 #include "mod/package.h"
@@ -144,7 +145,8 @@ int main(void) {
     assert(!TYPES_ValidateMap(map, sizeof(map), defs, len));
     map[8] = 1;
     map[35] = 32;
-    assert(!TYPES_ValidateMap(map, sizeof(map), defs, len));
+    assert(TYPES_ValidateMap(map, sizeof(map), defs, len));
+    assert(!MAPS_Contains(NULL, 0, 1, map[33], 0, 32, 0));
     map[35] = 12;
     defs[32 + 8] = 2;
     assert(!TYPES_Validate(defs, len));
@@ -189,6 +191,25 @@ int main(void) {
     assert(TYPES_ReadState(f, 1));
     fclose(f);
     assert(TYPES_At(actorSlot, 0) == 40010);
+    TYPES_Mount(NULL, 0, NULL, 0);
+    actorSlot.kind = 6;
+    actorSlot.map = 300;
+    TYPES_CellEncode(actorMap + 32, &actorSlot);
+    TypeCell decoded;
+    TYPES_CellDecode(actorMap + 32, &decoded);
+    assert(decoded.map == 300 && TYPES_ValidateMap(actorMap, sizeof(actorMap), actorDefs, len));
+    TYPES_Mount(actorDefs, len, actorMap, sizeof(actorMap));
+    TYPES_BeginEncounter(2, 300);
+    assert(TYPES_At(actorSlot, 0) == 40010);
+    TypeCell low = actorSlot;
+    low.map = 44;
+    assert(TYPES_At(low, 0) == 0 && TYPES_CellKey(&low) != TYPES_CellKey(&actorSlot));
+    f = tmpfile();
+    assert(f && TYPES_WriteState(f));
+    TYPES_Reset();
+    rewind(f);
+    assert(TYPES_ReadState(f, 1) && TYPES_At(actorSlot, 0) == 40010);
+    fclose(f);
     TYPES_Mount(NULL, 0, NULL, 0);
     actorDef.result[1] = 40011;
     TYPES_Encode(actorDefs + 32, &actorDef);

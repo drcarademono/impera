@@ -30,12 +30,12 @@ static int noBase(void *context, const char *name, unsigned char **data, size_t 
     return 0;
 }
 int main(void) {
-    unsigned char bytes[32 + 96 * 3] = {0};
+    unsigned char bytes[32 + 96 * 4] = {0};
     memcpy(bytes, "ICONT001", 8);
     bytes[8] = 9;
-    CONTENTS_PutWord(bytes + 24, 3);
-    ContentsDef defs[3] = {{0}};
-    for (int i = 0; i < 3; i++) {
+    CONTENTS_PutWord(bytes + 24, 4);
+    ContentsDef defs[4] = {{0}};
+    for (int i = 0; i < 4; i++) {
         defs[i].id = i + 1;
         defs[i].map = i ? 33 : 5;
         defs[i].x = i ? 1 : 2;
@@ -55,7 +55,13 @@ int main(void) {
     defs[2].floor = 0;
     defs[2].x = 2;
     defs[2].y = 3;
-    for (int i = 0; i < 3; i++)
+    defs[3].map = 5;
+    defs[3].floor = 0;
+    defs[3].x = 3;
+    defs[3].y = 4;
+    defs[3].action = 1;
+    defs[3].count = 0;
+    for (int i = 0; i < 4; i++)
         CONTENTS_EncodeRecord(bytes + 32 + i * 96, &defs[i]);
     assert(CONTENTS_Validate(bytes, sizeof(bytes)));
     CONTENTS_Mount(bytes, sizeof(bytes));
@@ -64,10 +70,13 @@ int main(void) {
     D_5874 = 139;
     D_587d = 5;
     D_587e = 10;
+    assert(CONTENTS_GAME_Shape(3, 4) == 1); /* An unopened empty chest is still visible. */
+    assert(CONTENTS_GAME_Interact(1, 3, 4, 0));
+    assert(CONTENTS_GAME_Shape(3, 4) == 0); /* It disappears only when opened. */
     D_57b2 = 9;
     D_57b1 = 97;
     D_57aa = 9998;
-    for (int i = 0; i < 32; i++)
+    for (int i = 0; i < 42; i++)
         D_5c5a[i]._0_tile = 0x50; /* Full vanilla actor list must not matter. */
     assert(CONTENTS_GAME_Command(2, 2) == 'S');
     assert(CONTENTS_GAME_Interact(0, 2, 2, 0));
@@ -93,6 +102,7 @@ int main(void) {
     D_55a8_party[0].status = 'G';
     D_57ac = 1;
     d = CONTENTS_Find(0, 33, 0, 1, 1);
+    assert(CONTENTS_GAME_Shape(1, 1) == 1);
     assert(CONTENTS_GAME_DungeonTile(0x08, 1, 1) == 0x48);
     assert(CONTENTS_GAME_DungeonTile(0x20, 2, 2) == 0x20);
     assert(CONTENTS_GAME_Interact(1, 1, 1, 0) && !(CONTENTS_State(d)->flags & 1));

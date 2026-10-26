@@ -14,5 +14,6 @@ QMap<QString, QByteArray> moveMapPosition(const Project &, int id, int map, int 
                                           bool moveLandmark = true);
 QWidget *mapPositionEditor(Project *, const QString &, const U5::MapPage &, MapCanvas *,
                            std::function<bool(const QMap<QString, QByteArray> &, const QString &)>,
-                           QMap<QString, int> *, std::function<void(QPoint)>);
+                           QMap<QString, int> *, std::function<void(QPoint)>,
+                           std::function<void(const QString &)> navigate = {});
 } // namespace Workshop

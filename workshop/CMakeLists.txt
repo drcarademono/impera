@@ -112,7 +112,7 @@ if(NOT shadowlord_rows)
 endif()
 string(REPLACE "u8 D_13a6" "static const uint8_t nativeShadowlordRows" shadowlord_rows "${shadowlord_rows}")
 file(APPEND "${CMAKE_CURRENT_BINARY_DIR}/native_npc_properties.h" "${shadowlord_rows}\n")
-add_library(impera_workshop_core STATIC ../src/text/text_window.c ../src/text/text_input.c ../src/text/dialogue_runtime.c ../src/text/dialogue_game.c ../src/text/game_frame.c native_text_viewport.cpp native_dialogue_frame.cpp native_dialogue_session.cpp native_dialogue_context.cpp custom_tiles.cpp shop_editor.cpp map_positions.cpp map_entities.cpp contents_editor.cpp ../src/mod/contents.c content_navigation.cpp engine_tables.cpp world_objects.cpp font_editor.cpp scene_editor.cpp cutscene_editor.cpp cutscene_composition.cpp composition_editor.cpp narrative_editor.cpp location_text.cpp dungeon_editor.cpp resource_document.cpp text_preview.cpp formats.cpp dialogue.cpp dialogue_preview.cpp dialogue_surface.cpp map_editor.cpp project.cpp ../src/mod/npcs.c ../src/mod/package.c ../src/mod/types.c)
+add_library(impera_workshop_core STATIC ../src/text/text_window.c ../src/text/text_input.c ../src/text/dialogue_runtime.c ../src/text/dialogue_game.c ../src/text/game_frame.c native_text_viewport.cpp native_dialogue_frame.cpp native_dialogue_session.cpp native_dialogue_context.cpp custom_tiles.cpp gates_editor.cpp map_json.cpp extended_maps.cpp shop_editor.cpp map_positions.cpp map_entities.cpp contents_editor.cpp ../src/mod/contents.c content_navigation.cpp engine_tables.cpp world_objects.cpp font_editor.cpp scene_editor.cpp cutscene_editor.cpp cutscene_composition.cpp composition_editor.cpp narrative_editor.cpp location_text.cpp dungeon_editor.cpp resource_document.cpp text_preview.cpp formats.cpp dialogue.cpp dialogue_preview.cpp dialogue_surface.cpp map_editor.cpp project.cpp ../src/mod/npcs.c ../src/mod/maps.c ../src/mod/package.c ../src/mod/types.c)
 qt_add_resources(impera_workshop_core alternate_tilesets PREFIX "/tilesets"
     BASE ../textures/tilesets FILES
     ../textures/tilesets/Ultima_5_Tiles_Amiga.png
@@ -197,7 +197,7 @@ if(BUILD_TESTING OR U5D_BUILD_TESTS)
     math(EXPR room_length "${room_end}-${room_begin}")
     string(SUBSTRING "${dungeon_source}" ${room_begin} ${room_length} room_calculation)
     file(APPEND "${CMAKE_CURRENT_BINARY_DIR}/engine_match_oracle.c"
-        "int WorkshopEngineDungeonRoom(int mapId, byte param_1){int D_5893_map_id=mapId,D_587b=0,D_589e=0,local_1c,local_4,local_1e,local_a;\n${room_calculation}\nreturn local_a;}\n")
+        "#include \"mod/maps.h\"\nint WorkshopEngineDungeonRoom(int mapId, byte param_1){int D_5893_map_id=mapId,D_587b=0,D_589e=0,local_1c,local_4,local_1e,local_a;\n${room_calculation}\nreturn local_a;}\n")
     add_executable(impera_workshop_test "${CMAKE_CURRENT_BINARY_DIR}/engine_match_oracle.c" tests.cpp window.cpp dialogue_editor.cpp engine_codec_test.c ../src/common/lzw.c)
     target_link_libraries(impera_workshop_test PRIVATE impera_workshop_core)
     add_executable(impera_workshop_custom_types_test custom_tiles_test.cpp window.cpp dialogue_editor.cpp)
@@ -205,8 +205,12 @@ if(BUILD_TESTING OR U5D_BUILD_TESTS)
     target_compile_definitions(impera_workshop_custom_types_test PRIVATE TEST_GAME_DIR="${workshop_engine_root}/Ultima 5")
     add_test(NAME workshop_custom_types COMMAND impera_workshop_custom_types_test)
     set_tests_properties(workshop_custom_types PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 60)
+    add_test(NAME workshop_map_json COMMAND impera_workshop_test --map-json-tests)
+    set_tests_properties(workshop_map_json PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 240)
     add_test(NAME workshop COMMAND impera_workshop_test)
-    set_tests_properties(workshop PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 60)
+    # This aggregate GUI suite includes many project and map-editor roundtrips.
+    # Intel macOS runners need more time than Linux and Apple Silicon hosts.
+    set_tests_properties(workshop PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 180)
 endif()
 
 if(MSVC)

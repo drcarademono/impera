@@ -1,5 +1,11 @@
 #include "mod/npcs.h"
 #include "map_editor.h"
+#include "gates_editor.h"
+#include "../src/mod/gates.h"
+#include "map_resize_dialog.h"
+#include "map_json.h"
+#include "dungeon_editor.h"
+#include "extended_maps.h"
 #include "../src/tiles.h"
 #include "contents_editor.h"
 #include "content_navigation.h"
@@ -21,17 +27,40 @@ MapDocument::MapDocument(const Project *p, const QString &r) : project(p), resou
 }
 QByteArray MapDocument::rawTerrain(int index, bool original) const {
     const auto &p = pages.at(index);
-    auto data = original ? project->resources[resource].original : project->data(resource);
-    if (p.side == 256)
-        return U5::worldMap(
+    const auto maps = Workshop::extendedMaps(*project);
+    const auto *extended = Workshop::findExtendedMap(maps, resource, index);
+    if (extended && !original)
+        return extended->cells;
+    const auto data = original ? project->resources[resource].original : project->data(resource);
+    QByteArray native;
+    const bool world = resource == "BRIT.DAT" || resource == "UNDER.DAT";
+    if (world)
+        native = U5::worldMap(
             resource, data,
             resource == "BRIT.DAT"
                 ? (original ? project->resources["DATA.OVL"].original : project->data("DATA.OVL"))
                 : QByteArray());
-    QByteArray cells;
-    for (int y = 0; y < p.side; ++y)
-        cells += data.mid(p.offset + y * p.stride, p.side);
-    require(cells.size() == p.side * p.side, "Map terrain is truncated");
+    const auto nativePages = MAPS_LocationResource(resource.toLatin1().constData())
+                                 ? QVector<U5::MapPage>()
+                                 : U5::mapPages(resource, data);
+    if (nativePages.isEmpty()) {
+        require(extended, "Missing map terrain");
+        return QByteArray(p.side * p.height(), char(extended->background));
+    }
+    if (index >= nativePages.size()) {
+        require(original, "Map terrain is truncated");
+        // Appended rooms have no vanilla page to compare against.
+        return QByteArray(p.side * p.height(), char(extended ? extended->background : 0));
+    }
+    const auto &source = nativePages.at(index);
+    if (!world)
+        for (int y = 0; y < source.height(); ++y)
+            native += data.mid(source.offset + y * source.stride, source.side);
+    require(native.size() == source.side * source.height(), "Map terrain is truncated");
+    QByteArray cells(p.side * p.height(), char(extended ? extended->background : 0));
+    for (int y = 0; y < qMin(p.height(), source.height()); ++y)
+        memcpy(cells.data() + y * p.side, native.constData() + y * source.side,
+               qMin(p.side, source.side));
     return cells;
 }
 QByteArray MapDocument::terrain(int index, bool original) const {
@@ -44,7 +73,7 @@ QByteArray MapDocument::terrain(int index, bool original) const {
     for (const auto &placed : CustomTiles::placements(*project)) {
         auto c = CustomTiles::cell(resource, pages[index], index, placed.x, placed.y);
         if (TYPES_CellKey(&c) == TYPES_CellKey(&placed) && placed.x < pages[index].side &&
-            placed.y < pages[index].side)
+            placed.y < pages[index].height())
             bytes[placed.y * pages[index].side + placed.x] =
                 char(U5::byte(definitions[placed.type], 9));
     }
@@ -53,7 +82,7 @@ QByteArray MapDocument::terrain(int index, bool original) const {
 QMap<QString, QByteArray> MapDocument::changes(int index, const QByteArray &cells,
                                                const QByteArray &expanded) const {
     const auto &p = pages.at(index);
-    require(cells.size() == p.side * p.side, "Map terrain dimensions changed");
+    require(cells.size() == p.side * p.height(), "Map terrain dimensions changed");
     auto data = project->data(resource);
     auto native = rawTerrain(index);
     auto ext = expanded;
@@ -70,7 +99,13 @@ QMap<QString, QByteArray> MapDocument::changes(int index, const QByteArray &cell
         if (TYPES_U32(ext.constData() + i * 4) >= 512)
             stored[i] = native[i];
     QMap<QString, QByteArray> result;
-    if (p.side == 256) {
+    auto maps = Workshop::extendedMaps(*project);
+    if (Workshop::findExtendedMap(maps, resource, index)) {
+        for (auto &map : maps)
+            if (map.resource == resource && map.page == index)
+                map.cells = stored;
+        result["MAPS.OVR"] = Workshop::writeExtendedMaps(maps);
+    } else if (resource == "BRIT.DAT" || resource == "UNDER.DAT") {
         auto overlay = resource == "BRIT.DAT" ? project->data("DATA.OVL") : QByteArray();
         U5::writeWorld(resource, stored, data, overlay);
         if (resource == "BRIT.DAT")
@@ -78,7 +113,8 @@ QMap<QString, QByteArray> MapDocument::changes(int index, const QByteArray &cell
     } else
         for (int y = 0; y < p.side; ++y)
             data.replace(p.offset + y * p.stride, p.side, stored.mid(y * p.side, p.side));
-    result[resource] = data;
+    if (!result.contains("MAPS.OVR"))
+        result[resource] = data;
     auto custom = CustomTiles::paint(*project, resource, p, index, cells, ext);
     for (auto it = custom.begin(); it != custom.end(); it++)
         result[it.key()] = it.value();
@@ -153,7 +189,14 @@ int MapNpcDocument::sprite(int settlement, int npc) const {
                      : resource == "DWELLING.NPC" ? 8
                      : resource == "CASTLE.NPC"   ? 16
                                                   : 24;
-    TypeCell key{3, quint8(bank + settlement + 1), 0, quint8(npc), quint8(npc >> 8), 0, 0};
+    const unsigned customMap = MAPS_LocationResource(resource.toLatin1().constData());
+    TypeCell key{3,
+                 quint8(customMap ? customMap : bank + settlement + 1),
+                 0,
+                 quint8(npc),
+                 quint8(npc >> 8),
+                 0,
+                 0};
     unsigned custom = CustomTiles::placements(*project).value(TYPES_CellKey(&key), key).type;
     return custom ? custom : 256 + U5::byte(project->data(resource), shapeOffset(settlement, npc));
 }
@@ -163,8 +206,15 @@ int MapNpcDocument::dialogue(int settlement, int npc) const {
 }
 QByteArray MapNpcDocument::move(int settlement, int npc, int slot, NpcLocation destination) const {
     int base = offset(settlement, npc), loc = locationIndex(slot);
-    require(destination.x >= 0 && destination.x < 32 && destination.y >= 0 && destination.y < 32 &&
-                destination.floor >= -128 && destination.floor <= 127,
+    int width = 32, height = 32;
+    if (project->resources.contains(resource.section('.', 0, 0) + ".DAT"))
+        for (const auto &page : project->mapPages(resource.section('.', 0, 0) + ".DAT"))
+            if (page.settlement == settlement && page.floor == destination.floor) {
+                width = page.side;
+                height = page.height();
+            }
+    require(destination.x >= 0 && destination.x < width && destination.y >= 0 &&
+                destination.y < height && destination.floor >= -128 && destination.floor <= 127,
             "NPC destination is outside map bounds");
     auto bytes = project->data(resource);
     bytes[base + 3 + loc] = char(destination.x);
@@ -180,7 +230,7 @@ MapCanvas::MapCanvas(QWidget *parent) : QWidget(parent) {
     setFocusPolicy(Qt::StrongFocus);
 }
 QImage MapCanvas::tileImageAt(int offset) const {
-    unsigned id = tileId(offset);
+    unsigned id = displayTiles.value(offset, tileId(offset));
     auto art = tiles.value(id);
     if (!spriteGround.contains(id))
         return art;
@@ -227,7 +277,8 @@ unsigned MapCanvas::tileId(int offset) const {
 void MapCanvas::setTileId(int offset, unsigned id) {
     if (offset < 0 || offset >= ids.size())
         return;
-    if (id >= 512 && !legacyTiles.contains(id))
+    if (actorBrushKinds.contains(id) || specialBrushKinds.contains(id) ||
+        (id >= 512 && !legacyTiles.contains(id)))
         return;
     if (!extended.isEmpty() || id >= 512) {
         if (extended.size() != ids.size() * 4)
@@ -288,6 +339,8 @@ QPoint MapCanvas::cellAt(QPointF p) const {
     return {int(std::floor(p.x() / (16 * zoom))), int(std::floor(p.y() / (16 * zoom)))};
 }
 void MapCanvas::paintEvent(QPaintEvent *e) {
+    if (prepareDisplay)
+        prepareDisplay();
     QPainter p(this);
     p.setRenderHint(QPainter::SmoothPixmapTransform, false);
     double cell = 16 * zoom;
@@ -335,6 +388,12 @@ void MapCanvas::paintEvent(QPaintEvent *e) {
             p.drawImage(QRectF(actor.x * cell, actor.y * cell, actorSize(actor.tile).width() * cell,
                                actorSize(actor.tile).height() * cell),
                         tiles[actor.tile]);
+    if (!gateSelection.isEmpty()) {
+        p.setPen(QPen(QColor("#72caff"), 2));
+        p.drawRect(QRectF(gateSelection.x() * cell, gateSelection.y() * cell,
+                          gateSelection.width() * cell, gateSelection.height() * cell)
+                       .adjusted(1, 1, -1, -1));
+    }
     if (tool == InspectNpc) {
         for (auto marker : positionMarkers) {
             QRectF r(marker.x * cell, marker.y * cell, cell, cell);
@@ -599,6 +658,9 @@ void MapCanvas::mousePressEvent(QMouseEvent *e) {
     if (!terrainEditingEnabled && tool != Select)
         return;
     if (tool != Select && !editable(cell))
+        return;
+    if ((tool == Pencil || actorBrushKinds.contains(brush) || specialBrushKinds.contains(brush)) &&
+        pencilPlacement && pencilPlacement(cell, brush))
         return;
     before = ids;
     beforeExtended = extended;
@@ -1117,15 +1179,17 @@ MapMinimap::MapMinimap(MapCanvas *c, MapView *v) : canvas(c), view(v) {
     setToolTip("Click or drag to navigate; outline shows the visible map area");
 }
 QRectF MapMinimap::imageRect() const {
-    double edge = qMax(1, qMin(width(), height()) - 8);
-    return {(width() - edge) / 2, (height() - edge) / 2, edge, edge};
+    QSizeF size(canvas->side, canvas->rowCount());
+    size.scale(QSizeF(qMax(1, width() - 8), qMax(1, height() - 8)), Qt::KeepAspectRatio);
+    return {(width() - size.width()) / 2, (height() - size.height()) / 2, size.width(),
+            size.height()};
 }
 void MapMinimap::refresh() {
-    cache = QImage(canvas->side * 4, canvas->side * 4, QImage::Format_RGB32);
+    cache = QImage(canvas->side * 4, canvas->rowCount() * 4, QImage::Format_RGB32);
     cache.fill(Qt::black);
     QPainter painter(&cache);
     painter.setRenderHint(QPainter::SmoothPixmapTransform);
-    for (int y = 0; y < canvas->side; ++y)
+    for (int y = 0; y < canvas->rowCount(); ++y)
         for (int x = 0; x < canvas->side; ++x) {
             int offset = y * canvas->side + x;
             if (offset >= canvas->ids.size())
@@ -1147,7 +1211,7 @@ void MapMinimap::paintEvent(QPaintEvent *) {
     double scale = area.width() / canvas->side;
     QPointF top = QPointF(canvas->mapFrom(view->viewport(), QPoint(0, 0))) / (16 * canvas->zoom);
     QSizeF visible = QSizeF(view->viewport()->size()) / (16 * canvas->zoom);
-    auto region = QRectF(top, visible).intersected(QRectF(0, 0, canvas->side, canvas->side));
+    auto region = QRectF(top, visible).intersected(QRectF(0, 0, canvas->side, canvas->rowCount()));
     painter.setPen(QPen(QColor("#ffffff"), 1));
     painter.drawRect(QRectF(area.topLeft() + region.topLeft() * scale, region.size() * scale));
     if (!canvas->selection.isEmpty()) {
@@ -1264,8 +1328,16 @@ MapWorkspace::MapWorkspace(
             if (!ok || name.trimmed() == project->locationName(id))
                 return;
             try {
-                if (commitResources({{"LOCATIONS.OVR", project->renameLocation(id, name)}},
-                                    "Rename location")) {
+                QMap<QString, QByteArray> changes;
+                if (MAPS_NewLocation(id)) {
+                    auto maps = Workshop::extendedMaps(*project);
+                    for (auto &m : maps)
+                        if (m.id == unsigned(id) && m.kind == 1)
+                            m.name = name.trimmed();
+                    changes["MAPS.OVR"] = Workshop::writeExtendedMaps(maps);
+                } else
+                    changes["LOCATIONS.OVR"] = project->renameLocation(id, name);
+                if (commitResources(changes, "Rename location")) {
                     document = MapDocument(project, resource);
                     populateFloors(currentPage());
                     if (locationChanged)
@@ -1286,8 +1358,46 @@ MapWorkspace::MapWorkspace(
     page->setSizeAdjustPolicy(QComboBox::AdjustToContents);
     page->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     row->addWidget(page);
+    auto resize = new QToolButton;
+    resize->setObjectName("resizeMap");
+    resize->setText("Resize…");
+    resize->setToolTip("Change map width and height; existing cells keep their coordinates.");
+    row->addWidget(resize);
+    connect(resize, &QToolButton::clicked, this, [this] {
+        if (!flushLocationMode())
+            return;
+        const auto mp = document.pages[currentPage()];
+        Workshop::MapResizeDialog dialog(window(), QSize(mp.side, mp.height()));
+        QPointer<MapWorkspace> owner(this);
+        for (int tile = 0; tile < 256; ++tile)
+            dialog.fill.addItem(QIcon(QPixmap::fromImage(canvas->tiles.value(tile))),
+                                QString("%1 · %2").arg(tile).arg(MapDocument::tileName(tile)), tile);
+        dialog.fill.setCurrentIndex(canvas->brush < 256 ? canvas->brush : 5);
+        if (dialog.exec() != QDialog::Accepted || !owner)
+            return;
+        try {
+            if (commitResources(Workshop::resizeMap(*project, resource, currentPage(),
+                                                    dialog.width.value(), dialog.height.value(),
+                                                    dialog.fill.currentData().toInt()),
+                                "Resize map")) {
+                document = MapDocument(project, resource);
+                loadPage();
+                if (locationChanged)
+                    locationChanged();
+            }
+        } catch (const std::exception &e) {
+            QMessageBox::warning(this, "Cannot resize map", e.what());
+        }
+    });
+
+    auto transfer = new QWidget;
+    transfer->setObjectName("mapTransferActions");
+    transfer->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    auto transferLayout = new QHBoxLayout(transfer);
+    transferLayout->setContentsMargins(0, 0, 0, 0);
+    transferLayout->setSpacing(4);
     auto exportButton = new QPushButton("Export");
-    exportButton->setToolTip("Export terrain, tile IDs, or the visible preview as a PNG.");
+    exportButton->setToolTip("Export the complete map as JSON, or export PNG images.");
     auto exportMenu = new QMenu(exportButton);
     exportMenu->addAction("Terrain PNG", this, [this] { exportImage(false); })
         ->setToolTip("Export map terrain artwork without grid or character overlays.");
@@ -1299,9 +1409,42 @@ MapWorkspace::MapWorkspace(
                                                [this] { exportImage(false, true); });
     previewExport->setToolTip("Export the visible canvas, including grid, markers and trigger "
                               "preview. Not suitable for terrain import.");
+    exportMenu->addSeparator();
+    auto jsonExport = exportMenu->addAction("Map JSON…", this, [this] {
+        try {
+            if (flushLocationMode())
+                Workshop::saveMapJson(this, *project, resource, currentPage());
+        } catch (const std::exception &e) {
+            QMessageBox::warning(this, "Cannot export map", QString::fromUtf8(e.what()));
+        }
+    });
+    jsonExport->setObjectName("mapExportJson");
+    jsonExport->setToolTip("Export all floors, map contents, and custom artwork.");
     exportButton->setMenu(exportMenu);
     exportButton->setObjectName("mapExport");
-    row->addWidget(exportButton);
+    auto importButton = new QPushButton("Import…");
+    importButton->setObjectName("mapImport");
+    importButton->setToolTip("Replace this map with a map JSON of the same type.");
+    transferLayout->addWidget(importButton);
+    transferLayout->addWidget(exportButton);
+    row->addWidget(transfer);
+    connect(importButton, &QPushButton::clicked, this, [this, navigate] {
+        try {
+            if (!flushLocationMode())
+                return;
+            auto json = Workshop::openMapJson(this);
+            if (json.isEmpty())
+                return;
+            auto edits = Workshop::importMapJson(*project, resource, currentPage(), json);
+            saveView();
+            if (commitResources(edits, "Import map")) {
+                Workshop::hydrateExtendedMaps(*project);
+                navigate(resource);
+            }
+        } catch (const std::exception &e) {
+            QMessageBox::warning(this, "Cannot import map", QString::fromUtf8(e.what()));
+        }
+    });
     centerLayout->addLayout(row);
     auto tools = new QHBoxLayout;
     tools->setObjectName("mapToolRow");
@@ -1504,11 +1647,13 @@ MapWorkspace::MapWorkspace(
     paletteFilter->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
     paletteFilter->setMinimumContentsLength(8);
     paletteFilter->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
-    paletteFilter->addItems({"All tiles", "World", "Location"});
-    const QStringList categoryHelp{
-        "Every tile.",
-        "Tiles found on Britannia or Underworld maps.",
-        "Tiles found on location maps, including every floor."};
+    paletteFilter->addItems({"All tiles", "World", "Locations", "NPCs", "Monsters", "Special"});
+    const QStringList categoryHelp{"Every tile and placeable item.",
+                                   "World terrain and location entrance tiles.",
+                                   "Tiles found on location maps, including every floor.",
+                                   "NPC types. Scheduled NPCs can be placed on location maps.",
+                                   "Monster types.",
+                                   "Signs, containers, transport, items and other map features."};
     for (int i = 0; i < categoryHelp.size(); ++i)
         paletteFilter->setItemData(i, categoryHelp[i], Qt::ToolTipRole);
     brushControls->addWidget(paletteFilter, 1);
@@ -1521,8 +1666,7 @@ MapWorkspace::MapWorkspace(
     paletteFilter->setAccessibleName("Tile category");
     rightLayout->addWidget(tileSearch);
     palette = new QListWidget;
-    palette->setToolTip(
-        "Select a terrain brush. Hover over a tile for its name, category, and ID.");
+    palette->setToolTip("Select terrain or an item to place on the map.");
     palette->setObjectName("mapPalette");
     palette->setViewMode(QListView::IconMode);
     palette->setResizeMode(QListView::Adjust);
@@ -1562,15 +1706,103 @@ MapWorkspace::MapWorkspace(
         if (d.render & TYPES_SPRITE)
             canvas->spriteGround[d.id] = d.ground;
         if (d.id < 256) {
-            palette->item(d.id)->setIcon(QIcon(QPixmap::fromImage(canvas->tiles[d.id])));
+            palette->item(d.id)->setIcon(
+                QIcon(QPixmap::fromImage(canvas->tiles[d.id])
+                          .scaled(32, 32, Qt::KeepAspectRatio, Qt::FastTransformation)));
             palette->item(d.id)->setToolTip(QString::fromUtf8(d.name));
         }
         if (d.id >= 512) {
-            auto item = new QListWidgetItem(QIcon(QPixmap::fromImage(canvas->tiles[d.id])),
-                                            QString(), palette);
+            auto item = new QListWidgetItem(
+                QIcon(QPixmap::fromImage(canvas->tiles[d.id])
+                          .scaled(32, 32, Qt::KeepAspectRatio, Qt::FastTransformation)),
+                QString(), palette);
             item->setData(Qt::UserRole, d.id);
             item->setToolTip(QString::fromUtf8(d.name));
         }
+    }
+    const auto supportedItems = Workshop::availableMapItems(*project, resource);
+    auto actorEntry = [&](int id, int kind, const QString &name) {
+        const bool supported = supportedItems.contains(kind == 1 ? Workshop::MapItemKind::Npc
+                                                                 : Workshop::MapItemKind::Monster);
+        canvas->actorBrushKinds[id] = kind;
+        auto item = new QListWidgetItem(
+            QIcon(QPixmap::fromImage(canvas->tiles.value(id))
+                      .scaled(32, 32, Qt::KeepAspectRatio, Qt::FastTransformation)),
+            QString(), palette);
+        item->setData(Qt::UserRole, id);
+        item->setData(Qt::UserRole + 1, name);
+        item->setData(Qt::AccessibleTextRole, name);
+        item->setToolTip(name + (kind == 1 ? " · NPC" : " · Monster") +
+                         (supported   ? QString()
+                          : kind == 1 ? "\nPlace scheduled NPCs on a location map."
+                                      : "\nMonsters cannot be placed on this map."));
+        if (!supported)
+            item->setFlags(item->flags() & ~Qt::ItemIsEnabled);
+    };
+    for (int shape = 64; shape < 128; shape += 4)
+        if (Workshop::actorName(shape) != "x")
+            actorEntry(256 + shape, 1, Workshop::actorName(shape));
+    if (resource == "BRIT.CBT")
+        actorEntry(400, 2, "Encounter monster");
+    else
+        for (int shape : Workshop::monsterShapes())
+            actorEntry(256 + shape, 2, Workshop::actorName(shape));
+    for (auto record : customRecords) {
+        TypeDef d;
+        TYPES_Decode(reinterpret_cast<const unsigned char *>(record.constData()), &d);
+        if (d.id >= 512 && d.kind)
+            actorEntry(d.id, d.kind, QString::fromUtf8(d.name));
+    }
+    canvas->prepareDisplay = [this] { refreshGatePreview(); };
+    auto specialItems = supportedItems;
+    std::sort(specialItems.begin(), specialItems.end(), [](auto a, auto b) {
+        return Workshop::mapItemName(a).compare(Workshop::mapItemName(b), Qt::CaseInsensitive) < 0;
+    });
+    for (auto kind : specialItems) {
+        if (kind == Workshop::MapItemKind::Npc || kind == Workshop::MapItemKind::Monster)
+            continue;
+        int id = 65536 + int(kind);
+        int art = kind == Workshop::MapItemKind::TownGate         ? 135
+                  : kind == Workshop::MapItemKind::Drawbridge     ? 72
+                  : kind == Workshop::MapItemKind::Sign           ? 0xf8
+                  : kind == Workshop::MapItemKind::Container      ? 257
+                  : kind == Workshop::MapItemKind::HiddenContents ? 0x5d
+                  : kind == Workshop::MapItemKind::Trigger        ? 0x45
+                                                           : 256 + Workshop::mapItemShape(kind);
+        auto image =
+            canvas->tiles.value(art).scaled(32, 32, Qt::KeepAspectRatio, Qt::FastTransformation);
+        if (kind == Workshop::MapItemKind::HiddenContents) {
+            image = QImage(32, 32, QImage::Format_ARGB32);
+            image.fill(Qt::transparent);
+            QPainter painter(&image);
+            painter.setPen(QPen(QColor("#72caff"), 2));
+            painter.setBrush(QColor("#365f8d"));
+            painter.drawRect(2, 4, 28, 24);
+            QFont font = painter.font();
+            font.setPixelSize(20);
+            font.setBold(true);
+            painter.setFont(font);
+            painter.setPen(Qt::white);
+            painter.drawText(image.rect(), Qt::AlignCenter, "C");
+        }
+        if (kind == Workshop::MapItemKind::Trigger) {
+            image = image.convertToFormat(QImage::Format_ARGB32);
+            QPainter painter(&image);
+            painter.setPen(Qt::red);
+            painter.drawRect(1, 1, 29, 29);
+        }
+        if (canvas->tiles.size() <= id)
+            canvas->tiles.resize(id + 1);
+        canvas->tiles[id] = image;
+        canvas->specialBrushKinds[id] = int(kind);
+        auto name = Workshop::mapItemName(kind);
+        auto item = new QListWidgetItem(QIcon(QPixmap::fromImage(image)), QString(), palette);
+        item->setData(Qt::UserRole, id);
+        item->setData(Qt::UserRole + 1, name);
+        item->setData(Qt::AccessibleTextRole, name);
+        const bool monster = kind == Workshop::MapItemKind::ShadowLord ||
+                             kind == Workshop::MapItemKind::PirateShip;
+        item->setToolTip(name + (monster ? " · Monster" : " · Special"));
     }
     rightLayout->addWidget(palette, 1);
     npcResource = companion;
@@ -1594,7 +1826,7 @@ MapWorkspace::MapWorkspace(
     split->setSizes({190, 780, 220});
     if (states->contains("map/editor")) {
         const auto shared = states->value("map/editor");
-        paletteFilter->setCurrentIndex(qBound(0, shared.paletteFilter, 2));
+        paletteFilter->setCurrentIndex(qBound(0, shared.paletteFilter, paletteFilter->count() - 1));
         tileSearch->setText(shared.tileSearch);
     }
     connect(tileSearch, &QLineEdit::textChanged, this, [this] {
@@ -1713,8 +1945,18 @@ MapWorkspace::MapWorkspace(
             view->setZoom(QVector<double>{1, 2, 3, 4, 8}[i - 1]);
     });
     connect(palette, &QListWidget::currentRowChanged, this, [=](int i) {
-        if (i >= 0)
+        if (i >= 0) {
             setBrush(palette->item(i)->data(Qt::UserRole).toInt());
+            if (!restoring && (canvas->actorBrushKinds.contains(canvas->brush) ||
+                               canvas->specialBrushKinds.contains(canvas->brush)))
+                tool->button(MapCanvas::Pencil)->click();
+        }
+    });
+    connect(palette, &QListWidget::itemClicked, this, [this](QListWidgetItem *item) {
+        if (!(item->flags() & Qt::ItemIsEnabled))
+            return;
+        setBrush(item->data(Qt::UserRole).toInt());
+        tool->button(MapCanvas::Pencil)->click();
     });
     canvas->pick = [=](int id) {
         tileSearch->clear();
@@ -1771,7 +2013,7 @@ MapWorkspace::MapWorkspace(
     };
     loadPage();
     x->setRange(0, canvas->side - 1);
-    y->setRange(0, canvas->side - 1);
+    y->setRange(0, canvas->rowCount() - 1);
 }
 bool MapWorkspace::externalMode() const {
     return locationModes && locationModes->tabText(activeMode) != "Terrain" &&
@@ -1791,6 +2033,8 @@ void MapWorkspace::clearLocationLayer() {
     canvas->moveNpc = nativeMoveNpc;
     canvas->commit = nativeCommit;
     layerFlush = {};
+    canvas->gateSelection = {};
+    canvas->actorFootprints.remove(unsigned(-1));
     if (locationLayer) {
         inspector->removeWidget(locationLayer);
         delete locationLayer;
@@ -1827,35 +2071,50 @@ void MapWorkspace::enableLocationModes(const QStringList &names, LocationLayerFa
     activeMode = qBound(
         0, navigation->value(resource + "/mode", canvas->tool == MapCanvas::InspectNpc ? 1 : 0),
         int(names.size()) - 1);
+    if (navigation->contains(resource + "/selectPosition")) {
+        (*navigation)["positions/selected"] = navigation->take(resource + "/selectPosition");
+        for (int i = 0; i < locationModes->count(); i++)
+            if (locationModes->tabText(i) == "Positions")
+                activeMode = i;
+    }
     locationModes->setCurrentIndex(activeMode);
     locationModes->setParent(this);
     locationModes->hide();
     canvas->prepareSelection = [this](QPoint cell) { return selectMapItem(cell); };
-    auto add = new QToolButton;
-    add->setText("Add…");
-    add->setIcon(style()->standardIcon(QStyle::SP_FileDialogNewFolder));
-    add->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-    add->setObjectName("mapAddMenu");
-    add->setToolTip("Place a new map item, then edit its properties on the right.");
-    add->setPopupMode(QToolButton::InstantPopup);
-    auto addMenu = new QMenu(add);
-    auto availableItems = Workshop::availableMapItems(*project, resource);
-    std::sort(availableItems.begin(), availableItems.end(), [](auto a, auto b) {
-        return QString::compare(Workshop::mapItemName(a), Workshop::mapItemName(b),
-                                Qt::CaseInsensitive) < 0;
-    });
-    for (auto kind : availableItems) {
-        auto action = addMenu->addAction(Workshop::mapItemName(kind));
-        action->setObjectName("addMapItem" + QString::number(int(kind)));
-        connect(action, &QAction::triggered, this, [this, kind] { beginAdd(int(kind)); });
-    }
-    add->setMenu(addMenu);
-    if (auto row = findChild<QHBoxLayout *>("mapToolRow")) {
-        row->insertWidget(7, add);
-        auto divider = new QFrame;
-        divider->setFrameShape(QFrame::VLine);
-        row->insertWidget(7, divider);
-    }
+    canvas->pencilPlacement = [this](QPoint cell, int tile) {
+        if (canvas->specialBrushKinds.contains(tile)) {
+            beginAdd(canvas->specialBrushKinds.value(tile), -1, cell);
+            return true;
+        }
+        if (canvas->actorBrushKinds.contains(tile)) {
+            int kind = canvas->actorBrushKinds.value(tile) == 1
+                           ? int(Workshop::MapItemKind::Npc)
+                           : int(Workshop::MapItemKind::Monster);
+            if (!Workshop::availableMapItems(*project, resource)
+                     .contains(Workshop::MapItemKind(kind))) {
+                if (canvas->feedback)
+                    canvas->feedback("This actor cannot be placed on this map.");
+                return true;
+            }
+            beginAdd(kind,
+                     resource == "BRIT.CBT" && tile < 512 ? -1
+                     : tile >= 512                        ? tile
+                                                          : tile - 256,
+                     cell);
+            return true;
+        }
+        if (resource != "BRIT.DAT" && resource != "UNDER.DAT")
+            return false;
+        const int profile = tile >= 512 ? CustomTiles::definition(*project, tile).base : tile;
+        if (!((profile >= 0x10 && profile <= 0x1b) || profile == 0x39 || profile == 0x3e))
+            return false;
+        for (const auto &pos : Workshop::mapPositions(*project))
+            if (pos.id >= 100 && pos.map == 0 && pos.floor == (resource == "UNDER.DAT" ? -1 : 0) &&
+                pos.cell == cell)
+                return false;
+        beginAddLocation(cell, tile);
+        return true;
+    };
     canvas->deleteItem = [this] { deleteSelectedItem(); };
     auto remove = new QToolButton;
     remove->setObjectName("mapDeleteItem");
@@ -1870,7 +2129,7 @@ void MapWorkspace::enableLocationModes(const QStringList &names, LocationLayerFa
     remove->setFixedSize(28, 28);
     remove->setIconSize({22, 22});
     if (auto row = findChild<QHBoxLayout *>("mapToolRow"))
-        row->insertWidget(9, remove);
+        row->insertWidget(row->count() - 1, remove);
     auto markers = new QCheckBox("Contents markers");
     markers->setObjectName("contentsMarkersToggle");
     markers->setToolTip(
@@ -1889,6 +2148,30 @@ void MapWorkspace::enableLocationModes(const QStringList &names, LocationLayerFa
     viewOptions->setAccessibleName("View options");
     viewOptions->setPopupMode(QToolButton::InstantPopup);
     auto viewMenu = new QMenu(viewOptions);
+    if (resource != "BRIT.DAT" && resource != "UNDER.DAT" && !resource.endsWith(".CBT")) {
+        gatePreviewHour = navigation->value("map/gatePreviewHour", -1);
+        auto preview = viewMenu->addMenu("Gate preview");
+        auto group = new QActionGroup(preview);
+        for (auto pair :
+             QList<QPair<QString, int>>{{"Map artwork", -1}, {"Day", 12}, {"Night", 0}}) {
+            auto action = preview->addAction(pair.first);
+            action->setObjectName(pair.second < 0     ? "gatePreviewArtwork"
+                                  : pair.second == 12 ? "gatePreviewDay"
+                                                      : "gatePreviewNight");
+            action->setToolTip(pair.second < 0 ? "Show the map as painted."
+                               : pair.second == 12
+                                   ? "Preview gates at 12:00 without changing terrain."
+                                   : "Preview gates at 00:00 without changing terrain.");
+            action->setCheckable(true);
+            action->setChecked(pair.second == gatePreviewHour);
+            group->addAction(action);
+            connect(action, &QAction::triggered, this, [this, hour = pair.second] {
+                gatePreviewHour = hour;
+                (*navigation)["map/gatePreviewHour"] = hour;
+                canvas->update();
+            });
+        }
+    }
     auto markerAction = viewMenu->addAction("Contents markers");
     markerAction->setObjectName("viewContentsMarkers");
     markerAction->setToolTip(markers->toolTip());
@@ -1934,6 +2217,78 @@ void MapWorkspace::enableLocationModes(const QStringList &names, LocationLayerFa
         applyLocationMode();
     });
     applyLocationMode();
+}
+void MapWorkspace::beginAddLocation(QPoint cell, int entranceTile) {
+    if (!flushLocationMode())
+        return;
+    const int profile =
+        entranceTile >= 512 ? CustomTiles::definition(*project, entranceTile).base : entranceTile;
+    const bool dungeon =
+        profile == TILE_MAP_CAVE || profile == TILE_MAP_MINE || profile == TILE_MAP_DUNGEON;
+    QDialog dialog(window());
+    QPointer<MapWorkspace> owner(this);
+    dialog.setWindowTitle(dungeon ? "Add dungeon" : "Add location");
+    QFormLayout form(&dialog);
+    QLineEdit name(dungeon ? "New dungeon" : "New location");
+    name.setObjectName("newLocationName");
+    QSpinBox width, height, fill;
+    width.setObjectName("newLocationWidth");
+    height.setObjectName("newLocationHeight");
+    width.setRange(1, 256);
+    height.setRange(1, 256);
+    width.setValue(dungeon ? 8 : 32);
+    height.setValue(dungeon ? 8 : 32);
+    fill.setRange(0, 255);
+    fill.setValue(dungeon ? 0xb0 : 5);
+    form.addRow("Name", &name);
+    form.addRow("Width (tiles)", &width);
+    form.addRow("Height (tiles)", &height);
+    QComboBox feature;
+    if (dungeon) {
+        const auto art = Workshop::dungeonFeatureImages(canvas->tiles);
+        for (int value = 0; value < 256; ++value)
+            if ((value >> 4) != 9)
+                feature.addItem(QIcon(QPixmap::fromImage(art[value])),
+                                Workshop::DungeonDocument::feature(value) + " · " +
+                                    Workshop::DungeonDocument::variant(value),
+                                value);
+        feature.setCurrentIndex(feature.findData(0));
+        feature.setObjectName("newDungeonFill");
+        form.addRow("Fill", &feature);
+    } else
+        form.addRow("Fill tile", &fill);
+    QDialogButtonBox buttons(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    form.addRow(&buttons);
+    connect(&buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(&buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    if (dialog.exec() != QDialog::Accepted || !owner)
+        return;
+    const QString title = name.text();
+    const int w = width.value(), h = height.value(),
+              tile = dungeon ? feature.currentData().toInt() : fill.value();
+    auto place = [this, title, w, h, tile, entranceTile, dungeon](QPoint cell) {
+        try {
+            const auto changes = dungeon ? Workshop::addDungeon(*project, resource, title, cell, w,
+                                                                h, tile, entranceTile)
+                                         : Workshop::addLocation(*project, resource, title, cell, w,
+                                                                 h, tile, entranceTile);
+            if (!commitResources(changes, dungeon ? "Add dungeon" : "Add location"))
+                return false;
+            Workshop::hydrateExtendedMaps(*project);
+            refreshTerrain();
+            minimap->refresh();
+            if (locationChanged)
+                locationChanged();
+            return true;
+        } catch (const std::exception &e) {
+            QMessageBox::warning(this, "Cannot add location", e.what());
+            return false;
+        }
+    };
+    if (cell.x() >= 0)
+        place(cell);
+    else
+        canvas->beginPlacement(entranceTile, false, place);
 }
 void MapWorkspace::applyLocationMode() {
     clearLocationLayer();
@@ -2060,30 +2415,37 @@ bool MapWorkspace::selectMapItem(QPoint cell) {
         auto b = project->data(resource);
         int base = page.offset;
         for (int i = 0; i < 16; i++)
-            encounterHit |= (resource == "BRIT.CBT" || U5::byte(b, base + 5 * 32 + 11 + i)) &&
+            encounterHit |= Workshop::mapMarkerActive(*project, resource, currentPage(), 24 + i,
+                                                      cell.x(), cell.y()) &&
+                            (resource == "BRIT.CBT" || U5::byte(b, base + 5 * 32 + 11 + i)) &&
                             U5::byte(b, base + 6 * 32 + 11 + i) == unsigned(cell.x()) &&
                             U5::byte(b, base + 7 * 32 + 11 + i) == unsigned(cell.y());
         for (int i = 0; i < 8; i++)
-            encounterHit |= U5::byte(b, base + 8 * 32 + 11 + i) == unsigned(cell.x()) &&
+            encounterHit |= Workshop::mapMarkerActive(*project, resource, currentPage(), 40 + i,
+                                                      cell.x(), cell.y()) &&
+                            U5::byte(b, base + 8 * 32 + 11 + i) == unsigned(cell.x()) &&
                             U5::byte(b, base + 8 * 32 + 19 + i) == unsigned(cell.y());
         for (int i = 0; i < 6; i++) {
             const int rows[] = {4, 1, 3, 2};
             int offset = base + rows[combatEntry->currentIndex()] * 32;
-            encounterHit |= U5::byte(b, offset + 11 + i) == unsigned(cell.x()) &&
-                            U5::byte(b, offset + 17 + i) == unsigned(cell.y());
+            encounterHit |=
+                Workshop::mapMarkerActive(*project, resource, currentPage(),
+                                          (rows[combatEntry->currentIndex()] - 1) * 6 + i, cell.x(),
+                                          cell.y()) &&
+                U5::byte(b, offset + 11 + i) == unsigned(cell.x()) &&
+                U5::byte(b, offset + 17 + i) == unsigned(cell.y());
         }
     }
-    const int signMap =
-        (resource == "BRIT.DAT" || resource == "UNDER.DAT")
-            ? 0
-            : QStringList{"TOWNE.DAT", "DWELLING.DAT", "CASTLE.DAT", "KEEP.DAT"}.indexOf(resource) *
-                      8 +
-                  page.settlement + 1;
+    const int signMap = Workshop::positionMap(resource, page);
     const int signFloor = resource == "UNDER.DAT" ? -1 : page.floor;
     if (npcMode >= 0 && page.settlement >= 0 && project->data(npcResource).size() >= 4608) {
         MapNpcDocument npcs(project, npcResource);
         for (int id = 1; id < npcs.count(page.settlement); ++id) {
-            auto position = npcs.location(page.settlement, id, schedule->currentIndex());
+            auto position =
+                npcs.location(page.settlement, id,
+                              Workshop::locationObject(*project, npcResource, page.settlement, id)
+                                  ? 0
+                                  : schedule->currentIndex());
             npcHit |=
                 U5::byte(project->data(npcResource), npcs.shapeOffset(page.settlement, id)) != 0 &&
                 position.floor == page.floor && position.x == cell.x() && position.y == cell.y();
@@ -2133,8 +2495,20 @@ bool MapWorkspace::selectMapItem(QPoint cell) {
     offer(contentsHit || containerTile, "Contents", contentsMode);
     offer(objectHit, "World object", objectMode);
     offer(encounterHit, "Encounter", encounterMode);
+    QByteArray gateRecord;
+    if (signMap > 0 && signMap < 128 && !resource.endsWith(".CBT"))
+        for (const auto &r :
+             Workshop::mapGates(*project, signMap, page.floor, document.terrain(currentPage()),
+                                QSize(page.side, page.height()))) {
+            QPoint position(U5::byte(r, 2), U5::byte(r, 3));
+            if (position == cell || (r[4] == 1 && position - QPoint(0, 1) == cell)) {
+                gateRecord = r;
+                offer(true, r[4] == 1 ? "Town gate" : "Drawbridge", -2);
+                break;
+            }
+        }
     int target = modes.isEmpty() ? contentsMode : modes.first();
-    if (target < 0)
+    if (target == -1)
         target = activeMode;
     if (choices.size() > 1) {
         bool ok = false;
@@ -2143,6 +2517,14 @@ bool MapWorkspace::selectMapItem(QPoint cell) {
         if (!ok)
             return false;
         target = modes[choices.indexOf(choice)];
+    }
+    if (target == -2) {
+        showGate(gateRecord);
+        return true;
+    }
+    if (findChild<QWidget *>("mapGateInspector")) {
+        clearLocationLayer();
+        applyLocationMode();
     }
     if (target != activeMode) {
         locationModes->setCurrentIndex(target);
@@ -2170,6 +2552,195 @@ bool MapWorkspace::selectMapItem(QPoint cell) {
     }
     return true;
 }
+void MapWorkspace::refreshGatePreview() {
+    canvas->displayTiles.clear();
+    if (gatePreviewHour < 0 || resource == "BRIT.DAT" || resource == "UNDER.DAT" ||
+        resource.endsWith(".CBT"))
+        return;
+    const auto &mp = document.pages[currentPage()];
+    int map = Workshop::positionMap(resource, mp);
+    for (const auto &r :
+         Workshop::mapGates(*project, map, mp.floor, canvas->ids, QSize(mp.side, mp.height()))) {
+        auto data = reinterpret_cast<const unsigned char *>(r.constData());
+        canvas->displayTiles.insert(data[3] * mp.side + data[2],
+                                    GATES_Open(data, gatePreviewHour) ? data[6] : data[7]);
+    }
+}
+void MapWorkspace::showGate(const QByteArray &record) {
+    if (record.isEmpty() || !flushLocationMode())
+        return;
+    clearLocationLayer();
+    canvas->tool = MapCanvas::InspectNpc;
+    tool->button(canvas->tool)->setChecked(true);
+    canvas->commit = {};
+    canvas->chooseNpc = [](int) {};
+    canvas->chooseActor = {};
+    canvas->actors.clear();
+    canvas->ghosts.clear();
+    canvas->selectedNpc = 0;
+    bool gate = record[4] == 1;
+    QPoint cell(U5::byte(record, 2), U5::byte(record, 3));
+    QPoint anchor = cell - QPoint(0, gate ? 1 : 0);
+    canvas->keyboardCell = anchor;
+    canvas->gateSelection = QRect(anchor, QSize(1, gate ? 2 : 1));
+    if (gate)
+        canvas->actorFootprints[unsigned(-1)] = QSize(1, 2);
+    canvas->actors.append({anchor.x(), anchor.y(), gate ? -1 : -2, 0, {}});
+    auto current = std::make_shared<QByteArray>(record);
+    auto panel = new QWidget;
+    panel->setObjectName("mapGateInspector");
+    panel->setProperty("gateRecord", record);
+    auto layout = new QVBoxLayout(panel);
+    auto title = new QLabel(gate ? "Town gate" : "Drawbridge");
+    layout->addWidget(title);
+    auto form = new QFormLayout;
+    auto mode = new QComboBox;
+    mode->setObjectName("gateMode");
+    mode->addItem("Scheduled", 1);
+    mode->addItem("Always open", 2);
+    mode->addItem("Always closed", 3);
+    mode->setCurrentIndex(mode->findData(record[5] ? int(U5::byte(record, 5)) : 2));
+    mode->setToolTip("Scheduled follows the opening and closing hours. Use Always open for "
+                     "decorative arches and permanent bridges.");
+    form->addRow("Behavior", mode);
+    auto open = new QSpinBox;
+    auto close = new QSpinBox;
+    open->setObjectName("gateOpenHour");
+    close->setObjectName("gateCloseHour");
+    for (auto hour : {open, close}) {
+        hour->setRange(0, 23);
+        hour->setSuffix(":00");
+    }
+    open->setValue(U5::byte(record, 8));
+    close->setValue(U5::byte(record, 9));
+    open->setToolTip("Hour when the gate opens; schedules can cross midnight.");
+    close->setToolTip(
+        "Hour when the gate closes. Equal opening and closing hours mean always closed.");
+    form->addRow("Opens", open);
+    form->addRow("Closes", close);
+    auto openTile = new QComboBox;
+    auto closedTile = new QComboBox;
+    openTile->setObjectName("gateOpenTile");
+    closedTile->setObjectName("gateClosedTile");
+    for (int tile = 0; tile < 256; ++tile) {
+        QIcon icon(QPixmap::fromImage(canvas->tiles.value(tile)));
+        QString name = QString("%1 · %2").arg(tile).arg(MapDocument::tileName(tile));
+        openTile->addItem(icon, name, tile);
+        closedTile->addItem(icon, name, tile);
+    }
+    for (auto tile : {openTile, closedTile}) {
+        tile->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+        tile->setMinimumContentsLength(14);
+        tile->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+    }
+    openTile->setCurrentIndex(U5::byte(record, 6));
+    closedTile->setCurrentIndex(U5::byte(record, 7));
+    openTile->setToolTip("Terrain shown when open or decorative.");
+    closedTile->setToolTip("Terrain shown when closed; its normal movement rules apply.");
+    form->addRow("Open tile", openTile);
+    form->addRow("Closed tile", closedTile);
+    layout->addLayout(form);
+    auto inherited = new QLabel;
+    inherited->setText(
+        Workshop::readGates(project->resources.value("GATES.OVR").edited).contains(record)
+            ? ""
+            : "Vanilla behavior");
+    layout->addWidget(inherited);
+    auto save = [=] {
+        open->setEnabled(mode->currentData().toInt() == 1);
+        close->setEnabled(mode->currentData().toInt() == 1);
+        auto next = *current;
+        next[5] = char(mode->currentData().toInt());
+        next[6] = char(openTile->currentData().toInt());
+        next[7] = char(closedTile->currentData().toInt());
+        next[8] = char(open->value());
+        next[9] = char(close->value());
+        try {
+            if (commitResources({{"GATES.OVR", Workshop::setGate(*project, next)}}, "Edit gate")) {
+                *current = next;
+                panel->setProperty("gateRecord", next);
+                inherited->clear();
+                canvas->update();
+            }
+        } catch (const std::exception &e) {
+            QMessageBox::warning(this, "Cannot edit gate", e.what());
+        }
+    };
+    open->setEnabled(record[5] == 1);
+    close->setEnabled(record[5] == 1);
+    connect(mode, &QComboBox::currentIndexChanged, panel, [=] { save(); });
+    connect(open, &QSpinBox::editingFinished, panel, save);
+    connect(close, &QSpinBox::editingFinished, panel, save);
+    connect(openTile, &QComboBox::currentIndexChanged, panel, [=] { save(); });
+    connect(closedTile, &QComboBox::currentIndexChanged, panel, [=] { save(); });
+    auto restore = new QPushButton("Use vanilla behavior");
+    restore->setObjectName("gateRestoreVanilla");
+    restore->setToolTip("Remove this override and use the automatic archway or bridge behavior.");
+    layout->addWidget(restore, 0, Qt::AlignLeft);
+    connect(restore, &QPushButton::clicked, panel, [=] {
+        if (commitResources({{"GATES.OVR", Workshop::setGate(*project, *current, true)}},
+                            "Reset gate")) {
+            QTimer::singleShot(0, this, [this, anchor] { selectMapItem(anchor); });
+            canvas->update();
+        }
+    });
+    layout->addStretch();
+    auto scroll = new QScrollArea;
+    scroll->setWidgetResizable(true);
+    scroll->setWidget(panel);
+    locationLayer = scroll;
+    inspector->addWidget(scroll);
+    inspector->setCurrentWidget(scroll);
+    canvas->moveNpc = [this, current, gate, anchor](int, QPoint to) {
+        const auto mp = document.pages[currentPage()];
+        QPoint target = to + QPoint(0, gate ? 1 : 0);
+        if (to.x() < 0 || to.y() < 0 || to.x() >= mp.side || target.y() >= mp.height())
+            return false;
+        try {
+            auto terrain = document.terrain(currentPage());
+            for (const auto &other :
+                 Workshop::mapGates(*project, Workshop::positionMap(resource, mp), mp.floor,
+                                    terrain, {mp.side, mp.height()})) {
+                if (other.left(4) == current->left(4))
+                    continue;
+                bool otherGate = other[4] == 1;
+                QRect area(QPoint(U5::byte(other, 2), U5::byte(other, 3) - (otherGate ? 1 : 0)),
+                           QSize(1, otherGate ? 2 : 1));
+                require(!area.intersects(QRect(to, QSize(1, gate ? 2 : 1))),
+                        "Another gate occupies that position");
+            }
+            terrain[anchor.y() * mp.side + anchor.x()] = gate ? (*current)[6] : (*current)[7];
+            if (gate)
+                terrain[(anchor.y() + 1) * mp.side + anchor.x()] = (*current)[6];
+            terrain[to.y() * mp.side + to.x()] = gate ? char(135) : (*current)[6];
+            if (gate)
+                terrain[target.y() * mp.side + target.x()] = (*current)[6];
+            auto next = *current;
+            next[2] = char(target.x());
+            next[3] = char(target.y());
+            Project staged = *project;
+            staged.resources["GATES.OVR"].edited = Workshop::setGate(staged, *current, true);
+            auto expanded = CustomTiles::expanded(*project, resource, mp, currentPage(), terrain);
+            for (auto cell : {anchor, anchor + QPoint(0, gate ? 1 : 0), to, target})
+                TYPES_Put32(expanded.data() + (cell.y() * mp.side + cell.x()) * 4, 0);
+            auto edits = document.changes(currentPage(), terrain, expanded);
+            edits["GATES.OVR"] = Workshop::setGate(staged, next);
+            if (!commitResources(edits, "Move gate"))
+                return false;
+            document = MapDocument(project, resource);
+            canvas->ids = document.terrain(currentPage());
+            canvas->extended =
+                CustomTiles::expanded(*project, resource, mp, currentPage(), canvas->ids);
+            QTimer::singleShot(0, this, [this, next] { showGate(next); });
+            return true;
+        } catch (const std::exception &e) {
+            QMessageBox::warning(this, "Cannot move gate", e.what());
+            return false;
+        }
+    };
+    canvas->update();
+}
+
 void MapWorkspace::refreshContextActors() {
     canvas->contextActors.clear();
     canvas->positionMarkers.clear();
@@ -2209,11 +2780,28 @@ void MapWorkspace::refreshContextActors() {
         return;
     MapNpcDocument npcs(project, npcResource);
     for (int id = 1; id < npcs.count(page.settlement); id++) {
-        auto position = npcs.location(page.settlement, id, schedule->currentIndex());
+        auto position =
+            npcs.location(page.settlement, id,
+                          Workshop::locationObject(*project, npcResource, page.settlement, id)
+                              ? 0
+                              : schedule->currentIndex());
         if (U5::byte(project->data(npcResource), npcs.shapeOffset(page.settlement, id)) &&
-            position.floor == page.floor && position.x < 32 && position.y < 32)
+            position.floor == page.floor && position.x < page.side && position.y < page.height())
             canvas->contextActors.append(
-                {position.x, position.y, npcs.sprite(page.settlement, id), id, {}});
+                {position.x, position.y,
+                 NPCS_ObjectKind(
+                     project->data(npcResource).constData() + npcs.offset(page.settlement, id),
+                     U5::byte(project->data(npcResource), npcs.shapeOffset(page.settlement, id))) ==
+                         NPCS_OBJECT_TRIGGER
+                     ? -1
+                     : npcs.sprite(page.settlement, id),
+                 id,
+                 NPCS_ObjectKind(
+                     project->data(npcResource).constData() + npcs.offset(page.settlement, id),
+                     U5::byte(project->data(npcResource), npcs.shapeOffset(page.settlement, id))) ==
+                         NPCS_OBJECT_TRIGGER
+                     ? "T"
+                     : QString()});
     }
 }
 int MapWorkspace::currentPage() const { return page->currentData().toInt(); }
@@ -2262,46 +2850,72 @@ void MapWorkspace::selectPage(int index) {
     populateFloors(index);
     loadPage();
     findChild<QSpinBox *>("mapGoX")->setRange(0, canvas->side - 1);
-    findChild<QSpinBox *>("mapGoY")->setRange(0, canvas->side - 1);
+    findChild<QSpinBox *>("mapGoY")->setRange(0, canvas->rowCount() - 1);
     if (locationChanged)
         locationChanged();
 }
 void MapWorkspace::cancelGesture() { canvas->cancelStroke(); }
 void MapWorkspace::setBrush(int id) {
-    canvas->brush = id >= 512 && canvas->legacyTiles.contains(id) ? id : qBound(0, id, 255);
+    canvas->brush = canvas->actorBrushKinds.contains(id) ||
+                            canvas->specialBrushKinds.contains(id) ||
+                            (id >= 512 && canvas->legacyTiles.contains(id))
+                        ? id
+                        : (id > 255 ? 5 : qBound(0, id, 255));
     {
         QSignalBlocker block(palette);
         for (int i = 0; i < palette->count(); i++)
             if (palette->item(i)->data(Qt::UserRole).toInt() == canvas->brush)
                 palette->setCurrentRow(i);
     }
+    if (auto edit = findChild<QPushButton *>("mapEditTileDefinition"))
+        edit->setVisible(!canvas->specialBrushKinds.contains(canvas->brush));
     brushImage->setPixmap(QPixmap::fromImage(canvas->tiles[canvas->brush])
                               .scaled(64, 64, Qt::KeepAspectRatio, Qt::FastTransformation));
-    brushLabel->setText(
-        QString("%1\nTile %2 · %3")
-            .arg(canvas->brush >= 512
-                     ? QString::fromUtf8(CustomTiles::definition(*project, canvas->brush).name)
-                     : MapDocument::tileName(canvas->brush))
-            .arg(canvas->brush)
-            .arg(tileCategories(canvas->brush).join(" · ")));
+    QString name;
+    for (int i = 0; i < palette->count(); ++i)
+        if (palette->item(i)->data(Qt::UserRole).toInt() == canvas->brush) {
+            name = palette->item(i)->data(Qt::UserRole + 1).toString();
+            break;
+        }
+    if (name.isEmpty())
+        name = canvas->brush >= 512
+                   ? QString::fromUtf8(CustomTiles::definition(*project, canvas->brush).name)
+               : canvas->brush >= 256 ? Workshop::actorName(canvas->brush - 256)
+                                      : MapDocument::tileName(canvas->brush);
+    brushLabel->setText(canvas->specialBrushKinds.contains(canvas->brush)
+                            ? name
+                            : QString("%1\nTile %2 · %3")
+                                  .arg(name)
+                                  .arg(canvas->brush)
+                                  .arg(tileCategories(canvas->brush).join(" · ")));
     filterPalette();
     canvas->update();
     saveView();
 }
 QStringList MapWorkspace::tileCategories(int id) const {
     QStringList categories;
+    if (canvas->specialBrushKinds.contains(id))
+        return {(canvas->specialBrushKinds.value(id) == int(Workshop::MapItemKind::ShadowLord) ||
+                 canvas->specialBrushKinds.value(id) == int(Workshop::MapItemKind::PirateShip))
+                    ? "Monsters"
+                    : "Special"};
+    if (canvas->actorBrushKinds.contains(id))
+        return {canvas->actorBrushKinds.value(id) == 1 ? "NPCs" : "Monsters"};
+    const int profile = id >= 512 ? CustomTiles::definition(*project, id).base : id;
+    if ((profile >= 0x10 && profile <= 0x1b) || profile == 0x39 || profile == 0x3e)
+        categories << "World";
     if (id >= 512) {
         auto d = CustomTiles::definition(*project, id);
-        if (d.filters & 1)
+        if ((d.filters & 1) && !categories.contains("World"))
             categories << "World";
         if (d.filters & 2)
-            categories << "Location";
+            categories << "Locations";
         return categories;
     }
-    if (worldTiles.contains(id))
+    if (worldTiles.contains(id) && !categories.contains("World"))
         categories.append("World");
     if (locationTiles.contains(id))
-        categories.append("Location");
+        categories.append("Locations");
     return categories;
 }
 void MapWorkspace::filterPalette() {
@@ -2310,8 +2924,10 @@ void MapWorkspace::filterPalette() {
         int i = palette->item(row)->data(Qt::UserRole).toInt();
         bool matches =
             query.isEmpty() ||
-            (i >= 512 ? QString::fromUtf8(CustomTiles::definition(*project, i).name)
-                      : MapDocument::tileName(i))
+            ((canvas->actorBrushKinds.contains(i) || canvas->specialBrushKinds.contains(i))
+                 ? palette->item(row)->data(Qt::UserRole + 1).toString()
+             : i >= 512 ? QString::fromUtf8(CustomTiles::definition(*project, i).name)
+                        : MapDocument::tileName(i))
                 .contains(query, Qt::CaseInsensitive) ||
             tileCategories(i).join(" ").contains(query, Qt::CaseInsensitive) ||
             QString::number(i).contains(query) ||
@@ -2380,6 +2996,11 @@ void MapWorkspace::saveView() {
         s.center = view->mapCenter();
 }
 void MapWorkspace::loadPage() {
+    if (auto resize = findChild<QToolButton *>("resizeMap")) {
+        const auto size = document.pages[currentPage()];
+        resize->setText(QString("%1 × %2…").arg(size.side).arg(size.height()));
+    }
+
     restoring = true;
     key = resource + "/" + QString::number(currentPage());
     auto state = states->value(key);
@@ -2394,6 +3015,7 @@ void MapWorkspace::loadPage() {
     }
     const auto &mp = document.pages[currentPage()];
     canvas->side = mp.side;
+    canvas->rows = mp.height();
     minimap->setVisible(resource == "BRIT.DAT" || resource == "UNDER.DAT");
     canvas->ids = document.terrain(currentPage());
     canvas->extended = CustomTiles::expanded(*project, resource, document.pages[currentPage()],
@@ -2401,7 +3023,7 @@ void MapWorkspace::loadPage() {
     canvas->libraryUuid = project->resources.value("TYPES.OVR").edited.mid(8, 16);
     canvas->original = document.terrain(currentPage(), true);
     canvas->keyboardCell = state.keyboardCell;
-    canvas->selection = state.selection.intersected(QRect(0, 0, mp.side, mp.side));
+    canvas->selection = state.selection.intersected(QRect(0, 0, mp.side, mp.height()));
     canvas->comparison = state.comparison;
     canvas->outline = false;
     {
@@ -2441,7 +3063,7 @@ void MapWorkspace::loadPage() {
     updateSelection();
     view->fitting = state.fit;
     updateZoom();
-    coordinate->setText(QString("%1 · %2 × %2 tiles").arg(mp.name).arg(mp.side));
+    coordinate->setText(QString("%1 · %2 × %3 tiles").arg(mp.name).arg(mp.side).arg(mp.height()));
     {
         QSignalBlocker block(maps);
         QTreeWidgetItemIterator it(maps);
@@ -2467,7 +3089,7 @@ void MapWorkspace::loadPage() {
         else if (state.center.x() >= 0)
             view->centerMap(state.center);
         else
-            view->centerMap({canvas->side / 2.0, canvas->side / 2.0});
+            view->centerMap({canvas->side / 2.0, canvas->rowCount() / 2.0});
         restoring = false;
         updateZoom();
         saveView();
@@ -2475,6 +3097,9 @@ void MapWorkspace::loadPage() {
 }
 QString MapWorkspace::npcName(int npc) const {
     MapNpcDocument npcs(project, npcResource);
+    const int town = document.pages[currentPage()].settlement;
+    if (Workshop::locationObject(*project, npcResource, town, npc))
+        return Workshop::locationObjectName(*project, npcResource, town, npc);
     int id = npcs.dialogue(document.pages[currentPage()].settlement, npc);
     unsigned appearance = npcs.sprite(document.pages[currentPage()].settlement, npc);
     if (appearance >= 512 && !npcNames.contains(id))
@@ -2487,6 +3112,7 @@ QString MapWorkspace::npcName(int npc) const {
 }
 void MapWorkspace::createNpcInspector(QVBoxLayout *layout) {
     auto title = new QLabel("NPC schedule");
+    title->setObjectName("mapNpcTitle");
     layout->addWidget(title);
     npcList = new QComboBox;
     npcList->setToolTip(
@@ -2510,7 +3136,52 @@ void MapWorkspace::createNpcInspector(QVBoxLayout *layout) {
     npcInfo->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     npcInfo->setTextInteractionFlags(Qt::TextSelectableByMouse);
     layout->addWidget(npcInfo);
+    objectProperties = new QWidget;
+    objectProperties->setObjectName("locationObjectProperties");
+    objectForm = new QFormLayout(objectProperties);
+    objectForm->setContentsMargins(0, 0, 0, 0);
+    objectValue = new QSpinBox;
+    objectValue->setObjectName("locationObjectValue");
+    objectValue->setRange(0, 255);
+    objectValue->setToolTip("Quantity, moon phase or hull condition for this object.");
+    objectAux = new QSpinBox;
+    objectAux->setObjectName("locationObjectSkiffs");
+    objectAux->setRange(0, 255);
+    objectAux->setToolTip("Number of skiffs carried by this frigate.");
+    objectVariant = new QComboBox;
+    objectVariant->setObjectName("locationObjectVariant");
+    objectVariant->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+    objectVariant->setToolTip("Item received when picked up, or terrain placed by this trigger.");
+    objectSkeleton = new QCheckBox("Skeleton keys");
+    objectSkeleton->setObjectName("locationObjectSkeleton");
+    objectForm->addRow("Quantity", objectValue);
+    objectForm->addRow("Type", objectVariant);
+    objectForm->addRow(objectSkeleton);
+    objectForm->addRow("Skiffs aboard", objectAux);
+    for (int j = 0; j < 2; j++) {
+        auto row = new QHBoxLayout;
+        objectTriggerX[j] = new QSpinBox;
+        objectTriggerY[j] = new QSpinBox;
+        objectTriggerX[j]->setObjectName(QString("locationTriggerX%1").arg(j));
+        objectTriggerY[j]->setObjectName(QString("locationTriggerY%1").arg(j));
+        objectTriggerX[j]->setToolTip("Destination column.");
+        objectTriggerY[j]->setToolTip("Destination row.");
+        row->addWidget(new QLabel("X"));
+        row->addWidget(objectTriggerX[j]);
+        row->addWidget(new QLabel("Y"));
+        row->addWidget(objectTriggerY[j]);
+        objectForm->addRow(QString("Destination %1").arg(j + 1), row);
+        for (auto spin : {objectTriggerX[j], objectTriggerY[j]})
+            connect(spin, &QSpinBox::editingFinished, this, [this] { editObjectProperties(); });
+    }
+    connect(objectValue, &QSpinBox::editingFinished, this, [this] { editObjectProperties(); });
+    connect(objectAux, &QSpinBox::editingFinished, this, [this] { editObjectProperties(); });
+    connect(objectVariant, &QComboBox::activated, this, [this] { editObjectProperties(); });
+    connect(objectSkeleton, &QCheckBox::clicked, this, [this] { editObjectProperties(); });
+    layout->addWidget(objectProperties);
+    objectProperties->hide();
     auto form = new QFormLayout;
+    npcMainForm = form;
     npcStartHour = new QSpinBox;
     npcStartHour->setObjectName("mapNpcStartHour");
     npcStartHour->setRange(0, 255);
@@ -2525,7 +3196,9 @@ void MapWorkspace::createNpcInspector(QVBoxLayout *layout) {
                              "sharing that conversation.");
     form->addRow("Name", npcNameField);
     connect(npcNameField, &QLineEdit::editingFinished, this, [this] {
-        if (canvas->selectedNpc < 1 || !project->resources.contains(talkResource))
+        if (canvas->selectedNpc < 1 || !project->resources.contains(talkResource) ||
+            Workshop::locationObject(*project, npcResource,
+                                     document.pages[currentPage()].settlement, canvas->selectedNpc))
             return;
         try {
             MapNpcDocument npcs(project, npcResource);
@@ -2735,6 +3408,14 @@ void MapWorkspace::refreshNpcs() {
         refreshCombat();
         return;
     }
+    if (objectProperties) {
+        objectProperties->hide();
+        for (int row = 0; row < 5; row++)
+            npcMainForm->setRowVisible(row, true);
+        npcGhosts->show();
+        npcConversation->show();
+        findChild<QPushButton *>("mapNpcAdvanced")->show();
+    }
     canvas->actors.clear();
     canvas->ghosts.clear();
     const auto &mp = document.pages[currentPage()];
@@ -2774,19 +3455,37 @@ void MapWorkspace::refreshNpcs() {
         if(auto list=qobject_cast<QListView *>(npcList->view()))
             list->setRowHidden(npc, npc == 0 || !U5::byte(project->data(npcResource),
                                                           npcs.shapeOffset(mp.settlement, npc)));
-        auto loc = npcs.location(mp.settlement, npc, slot);
+        auto loc = npcs.location(
+            mp.settlement, npc,
+            Workshop::locationObject(*project, npcResource, mp.settlement, npc) ? 0 : slot);
         if (npc > 0 && U5::byte(project->data(npcResource), npcs.shapeOffset(mp.settlement, npc)) &&
-            loc.floor == mp.floor && loc.x < 32 && loc.y < 32)
-            canvas->actors.append({loc.x, loc.y, npcs.sprite(mp.settlement, npc), npc});
+            loc.floor == mp.floor && loc.x < mp.side && loc.y < mp.height())
+            canvas->actors.append(
+                {loc.x, loc.y,
+                 NPCS_ObjectKind(
+                     project->data(npcResource).constData() + npcs.offset(mp.settlement, npc),
+                     U5::byte(project->data(npcResource), npcs.shapeOffset(mp.settlement, npc))) ==
+                         NPCS_OBJECT_TRIGGER
+                     ? -1
+                     : npcs.sprite(mp.settlement, npc),
+                 npc,
+                 NPCS_ObjectKind(
+                     project->data(npcResource).constData() + npcs.offset(mp.settlement, npc),
+                     U5::byte(project->data(npcResource), npcs.shapeOffset(mp.settlement, npc))) ==
+                         NPCS_OBJECT_TRIGGER
+                     ? "T"
+                     : QString()});
     }
     {
         int hours[4]{-1, -1, -1, -1};
         bool consistent = true;
         for (int actor = 0; actor < npcs.count(mp.settlement); ++actor) {
+            if (Workshop::locationObject(*project, npcResource, mp.settlement, actor))
+                continue;
             bool onMap = false;
             for (int change = 0; change < 4; ++change) {
                 auto loc = npcs.location(mp.settlement, actor, change);
-                onMap |= loc.floor == mp.floor && loc.x < 32 && loc.y < 32;
+                onMap |= loc.floor == mp.floor && loc.x < mp.side && loc.y < mp.height();
             }
             if (!onMap)
                 continue;
@@ -2817,7 +3516,18 @@ void MapWorkspace::refreshNpcs() {
         canvas->update();
         return;
     }
-    auto loc = npcs.location(mp.settlement, npc, slot);
+    const bool object = Workshop::locationObject(*project, npcResource, mp.settlement, npc);
+    if (object) {
+        QSignalBlocker block(schedule);
+        schedule->setCurrentIndex(0);
+        slot = 0;
+    }
+    schedule->setVisible(!object);
+    if (auto label = findChild<QLabel *>("mapScheduleLabel"))
+        label->setVisible(!object);
+    auto loc = npcs.location(
+        mp.settlement, npc,
+        Workshop::locationObject(*project, npcResource, mp.settlement, npc) ? 0 : slot);
     npcAppearance->setEnabled(true);
     npcDialogue->setEnabled(true);
     npcBehavior->setEnabled(true);
@@ -2847,7 +3557,7 @@ void MapWorkspace::refreshNpcs() {
             .arg(npcs.hour(mp.settlement, npc, slot) < 24
                      ? QString("%1:00").arg(npcs.hour(mp.settlement, npc, slot), 2, 10, QChar('0'))
                      : "an unusual time (see advanced details)");
-    if (loc.x >= 32 || loc.y >= 32)
+    if (loc.x >= mp.side || loc.y >= mp.height())
         info += "Position is outside this map.\n";
     if (loc.floor != mp.floor)
         info += QString("Floor %1.\n").arg(loc.floor);
@@ -2860,8 +3570,8 @@ void MapWorkspace::refreshNpcs() {
                              .arg(other.x)
                              .arg(other.y)
                              .arg(other.floor));
-        if (npcGhosts->isChecked() && s != slot && other.floor == mp.floor && other.x < 32 &&
-            other.y < 32)
+        if (npcGhosts->isChecked() && s != slot && other.floor == mp.floor && other.x < mp.side &&
+            other.y < mp.height())
             canvas->ghosts.append({other.x, other.y, sprite, s});
     }
     info += "Scheduled destinations:\n" + positions.join("\n");
@@ -2872,7 +3582,10 @@ void MapWorkspace::refreshNpcs() {
         conversationIndices.contains(id)
             ? "Open this NPC’s dialogue for editing."
             : "Create a new conversation for this NPC and open it for editing.");
-    npcInfo->setText(info);
+    npcInfo->setText(object ? npcName(npc) : info);
+    findChild<QLabel *>("mapNpcTitle")->setText(object ? "Map object" : "NPC schedule");
+    if (object)
+        refreshObjectProperties(npc);
     canvas->update();
 }
 void MapWorkspace::selectNpc(int npc) {
@@ -2910,6 +3623,19 @@ bool MapWorkspace::moveNpcTo(int npc, int x, int y, int floor) {
                                          npcs.sprite(settlement, npc), npc,
                                          schedule->currentIndex());
         auto bytes = npcs.move(settlement, npc, schedule->currentIndex(), destination);
+        if (Workshop::locationObject(*project, npcResource, settlement, npc)) {
+            const int base = npcs.offset(settlement, npc);
+            const int shape = U5::byte(bytes, npcs.shapeOffset(settlement, npc));
+            const bool trigger =
+                NPCS_ObjectKind(bytes.constData() + base, shape) == NPCS_OBJECT_TRIGGER;
+            for (int j = 0; j < 3; j++) {
+                if (!trigger || j == 0) {
+                    bytes[base + 3 + j] = char(x);
+                    bytes[base + 6 + j] = char(y);
+                }
+                bytes[base + 9 + j] = char(floor);
+            }
+        }
         if (bytes != project->data(npcResource) &&
             !commitResources({{npcResource, bytes}}, "Move NPC " + npcName(npc)))
             return false;
@@ -2928,7 +3654,7 @@ void MapWorkspace::locateNpc() {
     auto current = document.pages[currentPage()];
     MapNpcDocument npcs(project, npcResource);
     auto loc = npcs.location(current.settlement, npc, schedule->currentIndex());
-    if (loc.x >= 32 || loc.y >= 32) {
+    if (loc.x >= current.side || loc.y >= current.height()) {
         coordinate->setText("Stored NPC position is outside map bounds");
         return;
     }
@@ -3085,17 +3811,36 @@ void MapWorkspace::createCombatInspector(QVBoxLayout *layout) {
             b[base + (9 + j) * 32 + 11 + i] = char(triggerX[j]->value());
             b[base + (9 + j) * 32 + 19 + i] = char(triggerY[j]->value());
         }
-        if (commitResources({{resource, b}}, "Edit trigger destinations"))
+        Project view = *project;
+        QMap<QString, QByteArray> changes;
+        for (int j = 0; j < 2; j++) {
+            auto flags = Workshop::setMapMarker(view, resource, currentPage(), 48 + j * 8 + i,
+                                                triggerEnabled[j]->isChecked());
+            for (auto it = flags.begin(); it != flags.end(); ++it) {
+                changes[it.key()] = it.value();
+                view.resources[it.key()].edited = it.value();
+            }
+            if (!triggerEnabled[j]->isChecked() && flags.isEmpty()) {
+                b[base + (9 + j) * 32 + 11 + i] = char(255);
+                b[base + (9 + j) * 32 + 19 + i] = char(255);
+            }
+        }
+        changes[resource] = b;
+        if (commitResources(changes, "Edit trigger destinations"))
             refreshCombat();
     };
     connect(triggerTile, &QComboBox::activated, this, [editTrigger] { editTrigger(); });
     for (int j = 0; j < 2; j++) {
         auto row = new QHBoxLayout;
+        triggerEnabled[j] = new QCheckBox;
+        triggerEnabled[j]->setToolTip("Enable this destination.");
+        row->addWidget(triggerEnabled[j]);
+        connect(triggerEnabled[j], &QCheckBox::clicked, this, [editTrigger] { editTrigger(); });
         triggerX[j] = new QSpinBox;
         triggerY[j] = new QSpinBox;
         for (auto spin : {triggerX[j], triggerY[j]}) {
             spin->setRange(0, 255);
-            spin->setToolTip("Destination coordinate, 0–10. 255 disables this destination.");
+            spin->setToolTip("Destination tile coordinate.");
             connect(spin, &QSpinBox::editingFinished, this, editTrigger);
         }
         triggerX[j]->setObjectName(QString("combatTriggerX%1").arg(j));
@@ -3132,6 +3877,7 @@ void MapWorkspace::createCombatInspector(QVBoxLayout *layout) {
     });
 }
 void MapWorkspace::refreshCombat() {
+    const auto geometry = document.pages[currentPage()];
     canvas->actors.clear();
     canvas->ghosts.clear();
     canvas->ids = document.terrain(currentPage());
@@ -3151,14 +3897,19 @@ void MapWorkspace::refreshCombat() {
                                       : QString("T%1").arg(entity - 21);
         bool enabled = entity < 6 || entity >= 22 || resource == "BRIT.CBT" ||
                        U5::byte(bytes, base + 5 * 32 + 11 + entity - 6) != 0;
+        int bit = entity < 6
+                      ? (QList<int>{4, 1, 3, 2}[combatEntry->currentIndex()] - 1) * 6 + entity
+                  : entity < 22 ? 24 + entity - 6
+                                : 40 + entity - 22;
+        enabled &= Workshop::mapMarkerActive(*project, resource, currentPage(), bit, x, y);
         combatEntity->addItem(QString("%1 · (%2, %3)%4")
                                   .arg(label)
                                   .arg(x)
                                   .arg(y)
-                                  .arg(!enabled           ? " · disabled"
-                                       : x > 10 || y > 10 ? " · outside"
-                                                          : ""));
-        if (enabled && x < 11 && y < 11)
+                                  .arg(!enabled ? " · disabled"
+                                       : x >= geometry.side || y >= geometry.height() ? " · outside"
+                                                                                      : ""));
+        if (enabled && x < geometry.side && y < geometry.height())
             canvas->actors.append({x, y,
                                    entity >= 6 && entity < 22 && resource == "DUNGEON.CBT"
                                        ? 256 + int(U5::byte(bytes, base + 5 * 32 + 11 + entity - 6))
@@ -3173,16 +3924,20 @@ void MapWorkspace::refreshCombat() {
             for (int row : {9, 10}) {
                 int cx = U5::byte(bytes, base + row * 32 + 11 + trigger);
                 int cy = U5::byte(bytes, base + row * 32 + 19 + trigger);
-                info += QString("\nChange %1: (%2, %3)%4")
-                            .arg(row - 8)
-                            .arg(cx)
-                            .arg(cy)
-                            .arg(cx > 10 || cy > 10 ? " (ignored by engine)" : "");
-                if (cx < 11 && cy < 11) {
+                info +=
+                    QString("\nChange %1: (%2, %3)%4")
+                        .arg(row - 8)
+                        .arg(cx)
+                        .arg(cy)
+                        .arg(cx >= geometry.side || cy >= geometry.height() ? " (ignored by engine)"
+                                                                            : "");
+                if (cx < geometry.side && cy < geometry.height() &&
+                    Workshop::mapMarkerActive(*project, resource, currentPage(),
+                                              48 + (row - 9) * 8 + trigger, cx, cy)) {
                     canvas->ghosts.append(
                         {cx, cy, tile, row - 8, QString("Change %1").arg(row - 8)});
                     if (combatPreview->isChecked() && canvas->tool == MapCanvas::InspectNpc)
-                        canvas->ids[cy * 11 + cx] = char(tile);
+                        canvas->ids[cy * geometry.side + cx] = char(tile);
                 }
             }
         }
@@ -3200,6 +3955,15 @@ void MapWorkspace::refreshCombat() {
         int i = canvas->selectedNpc - 22;
         triggerTile->setCurrentIndex(triggerTile->findData(U5::byte(bytes, base + 11 + i)));
         for (int j = 0; j < 2; j++) {
+            bool enabled =
+                Workshop::mapMarkerActive(*project, resource, currentPage(), 48 + j * 8 + i,
+                                          U5::byte(bytes, base + (9 + j) * 32 + 11 + i),
+                                          U5::byte(bytes, base + (9 + j) * 32 + 19 + i));
+            triggerEnabled[j]->setChecked(enabled);
+            triggerX[j]->setEnabled(enabled);
+            triggerY[j]->setEnabled(enabled);
+            triggerX[j]->setRange(0, geometry.side - 1);
+            triggerY[j]->setRange(0, geometry.height() - 1);
             triggerX[j]->setValue(U5::byte(bytes, base + (9 + j) * 32 + 11 + i));
             triggerY[j]->setValue(U5::byte(bytes, base + (9 + j) * 32 + 19 + i));
         }
@@ -3213,7 +3977,8 @@ void MapWorkspace::refreshCombat() {
 }
 bool MapWorkspace::moveCombat(int entity, QPoint destination) {
     if (entity < 0 || entity >= 30 || destination.x() < 0 || destination.y() < 0 ||
-        destination.x() > 10 || destination.y() > 10)
+        destination.x() >= document.pages[currentPage()].side ||
+        destination.y() >= document.pages[currentPage()].height())
         return false;
     for (const auto &actor : canvas->actors)
         if (actor.npc == entity) {
@@ -3230,8 +3995,12 @@ bool MapWorkspace::moveCombat(int entity, QPoint destination) {
         combatOffsets(document.pages[currentPage()].offset, entity, combatEntry->currentIndex());
     bytes[offsets.first] = char(destination.x());
     bytes[offsets.second] = char(destination.y());
-    if (bytes != project->data(resource) &&
-        !commitResources({{resource, bytes}}, "Move encounter marker"))
+    int bit = entity < 6    ? (QList<int>{4, 1, 3, 2}[combatEntry->currentIndex()] - 1) * 6 + entity
+              : entity < 22 ? 24 + entity - 6
+                            : 40 + entity - 22;
+    auto edits = Workshop::setMapMarker(*project, resource, currentPage(), bit, true);
+    edits[resource] = bytes;
+    if (!commitResources(edits, "Move encounter marker"))
         return false;
     refreshCombat();
     saveView();
@@ -3513,17 +4282,18 @@ QString MapDocument::tileCategory(int id) {
 QImage MapDocument::terrainImage(int page, const QVector<QImage> &tiles, bool ids) const {
     auto cells = terrain(page);
     int side = pages[page].side;
+    int rows = pages[page].height();
     auto ext = CustomTiles::expanded(*project, resource, pages[page], page, cells);
     bool custom = false;
     for (int i = 0; i < cells.size(); i++)
         custom |= TYPES_U32(ext.constData() + i * 4) >= 512;
-    QImage image(side * (ids ? 1 : 16), side * (ids ? 1 : 16),
+    QImage image(side * (ids ? 1 : 16), rows * (ids ? 1 : 16),
                  ids ? (custom ? QImage::Format_Grayscale16 : QImage::Format_Grayscale8)
                      : QImage::Format_RGB32);
     require(!image.isNull(), "Cannot allocate map export");
     image.fill(Qt::black);
     if (ids) {
-        for (int y = 0; y < side; y++)
+        for (int y = 0; y < rows; y++)
             for (int x = 0; x < side; x++) {
                 unsigned id = TYPES_U32(ext.constData() + (y * side + x) * 4);
                 if (!id)
@@ -3539,6 +4309,7 @@ QImage MapDocument::terrainImage(int page, const QVector<QImage> &tiles, bool id
         canvas.extended = ext;
         canvas.tiles = tiles;
         canvas.side = side;
+        canvas.rows = rows;
         auto definitions = CustomTiles::records(*project);
         for (auto it = definitions.begin(); it != definitions.end(); it++) {
             auto d = CustomTiles::definition(*project, it.key());
@@ -3551,7 +4322,7 @@ QImage MapDocument::terrainImage(int page, const QVector<QImage> &tiles, bool id
                 canvas.spriteGround[d.id] = d.ground;
         }
         QPainter painter(&image);
-        for (int y = 0; y < side; y++)
+        for (int y = 0; y < rows; y++)
             for (int x = 0; x < side; x++)
                 painter.drawImage(QRect(x * 16, y * 16, 16, 16), canvas.tileImageAt(y * side + x));
     }
@@ -3568,19 +4339,20 @@ void MapWorkspace::setItemMode(const QString &mode) {
             return;
         }
 }
-void MapWorkspace::beginAdd(int value) {
+void MapWorkspace::beginAdd(int value, int selectedAppearance, QPoint cell) {
     try {
         if (!flushLocationMode())
             return;
         auto kind = Workshop::MapItemKind(value);
-        int appearance = -1, conversation = -1;
+        int appearance = selectedAppearance, conversation = -1;
         QString name = "New NPC";
         if (!Workshop::mapItemVariants(kind).isEmpty() || kind == Workshop::MapItemKind::Npc ||
-            kind == Workshop::MapItemKind::Monster) {
+            (kind == Workshop::MapItemKind::Monster && selectedAppearance < 0 && cell.x() < 0)) {
             QDialog dialog(this);
             dialog.setWindowTitle("Add " + Workshop::mapItemName(kind));
             auto layout = new QFormLayout(&dialog);
             auto names = new QLineEdit(name, &dialog);
+            names->setObjectName("newNpcName");
             auto shapes = new QComboBox(&dialog);
             auto conversations = new QComboBox(&dialog);
             names->setVisible(kind == Workshop::MapItemKind::Npc);
@@ -3626,8 +4398,13 @@ void MapWorkspace::beginAdd(int value) {
             shapes->setToolTip(Workshop::mapItemVariants(kind).isEmpty()
                                    ? "Choose the artwork and native creature type."
                                    : "Choose the item to place.");
-            layout->addRow(Workshop::mapItemVariants(kind).isEmpty() ? "Appearance" : "Type",
-                           shapes);
+            if (selectedAppearance >= 0)
+                shapes->setCurrentIndex(shapes->findData(selectedAppearance));
+            if (selectedAppearance < 0)
+                layout->addRow(Workshop::mapItemVariants(kind).isEmpty() ? "Appearance" : "Type",
+                               shapes);
+            else
+                shapes->hide();
             auto buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
             layout->addRow(buttons);
             connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
@@ -3641,24 +4418,32 @@ void MapWorkspace::beginAdd(int value) {
             if (name.isEmpty())
                 name = "New NPC";
         }
-        int tile = kind == Workshop::MapItemKind::Gold             ? 258
-                   : kind == Workshop::MapItemKind::Food           ? 271
-                   : kind == Workshop::MapItemKind::Moonstone      ? 281
-                   : kind == Workshop::MapItemKind::SleepingFigure ? 286
-                   : kind == Workshop::MapItemKind::Sign           ? 0xf8
-                   : kind == Workshop::MapItemKind::Container      ? 257
-                   : kind == Workshop::MapItemKind::Horse          ? 272
-                   : kind == Workshop::MapItemKind::Skiff          ? 296
-                   : kind == Workshop::MapItemKind::Frigate        ? 288
-                   : kind == Workshop::MapItemKind::Carpet         ? 283
-                   : appearance >= 0                               ? 256 + appearance
-                                                                   : -1;
+        int tile = kind == Workshop::MapItemKind::TownGate     ? 135
+                   : kind == Workshop::MapItemKind::Drawbridge ? 72
+                   : kind == Workshop::MapItemKind::Gold       ? 258
+                   : kind == Workshop::MapItemKind::Food       ? 271
+                   : kind == Workshop::MapItemKind::Moonstone  ? 281
+                   : kind == Workshop::MapItemKind::Corpse     ? 286
+                   : kind == Workshop::MapItemKind::Sign       ? 0xf8
+                   : kind == Workshop::MapItemKind::Container  ? 257
+                   : kind == Workshop::MapItemKind::Horse      ? 272
+                   : kind == Workshop::MapItemKind::Skiff      ? 296
+                   : kind == Workshop::MapItemKind::Frigate    ? 288
+                   : kind == Workshop::MapItemKind::Carpet     ? 283
+                   : appearance >= 0                           ? 256 + appearance
+                                                               : -1;
         if (kind != Workshop::MapItemKind::Sign && kind != Workshop::MapItemKind::Container &&
-            kind != Workshop::MapItemKind::HiddenContents && kind != Workshop::MapItemKind::Trigger)
+            kind != Workshop::MapItemKind::HiddenContents &&
+            kind != Workshop::MapItemKind::Trigger && kind != Workshop::MapItemKind::TownGate &&
+            kind != Workshop::MapItemKind::Drawbridge)
             tile = 256 + Workshop::mapItemShape(kind, appearance);
         if (appearance >= 512 &&
             (kind == Workshop::MapItemKind::Npc || kind == Workshop::MapItemKind::Monster))
             tile = appearance;
+        if (cell.x() >= 0) {
+            placeAddedItem(value, appearance, conversation, name, cell);
+            return;
+        }
         canvas->beginPlacement(
             tile,
             kind != Workshop::MapItemKind::Npc && kind != Workshop::MapItemKind::Sign &&
@@ -3687,6 +4472,18 @@ bool MapWorkspace::placeAddedItem(int value, int appearance, int conversation, Q
             (*navigation)["positions/selected"] = edit.slot;
         if (edit.mode == "Starting Objects")
             (*navigation)["objects/slot"] = edit.slot;
+        if (edit.mode == "Gates") {
+            document = MapDocument(project, resource);
+            canvas->ids = document.terrain(currentPage());
+            canvas->extended = CustomTiles::expanded(
+                *project, resource, document.pages[currentPage()], currentPage(), canvas->ids);
+            canvas->cancelStroke();
+            canvas->tool = MapCanvas::InspectNpc;
+            tool->button(canvas->tool)->setChecked(true);
+            selectMapItem(cell);
+            canvas->update();
+            return true;
+        }
         setItemMode(edit.mode);
         canvas->keyboardCell = cell;
         if (edit.mode == "NPCs / Schedules" || edit.mode == "Encounter")
@@ -3714,6 +4511,25 @@ bool MapWorkspace::placeAddedItem(int value, int appearance, int conversation, Q
     }
 }
 void MapWorkspace::deleteSelectedItem() {
+    if (auto panel = findChild<QWidget *>("mapGateInspector")) {
+        const auto record = panel->property("gateRecord").toByteArray();
+        const auto mp = document.pages[currentPage()];
+        int x = U5::byte(record, 2), y = U5::byte(record, 3);
+        bool gate = record[4] == 1;
+        auto terrain = document.terrain(currentPage());
+        terrain[y * mp.side + x] = gate ? record[6] : record[7];
+        if (gate && y)
+            terrain[(y - 1) * mp.side + x] = record[6];
+        auto edits = document.changes(currentPage(), terrain);
+        edits["GATES.OVR"] = Workshop::setGate(*project, record, true);
+        if (commitResources(edits, "Delete gate")) {
+            clearLocationLayer();
+            document = MapDocument(project, resource);
+            applyLocationMode();
+            canvas->update();
+        }
+        return;
+    }
     if (!locationModes || !flushLocationMode())
         return;
     try {
@@ -3736,6 +4552,116 @@ void MapWorkspace::deleteSelectedItem() {
     } catch (const std::exception &error) {
         QMessageBox::warning(this, "Cannot delete map item", error.what());
     }
+}
+void MapWorkspace::refreshObjectProperties(int npc) {
+    const auto &mp = document.pages[currentPage()];
+    MapNpcDocument npcs(project, npcResource);
+    auto b = project->data(npcResource);
+    int base = npcs.offset(mp.settlement, npc),
+        shape = U5::byte(b, npcs.shapeOffset(mp.settlement, npc));
+    const int kind = NPCS_ObjectKind(b.constData() + base, shape);
+    const int value = U5::byte(b, npcs.dialogueOffset(mp.settlement, npc));
+    objectProperties->show();
+    objectProperties->setEnabled(kind >= 0);
+    for (int row = 0; row < 5; row++)
+        npcMainForm->setRowVisible(row, false);
+    npcGhosts->hide();
+    npcConversation->hide();
+    findChild<QPushButton *>("mapNpcAdvanced")->hide();
+    const bool ship = (shape & 0xf8) == 0x20 || (shape & 0xfc) == 0x2c;
+    const bool quantity =
+        shape == 2 || shape == 15 || shape == 7 || shape == 8 || shape == 13 || shape == 25 || ship;
+    objectForm->setRowVisible(objectValue, quantity);
+    qobject_cast<QLabel *>(objectForm->labelForField(objectValue))
+        ->setText(shape == 25 ? "Moon phase"
+                  : ship      ? "Hull condition"
+                              : "Quantity");
+    objectValue->setRange(shape == 25 || ship ? 0 : 1, shape == 25  ? 7
+                                                       : shape == 7 ? 127
+                                                       : ship       ? 100
+                                                                    : 255);
+    objectValue->setValue(shape == 7 ? value & 127 : value);
+    objectForm->setRowVisible(objectAux, (shape & 0xf8) == 0x20);
+    objectAux->setValue(U5::byte(b, base + 15));
+    objectForm->setRowVisible(objectSkeleton, shape == 7);
+    objectSkeleton->setChecked(value & 128);
+    const bool equipment = shape == 5 || shape == 6 || (shape >= 9 && shape <= 12);
+    const bool typed = equipment || shape == 3 || shape == 4 || shape == 180 || shape == 252 ||
+                       kind == NPCS_OBJECT_TRIGGER;
+    objectForm->setRowVisible(objectVariant, typed);
+    qobject_cast<QLabel *>(objectForm->labelForField(objectVariant))
+        ->setText(shape == 252   ? "Identity"
+                  : shape == 180 ? "Shard"
+                                 : "Type");
+    objectVariant->clear();
+    if (kind == NPCS_OBJECT_TRIGGER)
+        for (int tile = 0; tile < 256; tile++)
+            objectVariant->addItem(MapDocument::tileName(tile), tile);
+    else
+        for (auto v : Workshop::mapItemVariants(shape == 180   ? Workshop::MapItemKind::Shard
+                                                : shape == 252 ? Workshop::MapItemKind::ShadowLord
+                                                : equipment    ? Workshop::MapItemKind::Equipment
+                                                : shape == 3   ? Workshop::MapItemKind::Potion
+                                                               : Workshop::MapItemKind::Scroll))
+            objectVariant->addItem(v.first, v.second);
+    objectVariant->setCurrentIndex(
+        objectVariant->findData(shape == 252 ? U5::byte(b, base + 15) : value));
+    objectVariant->setToolTip(
+        shape == 252 ? "The Shadow Lord’s identity controls this floor’s native influence. One "
+                       "Shadow Lord may be placed per location."
+        : shape == 180 ? "Choose the Shard of Falsehood, Hatred or Cowardice. Picking it up grants "
+                         "that quest item."
+                       : "Choose the item variant or replacement terrain tile.");
+    for (int j = 0; j < 2; j++) {
+        objectForm->setRowVisible(4 + j, kind == NPCS_OBJECT_TRIGGER);
+        objectTriggerX[j]->setRange(0, mp.side - 1);
+        objectTriggerY[j]->setRange(0, mp.height() - 1);
+        objectTriggerX[j]->setValue(U5::byte(b, base + 4 + j));
+        objectTriggerY[j]->setValue(U5::byte(b, base + 7 + j));
+    }
+}
+void MapWorkspace::editObjectProperties() {
+    int npc = canvas->selectedNpc;
+    if (npc < 1)
+        return;
+    const auto &mp = document.pages[currentPage()];
+    MapNpcDocument npcs(project, npcResource);
+    auto b = project->data(npcResource);
+    int base = npcs.offset(mp.settlement, npc),
+        shape = U5::byte(b, npcs.shapeOffset(mp.settlement, npc));
+    int kind = NPCS_ObjectKind(b.constData() + base, shape);
+    if (kind < 0)
+        return;
+    int value = U5::byte(b, npcs.dialogueOffset(mp.settlement, npc));
+    if (!objectValue->isHidden())
+        value = objectValue->value();
+    if (shape == 7) {
+        value |= objectSkeleton->isChecked() ? 128 : 0;
+        kind = int(objectSkeleton->isChecked() ? Workshop::MapItemKind::SkeletonKey
+                                               : Workshop::MapItemKind::Key);
+    }
+    if (!objectVariant->isHidden() && objectVariant->currentIndex() >= 0) {
+        if (shape == 252)
+            b[base + 15] = char(objectVariant->currentData().toInt());
+        else
+            value = objectVariant->currentData().toInt();
+        if (kind == int(Workshop::MapItemKind::Equipment))
+            b[npcs.shapeOffset(mp.settlement, npc)] =
+                char(Workshop::mapItemShape(Workshop::MapItemKind::Equipment, value));
+    }
+    for (int j = 0; j < 3; j++)
+        b[base + j] = char(NPCS_OBJECT_MARKER | kind);
+    b[npcs.dialogueOffset(mp.settlement, npc)] = char(value);
+    if ((shape & 0xf8) == 0x20)
+        b[base + 15] = char(objectAux->value());
+    if (kind == NPCS_OBJECT_TRIGGER)
+        for (int j = 0; j < 2; j++) {
+            b[base + 4 + j] = char(objectTriggerX[j]->value());
+            b[base + 7 + j] = char(objectTriggerY[j]->value());
+            b[base + 10 + j] = b[base + 9];
+        }
+    if (commitResources({{npcResource, b}}, "Edit map object"))
+        refreshNpcs();
 }
 void MapWorkspace::editNpcProperties() {
     int slot = canvas->selectedNpc;

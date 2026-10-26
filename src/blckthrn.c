@@ -562,8 +562,7 @@ void BLCKTHRN_0910_Death(void)
     CAST2_08ea(D_58a6);
     D_587c_partyTile = TILE_ACTOR_SLEEP;
 
-    if (D_5893_map_id < 0x21)
-    {
+    if (MAPS_Outside(D_5893_map_id)) {
         ULTIMA_5910_UpdateFrame();
     }
 

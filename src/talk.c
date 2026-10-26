@@ -76,11 +76,13 @@ static int TALK_0054(int param_1, int param_2)
 int TALK_Target(int dx,int dy,int* x,int* y)
 {
     *x=D_5896_map_x+dx;*y=D_5897_map_y+dy;
-    if(D_5893_map_id && (*x<0 || *y<0 || *x>=32 || *y>=32)) return 0;
+    if (D_5893_map_id && (*x < 0 || *y < 0 || *x >= MAP_WIDTH || *y >= MAP_HEIGHT))
+        return 0;
     int actor=ULTIMA_368e_FindActorTileAtPos(*x,*y,D_5895_map_level);
     if(!actor && TALK_0054(*x,*y)) {
         *x+=dx;*y+=dy;
-        if(D_5893_map_id && (*x<0 || *y<0 || *x>=32 || *y>=32)) return 0;
+        if (D_5893_map_id && (*x < 0 || *y < 0 || *x >= MAP_WIDTH || *y >= MAP_HEIGHT))
+            return 0;
         actor=ULTIMA_368e_FindActorTileAtPos(*x,*y,D_5895_map_level);
     }
     return actor;
@@ -131,10 +133,13 @@ static void TALK_00e6_TalkToMerchant(int param_1)
 
         D_b116 = param_1 - 0x81;
 
-        for (D_b114 = 0; D_23ca[D_b116][D_b114] != D_5893_map_id && D_b114 < 0x10; D_b114++)
-        {
+        for (D_b114 = 0; D_b114 < 0x10 && D_23ca[D_b116][D_b114] != D_5893_map_id; D_b114++) {
         }
 
+        if (D_b114 >= 16) {
+            ULTIMA_1850_PrintString("No service is available here.\n");
+            return;
+        }
         D_aafc = D_21ca[D_b116][D_b114];
         D_aafe = D_22ca[D_b116][D_b114];
 
@@ -531,6 +536,7 @@ static ImperaDialogueGame dialogueGame(void) {
     g.actorCount = MAP_ACTOR_COUNT;
     g.extraKilled = D_5b5a + 128;
     g.extraMet = D_5bda + 128;
+    g.mapCount = 128;
     g.random = gameRandom;
     g.vitals = gameVitals;
     return g;
@@ -758,7 +764,14 @@ static uint8_t *TALK_LoadConversation(const char *name, unsigned wanted) {
 static void TALK_127e_StartTalk(int param_1)
 {
 #if !defined(TARGET_DOS16)
-    uint8_t *bank = TALK_LoadConversation(D_4aa0[(D_5893_map_id - 1) >> 3], param_1);
+    char customName[32];
+    const char *resource;
+    if (MAPS_NewLocation(D_5893_map_id)) {
+        snprintf(customName, sizeof(customName), "LOC%03u.TLK", D_5893_map_id);
+        resource = customName;
+    } else
+        resource = D_4aa0[(D_5893_map_id - 1) >> 3];
+    uint8_t *bank = TALK_LoadConversation(resource, param_1);
     if (!bank)
         return;
 #else

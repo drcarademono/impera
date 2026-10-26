@@ -1,5 +1,70 @@
 #include "npcs.h"
 #include <string.h>
+static int validObject(const unsigned char *s, unsigned shape, unsigned value) {
+    int kind = NPCS_ObjectKind(s, shape);
+    if (kind < 0)
+        return 1;
+    switch (kind) {
+    case 5:
+        return (shape == 16 || shape == 17) && !value;
+    case 6:
+        return shape >= 40 && shape <= 43 && !value;
+    case 7:
+        return shape >= 32 && shape <= 39 && value <= 100;
+    case 8:
+        return shape == 27 && !value;
+    case 9:
+        return shape == 29;
+    case 10:
+        return shape == 30 && !value;
+    case 11:
+        return shape == 2 && value;
+    case 12:
+        return shape == 15 && value;
+    case 13:
+        return shape == 25 && value < 8;
+    case 14:
+        return shape == 8 && value;
+    case 15:
+        return shape == 7 && value && value < 128;
+    case 16:
+        return shape == 7 && (value & 128) && (value & 127);
+    case 17:
+        return shape == 13 && value;
+    case 18:
+        return shape == 3 && value < 8;
+    case 19:
+        return shape == 4 && (value < 8 || value == 255);
+    case 20:
+        return value < 48 && shape == (value < 4    ? 9
+                                       : value < 9  ? 6
+                                       : value < 16 ? 11
+                                       : value < 42 ? 5
+                                       : value < 45 ? 10
+                                                    : 12);
+    case 21:
+        return shape == 14 && !value;
+    case 22:
+        return NPCS_Blood(shape, value, s[15]);
+    case 23:
+        return shape == 31 && !value;
+    case 24:
+        return shape >= 44 && shape <= 47 && value <= 100;
+    case 25:
+        return shape == 236 && value <= 1;
+    case 26:
+        return shape == 252 && !value && s[15] < 3;
+    case 27:
+        return shape == 180 && value < 3;
+    case 28:
+        return shape == 181 && !value;
+    case 29:
+        return shape == 182 && !value;
+    case 30:
+        return shape == 183 && !value;
+    }
+    return 0;
+}
 int NPCS_Validate(const void *bytes, size_t n) {
     const unsigned char *p = bytes;
     if (n == IMPERA_NPC_BASE_SIZE)
@@ -17,7 +82,7 @@ int NPCS_Validate(const void *bytes, size_t n) {
         unsigned slot = NPCS_Word(p + off + 2), key = p[off] * IMPERA_NPC_CAPACITY + slot;
         if (p[off] >= 8 || p[off + 1] || slot < 32 || slot >= IMPERA_NPC_CAPACITY ||
             slot != next[p[off]]++ || (off > IMPERA_NPC_EXTRA_START && key <= previous) ||
-            p[off + 22] || p[off + 23])
+            p[off + 22] || p[off + 23] || !validObject(p + off + 4, p[off + 20], p[off + 21]))
             return 0;
         previous = key;
     }
