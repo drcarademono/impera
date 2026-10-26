@@ -1,3 +1,4 @@
+#include "mod/metadata.h"
 #include "native_dialogue_frame.h"
 #include "mod/interface.h"
 #include "extended_maps.h"
@@ -290,7 +291,7 @@ WorkshopWindow::WorkshopWindow() {
             return;
         bool ok;
         QString title = QInputDialog::getText(
-            this, "Mod name", "Name shown in Impera's log:", QLineEdit::Normal, project.title, &ok);
+            this, "Mod name", "Name shown in Impera:", QLineEdit::Normal, project.title, &ok);
         if (ok) {
             project.title = title;
             updateSummary();
@@ -1011,6 +1012,109 @@ QWidget *WorkshopWindow::overviewEditor() {
     layout->addWidget(summary);
     auto tabs = new QTabWidget;
     tabs->setObjectName("overviewTabs");
+    auto details = new QWidget;
+    details->setObjectName("overviewModDetails");
+    auto detailsLayout = new QHBoxLayout(details);
+    auto textLayout = new QVBoxLayout;
+    textLayout->addWidget(new QLabel("Description"));
+    auto description = new QPlainTextEdit;
+    description->setObjectName("modDescription");
+    description->setPlaceholderText("Describe your mod for players.");
+    description->setToolTip("Shown in Impera’s Mods tab. Up to 4096 UTF-8 bytes.");
+    auto info = project.resources.value("MODINFO.DAT").edited;
+    auto screenshot = std::make_shared<QByteArray>();
+    if (MODINFO_Validate(info.constData(), info.size())) {
+        auto bytes = reinterpret_cast<const unsigned char *>(info.constData());
+        unsigned length = MODINFO_U32(bytes + 8);
+        description->setPlainText(QString::fromUtf8(info.constData() + 16, length));
+        *screenshot = info.mid(16 + length);
+    }
+    textLayout->addWidget(description, 1);
+    auto remaining = new QLabel;
+    remaining->setObjectName("modDescriptionBudget");
+    textLayout->addWidget(remaining);
+    detailsLayout->addLayout(textLayout, 1);
+    auto imageLayout = new QVBoxLayout;
+    imageLayout->addWidget(new QLabel("Screenshot"));
+    auto preview = new QLabel;
+    preview->setObjectName("modScreenshotPreview");
+    preview->setFixedSize(320, 200);
+    preview->setAlignment(Qt::AlignCenter);
+    preview->setStyleSheet("background:black;");
+    auto updateImage = [preview, screenshot] {
+        if (screenshot->isEmpty()) { preview->setPixmap({}); preview->setText("No screenshot"); }
+        else { preview->setText({}); preview->setPixmap(QPixmap::fromImage(QImage::fromData(*screenshot))); }
+    };
+    updateImage(); imageLayout->addWidget(preview);
+    auto buttons = new QHBoxLayout;
+    auto import = new QPushButton("Import image…");
+    import->setObjectName("importModScreenshot");
+    import->setToolTip("Import an image, fitted to a 320 × 200 screenshot without cropping.");
+    auto remove = new QPushButton("Remove");
+    remove->setObjectName("removeModScreenshot");
+    remove->setToolTip("Remove the screenshot from this mod.");
+    remove->setEnabled(!screenshot->isEmpty());
+    buttons->addWidget(import); buttons->addWidget(remove); buttons->addStretch();
+    imageLayout->addLayout(buttons); imageLayout->addStretch();
+    detailsLayout->addLayout(imageLayout);
+    auto timer = new QTimer(details);
+    timer->setSingleShot(true); timer->setInterval(350);
+    auto applyDetails = [this, description, screenshot, timer] {
+        timer->stop();
+        return guard([&] {
+            auto text = description->toPlainText().toUtf8();
+            require(text.size() <= MODINFO_MAX_TEXT, "Description exceeds 4096 UTF-8 bytes");
+            QByteArray bytes("IMETA001", 8);
+            for (unsigned n : {unsigned(text.size()), unsigned(screenshot->size())})
+                for (int i = 0; i < 4; ++i) bytes.append(char(n >> (8 * i)));
+            bytes += text; bytes += *screenshot;
+            require(MODINFO_Validate(bytes.constData(), bytes.size()), "Invalid mod details");
+            if (text.isEmpty() && screenshot->isEmpty() &&
+                project.resources.value("MODINFO.DAT").edited.isEmpty()) return;
+            edit({{"MODINFO.DAT", bytes}}, "Edit mod details");
+        });
+    };
+    flushDraft = applyDetails;
+    connect(timer, &QTimer::timeout, details, applyDetails);
+    auto updateBudget = [description, remaining] {
+        int length = description->toPlainText().toUtf8().size();
+        remaining->setText(QString("%1 / 4096 bytes").arg(length));
+        remaining->setStyleSheet(length > MODINFO_MAX_TEXT ? "color:#ff5555" : "");
+    };
+    updateBudget();
+    connect(description, &QPlainTextEdit::textChanged, details, [timer, description, updateBudget] {
+        updateBudget();
+        if (description->toPlainText().toUtf8().size() <= MODINFO_MAX_TEXT) timer->start();
+        else timer->stop();
+    });
+    connect(import, &QPushButton::clicked, details, [this, screenshot, applyDetails, updateImage, remove] {
+        auto path = QFileDialog::getOpenFileName(this, "Mod screenshot", {}, "Images (*.png *.jpg *.jpeg *.bmp)");
+        if (path.isEmpty()) return;
+        guard([&] {
+            QImageReader reader(path);
+            auto size = reader.size();
+            require(size.isValid() && size.width() <= 4096 && size.height() <= 4096,
+                    "Choose an image no larger than 4096 × 4096 pixels");
+            auto source = reader.read(); require(!source.isNull(), "Cannot read image");
+            QImage image(320, 200, QImage::Format_RGB32); image.fill(Qt::black);
+            QPainter painter(&image);
+            auto fitted = source.scaled(320, 200, Qt::KeepAspectRatio, Qt::FastTransformation);
+            painter.drawImage((320 - fitted.width()) / 2, (200 - fitted.height()) / 2, fitted);
+            painter.end();
+            QByteArray png; QBuffer buffer(&png); buffer.open(QIODevice::WriteOnly);
+            require(image.save(&buffer, "PNG"), "Cannot encode screenshot");
+            auto old = *screenshot; *screenshot = png;
+            if (!applyDetails()) { *screenshot = old; return; }
+            updateImage(); remove->setEnabled(true);
+        });
+    });
+    connect(remove, &QPushButton::clicked, details, [screenshot, applyDetails, updateImage, remove] {
+        auto old = *screenshot; screenshot->clear();
+        if (!applyDetails()) { *screenshot = old; return; }
+        updateImage(); remove->setEnabled(false);
+    });
+    tabs->addTab(details, "Mod details");
+
     auto diagnostics = new QWidget(root);
     diagnostics->setObjectName("overviewAdvancedPanel");
     auto diagnosticsLayout = new QVBoxLayout(diagnostics);
@@ -1141,7 +1245,7 @@ QWidget *WorkshopWindow::overviewEditor() {
     return root;
 }
 QWidget *WorkshopWindow::resourceEditor(const QString &name) {
-    if (name == "@overview") return overviewEditor();
+    if (name == "@overview" || name == "MODINFO.DAT") return overviewEditor();
     if (name == "INTERFACE.OVR") {
         auto root = new QWidget;
         root->setObjectName("interfaceEditor");

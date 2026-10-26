@@ -51,7 +51,7 @@ void Project::openGame(const QString &directory) {
         if (upper == "TYPES.OVR" || upper == "TYPEMAP.OVR" || upper == "CUTSCENE.OVR" ||
             upper == "MAPS.OVR" || MAPS_LocationResource(upper.toLatin1().constData()) ||
             upper == "LOCATIONS.OVR" || upper == "TEXT.OVR" || upper == "RULES.TBL" ||
-            upper == "INTERFACE.OVR" || upper == "GATES.OVR" || upper == "CONTENTS.OVR")
+            upper == "MODINFO.DAT" || upper == "INTERFACE.OVR" || upper == "GATES.OVR" || upper == "CONTENTS.OVR")
             continue; // Companion resources are package-only.
         if (!MOD_AllowedResource(upper.toLatin1().constData()))
             continue;
@@ -89,6 +89,7 @@ void Project::openGame(const QString &directory) {
     next.resources.insert("CONTENTS.OVR", {{}, {}});
     next.resources.insert("GATES.OVR", {{}, {}});
     next.resources.insert("INTERFACE.OVR", {{}, {}});
+    next.resources.insert("MODINFO.DAT", {{}, {}});
     *this = next;
 }
 const QByteArray &Project::data(const QString &name) const {
@@ -319,7 +320,8 @@ QByteArray Project::package() const {
         portableConditions |= contents.refill > 2;
     const bool masks = usesMasks(*this);
     QByteArray out(
-        list.contains("INTERFACE.OVR") ? "IMOD0026"
+        list.contains("MODINFO.DAT") ? "IMOD0027"
+        : list.contains("INTERFACE.OVR") ? "IMOD0026"
         : masks                        ? "IMOD0025"
         : list.contains("GATES.OVR") ? "IMOD0024"
         : portableConditions         ? "IMOD0023"
@@ -499,6 +501,10 @@ void Project::save(const QString &path) {
         requirements["interfaceColors"] = 1;
         requirements["packageVersion"] = 26;
     }
+    if (changed().contains("MODINFO.DAT")) {
+        requirements["modMetadata"] = 1;
+        requirements["packageVersion"] = 27;
+    }
     if (!requirements.isEmpty())
         root["requires"] = requirements;
     QJsonObject annotations;
@@ -605,7 +611,7 @@ QVector<ModDiagnostic> validateMod(const Project &project, const QString &modsDi
             if (name == "TYPES.OVR" || name == "TYPEMAP.OVR" || name == "CUTSCENE.OVR" ||
                 name == "MAPS.OVR" || MAPS_LocationResource(name.toLatin1().constData()) ||
                 name == "LOCATIONS.OVR" || name == "TEXT.OVR" || name == "RULES.TBL" ||
-                name == "INTERFACE.OVR" || name == "GATES.OVR" || name == "CONTENTS.OVR") {
+                name == "MODINFO.DAT" || name == "INTERFACE.OVR" || name == "GATES.OVR" || name == "CONTENTS.OVR") {
                 require(project.resources[name].original.isEmpty(),
                         "Companion resource must have an empty original base");
             } else if (!MOD_TilesetSheet(name.toLatin1().constData())) {
@@ -750,12 +756,28 @@ QVector<ModDiagnostic> validateMod(const Project &project, const QString &modsDi
             }
     }
     if (mods.exists()) {
+        QSet<QString> disabledMods;
+        QFile preferences(mods.filePath("mods.cfg"));
+        if (preferences.open(QIODevice::ReadOnly) && preferences.readLine() == "IMODS001\n") {
+            while (!preferences.atEnd()) {
+                auto line = preferences.readLine(2050);
+                if (!line.endsWith('\n')) continue;
+                line.chop(1);
+                bool valid = !line.isEmpty() && line.size() % 2 == 0;
+                for (char c : line) valid &= (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+                if (valid) disabledMods.insert(QString::fromUtf8(QByteArray::fromHex(line)));
+            }
+        }
         auto installed = mods.entryList(QDir::Files, QDir::NoSort);
         std::sort(installed.begin(), installed.end(),
                   [](const QString &a, const QString &b) { return a.toUtf8() < b.toUtf8(); });
         for (const auto &file : installed) {
             if (!file.endsWith(".imperamod", Qt::CaseInsensitive))
                 continue;
+            if (disabledMods.contains(file)) {
+                result.append({ModDiagnostic::Information, {}, file + ": disabled in Impera."});
+                continue;
+            }
             try {
                 require(mountedCount < 128, "Engine package limit (128) exceeded");
                 auto bytes = readLimited(mods.filePath(file), MOD_MAX_PACKAGE);
@@ -782,7 +804,7 @@ QVector<ModDiagnostic> validateMod(const Project &project, const QString &modsDi
                     for (const auto &b : mountedContents)
                         conflict |= contentsConflict(a, b);
                 for (const auto &name : names)
-                    if (name != "CONTENTS.OVR")
+                    if (name != "CONTENTS.OVR" && name != "MODINFO.DAT")
                         conflict |= overrides.contains(name);
                 if (conflict) {
                     result.append(
@@ -816,6 +838,7 @@ QVector<ModDiagnostic> validateMod(const Project &project, const QString &modsDi
                                                " overrides the same contents target or identity."});
                         continue;
                     }
+                    if (name == "MODINFO.DAT") continue;
                     overrides.insert(name);
                     if (changes.contains(name))
                         result.append({ModDiagnostic::Warning, name,
@@ -935,7 +958,7 @@ QString prepareModTest(const Project &project, const QString &sessionsDirectory)
         if (name == "TYPES.OVR" || name == "TYPEMAP.OVR" || name == "CUTSCENE.OVR" ||
             name == "MAPS.OVR" || MAPS_LocationResource(name.toLatin1().constData()) ||
             name == "LOCATIONS.OVR" || name == "TEXT.OVR" || name == "RULES.TBL" ||
-            name == "INTERFACE.OVR" || name == "GATES.OVR" || name == "CONTENTS.OVR" || MOD_TilesetSheet(name.toLatin1().constData()))
+            name == "MODINFO.DAT" || name == "INTERFACE.OVR" || name == "GATES.OVR" || name == "CONTENTS.OVR" || MOD_TilesetSheet(name.toLatin1().constData()))
             continue; // Virtual companion exists only inside the package.
         auto bytes = readLimited(destination.filePath(name), MOD_MAX_RESOURCE);
         require(bytes == project.resources[name].original,

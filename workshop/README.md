@@ -752,3 +752,8 @@ and travel with the project and exported mod.
 DOS, Amiga and Grayscale transparency masks start from Impera’s bundled base
 mask (also used by DOS Enhanced). Exporting a mask edit replaces that pack’s
 default mask; an untouched mask does not need to be included in a mod.
+
+Mod Overview → Mod details edits the description and screenshot shown by Impera’s
+Mods tab. Import image fits artwork into a 320 × 200 preview without cropping;
+Remove clears the screenshot. These edits support undo/redo, project saves and
+package import/export. Metadata requires package version 27.

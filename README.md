@@ -695,3 +695,9 @@ Options. The bundled transparency-protection mask applies automatically to DOS,
 DOS Enhanced, Amiga and Grayscale when transparent sprites are enabled. No mod
 is required. White mask pixels preserve black ink; ordinary black mask pixels
 retain normal cutouts. Workshop starts those mask editors with the same defaults.
+
+Engine Options has Options and Mods tabs (Tab switches between them). The Mods
+list uses the same checkboxes as other engine options. Space toggles a mod; Enter
+opens its screenshot and scrollable description. Click a checkbox to toggle it,
+or click the screenshot for details. Main-menu changes apply immediately; changes
+made during gameplay are saved for the next launch. Mod files are kept intact.

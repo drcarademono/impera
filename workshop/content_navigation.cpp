@@ -190,7 +190,7 @@ QVector<ContentDestination> contentDestinations(const Project &project) {
             continue;
         if (name == "TYPEMAP.OVR")
             continue;
-        if (name == "INTERFACE.OVR") continue;
+        if (name == "MODINFO.DAT" || name == "INTERFACE.OVR") continue;
         if (name == "CONTENTS.OVR" || name == "GATES.OVR")
             continue; // Edited through the map inspector.
         if (MAPS_LocationResource(name.toLatin1().constData())) {

@@ -30,7 +30,7 @@ All integers are unsigned little-endian 32-bit values; there is no padding.
 
 | Header | Encoding |
 | --- | --- |
-| Magic/version | Eight ASCII bytes `IMOD0001` through `IMOD0026` |
+| Magic/version | Eight ASCII bytes `IMOD0001` through `IMOD0027` |
 | Title length | 1–256 UTF-8 bytes |
 | Resource count | 1–512 |
 | Title | Length bytes; embedded NUL forbidden |
@@ -616,3 +616,27 @@ bytes are the ASCII signature `IUI00001` followed by one EGA palette index
 gameplay and engine-menu frames use this color; white outlines, text, artwork
 and spell colors remain unchanged. Packages with invalid indices, signatures
 or sizes are rejected. Earlier package features remain valid in version 26.
+
+### Mod browser metadata (package version 27)
+
+`MODINFO.DAT` is an optional empty-base resource. It starts with the eight-byte
+ASCII signature `IMETA001`, then two little-endian 32-bit lengths: description
+bytes and screenshot bytes. A UTF-8 description follows (up to 4096 bytes, no NUL;
+line breaks and tabs allowed), then an optional 320 × 200 PNG of at most 256 KiB.
+Descriptions and images are authored in Workshop’s Mod Overview → Mod details.
+Mod titles remain in the package header. Legacy packages appear using their
+header title with no description or screenshot. Metadata is excluded from
+whole-resource conflict detection, so different mods may each provide it.
+
+Engine Options → Mods lists available `.imperamod` files in the executable’s Mods
+folder. Checkboxes persist selections in `Mods/mods.cfg`: ASCII `IMODS001` plus
+a newline, then one hex-encoded UTF-8 disabled filename per line. Unlisted mods
+are enabled by default. Filenames, not display titles, identify selections.
+Writes use a temporary file and atomic rename; failed saves retain the old state.
+The first 128 files in the existing deterministic load order are shown. Failed
+packages remain visible with a diagnostic. Disabling a package preserves its file.
+
+Changes made from the main menu remount the enabled packages immediately and
+refresh the menu’s cached fonts and artwork on return. During gameplay, selections
+are saved for the next startup without touching the active resource snapshot.
+Workshop installed-mod validation respects the disabled-file list.

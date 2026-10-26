@@ -40,7 +40,9 @@ static void INTRO_0010(void)
     int local_4;
 
     ULTIMA_0c22_GRAP_0f_SelectPage(1);
-    ULTIMA_16ba_PrintChar(CTRL_CHAR_CLEAR_WINDOW);
+    /* This page is an animation atlas, not the active menu text window. */
+    ULTIMA_0a70_GRAP_2d_SetPenColor(0);
+    ULTIMA_0aa6_GRAP_3f_FillRect(0, 0, 319, 199);
 
     for (local_4 = 0; local_4 < 4; local_4++)
     {
@@ -372,9 +374,14 @@ static void INTRO_05b0_DisplayTitle(int param_1) // (0 for fast display)
     {
         D_bb1a = ULTIMA_0bae_LoadImageFile(D_25f0[23]); // "ULTIMA.16"
     } while (D_bb1a == 0);
+    ULTIMA_0c3c(0, 0, 319, 199);
+    /* A replacement title may be smaller or masked. Clear both complete
+     * graphics pages; the current text window covers only the menu below. */
+    ULTIMA_0a70_GRAP_2d_SetPenColor(0);
     ULTIMA_0c22_GRAP_0f_SelectPage(0);
-    ULTIMA_16ba_PrintChar(CTRL_CHAR_CLEAR_WINDOW);
+    ULTIMA_0aa6_GRAP_3f_FillRect(0, 0, 319, 199);
     ULTIMA_0c22_GRAP_0f_SelectPage(1);
+    ULTIMA_0aa6_GRAP_3f_FillRect(0, 0, 319, 199);
     ULTIMA_0d4c_GRAP_4b_PutImage(D_bb1a, 0, 0, 0, 0);
     if (param_1 != 0)
     {
@@ -406,6 +413,10 @@ static void INTRO_05b0_DisplayTitle(int param_1) // (0 for fast display)
     INTRO_2090_AnimateWD();
     D_a9bd[1] = 0;
     INTRO_04e0_DrawMenuBorders();
+}
+
+void INTRO_RefreshTitle(void) {
+    INTRO_05b0_DisplayTitle(0);
 }
 
 static void INTRO_0676_WriteMenuOption(int param_4, int param_3, int param_2, char* param_1)
@@ -871,9 +882,23 @@ static void INTRO_RunMain(void) // intro_main (initialize video) (8b46)
         switch ((int)local_10)
         {
 #if defined(TARGET_SDL)
-        case 'O':
+        case 'O': {
+            unsigned previousMods = MOD_Revision();
             ENGINE_ShowOptions(false);
+            if (previousMods != MOD_Revision()) {
+                /* No gameplay is active: discard cached mod artwork/fonts. */
+                ULTIMA_102e_UnloadTileset();
+                for (int font = 0; font < 2; ++font) {
+                    free(D_539c[font]);
+                    D_539c[font] = NULL;
+                }
+                ULTIMA_1d02_LoadCharset("IBM.CH", 0);
+                ULTIMA_1d02_LoadCharset("RUNES.CH", 1);
+                ULTIMA_1c9e_SelectCharset(0);
+                INTRO_RefreshTitle();
+            }
             break;
+        }
 #endif
         case 0x4a: // 'J'
 #if defined(TARGET_SDL)

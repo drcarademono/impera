@@ -1,4 +1,14 @@
 #undef NDEBUG
+#include "common/common.h"
+#include "intro.h"
+#include "funcs.h"
+#include "graphics/wd.h"
+#include "graphics/grap.h"
+#include "mod/package.h"
+#include "mod/runtime.h"
+#include "common/file.h"
+#include "text/text_window.h"
+#undef NDEBUG
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -26,6 +36,113 @@ static Uint32 selectEnhanced(void* data, SDL_TimerID timer, Uint32 interval) {
     key(SDLK_DOWN); key(SDLK_RETURN); /* Enhanced must be immediately beneath DOS. */
     key(SDLK_ESCAPE);
     return 0;
+}
+static int modStep, expectedModEnabled;
+static Uint32 modInput(void* data, SDL_TimerID timer, Uint32 interval) {
+    (void)data; (void)timer;
+    if (!modStep++) { key(SDLK_TAB); return interval; }
+    /* Same seven-pixel checkbox as the ordinary engine options. */
+    assert(g_linearEgaBuffer0[45*320+21] == (expectedModEnabled ? 10 : 0));
+    assert((TILESET_UIBufferColor(g_linearEgaBuffer0+64*320+164, IMPERA_TextPalette) & 0xffffffu) == 0xc8283cu);
+    key(SDLK_SPACE); key(SDLK_ESCAPE);
+    return 0;
+}
+static void packageNumber(FILE *f, unsigned value) {
+    unsigned char b[4] = {value, value >> 8, value >> 16, value >> 24};
+    assert(fwrite(b,1,4,f)==4);
+}
+static void modOptions(void) {
+    assert(SDL_CreateDirectory("mod-manager-fixture"));
+    assert(SDL_CreateDirectory("mod-manager-fixture/Mods"));
+    SDL_Surface *image = SDL_CreateSurface(320,200,SDL_PIXELFORMAT_RGBA32); assert(image);
+    assert(SDL_FillSurfaceRect(image,NULL,SDL_MapSurfaceRGBA(image,200,40,60,255)));
+    assert(SDL_SavePNG(image,"mod-manager-fixture/image.png")); SDL_DestroySurface(image);
+    size_t pngSize; void *png = SDL_LoadFile("mod-manager-fixture/image.png",&pngSize); assert(png);
+    const char *text = "A test mod description.";
+    size_t size = 16 + strlen(text) + pngSize;
+    unsigned char *metadata = calloc(1,size); assert(metadata);
+    memcpy(metadata,"IMETA001",8); metadata[8]=(unsigned char)strlen(text);
+    for(int i=0;i<4;i++) metadata[12+i]=(unsigned char)(pngSize>>(8*i));
+    memcpy(metadata+16,text,strlen(text)); memcpy(metadata+16+strlen(text),png,pngSize); SDL_free(png);
+    FILE *f=fopen("mod-manager-fixture/Mods/test.imperamod","wb"); assert(f);
+    assert(fwrite("IMOD0027",1,8,f)==8); packageNumber(f,6); packageNumber(f,1);
+    assert(fwrite("UI mod",1,6,f)==6); packageNumber(f,11); assert(fwrite("MODINFO.DAT",1,11,f)==11);
+    packageNumber(f,0); packageNumber(f,(unsigned)size); packageNumber(f,0);
+    packageNumber(f,MOD_Crc32(metadata,size)); packageNumber(f,1);
+    packageNumber(f,0); packageNumber(f,(unsigned)size); assert(fwrite(metadata,1,size,f)==size);
+    assert(!fclose(f)); free(metadata);
+    assert(SDL_setenv_unsafe("U5D_MODS_DIR","mod-manager-fixture/Mods",1)==0);
+    FILE_SetDataDirectory(".");
+    assert(MOD_LoadedCount()==1 && MOD_AvailableCount()==1);
+    unsigned revision=MOD_Revision();
+    modStep=0; expectedModEnabled=1;
+    assert(SDL_AddTimer(80,modInput,NULL)); ENGINE_ShowOptions(false);
+    assert(MOD_LoadedCount()==0 && !MOD_Available(0)->enabled && !MOD_ChangesPending());
+    assert(MOD_Revision()!=revision); revision=MOD_Revision();
+    modStep=0; expectedModEnabled=0;
+    assert(SDL_AddTimer(80,modInput,NULL)); ENGINE_ShowOptions(true);
+    assert(MOD_LoadedCount()==0 && MOD_Available(0)->enabled && MOD_ChangesPending());
+    assert(MOD_Revision()==revision); /* Running gameplay retains the active snapshot. */
+    FILE_ReloadMods(); assert(MOD_LoadedCount()==1 && !MOD_ChangesPending());
+    FILE_SetDataDirectory(NULL); assert(SDL_unsetenv_unsafe("U5D_MODS_DIR")==0);
+    remove("mod-manager-fixture/image.png"); remove("mod-manager-fixture/Mods/test.imperamod");
+    remove("mod-manager-fixture/Mods/mods.cfg");
+    assert(SDL_RemovePath("mod-manager-fixture/Mods")); assert(SDL_RemovePath("mod-manager-fixture"));
+}
+static void literalCode(FILE *f, unsigned code, unsigned *bits, int *count) {
+    *bits |= code << *count; *count += 9;
+    while (*count >= 8) { assert(fputc(*bits & 255, f) != EOF); *bits >>= 8; *count -= 8; }
+}
+static void titleFixture(bool small) {
+    unsigned char *data = calloc(1, 50000); assert(data);
+    data[0] = 5; unsigned offset = 22;
+    for (int i = 0; i < 5; ++i) {
+        int width = small ? 8 : i ? 288 : 320;
+        int height = small ? 8 : i ? 49 : 100;
+        data[2+i*4] = offset; data[3+i*4] = offset >> 8;
+        data[offset] = width; data[offset+1] = width >> 8; data[offset+2] = height;
+        memset(data+offset+4, (i+2)*17, width/2*height); offset += 4+width/2*height;
+        if (small && i == 0) {
+            data[4] = offset; data[5] = offset >> 8;
+            data[offset] = 8; data[offset+2] = 8;
+            memset(data+offset+4, 0x80, 8); offset += 12; /* Transparent first column. */
+        }
+    }
+    FILE *f = fopen("ULTIMA.16", "wb"); assert(f); packageNumber(f,offset);
+    unsigned bits = 0; int count = 0;
+    for (unsigned i=0;i<offset;++i) {
+        literalCode(f,256,&bits,&count); literalCode(f,data[i],&bits,&count);
+    }
+    literalCode(f,257,&bits,&count);
+    if(count) assert(fputc(bits & 255,f)!=EOF);
+    assert(!fclose(f)); free(data);
+}
+static void refreshTitle(void) {
+    TextWindow windows[4]; memcpy(windows,D_535e_textWindows,sizeof(windows));
+    TextWindow *oldWindow=D_539a_currentTextWindow;
+    byte *oldFont=D_5398_currentCharset, *oldTitle=D_bb1a;
+    int oldIndex=D_5386_current_text_window_idx;
+    ULTIMA_1c22_SetTextWindowSize(0,1,16,38,23); ULTIMA_1b94_SelectTextWindow(0);
+    ULTIMA_1c9e_SelectCharset(0);
+    D_13b0_brightWhiteColor=15;
+    int oldImmediate = EVT_SetImmediateExit(1);
+    titleFixture(false); INTRO_RefreshTitle();
+    assert(g_linearEgaBuffer0[40*320+100]==2);
+    byte *first=D_bb1a;
+    titleFixture(true); INTRO_RefreshTitle();
+    assert(g_linearEgaBuffer0[40*320+100]==0); /* Old full-width logo removed. */
+    assert(g_linearEgaBuffer0[0]==0 && g_linearEgaBuffer0[1]==2); /* Masked pixels clear to black. */
+    for(int frame=0;frame<4;++frame) {
+        GRAP_BUF_ShowNextWDFrame();
+        assert(g_linearEgaBuffer0[80*320+100]==0); /* No old subtitle between smaller frames. */
+        assert(g_linearEgaBuffer0[66*320+0]==0); /* Atlas margins also cleared. */
+        assert(g_linearEgaBuffer0[66*320+17]>=3 && g_linearEgaBuffer0[66*320+17]<=6);
+    }
+    free(first); free(D_bb1a); D_bb1a=oldTitle;
+    memcpy(D_535e_textWindows,windows,sizeof(windows)); D_539a_currentTextWindow=oldWindow;
+    D_5398_currentCharset=oldFont; D_5386_current_text_window_idx=oldIndex;
+    EVT_SetImmediateExit(oldImmediate);
+    remove("ULTIMA.16");
 }
 static int musicPickerMode,musicInputStep;
 static Uint32 musicInput(void* data,SDL_TimerID timer,Uint32 interval)
@@ -58,7 +175,7 @@ int main(int argc, char** argv)
 {
     remove("ENGINE.CFG");
     assert(SDL_Init(SDL_INIT_VIDEO|SDL_INIT_AUDIO));
-    GRAP_SDL_Initialize();
+    GRAP_Initialize();
     D_5893_map_id=0x40;D_58a4=0;
     byte font[1024];FILE* f=fopen("IBM.CH","rb");assert(f);
     assert(fread(font,1,sizeof(font),f)==sizeof(font));fclose(f);D_539c[0]=font;
@@ -124,6 +241,8 @@ int main(int argc, char** argv)
         fputs("Ctrl+E was consumed without exiting\n",stderr);
         return 1;
     }
+    modOptions();
+    refreshTitle();
     assert(TILESET_Select(TILESET_DOS));
     assert(SDL_AddTimer(80, selectEnhanced, NULL));
     ENGINE_ShowOptions(false);
@@ -173,9 +292,9 @@ int main(int argc, char** argv)
     assert(g_linearEgaBuffer0[0*320+8]==1);
     assert(g_linearEgaBuffer0[7*320+7]==15);
     assert(g_linearEgaBuffer0[80*320+0]==1);
-    assert(g_linearEgaBuffer0[139*320+16]==15);
+    assert(g_linearEgaBuffer0[143*320+16]==15);
     for(int y=0;y<8;y++) for(int x=0;x<8;x++)
-        assert(g_linearEgaBuffer0[(140+y)*320+24+x]==((font['M'*8+y]&(0x80>>x))?0:15));
+        assert(g_linearEgaBuffer0[(144+y)*320+24+x]==((font['M'*8+y]&(0x80>>x))?0:15));
     int count;SDL_Window** windows=SDL_GetWindows(&count);assert(count==1);
     SDL_Renderer* renderer=SDL_GetRenderer(windows[0]);SDL_free(windows);
     SDL_Surface* shot=SDL_RenderReadPixels(renderer,NULL);assert(shot);
