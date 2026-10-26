@@ -276,7 +276,7 @@ bool GRAP_SDL_MouseUIPoint(float x, float y, float* ux, float* uy)
     return true;
 }
 
-bool GRAP_SDL_MouseMapPoint(float x, float y, int* dx, int* dy, float* rx, float* ry)
+static bool MouseMapPoint(float x, float y, int* dx, int* dy, float* rx, float* ry, bool frame)
 {
     int width, height, windowW, windowH;
     if (!s_sdlWindow || !s_sdlRenderer || !SDL_GetWindowSize(s_sdlWindow, &windowW, &windowH) ||
@@ -284,6 +284,7 @@ bool GRAP_SDL_MouseMapPoint(float x, float y, int* dx, int* dy, float* rx, float
         return false;
     float gx = x * width / windowW, gy = y * height / windowH;
     int mapX = 8, mapY = 8, columns = 11, rows = 11;
+    int frameWidth = 192, frameHeight = 192;
     if (s_fullscreen) {
         WideLayout l = VideoLayout(width, height);
         int canvasW = s_expandedFrame ? l.width : 320;
@@ -296,14 +297,17 @@ bool GRAP_SDL_MouseMapPoint(float x, float y, int* dx, int* dy, float* rx, float
             gy = (gy - (height - canvasH * l.scaleY) / 2) / l.scaleY;
         }
         if (s_expandedFrame) {
-            if(gy<8 || gy>=l.height-8) return false;
+            if(!frame && (gy<8 || gy>=l.height-8)) return false;
+            frameWidth = l.sidebarX; frameHeight = l.height;
             mapX = l.mapX; mapY = l.mapY; columns = l.columns; rows = l.rows;
         }
     } else {
         gx = gx * 320 / width;
         gy = gy * 200 / height;
     }
-    if (gx < mapX || gy < mapY || gx >= mapX + columns * 16 || gy >= mapY + rows * 16)
+    if (frame) {
+        if (gx < 0 || gy < 0 || gx >= frameWidth || gy >= frameHeight) return false;
+    } else if (gx < mapX || gy < mapY || gx >= mapX + columns * 16 || gy >= mapY + rows * 16)
         return false;
     *dx = (int)((gx - mapX) / 16) - columns / 2;
     *dy = (int)((gy - mapY) / 16) - rows / 2;
@@ -318,6 +322,13 @@ bool GRAP_SDL_MouseMapPoint(float x, float y, int* dx, int* dy, float* rx, float
         *ry += oy;
     }
     return true;
+}
+
+bool GRAP_SDL_MouseMapPoint(float x, float y, int* dx, int* dy, float* rx, float* ry) {
+    return MouseMapPoint(x, y, dx, dy, rx, ry, false);
+}
+bool GRAP_SDL_MouseMovementPoint(float x, float y, int* dx, int* dy, float* rx, float* ry) {
+    return MouseMapPoint(x, y, dx, dy, rx, ry, true);
 }
 
 void GRAP_SDL_SetVideoMode(int mode)

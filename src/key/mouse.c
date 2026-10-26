@@ -152,7 +152,7 @@ int MOUSE_CursorDirection(float x, float y)
 {
     int dx, dy; float rx, ry;
     if (s_pointerMode || !D_58a4 || (!MAPS_Outside(D_5893_map_id) && D_5893_map_id < 128) ||
-        !GRAP_SDL_MouseMapPoint(x, y, &dx, &dy, &rx, &ry))
+        !GRAP_SDL_MouseMovementPoint(x, y, &dx, &dy, &rx, &ry))
         return 0;
     /* Combat sprites occupy fixed coordinates in the original 11x11 map. */
     if (D_5893_map_id >= 128) {
@@ -613,7 +613,7 @@ int MOUSE_PollCommand(void)
         float x, y, rx, ry;
         int dx, dy;
         SDL_GetMouseState(&x, &y);
-        if (!GRAP_SDL_MouseMapPoint(x, y, &dx, &dy, &rx, &ry)) return 0;
+        if (!GRAP_SDL_MouseMovementPoint(x, y, &dx, &dy, &rx, &ry)) return 0;
         if (s_single) s_single = false;
         s_moveTime = SDL_GetTicks();
         int direction = MOUSE_CursorDirection(x, y);

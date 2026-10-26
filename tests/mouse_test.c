@@ -360,6 +360,20 @@ int main(int argc, char** argv)
     assert(GRAP_SDL_MouseMapPoint(448,460.8f,&dx,&dy,&rx,&ry));
     assert(dx==1 && dy==0);
     assert(!GRAP_SDL_MouseMapPoint(1000,450,&dx,&dy,&rx,&ry));
+    byte oldActive=D_58a4; D_58a4=1;
+    const float framePoints[][2]={{4,96},{188,96},{96,4},{96,188}};
+    const int frameDirections[]={U5_KEY_LEFT,U5_KEY_RIGHT,U5_KEY_UP,U5_KEY_DOWN};
+    for(int i=0;i<4;i++) {
+        float x=framePoints[i][0]*4, y=framePoints[i][1]*4.8f;
+        assert(!GRAP_SDL_MouseMapPoint(x,y,&dx,&dy,&rx,&ry));
+        assert(GRAP_SDL_MouseMovementPoint(x,y,&dx,&dy,&rx,&ry));
+        assert(MOUSE_CursorDirection(x,y)==frameDirections[i]);
+    }
+    assert(!GRAP_SDL_MouseMovementPoint(192*4,96*4.8f,&dx,&dy,&rx,&ry));
+    assert(!GRAP_SDL_MouseMovementPoint(96*4,192*4.8f,&dx,&dy,&rx,&ry));
+    assert(!GRAP_SDL_MouseMovementPoint(-1,96*4.8f,&dx,&dy,&rx,&ry));
+    D_58a4=oldActive;
+
     MOUSE_SetCommandInput(true);
     MOUSE_Button(448,460.8f,SDL_BUTTON_LEFT,true,1);
     ticks+=301;
@@ -917,6 +931,10 @@ int main(int argc, char** argv)
     cursorX=1000; /* status column still never issues movement */
     ticks+=160;
     assert(MOUSE_PollCommand()==0);
+    cursorX=4*4; cursorY=96*4.8f; ticks+=160;
+    assert(MOUSE_PollCommand()==U5_KEY_LEFT); /* Blue frame remains a movement target. */
+    cursorX=96*4; cursorY=188*4.8f; ticks+=160;
+    assert(MOUSE_PollCommand()==U5_KEY_DOWN);
     MOUSE_Button(cursorX,cursorY,SDL_BUTTON_RIGHT,false,1);
     ticks+=160;
     assert(MOUSE_PollCommand()==0);
@@ -955,6 +973,16 @@ int main(int argc, char** argv)
     assert(GRAP_SDL_MouseMapPoint(centerX,centerY,&dx,&dy,&rx,&ry) && dx==0 && dy==0);
     assert(GRAP_SDL_MouseMapPoint(centerX+16*l.scale,centerY,&dx,&dy,&rx,&ry) && dx==1 && dy==0);
     assert(!GRAP_SDL_MouseMapPoint(1020,centerY,&dx,&dy,&rx,&ry));
+    float canvasLeft=(1024-l.width*l.scale)/2.0f, canvasTop=(768-l.height*l.scaleY)/2.0f;
+    float frameRight=canvasLeft+(l.sidebarX-4)*l.scale;
+    assert(!GRAP_SDL_MouseMapPoint(frameRight,centerY,&dx,&dy,&rx,&ry));
+    assert(GRAP_SDL_MouseMovementPoint(frameRight,centerY,&dx,&dy,&rx,&ry));
+    assert(MOUSE_CursorDirection(frameRight,centerY)==U5_KEY_RIGHT);
+    assert(GRAP_SDL_MouseMovementPoint(centerX,canvasTop+4*l.scaleY,&dx,&dy,&rx,&ry));
+    assert(MOUSE_CursorDirection(centerX,canvasTop+4*l.scaleY)==U5_KEY_UP);
+    assert(GRAP_SDL_MouseMovementPoint(centerX,canvasTop+(l.height-4)*l.scaleY,&dx,&dy,&rx,&ry));
+    assert(!GRAP_SDL_MouseMovementPoint(canvasLeft+l.sidebarX*l.scale,centerY,&dx,&dy,&rx,&ry));
+
     int cursorWidth,cursorHeight;
     GRAP_SDL_CursorSize(&cursorWidth,&cursorHeight);
     assert(cursorWidth==48 && cursorHeight==58);

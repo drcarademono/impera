@@ -219,9 +219,13 @@ static int TALK_0788_ProcessTalkString(ImperaTalk *s) {
 }
 
 static int TALK_07aa_ProcessNthTalkString(ImperaTalk *s, uint8_t param_1) {
+    size_t name = param_1 == TALK_KEY_NAME
+                      ? IMPERA_TalkLookText(s->data, s->size, 1, NULL, NULL, 0) : 0;
     TALK_075a_SelectNthTalkString(s, param_1);
     int result = TALK_0788_ProcessTalkString(s);
-    if (!result && param_1 == TALK_KEY_NAME && s->learnName) s->learnName(s->host);
+    /* Some vanilla names continue into questions, branches or conversation end.
+     * Those controls can return nonzero after the name has already appeared. */
+    if (name && !stopped(s) && s->learnName) s->learnName(s->host);
     return result;
 }
 
@@ -956,10 +960,14 @@ size_t IMPERA_TalkLookText(const uint8_t *data, size_t size, int known, const ch
             boundary = 1;
         } else if (code == 0x81) {
             word = avatar ? avatar : "Avatar";
-        } else if (code == 0x8d) { space = used != 0; continue; }
+        } else if (code == 0x8d) { if (known) break; space = used != 0; continue; }
         else if (code == 0x8e) continue;
         else if (code < 0xa0 || code >= 0xfc) break;
         else {
+            if (known && code == 0xa2) {
+                if (!used) continue;
+                if (pos == size || !data[pos] || data[pos] == 0x8d || data[pos] < 0xa0) break;
+            }
             literal[0] = (char)(code & 127); word = literal;
             if (boundary && used) space = 1;
             boundary = 0;

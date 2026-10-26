@@ -28,6 +28,11 @@ static void text(const char *s) {
     while (*s)
         assert(TALK_0f32_ProcessChar((byte)*s++ | 128) == 0);
 }
+static int nameInputStep;
+static void nameThenBye(void *host, char *answer, int capacity) {
+    (void)host; (void)capacity;
+    strcpy(answer, nameInputStep++ ? "BYE" : "NAME");
+}
 static int revealName(void *host) { (void)host; return 1; }
 static void enhancedLook(void) {
     const uint8_t conversation[] = {0xc7,0xe1,0xec,0xec,0xf2,0xef,0xf4,0,
@@ -67,6 +72,23 @@ static void enhancedLook(void) {
     assert(IMPERA_TalkDescription(&session)==0); IMPERA_TalkFlush(&session);
     assert(learnedNames[0][0]&32);
     reset(); assert(TALK_LookNpc(1) && strstr(output,"You see Gallrot."));
+    const uint8_t eb[] = {0xc5,0xe2,0xa2,0x8d,0x8d,0x82,0,0xe1,0xa0,0xe2,0xef,0xf9,0xae,0};
+    assert(IMPERA_TalkLookText(eb,sizeof(eb),1,NULL,result,sizeof(result)) == 3 && !strcmp(result,"Eb"));
+    learnedNames[0][0]=0;
+    s_conversation=(uint8_t*)eb; s_conversationSize=sizeof(eb);
+    session=nativeTalk(); session.greetingRoll=revealName; reset();
+    assert(IMPERA_TalkDescription(&session)==1); /* Name followed by End conversation. */
+    assert(learnedNames[0][0]&32); /* Nonzero script return must not discard a revealed name. */
+    /* Eb's real Name control pattern: close quote, two newlines, then
+     * return to topics for introduced players; otherwise ask their name. */
+    const uint8_t ebScript[]={0xc5,0xe2,0xa2,0x8d,0x8d,0x8c,0xff,0x88,0,
+        0xe1,0x28,0xe2,0xef,0xf9,0xae,0,0xc8,0xe9,0,
+        0xc2,0xf5,0xf3,0xe2,0xef,0xf9,0,0xc2,0xf9,0xe5,0xa1,0};
+    learnedNames[0][0]=0; D_5bda[0]|=32;
+    s_conversation=(uint8_t*)ebScript; s_conversationSize=sizeof(ebScript);
+    session=nativeTalk(); session.getString=nameThenBye; *session.questionMode=0; nameInputStep=0; reset();
+    assert(IMPERA_TalkTopics(&session)==1 && !session.error);
+    assert(nameInputStep==2 && (learnedNames[0][0]&32));
     s_conversation=NULL; s_conversationSize=0; D_4aa0[0]=(char*)savedResource;
     memset(&D_5f5e[5],0,sizeof(D_5f5e[5])); D_659e[5]=0; D_5bda[0]&=~32;
     assert(!remove("look-test.tlk"));
