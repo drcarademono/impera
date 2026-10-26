@@ -130,12 +130,133 @@ void ENGINE_UIFrame(void)
 }
 static int rowY(int row)
 {
-    if(row<ENGINE_MOVEMENT_SPEED) return 40+row*10;
-    if(row==ENGINE_MOVEMENT_SPEED) return 140;
-    if(row==ENGINE_ANIMATION_SPEED) return 160;
-    return 180;
+    return row == ENGINE_SETTING_COUNT ? 180 : 44 + row * 10;
 }
 static bool s_gameplay;
+static int s_optionsTab, s_modSelected, s_modTop, s_modScroll;
+static bool s_modDetails;
+static SDL_Surface *s_modImage;
+static unsigned s_modImageRevision = ~0u;
+static int s_modImageIndex = -1;
+static void checkbox(int x, int y, bool enabled) {
+    ENGINE_UIRect(x, y, 7, 7, 7);
+    ENGINE_UIRect(x + 1, y + 1, 5, 5, enabled ? 10 : 0);
+}
+/* The native font has byte glyphs; decode UTF-8 before wrapping/truncating. */
+static void modText(const char *text, char *out, size_t capacity) {
+    size_t n = 0;
+    while (*text && n + 1 < capacity) {
+        unsigned c = (unsigned char)*text++;
+        if (c >= 128) {
+            unsigned extra = c >= 0xf0 ? 3 : c >= 0xe0 ? 2 : c >= 0xc0 ? 1 : 0;
+            c &= extra == 3 ? 7 : extra == 2 ? 15 : extra == 1 ? 31 : 127;
+            while (extra-- && *text && ((unsigned char)*text & 192) == 128)
+                c = (c << 6) | ((unsigned char)*text++ & 63);
+        }
+        out[n++] = c <= 255 ? (char)c : '?';
+    }
+    out[n] = 0;
+}
+static int descriptionLines(const char *text, int columns, int first, int visible, int x, int y) {
+    char decoded[4097]; modText(text, decoded, sizeof(decoded));
+    const char *p = decoded;
+    int row = 0;
+    while (*p) {
+        char line[39]; int n = 0, space = -1;
+        while (p[n] && p[n] != '\n' && p[n] != '\r' && n < columns) {
+            line[n] = p[n] == '\t' ? ' ' : p[n];
+            if (line[n] == ' ') space = n;
+            ++n;
+        }
+        int consumed = n;
+        if (n == columns && p[n] && p[n] != '\n' && p[n] != '\r' && space > 0)
+            n = space, consumed = space + 1;
+        line[n] = 0;
+        if (row >= first && row < first + visible) ENGINE_UIText(x, y + (row - first) * 8, line, 15);
+        ++row; p += consumed;
+        if (*p == '\r') ++p;
+        if (*p == '\n') ++p;
+    }
+    return row;
+}
+static void modImage(const ModInfo *info) {
+    if (s_modImageRevision != MOD_Revision() || s_modImageIndex != s_modSelected) {
+        SDL_DestroySurface(s_modImage); s_modImage = NULL;
+        s_modImageRevision = MOD_Revision(); s_modImageIndex = s_modSelected;
+        if (info && info->imageSize) {
+            SDL_IOStream *stream = SDL_IOFromConstMem(info->image, info->imageSize);
+            SDL_Surface *source = stream ? SDL_LoadPNG_IO(stream, true) : NULL;
+            if (source && source->w == 320 && source->h == 200) {
+                SDL_Surface *scaled = SDL_ScaleSurface(source, 160, 100, SDL_SCALEMODE_NEAREST);
+                if (scaled) { s_modImage = SDL_ConvertSurface(scaled, SDL_PIXELFORMAT_RGBA32); SDL_DestroySurface(scaled); }
+            }
+            SDL_DestroySurface(source);
+        }
+    }
+    if (s_modImage) {
+        int page = D_52ba_vdp._52d8_page; D_52ba_vdp._52d8_page = 0;
+        /* SDL may pad rows; pass one tightly packed RGBA scanline at a time. */
+        int x = s_modDetails ? 16 : 144, y = s_modDetails ? 60 : 44;
+        for (int row = 0; row < 100; ++row)
+            GRAP_BUF_PutRGBA((const unsigned char *)s_modImage->pixels + row * s_modImage->pitch, 160, 1, x, y + row);
+        D_52ba_vdp._52d8_page = page;
+    } else ENGINE_UIText(s_modDetails ? 40 : 168, s_modDetails ? 100 : 84, "No screenshot", 8);
+}
+static void drawMods(void) {
+    unsigned count = MOD_AvailableCount();
+    if (!count) { ENGINE_UIText(40, 72, "No mods in the Mods folder", 7); return; }
+    s_modSelected = SDL_clamp(s_modSelected, 0, (int)count - 1);
+    const ModInfo *info = MOD_Available(s_modSelected);
+    if (s_modDetails) {
+        char title[257]; modText(info->title, title, sizeof(title)); title[36] = 0;
+        ENGINE_UIText(16, 44, title, 15); modImage(info);
+        checkbox(20, 164, info->enabled); ENGINE_UIText(32, 164, info->enabled ? "Enabled" : "Disabled", 15);
+        const char *description = *info->description ? info->description : "No description provided.";
+        int lines = descriptionLines(description, 15, 0, 0, 184, 52);
+        s_modScroll = SDL_clamp(s_modScroll, 0, SDL_max(0, lines - 15));
+        descriptionLines(description, 15, s_modScroll, 15, 184, 52);
+        ENGINE_UIText(16, 180, "Esc: Back  Space: On/Off", 7);
+    } else {
+        if (s_modSelected < s_modTop) s_modTop = s_modSelected;
+        if (s_modSelected >= s_modTop + 12) s_modTop = s_modSelected - 11;
+        for (int row = 0; row < 12 && row + s_modTop < (int)count; ++row) {
+            const ModInfo *item = MOD_Available(row + s_modTop); int y = 44 + row * 10;
+            bool selected = row + s_modTop == s_modSelected;
+            if (selected) ENGINE_UIRect(16, y - 1, 120, 10, 15);
+            checkbox(20, y, item->enabled);
+            char title[257]; modText(item->title, title, sizeof(title));
+            if (strlen(title) > 12) { title[11] = '~'; title[12] = 0; }
+            ENGINE_UIText(32, y, title, selected ? 0 : 15);
+        }
+        modImage(info);
+        descriptionLines(*info->description ? info->description : "No description provided.", 20, 0, 3, 144, 148);
+        ENGINE_UIText(16, 170, "Space: On/Off  Enter: Details", 7);
+        ENGINE_UIText(16, 180, "Return", 15);
+    }
+    const char *status = optionStatus ? optionStatus : MOD_ChangesPending() ? "Restart Impera to apply changes" : *info->error ? "Mod could not load: see details" : NULL;
+    if (status) {
+        /* Show errors/restart requirements in place of the detail-page hint. */
+        ENGINE_UIRect(16, 180, 288, 8, 0);
+        char message[257]; modText(status, message, sizeof(message)); message[36] = 0;
+        ENGINE_UIText(16, 180, message, 14);
+    }
+    if (s_modDetails && *info->error) {
+        ENGINE_UIRect(16, 60, 160, 100, 0);
+        descriptionLines(info->error, 20, 0, 12, 16, 60);
+    }
+}
+static void toggleMod(void) {
+    const ModInfo *info = MOD_Available(s_modSelected);
+    if (!info) return;
+    if (!MOD_SetEnabled(s_modSelected, !info->enabled)) { optionStatus = "Cannot save mod selection"; return; }
+    optionStatus = NULL;
+    if (!s_gameplay) {
+        FILE_ReloadMods();
+        TILESET_Select(TILESET_Selected());
+        if (MOD_AvailableCount()) s_modSelected = SDL_min(s_modSelected, (int)MOD_AvailableCount() - 1);
+    }
+}
+
 static int s_videoChoice=-1;
 static int s_dropdownRow=ENGINE_FULLSCREEN;
 static int choiceTop(void) { return rowY(s_dropdownRow)+12; }
@@ -202,10 +323,16 @@ static void openChoice(int row) {
 }
 void ENGINE_DrawSettings(int selected)
 {
+    TILESET_Copy(g_linearEgaBuffer0, NULL, 320*200);
     memset(g_linearEgaBuffer0,0,320*200);
     ENGINE_UIFrame();
     ENGINE_UIText(104,12,"Engine Options",15);
-    ENGINE_UIText(24,26,optionStatus?optionStatus:"Arrows / Enter   Esc: Back",7);
+    if (!s_optionsTab) ENGINE_UIRect(20, 25, 64, 10, 15);
+    else ENGINE_UIRect(100, 25, 48, 10, 15);
+    ENGINE_UIText(24,26,"Options",s_optionsTab ? 7 : 0);
+    ENGINE_UIText(104,26,"Mods",s_optionsTab ? 0 : 7);
+    ENGINE_UIText(168,26,"Tab: Switch tabs",7);
+    if (s_optionsTab) { drawMods(); GRAP_BUF_MarkDirty(); GRAP_BUF_Present(); return; }
     for(int row=0;row<=ENGINE_SETTING_COUNT;row++) {
         int y=rowY(row);
         bool highlighted=row==selected && s_videoChoice<0;
@@ -218,8 +345,7 @@ void ENGINE_DrawSettings(int selected)
             const char* label=row==ENGINE_TILESET?TILESET_Label(TILESET_Selected()):videoLabel(videoChoice());
             ENGINE_UIText(choiceTextX(label),y,label,foreground);
         } else if(!isSpeed(row)) {
-            ENGINE_UIRect(232,y+1,7,7,7);
-            ENGINE_UIRect(233,y+2,5,5,value?10:0);
+            checkbox(232,y+1,value != 0);
             ENGINE_UIText(248,y,value?"On":"Off",highlighted?0:(value?10:7));
         } else {
             ENGINE_UIRect(184,y+4,64,1,highlighted?0:7);
@@ -228,9 +354,10 @@ void ENGINE_DrawSettings(int selected)
             ENGINE_UIRect(knob-2,y+1,5,7,highlighted?0:14);
             char number[12];SDL_snprintf(number,sizeof(number),"%.2f",(double)value);
             ENGINE_UIText(264,y,number,highlighted?0:14);
-            ENGINE_UIText(172,y+9,"0.5",7);ENGINE_UIText(200,y+9,"0.75",7);ENGINE_UIText(244,y+9,"1",7);
+
         }
     }
+    if (optionStatus) ENGINE_UIText(24, 168, optionStatus, 7);
     if(s_videoChoice>=0) {
         int left=choiceLeft(),top=choiceTop(),width=choiceWidth(),height=choices()*11+4;
         /* Black surround separates the popup from partially covered settings. */
@@ -265,6 +392,7 @@ static void adjust(int row,int direction)
 void ENGINE_ShowOptions(bool gameplay)
 {
     s_gameplay=gameplay;
+    s_optionsTab = 0; s_modDetails = false; s_modScroll = 0;
     unsigned previousTileset=TILESET_Revision();
     optionStatus=NULL;
     s_videoChoice=-1;
@@ -282,6 +410,50 @@ void ENGINE_ShowOptions(bool gameplay)
             if(event.type==SDL_EVENT_QUIT ||
                (event.type==SDL_EVENT_KEY_DOWN && event.key.key==SDLK_E &&
                 (event.key.mod & SDL_KMOD_CTRL))) { if(changed) ENGINE_Save();exit(0); }
+            if(event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_TAB) {
+                s_optionsTab = !s_optionsTab; s_videoChoice = -1; drag = -1; s_modDetails = false;
+                ENGINE_DrawSettings(selected); continue;
+            }
+            if(event.type == SDL_EVENT_MOUSE_BUTTON_DOWN && event.button.button == SDL_BUTTON_LEFT) {
+                float x, y;
+                if(GRAP_SDL_MouseUIPoint(event.button.x, event.button.y, &x, &y) && y >= 24 && y < 37 && x >= 20 && x < 152) {
+                    s_optionsTab = x >= 96; s_videoChoice = -1; drag = -1; s_modDetails = false;
+                    ENGINE_DrawSettings(selected); continue;
+                }
+            }
+            if(s_optionsTab) {
+                int count = (int)MOD_AvailableCount();
+                if(event.type == SDL_EVENT_KEY_DOWN) {
+                    switch(event.key.key) {
+                    case SDLK_ESCAPE: if(s_modDetails) s_modDetails = false; else done = true; break;
+                    case SDLK_UP: if(s_modDetails) s_modScroll = SDL_max(0, s_modScroll - 1); else s_modSelected = SDL_max(0, s_modSelected - 1); break;
+                    case SDLK_DOWN: if(s_modDetails) ++s_modScroll; else s_modSelected = SDL_min(SDL_max(0,count-1), s_modSelected + 1); break;
+                    case SDLK_PAGEUP: if(s_modDetails) s_modScroll = SDL_max(0, s_modScroll - 12); else s_modSelected = SDL_max(0, s_modSelected - 12); break;
+                    case SDLK_PAGEDOWN: if(s_modDetails) s_modScroll += 12; else s_modSelected = SDL_min(SDL_max(0,count-1), s_modSelected + 12); break;
+                    case SDLK_RETURN: if(count) { s_modDetails = !s_modDetails; s_modScroll = 0; } break;
+                    case SDLK_SPACE: if(!event.key.repeat) toggleMod(); break;
+                    }
+                }
+                if(event.type == SDL_EVENT_MOUSE_WHEEL) {
+                    int change = event.wheel.y > 0 ? -1 : 1;
+                    if(s_modDetails) s_modScroll = SDL_max(0,s_modScroll + change * 3);
+                    else s_modSelected = SDL_clamp(s_modSelected + change,0,SDL_max(0,count-1));
+                }
+                if(event.type == SDL_EVENT_MOUSE_BUTTON_DOWN && event.button.button == SDL_BUTTON_LEFT) {
+                    float x,y;
+                    if(GRAP_SDL_MouseUIPoint(event.button.x,event.button.y,&x,&y)) {
+                        if(s_modDetails) {
+                            if(y>=162 && y<173 && x>=16 && x<136) toggleMod();
+                            else if(y>=178) s_modDetails = false;
+                        } else if(y>=44 && y<164 && x>=16 && x<136) {
+                            int item = s_modTop + ((int)y - 44) / 10;
+                            if(item<count) { s_modSelected=item; s_modScroll=0; if(x<32) toggleMod(); else if(event.button.clicks>=2) s_modDetails=true; }
+                        } else if(x>=144 && y>=44 && y<174 && count) { s_modDetails=true; s_modScroll=0; }
+                        else if(y>=178 && x<136) done=true;
+                    }
+                }
+                ENGINE_DrawSettings(selected); continue;
+            }
             if(s_videoChoice>=0) {
                 if(event.type==SDL_EVENT_KEY_DOWN) {
                     switch(event.key.key) {
@@ -353,6 +525,7 @@ void ENGINE_ShowOptions(bool gameplay)
         MOUSE_UpdateCursor();
         SDL_Delay(16);
     }
+    SDL_DestroySurface(s_modImage); s_modImage = NULL; s_modImageIndex = -1; s_optionsTab = 0;
     if(changed && !ENGINE_Save()) fprintf(stderr,"Unable to save engine settings\n");
     KEY_SDL_ClearInput();MOUSE_Cancel();
     GRAP_SDL_SetPixelUI(false);

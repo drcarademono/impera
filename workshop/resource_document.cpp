@@ -1,3 +1,4 @@
+#include "mod/metadata.h"
 #include "mod/interface.h"
 #include "extended_maps.h"
 #include "mod/location_names.h"
@@ -21,6 +22,8 @@
 using U5::require;
 namespace Workshop {
 Capability capability(const QString &resource) {
+    if (resource == "MODINFO.DAT")
+        return {"Mod details", "Project", "Edited in Mod Overview", EditorKind::Inspector};
     if (resource == "INTERFACE.OVR")
         return {"Interface", "Graphics", "Frame color", EditorKind::Inspector};
     if (resource == "TYPES.OVR")
@@ -220,6 +223,10 @@ QMap<QString, QByteArray> ResourceDocument::replace(const Entry &e, const QByteA
 void validateResource(const Project &project, const QString &name) {
     const auto &b = project.data(name);
     const auto kind = capability(name).editor;
+    if (name == "MODINFO.DAT") {
+        require(MODINFO_Validate(b.constData(), b.size()), "Invalid mod description or screenshot");
+        return;
+    }
     if (name == "INTERFACE.OVR") {
         require(INTERFACE_Validate(b.constData(), b.size()), "Invalid interface colors");
         return;

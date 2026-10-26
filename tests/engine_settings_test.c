@@ -1,4 +1,10 @@
 #undef NDEBUG
+#include "common/common.h"
+#include "mod/package.h"
+#include "mod/runtime.h"
+#include "common/file.h"
+#include "text/text_window.h"
+#undef NDEBUG
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -26,6 +32,58 @@ static Uint32 selectEnhanced(void* data, SDL_TimerID timer, Uint32 interval) {
     key(SDLK_DOWN); key(SDLK_RETURN); /* Enhanced must be immediately beneath DOS. */
     key(SDLK_ESCAPE);
     return 0;
+}
+static int modStep, expectedModEnabled;
+static Uint32 modInput(void* data, SDL_TimerID timer, Uint32 interval) {
+    (void)data; (void)timer;
+    if (!modStep++) { key(SDLK_TAB); return interval; }
+    /* Same seven-pixel checkbox as the ordinary engine options. */
+    assert(g_linearEgaBuffer0[45*320+21] == (expectedModEnabled ? 10 : 0));
+    assert((TILESET_UIBufferColor(g_linearEgaBuffer0+64*320+164, IMPERA_TextPalette) & 0xffffffu) == 0xc8283cu);
+    key(SDLK_SPACE); key(SDLK_ESCAPE);
+    return 0;
+}
+static void packageNumber(FILE *f, unsigned value) {
+    unsigned char b[4] = {value, value >> 8, value >> 16, value >> 24};
+    assert(fwrite(b,1,4,f)==4);
+}
+static void modOptions(void) {
+    assert(SDL_CreateDirectory("mod-manager-fixture"));
+    assert(SDL_CreateDirectory("mod-manager-fixture/Mods"));
+    SDL_Surface *image = SDL_CreateSurface(320,200,SDL_PIXELFORMAT_RGBA32); assert(image);
+    assert(SDL_FillSurfaceRect(image,NULL,SDL_MapSurfaceRGBA(image,200,40,60,255)));
+    assert(SDL_SavePNG(image,"mod-manager-fixture/image.png")); SDL_DestroySurface(image);
+    size_t pngSize; void *png = SDL_LoadFile("mod-manager-fixture/image.png",&pngSize); assert(png);
+    const char *text = "A test mod description.";
+    size_t size = 16 + strlen(text) + pngSize;
+    unsigned char *metadata = calloc(1,size); assert(metadata);
+    memcpy(metadata,"IMETA001",8); metadata[8]=(unsigned char)strlen(text);
+    for(int i=0;i<4;i++) metadata[12+i]=(unsigned char)(pngSize>>(8*i));
+    memcpy(metadata+16,text,strlen(text)); memcpy(metadata+16+strlen(text),png,pngSize); SDL_free(png);
+    FILE *f=fopen("mod-manager-fixture/Mods/test.imperamod","wb"); assert(f);
+    assert(fwrite("IMOD0027",1,8,f)==8); packageNumber(f,6); packageNumber(f,1);
+    assert(fwrite("UI mod",1,6,f)==6); packageNumber(f,11); assert(fwrite("MODINFO.DAT",1,11,f)==11);
+    packageNumber(f,0); packageNumber(f,(unsigned)size); packageNumber(f,0);
+    packageNumber(f,MOD_Crc32(metadata,size)); packageNumber(f,1);
+    packageNumber(f,0); packageNumber(f,(unsigned)size); assert(fwrite(metadata,1,size,f)==size);
+    assert(!fclose(f)); free(metadata);
+    assert(SDL_setenv_unsafe("U5D_MODS_DIR","mod-manager-fixture/Mods",1)==0);
+    FILE_SetDataDirectory(".");
+    assert(MOD_LoadedCount()==1 && MOD_AvailableCount()==1);
+    unsigned revision=MOD_Revision();
+    modStep=0; expectedModEnabled=1;
+    assert(SDL_AddTimer(80,modInput,NULL)); ENGINE_ShowOptions(false);
+    assert(MOD_LoadedCount()==0 && !MOD_Available(0)->enabled && !MOD_ChangesPending());
+    assert(MOD_Revision()!=revision); revision=MOD_Revision();
+    modStep=0; expectedModEnabled=0;
+    assert(SDL_AddTimer(80,modInput,NULL)); ENGINE_ShowOptions(true);
+    assert(MOD_LoadedCount()==0 && MOD_Available(0)->enabled && MOD_ChangesPending());
+    assert(MOD_Revision()==revision); /* Running gameplay retains the active snapshot. */
+    FILE_ReloadMods(); assert(MOD_LoadedCount()==1 && !MOD_ChangesPending());
+    FILE_SetDataDirectory(NULL); assert(SDL_unsetenv_unsafe("U5D_MODS_DIR")==0);
+    remove("mod-manager-fixture/image.png"); remove("mod-manager-fixture/Mods/test.imperamod");
+    remove("mod-manager-fixture/Mods/mods.cfg");
+    assert(SDL_RemovePath("mod-manager-fixture/Mods")); assert(SDL_RemovePath("mod-manager-fixture"));
 }
 static int musicPickerMode,musicInputStep;
 static Uint32 musicInput(void* data,SDL_TimerID timer,Uint32 interval)
@@ -124,6 +182,7 @@ int main(int argc, char** argv)
         fputs("Ctrl+E was consumed without exiting\n",stderr);
         return 1;
     }
+    modOptions();
     assert(TILESET_Select(TILESET_DOS));
     assert(SDL_AddTimer(80, selectEnhanced, NULL));
     ENGINE_ShowOptions(false);
@@ -173,9 +232,9 @@ int main(int argc, char** argv)
     assert(g_linearEgaBuffer0[0*320+8]==1);
     assert(g_linearEgaBuffer0[7*320+7]==15);
     assert(g_linearEgaBuffer0[80*320+0]==1);
-    assert(g_linearEgaBuffer0[139*320+16]==15);
+    assert(g_linearEgaBuffer0[143*320+16]==15);
     for(int y=0;y<8;y++) for(int x=0;x<8;x++)
-        assert(g_linearEgaBuffer0[(140+y)*320+24+x]==((font['M'*8+y]&(0x80>>x))?0:15));
+        assert(g_linearEgaBuffer0[(144+y)*320+24+x]==((font['M'*8+y]&(0x80>>x))?0:15));
     int count;SDL_Window** windows=SDL_GetWindows(&count);assert(count==1);
     SDL_Renderer* renderer=SDL_GetRenderer(windows[0]);SDL_free(windows);
     SDL_Surface* shot=SDL_RenderReadPixels(renderer,NULL);assert(shot);

@@ -22,6 +22,11 @@ void FILE_SetDataDirectory(const char* directory)
     MOD_MountDirectory(s_dataDirectory);
 #endif
 }
+void FILE_ReloadMods(void) {
+#if defined(TARGET_SDL)
+    MOD_MountDirectory(s_dataDirectory);
+#endif
+}
 int FILE_DataPath(const char* path,char* resolved,size_t capacity)
 {
     char full[FILE_PATH_SIZE];

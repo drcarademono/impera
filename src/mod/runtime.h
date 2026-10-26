@@ -9,6 +9,18 @@ void MOD_MountDirectory(const char *directory);
 FILE *MOD_OpenResource(const char *name, int *found);
 unsigned MOD_LoadedCount(void);
 unsigned MOD_FrameColor(void);
+#define MOD_CATALOG_LIMIT 128
+#define MOD_FILENAME_LIMIT 1024
+typedef struct ModInfo {
+    char filename[MOD_FILENAME_LIMIT], title[257], description[4097], error[256];
+    unsigned char *image;
+    size_t imageSize;
+    int enabled, startupEnabled, active;
+} ModInfo;
+unsigned MOD_AvailableCount(void);
+const ModInfo *MOD_Available(unsigned index);
+int MOD_SetEnabled(unsigned index, int enabled);
+int MOD_ChangesPending(void);
 unsigned MOD_Revision(void);
 const char *MOD_LocationName(unsigned map, const char *fallback);
 unsigned MOD_TableValue(unsigned table, unsigned index, unsigned fallback);

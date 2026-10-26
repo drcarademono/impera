@@ -1,3 +1,4 @@
+#include "mod/metadata.h"
 #include "custom_tiles.h"
 #include "map_positions.h"
 #include "map_json.h"
@@ -120,6 +121,51 @@ int main(int argc, char **argv) {
         std::cout << "PASS " << name << "\n";
     };
     try {
+        test("Mod details persist, preview, import, export and undo", [&] {
+            QTemporaryDir dir;
+            fixture(dir.path());
+            WorkshopWindow window; check(window.openGame(dir.path()), "Mod details fixture");
+            auto workspace = window.findChild<QComboBox *>("contentWorkspace");
+            workspace->setCurrentText("Mod Overview");
+            auto overview = window.findChild<QWidget *>("modOverview");
+            auto description = overview->findChild<QPlainTextEdit *>("modDescription");
+            check(description, "Description editor missing");
+            description->setPlainText("Explore a new world.\nA second paragraph.");
+            waitFor([&] { return !window.projectForTests().data("MODINFO.DAT").isEmpty(); });
+            auto &project = window.projectForTests();
+            auto metadata = project.data("MODINFO.DAT");
+            check(MODINFO_Validate(metadata.constData(), metadata.size()), "Metadata not applied");
+            check(metadata.mid(16) == description->toPlainText().toUtf8(), "Description changed");
+            QImage image(640, 400, QImage::Format_RGB32); image.fill(QColor(200, 40, 60));
+            QString path = dir.filePath("screenshot.png"); check(image.save(path), "Screenshot fixture");
+            QTimer::singleShot(0, [path] {
+                auto dialog = qobject_cast<QFileDialog *>(QApplication::activeModalWidget());
+                check(dialog, "Screenshot file dialog missing");
+                dialog->selectFile(path); QMetaObject::invokeMethod(dialog, "accept", Qt::DirectConnection);
+            });
+            overview->findChild<QPushButton *>("importModScreenshot")->click();
+            metadata = project.data("MODINFO.DAT");
+            auto data = reinterpret_cast<const unsigned char *>(metadata.constData());
+            auto png = metadata.mid(16 + MODINFO_U32(data + 8));
+            auto screenshot = QImage::fromData(png);
+            check(screenshot.size() == QSize(320, 200) && screenshot.pixelColor(160, 100) == QColor(200, 40, 60),
+                  "Screenshot lost size or artwork");
+            auto package = project.package(); check(package.startsWith("IMOD0027"), "Metadata version missing");
+            auto imported = fixture(dir.path()); imported.importPackage(package);
+            check(imported.data("MODINFO.DAT") == metadata, "Metadata package transfer");
+            project.save(dir.filePath("mod.imperaproject")); Project restored; restored.load(project.projectPath);
+            check(restored.data("MODINFO.DAT") == metadata, "Metadata project round trip");
+            overview->findChild<QPushButton *>("removeModScreenshot")->click();
+            data = reinterpret_cast<const unsigned char *>(project.data("MODINFO.DAT").constData());
+            check(MODINFO_U32(data + 12) == 0, "Screenshot removal failed");
+            for(auto action : window.findChildren<QAction *>())
+                if(action->text().startsWith("Undo ")) { action->trigger(); break; }
+            app.processEvents(); app.processEvents();
+            check(project.data("MODINFO.DAT") == metadata, "Screenshot undo failed");
+            auto invalid = metadata; invalid[8] = char(255); invalid[9] = char(255);
+            project.resources["MODINFO.DAT"].edited = invalid;
+            rejects([&] { project.validate(); });
+        });
         test("Interface frame colors preview, undo and transfer without changing artwork", [&] {
             QTemporaryDir dir;
             fixture(dir.path());
@@ -1991,19 +2037,20 @@ int main(int argc, char **argv) {
             check(overview, "Overview did not open from workspace selector");
             auto overviewTabs = overview->findChild<QTabWidget *>("overviewTabs");
             auto advanced = overview->findChild<QToolButton *>("overviewAdvanced");
-            check(overviewTabs && overviewTabs->count() == 2 &&
-                      overviewTabs->tabText(0) == "Changed content" &&
-                      overviewTabs->tabText(1) == "Validation" && advanced && !advanced->isChecked(),
-                  "Overview should show only changes and validation by default");
+            check(overviewTabs && overviewTabs->count() == 3 &&
+                      overviewTabs->tabText(0) == "Mod details" &&
+                      overviewTabs->tabText(1) == "Changed content" &&
+                      overviewTabs->tabText(2) == "Validation" && advanced && !advanced->isChecked(),
+                  "Overview should show mod details, changes and validation by default");
             for (auto button : overview->findChildren<QPushButton *>())
                 check(!QStringList{"Save Project", "Name Mod", "Export Package", "Test Mod"}
                            .contains(button->text()), "Duplicate overview command remains");
             advanced->click();
-            check(overviewTabs->count() == 3 &&
+            check(overviewTabs->count() == 4 &&
                       overviewTabs->currentWidget()->objectName() == "overviewAdvancedPanel",
                   "Advanced diagnostics are inaccessible");
             advanced->click();
-            check(overviewTabs->count() == 2,
+            check(overviewTabs->count() == 3,
                   "Advanced diagnostics did not collapse");
             auto changed = overview->findChild<QTreeWidget *>("overviewChanges");
             auto resources = overview->findChild<QTreeWidget *>("overviewPackageResources");

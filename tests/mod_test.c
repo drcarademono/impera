@@ -1,3 +1,4 @@
+#include "mod/metadata.h"
 #include "mod/interface.h"
 #include "mod/location_names.h"
 #undef NDEBUG
@@ -501,9 +502,65 @@ static void interfaceColors(void) {
     assert(!INTERFACE_Validate(settings, 8));
 }
 
+static void modCatalog(void) {
+    const char *description = "Explore a new Britannia.";
+    unsigned char metadata[128] = "IMETA001";
+    metadata[8] = (unsigned char)strlen(description);
+    memcpy(metadata + 16, description, strlen(description));
+    size_t metadataSize = 16 + strlen(description);
+    assert(MODINFO_Validate(metadata, metadataSize));
+    metadata[16] = 0xc0; assert(!MODINFO_Validate(metadata, metadataSize)); metadata[16] = 'E';
+    assert(!MODINFO_Validate(metadata, metadataSize - 1));
+    ModPackage decoded; char error[256]; Buffer package;
+    header(&package, 1); memcpy(package.bytes, "IMOD0027", 8);
+    rawEntry(&package, "MODINFO.DAT", "", 0, metadata, metadataSize);
+    assert(MOD_Decode(package.bytes, package.size, readBase, NULL, &decoded, error, sizeof(error)));
+    MOD_Free(&decoded);
+    memcpy(package.bytes, "IMOD0026", 8);
+    assert(!MOD_Decode(package.bytes, package.size, readBase, NULL, &decoded, error, sizeof(error)));
+    const char *names[] = {"FIRST.DAT", "SECOND.DAT"};
+    const char *paths[] = {"application/Mods/a.imperamod", "application/Mods/b.imperamod"};
+    put("game/FIRST.DAT", "base", 4); put("game/SECOND.DAT", "base", 4);
+    for (int i = 0; i < 2; ++i) {
+        header(&package, 2); memcpy(package.bytes, "IMOD0027", 8);
+        rawEntry(&package, "MODINFO.DAT", "", 0, metadata, metadataSize);
+        entry(&package, names[i], "base", "modded");
+        put(paths[i], package.bytes, package.size);
+    }
+    put("application/Mods/c.imperamod", "invalid", 7);
+    FILE_SetDataDirectory("game");
+    assert(MOD_LoadedCount() == 2 && MOD_AvailableCount() == 3);
+    assert(!MOD_Available(3));
+    assert(!strcmp(MOD_Available(0)->description, description));
+    assert(MOD_Available(0)->active && MOD_Available(1)->active);
+    assert(*MOD_Available(2)->error && !MOD_Available(2)->active);
+    assert(SDL_CreateDirectory("application/Mods/mods.cfg.tmp"));
+    assert(!MOD_SetEnabled(0, 0)); /* Failed save cannot alter selected or active mods. */
+    assert(MOD_Available(0)->enabled && !MOD_ChangesPending());
+    assert(SDL_RemovePath("application/Mods/mods.cfg.tmp"));
+    unsigned revision = MOD_Revision();
+    assert(MOD_SetEnabled(0, 0));
+    assert(MOD_ChangesPending() && MOD_LoadedCount() == 2 && MOD_Revision() == revision);
+    value("FIRST.DAT", "modded", 1); /* Active game keeps its snapshot. */
+    FILE_ReloadMods();
+    assert(!MOD_ChangesPending() && MOD_LoadedCount() == 1 && MOD_Revision() != revision);
+    assert(!MOD_Available(0)->enabled && !MOD_Available(0)->active);
+    assert(MOD_Available(1)->enabled && MOD_Available(1)->active);
+    assert(!strcmp(MOD_Available(0)->description, description));
+    value("FIRST.DAT", "base", 1);
+    assert(MOD_SetEnabled(0, 1)); FILE_ReloadMods();
+    assert(MOD_LoadedCount() == 2 && MOD_Available(0)->active);
+    assert(!MOD_SetEnabled(99, 0));
+    FILE_SetDataDirectory(NULL);
+    assert(MOD_AvailableCount() == 0 && !MOD_ChangesPending());
+    remove(paths[0]); remove(paths[1]); remove("application/Mods/c.imperamod");
+    remove("application/Mods/mods.cfg"); remove("game/FIRST.DAT"); remove("game/SECOND.DAT");
+}
+
 int main(void) {
     assert(SDL_CreateDirectory("application/Mods"));
     assert(SDL_SetEnvironmentVariable(SDL_GetEnvironment(), "APPIMAGE", "application/Impera.AppImage", true));
+    modCatalog();
     interfaceColors();
     assert(MOD_AllowedResource("INIT.GAM"));
     assert(MOD_AllowedResource("BRIT.CBT"));

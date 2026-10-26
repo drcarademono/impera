@@ -1,3 +1,4 @@
+#include "metadata.h"
 #include "interface.h"
 #include "location_names.h"
 #include "maps.h"
@@ -17,6 +18,82 @@
 /* Startup snapshot: no extraction, no changes to game assets or writable saves. */
 static ModPackage *packages[128];
 static unsigned loaded;
+static ModInfo catalog[MOD_CATALOG_LIMIT];
+static unsigned catalogCount;
+static char preferences[FILE_PATH_SIZE];
+static char disabled[MOD_CATALOG_LIMIT][MOD_FILENAME_LIMIT];
+static unsigned disabledCount;
+unsigned MOD_AvailableCount(void) { return catalogCount; }
+const ModInfo *MOD_Available(unsigned index) { return index < catalogCount ? &catalog[index] : NULL; }
+int MOD_ChangesPending(void) {
+    for (unsigned i = 0; i < catalogCount; ++i)
+        if (catalog[i].enabled != catalog[i].startupEnabled) return 1;
+    return 0;
+}
+static int disabledIndex(const char *name) {
+    for (unsigned i = 0; i < disabledCount; ++i)
+        if (!strcmp(disabled[i], name)) return (int)i;
+    return -1;
+}
+static int hexValue(char c) {
+    return c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : -1;
+}
+static void loadPreferences(void) {
+    disabledCount = 0;
+    FILE *f = fopen(preferences, "rb");
+    if (!f) return;
+    char line[MOD_FILENAME_LIMIT * 2 + 2];
+    if (!fgets(line, sizeof(line), f) || strcmp(line, "IMODS001\n")) { fclose(f); return; }
+    while (disabledCount < MOD_CATALOG_LIMIT && fgets(line, sizeof(line), f)) {
+        size_t n = strlen(line);
+        if (!n || line[n - 1] != '\n' || (n - 1) % 2 || n <= 1) continue;
+        --n;
+        if (n / 2 >= MOD_FILENAME_LIMIT) continue;
+        char name[MOD_FILENAME_LIMIT]; int ok = 1;
+        for (size_t i = 0; i < n / 2; ++i) {
+            int a = hexValue(line[i * 2]), b = hexValue(line[i * 2 + 1]);
+            if (a < 0 || b < 0 || !(a || b)) { ok = 0; break; }
+            name[i] = (char)(a * 16 + b);
+        }
+        name[n / 2] = 0;
+        if (ok && disabledIndex(name) < 0) SDL_strlcpy(disabled[disabledCount++], name, MOD_FILENAME_LIMIT);
+    }
+    fclose(f);
+}
+static int savePreferences(void) {
+    if (!*preferences) return 0;
+    char temporary[FILE_PATH_SIZE];
+    if (SDL_snprintf(temporary, sizeof(temporary), "%s.tmp", preferences) >= (int)sizeof(temporary)) return 0;
+    FILE *f = fopen(temporary, "wb");
+    if (!f) return 0;
+    int ok = fputs("IMODS001\n", f) >= 0;
+    for (unsigned i = 0; ok && i < disabledCount; ++i) {
+        for (const unsigned char *p = (const unsigned char *)disabled[i]; *p; ++p)
+            if (fprintf(f, "%02x", *p) < 0) { ok = 0; break; }
+        if (fputc('\n', f) == EOF) ok = 0;
+    }
+    if (fclose(f)) ok = 0;
+    if (ok) ok = SDL_RenamePath(temporary, preferences);
+    if (!ok) remove(temporary);
+    return ok;
+}
+int MOD_SetEnabled(unsigned index, int enabled) {
+    if (index >= catalogCount) return 0;
+    ModInfo *info = &catalog[index]; enabled = !!enabled;
+    if (info->enabled == enabled) return 1;
+    int found = disabledIndex(info->filename);
+    if (!enabled) {
+        if (disabledCount == MOD_CATALOG_LIMIT) return 0;
+        SDL_strlcpy(disabled[disabledCount++], info->filename, MOD_FILENAME_LIMIT);
+    } else if (found >= 0) {
+        memmove(disabled[found], disabled[found + 1], (disabledCount - found - 1) * MOD_FILENAME_LIMIT);
+        --disabledCount;
+    }
+    if (!savePreferences()) { loadPreferences(); return 0; }
+    info->enabled = enabled;
+    return 1;
+}
+
 static unsigned revision;
 unsigned MOD_Revision(void) { return revision; }
 static uint8_t britanniaIndex[256];
@@ -106,6 +183,9 @@ static int compareNames(const void *a, const void *b) {
 }
 unsigned MOD_LoadedCount(void) { return loaded; }
 void MOD_MountDirectory(const char *directory) {
+    for (unsigned i = 0; i < catalogCount; ++i) free(catalog[i].image);
+    memset(catalog, 0, sizeof(catalog)); catalogCount = 0;
+    preferences[0] = 0; disabledCount = 0;
     MAPS_Mount(NULL, 0);
     TYPES_Mount(NULL, 0, NULL, 0);
     for (unsigned i = 0; i < loaded; i++) {
@@ -155,6 +235,9 @@ void MOD_MountDirectory(const char *directory) {
     SDL_PathInfo folder;
     if (!SDL_GetPathInfo(mods, &folder) || folder.type != SDL_PATHTYPE_DIRECTORY)
         return;
+    if (SDL_snprintf(preferences, sizeof(preferences), "%s/mods.cfg", mods) >= (int)sizeof(preferences))
+        preferences[0] = 0;
+    loadPreferences();
     int count = 0;
     char **names = SDL_GlobDirectory(mods, "*.imperamod", SDL_GLOB_CASEINSENSITIVE, &count);
     if (!names) {
@@ -162,18 +245,25 @@ void MOD_MountDirectory(const char *directory) {
         return;
     }
     qsort(names, count, sizeof(char *), compareNames);
-    for (int i = 0; i < count; i++) {
+    for (int i = 0; i < count && catalogCount < MOD_CATALOG_LIMIT; i++) {
         char path[FILE_PATH_SIZE], error[256];
         SDL_PathInfo info;
         if (SDL_snprintf(path, sizeof(path), "%s/%s", mods, names[i]) >= (int)sizeof(path) ||
             !SDL_GetPathInfo(path, &info) || info.type != SDL_PATHTYPE_FILE)
             continue;
+        if (strlen(names[i]) >= MOD_FILENAME_LIMIT) continue;
+        ModInfo *item = &catalog[catalogCount++];
+        SDL_strlcpy(item->filename, names[i], sizeof(item->filename));
+        SDL_strlcpy(item->title, names[i], sizeof(item->title));
+        item->enabled = item->startupEnabled = disabledIndex(names[i]) < 0;
         if (loaded == 128 || info.size > MOD_MAX_PACKAGE) {
+            SDL_strlcpy(item->error, "Package exceeds the mod size limit", sizeof(item->error));
             DEBUG_Error("Skipping mod %s: package limit exceeded", names[i]);
             continue;
         }
         FILE *f = fopen(path, "rb");
         if (!f) {
+            SDL_strlcpy(item->error, "Cannot read this mod file", sizeof(item->error));
             DEBUG_Error("Cannot open mod %s", names[i]);
             continue;
         }
@@ -186,12 +276,33 @@ void MOD_MountDirectory(const char *directory) {
         else
             SDL_strlcpy(error, "Cannot read package or allocate memory", sizeof(error));
         free(bytes);
+        if (ok) {
+            SDL_strlcpy(item->title, p->title, sizeof(item->title));
+            const ModResource *meta = resourceIn(p, "MODINFO.DAT");
+            if (meta) {
+                unsigned text = MODINFO_U32(meta->data + 8), image = MODINFO_U32(meta->data + 12);
+                memcpy(item->description, meta->data + 16, text);
+                if (image) {
+                    item->image = malloc(image);
+                    if (item->image) {
+                        memcpy(item->image, meta->data + 16 + text, image);
+                        item->imageSize = image;
+                    }
+                }
+            }
+        }
+        if (!item->enabled) {
+            if (!ok) SDL_strlcpy(item->error, error, sizeof(item->error));
+            if (p) { MOD_Free(p); free(p); }
+            continue;
+        }
         if (ok)
             for (unsigned j = 0; j < loaded; j++)
                 for (unsigned a = 0; a < p->count; a++)
                     for (unsigned b = 0; b < packages[j]->count; b++)
                         if (!strcmp(p->entries[a].name, packages[j]->entries[b].name) &&
-                            strcmp(p->entries[a].name, "CONTENTS.OVR")) {
+                            strcmp(p->entries[a].name, "CONTENTS.OVR") &&
+                            strcmp(p->entries[a].name, "MODINFO.DAT")) {
                             ok = 0;
                             SDL_snprintf(error, sizeof(error), "Resource %s already overridden by %s",
                                          p->entries[a].name, packages[j]->title);
@@ -220,6 +331,7 @@ void MOD_MountDirectory(const char *directory) {
         if (ok) {
             totalMemory += packageMemory;
             packages[loaded++] = p;
+            item->active = 1;
             if (contents)
                 CONTENTS_Mount(contents->data, contents->size);
             const ModResource *types = resourceIn(p, "TYPES.OVR"),
@@ -235,6 +347,7 @@ void MOD_MountDirectory(const char *directory) {
             }
             debug("Loaded mod %s (%s), %u resources", names[i], p->title, p->count);
         } else {
+            SDL_strlcpy(item->error, error, sizeof(item->error));
             DEBUG_Error("Skipping mod %s: %s", names[i], error);
             if (p) {
                 MOD_Free(p);

@@ -871,9 +871,23 @@ static void INTRO_RunMain(void) // intro_main (initialize video) (8b46)
         switch ((int)local_10)
         {
 #if defined(TARGET_SDL)
-        case 'O':
+        case 'O': {
+            unsigned previousMods = MOD_Revision();
             ENGINE_ShowOptions(false);
+            if (previousMods != MOD_Revision()) {
+                /* No gameplay is active: discard cached mod artwork/fonts. */
+                ULTIMA_102e_UnloadTileset();
+                for (int font = 0; font < 2; ++font) {
+                    free(D_539c[font]);
+                    D_539c[font] = NULL;
+                }
+                ULTIMA_1d02_LoadCharset("IBM.CH", 0);
+                ULTIMA_1d02_LoadCharset("RUNES.CH", 1);
+                ULTIMA_1c9e_SelectCharset(0);
+                INTRO_05b0_DisplayTitle(0);
+            }
             break;
+        }
 #endif
         case 0x4a: // 'J'
 #if defined(TARGET_SDL)
