@@ -816,13 +816,17 @@ int TALK_LookNpc(unsigned actor) {
     int known = (learnedNames[D_5893_map_id - 1][slot / 8] & (1u << (slot % 8))) != 0;
     const char *avatar = (const char *)D_55a8_party[0].name;
     size_t length = IMPERA_TalkLookText(s_conversation, s_conversationSize, known, avatar, NULL, 0);
-    char *text = length ? malloc(length) : NULL;
+    /* Leave room for punctuation so the word wrapper sees the final word
+     * and its period together, including names that exactly fill a row. */
+    char *text = length ? malloc(length + 1) : NULL;
     if (text) IMPERA_TalkLookText(s_conversation, s_conversationSize, known, avatar, text, length);
     s_conversation = saved; s_conversationSize = savedSize; free(bank);
     if (!text) return 0;
-    ULTIMA_1850_PrintString("\nYou see "); ULTIMA_1850_PrintString(text);
     size_t n = strlen(text);
-    if (n && text[n-1] != '.' && text[n-1] != '!' && text[n-1] != '?') ULTIMA_16ba_PrintChar('.');
+    if (n && text[n-1] != '.' && text[n-1] != '!' && text[n-1] != '?') {
+        text[n] = '.'; text[n+1] = 0;
+    }
+    ULTIMA_1850_PrintString("\nYou see "); ULTIMA_1850_PrintString(text);
     ULTIMA_16ba_PrintChar('\n'); free(text); return 1;
 #else
     (void)actor; return 0;

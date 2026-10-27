@@ -6,7 +6,7 @@
  * capturing the renderer calls instead of needing an interactive conversation. */
 #include "../src/talk.c"
 
-static char output[4096];
+static char output[4096], lastString[4096];
 static int styles[4096], length, column, charset;
 void __wrap_ULTIMA_16ba_PrintChar(uint ch) {
     assert(length < (int)sizeof(output) - 1);
@@ -15,7 +15,9 @@ void __wrap_ULTIMA_16ba_PrintChar(uint ch) {
     output[length] = 0;
     column = ch == '\n' ? 0 : column + 1;
 }
-void __wrap_ULTIMA_1850_PrintString(char *text) { while (*text) __wrap_ULTIMA_16ba_PrintChar((unsigned char)*text++); }
+void __wrap_ULTIMA_1850_PrintString(char *text) {
+    assert(strlen(text) < sizeof(lastString)); strcpy(lastString, text);
+    while (*text) __wrap_ULTIMA_16ba_PrintChar((unsigned char)*text++); }
 void __wrap_ULTIMA_1c9e_SelectCharset(int value) { charset = value; }
 int __wrap_ULTIMA_1f12_GetCurrentTextX(void) { return column; }
 static void reset(void) {
@@ -72,6 +74,9 @@ static void enhancedLook(void) {
     assert(IMPERA_TalkDescription(&session)==0); IMPERA_TalkFlush(&session);
     assert(learnedNames[0][0]&32);
     reset(); assert(TALK_LookNpc(1) && strstr(output,"You see Gallrot."));
+    /* Punctuation must reach the word wrapper in the same string as the
+     * final word, rather than being printed separately after a full row. */
+    assert(!strcmp(lastString,"Gallrot."));
     const uint8_t eb[] = {0xc5,0xe2,0xa2,0x8d,0x8d,0x82,0,0xe1,0xa0,0xe2,0xef,0xf9,0xae,0};
     assert(IMPERA_TalkLookText(eb,sizeof(eb),1,NULL,result,sizeof(result)) == 3 && !strcmp(result,"Eb"));
     learnedNames[0][0]=0;
