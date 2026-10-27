@@ -111,6 +111,12 @@ bool __wrap_SDL_RenderPresent(SDL_Renderer* renderer)
         assert(SDL_ReadSurfacePixel(image, x, y, &r, &g, &b, &a));
         assert(orderSelection ? (r == 255 && g == 255 && b == 255)
                               : (r == 85 && g == 255 && b == 85));
+        x=(image->w-layout.width*layout.scale)/2+
+          (layout.mapX+(layout.columns/2-5+8)*16+8)*layout.scale;
+        y=SDL_ceilf((image->h-layout.height*layout.scaleY)/2+
+                    (layout.mapY+(layout.rows/2-5+8)*16+8)*layout.scaleY);
+        assert(SDL_ReadSurfacePixel(image,x,y,&r,&g,&b,&a));
+        assert(r==255 && g==85 && b==85); /* Native marker/effect survives every frame. */
         SDL_DestroySurface(image);
     }
     if(checkCombatMargins) {
@@ -1464,6 +1470,10 @@ int main(int argc, char** argv)
                 memcpy(D_ab02, D_ad14, sizeof(D_ab02));
                 ULTIMA_5394();
                 ULTIMA_56ac_DrawMap();
+                /* 255 can mark native combat cells/effects; it is not a
+                 * world-map darkness classification. */
+                *ULTIMA_4402_GetTileAddr(8,8)=255;
+                for(int y=136;y<152;y++) memset(g_linearEgaBuffer0+y*320+136,12,16);
                 if (selected)
                     paintCombatCursor(D_ba14[7].x, 4);
                 GRAP_SDL_FlushFrame();
@@ -1473,6 +1483,10 @@ int main(int argc, char** argv)
                 memcpy(D_ab02, D_ad14, sizeof(D_ab02));
                 ULTIMA_5394();
                 ULTIMA_56ac_DrawMap();
+                /* 255 can mark native combat cells/effects; it is not a
+                 * world-map darkness classification. */
+                *ULTIMA_4402_GetTileAddr(8,8)=255;
+                for(int y=136;y<152;y++) memset(g_linearEgaBuffer0+y*320+136,12,16);
                 if (selected)
                     paintCombatCursor(3, 4);
                 if (selected)

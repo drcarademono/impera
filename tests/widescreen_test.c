@@ -540,6 +540,21 @@ int main(void)
     }
     assert(WIDE_Compose(pixels, broad));
     assert(pixel(pixels, broad, 7, 0) == 0); /* combat never fabricates terrain */
+    /* Small combat's viewport stays centered even with an edge fighter.
+     * Preserve every native board pixel and never index beyond its 11 rows. */
+    memset(D_5c5a,0,sizeof(D_5c5a));
+    memset(D_ab02,1,sizeof(D_ab02));
+    memset(g_linearEgaBuffer0,3,320*200);
+    for(int fighterY=0;fighterY<=10;fighterY+=5)
+        for(int fighterX=0;fighterX<=10;fighterX+=5) {
+            D_5896_map_x=fighterX;D_5897_map_y=fighterY;
+            WideLayout combat=WIDE_Layout(1920,1080);
+            assert(WIDE_Compose(pixels,combat));
+            int left=combat.mapX+(combat.columns/2-5)*16;
+            int top=combat.mapY+(combat.rows/2-5)*16;
+            for(int y=0;y<176;y++) for(int x=0;x<176;x++)
+                assert(pixels[(top+y)*combat.width+left+x]==3);
+        }
     /* Border strips must reach the final row, with one centered opening and
      * no orphaned arrow tips copied near the outer corners. */
     for (int y = 0; y < 8; y++) {
