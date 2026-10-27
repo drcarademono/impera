@@ -210,14 +210,13 @@ static int descriptionRows(const char *text, int columns, int first, int visible
 static int descriptionLines(const char *text,int columns,int first,int visible,int x,int y) {
     return descriptionRows(text,columns,first,visible,x,y,false);
 }
-static int modListRows(void) { return 6; }
-static int modDetailsTop(void) { return 120; }
-static int modThumbHeight(int count) { return SDL_max(8,60*6/count); }
-static int modThumbTop(int count) { return 44+(60-modThumbHeight(count))*s_modTop/(count-6); }
+static int modListRows(void) { return 8; }
+static int modThumbHeight(int count) { return SDL_max(8,112*modListRows()/count); }
+static int modThumbTop(int count) { return 44+(112-modThumbHeight(count))*s_modTop/(count-modListRows()); }
 static void modScrollbar(float y,int grab,int count) {
-    if(count<=6) return;
-    int offset=SDL_clamp(s_modSelected-s_modTop,0,5);
-    s_modTop=SDL_clamp((int)SDL_roundf((y-44-grab)*(count-6)/(60-modThumbHeight(count))),0,count-6);
+    if(count<=modListRows()) return;
+    int offset=SDL_clamp(s_modSelected-s_modTop,0,modListRows()-1);
+    s_modTop=SDL_clamp((int)SDL_roundf((y-44-grab)*(count-modListRows())/(112-modThumbHeight(count))),0,count-modListRows());
     s_modSelected=SDL_min(count-1,s_modTop+offset);
 }
 static int modTextThumbHeight(void) { return SDL_max(8,104*13/s_modDetailLines); }
@@ -234,10 +233,10 @@ static void modImage(const ModInfo *info) {
         s_modImageRevision = MOD_Revision();
         s_modImageDetails = s_modDetails;
         if (info && info->imageSize)
-            GRAP_SDL_UIThumbnailPNG(0, info->image, info->imageSize, 16, s_modDetails ? 60 : modDetailsTop(), 44, 24);
+            GRAP_SDL_UIThumbnailPNG(0, info->image, info->imageSize, 16, 60, 44, 24);
     }
     if (!info || !info->imageSize) {
-        int y=s_modDetails?60:modDetailsTop();
+        int y=60;
         ENGINE_UIText(16,y+4,"No",8); ENGINE_UIText(16,y+12,"image",8);
     }
 }
@@ -278,33 +277,23 @@ static void drawMods(void) {
         if (s_modSelected >= s_modTop + rows) s_modTop = s_modSelected - rows + 1;
         s_modTop=SDL_clamp(s_modTop,0,SDL_max(0,(int)count-rows));
         for (int row = 0; row < rows && row + s_modTop < (int)count; ++row) {
-            const ModInfo *item = MOD_Available(row + s_modTop); int y = 44 + row * 10;
+            const ModInfo *item = MOD_Available(row + s_modTop); int y = 44 + row * 14;
             bool selected = row + s_modTop == s_modSelected;
-            if (selected) ENGINE_UIRect(16, y - 1, count>6?280:288, 10, 15);
+            if (selected) ENGINE_UIRect(16, y - 1, 208, 12, 15);
             checkbox(20, y, item->enabled);
             char title[257]; modText(item->title, title, sizeof(title));
-            int chars=count>6?33:34;
+            int chars=23;
             if (strlen(title) > (size_t)chars) { memcpy(title+chars-3,"...",3); title[chars] = 0; }
             ENGINE_UIText(32, y, title, selected ? 0 : 15);
+            modButton(224,y-1,72,"Details");
         }
-        if(count>6) {
-            ENGINE_UIRect(300,44,4,60,8);
+        if(count>modListRows()) {
+            ENGINE_UIRect(300,44,4,112,8);
             ENGINE_UIRect(300,modThumbTop(count),4,modThumbHeight(count),15);
         }
-        char range[40]; SDL_snprintf(range,sizeof(range),"%d-%d of %u",s_modTop+1,SDL_min((int)count,s_modTop+6),count);
-        ENGINE_UIText(16,106,range,7);
-        modButton(232,104,72,"Details");
-        int detailsY=modDetailsTop();
-        ENGINE_UIRect(16,detailsY-4,288,1,8);
-        modImage(info);
-        if (*info->author) {
-            char author[300]; SDL_snprintf(author, sizeof(author), "By %s", info->author);
-            char display[300]; modText(author, display, sizeof(display)); display[29] = 0;
-            ENGINE_UIText(72, detailsY, display, 7);
-        }
-        int descriptionY=detailsY+(*info->author?12:0);
-        descriptionRows(*info->description ? info->description : "No description provided.", 29, 0,
-                        (164-descriptionY)/8,72,descriptionY,true);
+        clearModImage();
+        char range[40]; SDL_snprintf(range,sizeof(range),"%d-%d of %u",s_modTop+1,SDL_min((int)count,s_modTop+rows),count);
+        ENGINE_UIText(16,158,range,7);
         ENGINE_UIText(16, 170, "Space: On/Off  Enter: Details", 7);
         ENGINE_UIText(16, 180, "Return", 15);
     }
@@ -511,10 +500,10 @@ void ENGINE_ShowOptions(bool gameplay)
                     case SDLK_ESCAPE: modGrab=-1;if(s_modDetails) s_modDetails = false; else done = true; break;
                     case SDLK_UP: if(s_modDetails) s_modScroll = SDL_max(0, s_modScroll - 1); else s_modSelected = SDL_max(0, s_modSelected - 1); break;
                     case SDLK_DOWN: if(s_modDetails) ++s_modScroll; else s_modSelected = SDL_min(SDL_max(0,count-1), s_modSelected + 1); break;
-                    case SDLK_PAGEUP: if(s_modDetails) s_modScroll = SDL_max(0, s_modScroll - 12); else {s_modSelected=SDL_max(0,s_modSelected-6);s_modTop=SDL_max(0,s_modTop-6);} break;
-                    case SDLK_PAGEDOWN: if(s_modDetails) s_modScroll += 12; else {s_modSelected=SDL_min(SDL_max(0,count-1),s_modSelected+6);s_modTop=SDL_min(SDL_max(0,count-6),s_modTop+6);} break;
+                    case SDLK_PAGEUP: if(s_modDetails) s_modScroll = SDL_max(0, s_modScroll - 12); else {s_modSelected=SDL_max(0,s_modSelected-modListRows());s_modTop=SDL_max(0,s_modTop-modListRows());} break;
+                    case SDLK_PAGEDOWN: if(s_modDetails) s_modScroll += 12; else {s_modSelected=SDL_min(SDL_max(0,count-1),s_modSelected+modListRows());s_modTop=SDL_min(SDL_max(0,count-modListRows()),s_modTop+modListRows());} break;
                     case SDLK_HOME: if(s_modDetails) s_modScroll=0; else {s_modSelected=0;s_modTop=0;} break;
-                    case SDLK_END: if(s_modDetails) s_modScroll=100000; else {s_modSelected=SDL_max(0,count-1);s_modTop=SDL_max(0,count-6);} break;
+                    case SDLK_END: if(s_modDetails) s_modScroll=100000; else {s_modSelected=SDL_max(0,count-1);s_modTop=SDL_max(0,count-modListRows());} break;
                     case SDLK_RETURN: modGrab=-1;if(count) { s_modDetails = !s_modDetails; s_modScroll = 0; } break;
                     case SDLK_SPACE: if(!event.key.repeat) toggleMod(); break;
                     }
@@ -535,15 +524,18 @@ void ENGINE_ShowOptions(bool gameplay)
                                 modTextScrollbar(y,modGrab);
                             } else if(y>=162 && y<173 && x>=16 && x<136) toggleMod();
                             else if(y>=178 && y<190 && x>=16 && x<80) {modGrab=-1;s_modDetails=false;}
-                        } else if(count>6 && x>=298 && x<306 && y>=44 && y<104) {
+                        } else if(count>modListRows() && x>=298 && x<306 && y>=44 && y<156) {
                             int top=modThumbTop(count),height=modThumbHeight(count);
                             modGrab=y>=top && y<top+height?(int)y-top:height/2;
                             modScrollbar(y,modGrab,count);
-                        } else if(y>=44 && y<44+modListRows()*10 && x>=16 && x<(count>6?296:304)) {
-                            int item = s_modTop + ((int)y - 44) / 10;
-                            if(item<count) { s_modSelected=item; s_modScroll=0; if(event.button.clicks<=1) toggleMod(); }
-                        } else if(count && ((x>=232 && x<304 && y>=104 && y<116) ||
-                                            (x>=16 && x<304 && y>=modDetailsTop() && y<164))) { modGrab=-1;s_modDetails=true; s_modScroll=0; }
+                        } else if(y>=43 && y<43+modListRows()*14 && x>=16 && x<296) {
+                            int item = s_modTop + ((int)y - 43) / 14;
+                            if(item<count && (int)y<44+(item-s_modTop)*14+11) {
+                                s_modSelected=item; s_modScroll=0;
+                                if(x>=224) {modGrab=-1;s_modDetails=true;}
+                                else if(event.button.clicks<=1) toggleMod();
+                            }
+                        }
                         else if(y>=178 && x<136) done=true;
                     }
                 }
@@ -554,8 +546,8 @@ void ENGINE_ShowOptions(bool gameplay)
                         if(s_modDetails) {
                             if(modGrab>=0) modTextScrollbar(y,modGrab);
                         } else if(modGrab>=0) modScrollbar(y,modGrab,count);
-                        else if(x>=16 && x<(count>6?296:304) && y>=44 && y<104) {
-                            int item=s_modTop+((int)y-44)/10;
+                        else if(x>=16 && x<296 && y>=44 && y<156) {
+                            int item=s_modTop+((int)y-44)/14;
                             if(item<count) s_modSelected=item;
                         }
                         if(before!=s_modSelected) { s_modScroll=0;redraw=true; }

@@ -80,17 +80,17 @@ static void expectUIText(int x,int y,const char *text,byte color,byte background
     }
 }
 static void expectRange(int top) {
-    char range[40];SDL_snprintf(range,sizeof(range),"%d-%d of %d",top+1,SDL_min(listCaseCount,top+6),listCaseCount);
-    expectUIText(16,106,range,7,0);
+    char range[40];SDL_snprintf(range,sizeof(range),"%d-%d of %d",top+1,SDL_min(listCaseCount,top+8),listCaseCount);
+    expectUIText(16,158,range,7,0);
 }
 static Uint32 listCaseInput(void *data,SDL_TimerID timer,Uint32 interval) {
     (void)data;(void)timer;
-    int tail=SDL_max(0,listCaseCount-6);
+    int tail=SDL_max(0,listCaseCount-8);
     switch(listCaseStep++) {
     case 0:key(SDLK_TAB);key(SDLK_HOME);break;
     case 1:
         if(!listCaseCount) {expectUIText(16,64,"No mods in the Mods folder",7,0);expectUIText(16,180,"Return",15,0);key(SDLK_ESCAPE);return 0;}
-        expectRange(0);expectUIText(72,152,"Description line...",15,0);
+        expectRange(0);
         key(SDLK_END);break;
     case 2: {
         expectRange(tail);
@@ -100,7 +100,7 @@ static Uint32 listCaseInput(void *data,SDL_TimerID timer,Uint32 interval) {
     }
     case 3:
         assert(!MOD_Available(listCaseCount-1)->enabled);
-        expectUIText(240,106,"Details",15,0);clickUI(270,110);break;
+        expectUIText(232,45+(listCaseCount-1-tail)*14,"Details",15,0);clickUI(270,48+(listCaseCount-1-tail)*14);break;
     case 4: {
         char title[40];SDL_snprintf(title,sizeof(title),"Test mod %02d",listCaseCount-1);
         expectUIText(72,60,title,15,0);
@@ -111,22 +111,22 @@ static Uint32 listCaseInput(void *data,SDL_TimerID timer,Uint32 interval) {
     case 6:expectRange(tail);hoverUI(200,48);break;
     case 7:
         assert(MOD_Available(tail)->enabled==(tail!=listCaseCount-1));
-        assert(g_linearEgaBuffer0[44*320+290]==15); /* Hover selects without toggling. */
-        if(listCaseCount>6) clickUI(302,44);else key(SDLK_HOME);
+        assert(g_linearEgaBuffer0[44*320+220]==15); /* Hover selects without toggling. */
+        if(listCaseCount>8) clickUI(302,44);else key(SDLK_HOME);
         break;
-    case 8:expectRange(0);if(listCaseCount>6) hoverUI(302,102);else key(SDLK_END);break;
+    case 8:expectRange(0);if(listCaseCount>8) hoverUI(302,154);else key(SDLK_END);break;
     case 9: {
         expectRange(tail);
         SDL_Event up={0};up.type=SDL_EVENT_MOUSE_BUTTON_UP;up.button.button=SDL_BUTTON_LEFT;assert(SDL_PushEvent(&up));
         key(SDLK_HOME);key(SDLK_PAGEDOWN);break;
     }
-    case 10:expectRange(SDL_min(6,SDL_max(0,listCaseCount-6)));key(SDLK_PAGEUP);break;
+    case 10:expectRange(SDL_min(8,SDL_max(0,listCaseCount-8)));key(SDLK_PAGEUP);break;
     case 11: {
         expectRange(0);
         for(int i=0;i<7;i++) {SDL_Event wheel={0};wheel.type=SDL_EVENT_MOUSE_WHEEL;wheel.wheel.y=-1;assert(SDL_PushEvent(&wheel));}
         break;
     }
-    case 12:expectRange(listCaseCount>7?2:listCaseCount>6?1:0);clickUI(48,184);return 0;
+    case 12:expectRange(0);clickUI(48,184);return 0;
     }
     return interval;
 }
@@ -136,7 +136,7 @@ static void modListCases(void) {
     for(int i=0;i<24;i++) {char path[160];SDL_snprintf(path,sizeof(path),"mod-list-fixture/Mods/%02d.imperamod",i);remove(path);}
     remove("mod-list-fixture/Mods/mods.cfg");
     assert(!SDL_setenv_unsafe("U5D_MODS_DIR","mod-list-fixture/Mods",1));
-    const int counts[]={0,1,6,7,24};
+    const int counts[]={0,1,8,9,24};
     for(unsigned c=0;c<sizeof(counts)/sizeof(counts[0]);c++) {
         listCaseCount=counts[c];
         for(int i=0;i<listCaseCount;i++) {
@@ -177,18 +177,18 @@ static Uint32 modInput(void* data, SDL_TimerID timer, Uint32 interval) {
     if (!modStep++) { key(SDLK_TAB); return interval; }
     /* Same seven-pixel checkbox as the ordinary engine options. */
     assert(g_linearEgaBuffer0[45*320+21] == (expectedModEnabled ? 10 : 0));
-    /* Repainting must retain the cached screenshot overlay. */
+    /* List redraws must not leave the details screenshot overlay behind. */
     ENGINE_DrawSettings(0);
     ENGINE_DrawSettings(0);
-    byte titlePixels[8][272];
-    for(int y=0;y<8;y++) memcpy(titlePixels[y],g_linearEgaBuffer0+(44+y)*320+32,272);
-    ENGINE_UIRect(32,44,272,8,15);
-    ENGINE_UIText(32,44,"Zhelkas' Enhanced Sprites",0);
-    for(int y=0;y<8;y++) assert(!memcmp(titlePixels[y],g_linearEgaBuffer0+(44+y)*320+32,272));
+    byte titlePixels[8][184];
+    for(int y=0;y<8;y++) memcpy(titlePixels[y],g_linearEgaBuffer0+(44+y)*320+32,184);
+    ENGINE_UIRect(32,44,184,8,15);
+    ENGINE_UIText(32,44,"Zhelkas' Enhanced Sp...",0);
+    for(int y=0;y<8;y++) assert(!memcmp(titlePixels[y],g_linearEgaBuffer0+(44+y)*320+32,184));
     SDL_Surface *shot=GRAP_SDL_CaptureFrame(); assert(shot);
     Uint8 r,g,b,a;
     assert(SDL_ReadSurfacePixel(shot,shot->w*36/320,shot->h*128/200,&r,&g,&b,&a));
-    assert(r==200 && g==40 && b==60);
+    assert(r==0 && g==0 && b==0);
     /* The preview is a display-resolution overlay, not baked into the pixel UI. */
     assert(g_linearEgaBuffer0[128*320+36] == 0);
     /* Match the small save-slot thumbnail footprint (44 by 24 logical pixels). */
@@ -197,7 +197,7 @@ static Uint32 modInput(void* data, SDL_TimerID timer, Uint32 interval) {
     const char *screenshot=getenv("IMPERA_MODS_SCREENSHOT");
     if(screenshot) assert(SDL_SavePNG(shot,screenshot));
     SDL_DestroySurface(shot);
-    clickUI(200,48); /* Clicking the full-width mod name must toggle it. */
+    clickUI(200,48); /* Clicking the mod name must toggle it. */
     key(SDLK_ESCAPE);
     return 0;
 }
