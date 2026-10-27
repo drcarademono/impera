@@ -73,17 +73,24 @@ static Uint32 modInput(void* data, SDL_TimerID timer, Uint32 interval) {
     /* Repainting must retain the cached screenshot overlay. */
     ENGINE_DrawSettings(0);
     ENGINE_DrawSettings(0);
+    byte titlePixels[8][272];
+    for(int y=0;y<8;y++) memcpy(titlePixels[y],g_linearEgaBuffer0+(44+y)*320+32,272);
+    ENGINE_UIRect(32,44,272,8,15);
+    ENGINE_UIText(32,44,"Zhelkas' Enhanced Sprites",0);
+    for(int y=0;y<8;y++) assert(!memcmp(titlePixels[y],g_linearEgaBuffer0+(44+y)*320+32,272));
     SDL_Surface *shot=GRAP_SDL_CaptureFrame(); assert(shot);
     Uint8 r,g,b,a;
-    assert(SDL_ReadSurfacePixel(shot,shot->w*164/320,shot->h*64/200,&r,&g,&b,&a));
+    assert(SDL_ReadSurfacePixel(shot,shot->w*36/320,shot->h*80/200,&r,&g,&b,&a));
     assert(r==200 && g==40 && b==60);
     /* The preview is a display-resolution overlay, not baked into the pixel UI. */
-    assert(g_linearEgaBuffer0[64*320+164] == 0);
+    assert(g_linearEgaBuffer0[80*320+36] == 0);
     /* Match the small save-slot thumbnail footprint (44 by 24 logical pixels). */
-    assert(SDL_ReadSurfacePixel(shot,shot->w*196/320,shot->h*64/200,&r,&g,&b,&a));
+    assert(SDL_ReadSurfacePixel(shot,shot->w*68/320,shot->h*80/200,&r,&g,&b,&a));
     assert(r==0 && g==0 && b==0);
+    const char *screenshot=getenv("IMPERA_MODS_SCREENSHOT");
+    if(screenshot) assert(SDL_SavePNG(shot,screenshot));
     SDL_DestroySurface(shot);
-    clickUI(72,48); /* Clicking the mod name must toggle it. */
+    clickUI(200,48); /* Clicking the full-width mod name must toggle it. */
     key(SDLK_ESCAPE);
     return 0;
 }
@@ -92,6 +99,15 @@ static void packageNumber(FILE *f, unsigned value) {
     assert(fwrite(b,1,4,f)==4);
 }
 static void modOptions(void) {
+    byte font[256*8];
+    byte *previousFont=D_539c[0];
+    for(int c=0;c<256;c++) for(int y=0;y<8;y++) font[c*8+y]=(byte)c;
+    const char *fontPath=getenv("IMPERA_MODS_FONT");
+    if(fontPath) {
+        FILE *file=fopen(fontPath,"rb");assert(file);
+        assert(fread(font,1,1024,file)==1024);assert(!fclose(file));
+    }
+    D_539c[0]=font;
     assert(SDL_CreateDirectory("mod-manager-fixture"));
     assert(SDL_CreateDirectory("mod-manager-fixture/Mods"));
     SDL_Surface *image = SDL_CreateSurface(320,200,SDL_PIXELFORMAT_RGBA32); assert(image);
@@ -108,8 +124,9 @@ static void modOptions(void) {
     memcpy(metadata+20,text,strlen(text)); memcpy(metadata+20+strlen(text),author,strlen(author));
     memcpy(metadata+20+strlen(text)+strlen(author),png,pngSize); SDL_free(png);
     FILE *f=fopen("mod-manager-fixture/Mods/test.imperamod","wb"); assert(f);
-    assert(fwrite("IMOD0028",1,8,f)==8); packageNumber(f,6); packageNumber(f,1);
-    assert(fwrite("UI mod",1,6,f)==6); packageNumber(f,11); assert(fwrite("MODINFO.DAT",1,11,f)==11);
+    const char *title="Zhelkas\xe2\x80\x99 Enhanced Sprites";
+    assert(fwrite("IMOD0028",1,8,f)==8); packageNumber(f,(unsigned)strlen(title)); packageNumber(f,1);
+    assert(fwrite(title,1,strlen(title),f)==strlen(title)); packageNumber(f,11); assert(fwrite("MODINFO.DAT",1,11,f)==11);
     packageNumber(f,0); packageNumber(f,(unsigned)size); packageNumber(f,0);
     packageNumber(f,MOD_Crc32(metadata,size)); packageNumber(f,1);
     packageNumber(f,0); packageNumber(f,(unsigned)size); assert(fwrite(metadata,1,size,f)==size);
@@ -132,6 +149,7 @@ static void modOptions(void) {
     remove("mod-manager-fixture/image.png"); remove("mod-manager-fixture/Mods/test.imperamod");
     remove("mod-manager-fixture/Mods/mods.cfg");
     assert(SDL_RemovePath("mod-manager-fixture/Mods")); assert(SDL_RemovePath("mod-manager-fixture"));
+    D_539c[0]=previousFont;
 }
 static void literalCode(FILE *f, unsigned code, unsigned *bits, int *count) {
     *bits |= code << *count; *count += 9;

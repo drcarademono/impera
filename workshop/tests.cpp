@@ -128,9 +128,15 @@ int main(int argc, char **argv) {
             auto workspace = window.findChild<QComboBox *>("contentWorkspace");
             workspace->setCurrentText("Mod Overview");
             auto overview = window.findChild<QWidget *>("modOverview");
+            auto modName = overview->findChild<QLineEdit *>("modName");
+            check(modName && modName->text()==window.projectForTests().title,"Mod name field missing");
+            for(auto action:window.findChildren<QAction *>()) check(action->text()!="Name Mod","Obsolete name menu remains");
             auto description = overview->findChild<QPlainTextEdit *>("modDescription");
             check(description, "Description editor missing");
             window.show(); window.activateWindow(); app.processEvents();
+            modName->setFocus();modName->setText("Zhelkas’ Enhanced Sprites");
+            waitFor([&] {return window.projectForTests().title==modName->text();});
+            check(modName->hasFocus() && window.findChild<QLineEdit *>("modName")==modName,"Naming stole focus");
             description->setFocus(); app.processEvents();
             QPointer<QPlainTextEdit> typingEditor(description);
             description->setPlainText("Explore a new world.\nA second paragraph.");
@@ -169,6 +175,7 @@ int main(int argc, char **argv) {
             auto imported = fixture(dir.path()); imported.importPackage(package);
             check(imported.data("MODINFO.DAT") == metadata, "Metadata package transfer");
             project.save(dir.filePath("mod.imperaproject")); Project restored; restored.load(project.projectPath);
+            check(restored.title=="Zhelkas’ Enhanced Sprites","Mod name failed project persistence");
             check(restored.data("MODINFO.DAT") == metadata, "Metadata project round trip");
             overview->findChild<QPushButton *>("removeModScreenshot")->click();
             data = reinterpret_cast<const unsigned char *>(project.data("MODINFO.DAT").constData());
@@ -2126,7 +2133,11 @@ int main(int argc, char **argv) {
                       editCommands[3] == "Forward",
                   "Edit commands lost their menu access");
             auto projectMenu = w.menuBar()->actions().first()->menu();
-            check(projectMenu && projectMenu->actions().size() >= 6, "Project commands lost their menu access");
+            check(projectMenu, "Project menu missing");
+            QStringList projectCommands;
+            for(auto action:projectMenu->actions()) projectCommands.append(action->text());
+            for(const auto &required:QStringList{"New Mod","Open Project","Save Project","Export Package","Import Package"})
+                check(projectCommands.contains(required),"Project command lost its menu access");
             bool shortcut = false;
             for (auto action : projectMenu->actions()) if (action->text() == "Open Project") shortcut = action->shortcut() == QKeySequence::Open;
             check(shortcut, "Moved project command lost its shortcut");

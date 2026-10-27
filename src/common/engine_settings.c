@@ -162,7 +162,16 @@ static void modText(const char *text, char *out, size_t capacity) {
             while (extra-- && *text && ((unsigned char)*text & 192) == 128)
                 c = (c << 6) | ((unsigned char)*text++ & 63);
         }
-        out[n++] = c <= 255 ? (char)c : '?';
+        /* The DOS font has straight punctuation, not Unicode typography. */
+        if(c==0x2018 || c==0x2019 || c==0x02bc) c='\'';
+        if(c==0x201c || c==0x201d) c='"';
+        if(c==0x2013 || c==0x2014 || c==0x2212) c='-';
+        if(c==0x00a0) c=' ';
+        if(c==0x2026) {
+            for(int dot=0;dot<3 && n+1<capacity;dot++) out[n++]='.';
+            continue;
+        }
+        out[n++] = c < 128 ? (char)c : '?';
     }
     out[n] = 0;
 }
@@ -188,6 +197,8 @@ static int descriptionLines(const char *text, int columns, int first, int visibl
     }
     return row;
 }
+static int modListRows(void) { return SDL_min(6,(int)MOD_AvailableCount()); }
+static int modDetailsTop(void) { return 44+modListRows()*10+8; }
 static void modImage(const ModInfo *info) {
     if (s_modImageIndex != s_modSelected || s_modImageRevision != MOD_Revision() ||
         s_modImageDetails != s_modDetails) {
@@ -196,10 +207,12 @@ static void modImage(const ModInfo *info) {
         s_modImageRevision = MOD_Revision();
         s_modImageDetails = s_modDetails;
         if (info && info->imageSize)
-            GRAP_SDL_UIThumbnailPNG(0, info->image, info->imageSize, s_modDetails ? 16 : 144,
-                                   s_modDetails ? 60 : 44, 44, 24);
+            GRAP_SDL_UIThumbnailPNG(0, info->image, info->imageSize, 16, s_modDetails ? 60 : modDetailsTop(), 44, 24);
     }
-    if (!info || !info->imageSize) ENGINE_UIText(s_modDetails ? 16 : 144, s_modDetails ? 68 : 52, "No image", 8);
+    if (!info || !info->imageSize) {
+        int y=s_modDetails?60:modDetailsTop();
+        ENGINE_UIText(16,y+4,"No",8); ENGINE_UIText(16,y+12,"image",8);
+    }
 }
 static void drawMods(void) {
     unsigned count = MOD_AvailableCount();
@@ -220,24 +233,28 @@ static void drawMods(void) {
         ENGINE_UIText(16, 180, "Esc: Back  Space: On/Off", 7);
     } else {
         if (s_modSelected < s_modTop) s_modTop = s_modSelected;
-        if (s_modSelected >= s_modTop + 12) s_modTop = s_modSelected - 11;
-        for (int row = 0; row < 12 && row + s_modTop < (int)count; ++row) {
+        int rows=modListRows();
+        if (s_modSelected >= s_modTop + rows) s_modTop = s_modSelected - rows + 1;
+        for (int row = 0; row < rows && row + s_modTop < (int)count; ++row) {
             const ModInfo *item = MOD_Available(row + s_modTop); int y = 44 + row * 10;
             bool selected = row + s_modTop == s_modSelected;
-            if (selected) ENGINE_UIRect(16, y - 1, 120, 10, 15);
+            if (selected) ENGINE_UIRect(16, y - 1, 288, 10, 15);
             checkbox(20, y, item->enabled);
             char title[257]; modText(item->title, title, sizeof(title));
-            if (strlen(title) > 12) { title[11] = '~'; title[12] = 0; }
+            if (strlen(title) > 34) { memcpy(title+31,"...",3); title[34] = 0; }
             ENGINE_UIText(32, y, title, selected ? 0 : 15);
         }
+        int detailsY=modDetailsTop();
+        ENGINE_UIRect(16,detailsY-4,288,1,8);
         modImage(info);
         if (*info->author) {
             char author[300]; SDL_snprintf(author, sizeof(author), "By %s", info->author);
-            char display[300]; modText(author, display, sizeof(display)); display[20] = 0;
-            ENGINE_UIText(144, 76, display, 7);
+            char display[300]; modText(author, display, sizeof(display)); display[29] = 0;
+            ENGINE_UIText(72, detailsY, display, 7);
         }
-        descriptionLines(*info->description ? info->description : "No description provided.", 20, 0,
-                         *info->author ? 9 : 10, 144, *info->author ? 88 : 76);
+        int descriptionY=detailsY+(*info->author?12:0);
+        descriptionLines(*info->description ? info->description : "No description provided.", 29, 0,
+                         (164-descriptionY)/8, 72, descriptionY);
         ENGINE_UIText(16, 170, "Space: On/Off  Enter: Details", 7);
         ENGINE_UIText(16, 180, "Return", 15);
     }
@@ -445,8 +462,8 @@ void ENGINE_ShowOptions(bool gameplay)
                     case SDLK_ESCAPE: if(s_modDetails) s_modDetails = false; else done = true; break;
                     case SDLK_UP: if(s_modDetails) s_modScroll = SDL_max(0, s_modScroll - 1); else s_modSelected = SDL_max(0, s_modSelected - 1); break;
                     case SDLK_DOWN: if(s_modDetails) ++s_modScroll; else s_modSelected = SDL_min(SDL_max(0,count-1), s_modSelected + 1); break;
-                    case SDLK_PAGEUP: if(s_modDetails) s_modScroll = SDL_max(0, s_modScroll - 12); else s_modSelected = SDL_max(0, s_modSelected - 12); break;
-                    case SDLK_PAGEDOWN: if(s_modDetails) s_modScroll += 12; else s_modSelected = SDL_min(SDL_max(0,count-1), s_modSelected + 12); break;
+                    case SDLK_PAGEUP: if(s_modDetails) s_modScroll = SDL_max(0, s_modScroll - 12); else s_modSelected = SDL_max(0, s_modSelected - 6); break;
+                    case SDLK_PAGEDOWN: if(s_modDetails) s_modScroll += 12; else s_modSelected = SDL_min(SDL_max(0,count-1), s_modSelected + 6); break;
                     case SDLK_RETURN: if(count) { s_modDetails = !s_modDetails; s_modScroll = 0; } break;
                     case SDLK_SPACE: if(!event.key.repeat) toggleMod(); break;
                     }
@@ -462,10 +479,10 @@ void ENGINE_ShowOptions(bool gameplay)
                         if(s_modDetails) {
                             if(y>=162 && y<173 && x>=16 && x<136) toggleMod();
                             else if(y>=178) s_modDetails = false;
-                        } else if(y>=44 && y<164 && x>=16 && x<136) {
+                        } else if(y>=44 && y<44+modListRows()*10 && x>=16 && x<304) {
                             int item = s_modTop + ((int)y - 44) / 10;
                             if(item<count) { s_modSelected=item; s_modScroll=0; if(event.button.clicks<=1) toggleMod(); }
-                        } else if(x>=144 && y>=44 && y<174 && count) { s_modDetails=true; s_modScroll=0; }
+                        } else if(x>=16 && x<304 && y>=modDetailsTop() && y<164 && count) { s_modDetails=true; s_modScroll=0; }
                         else if(y>=178 && x<136) done=true;
                     }
                 }

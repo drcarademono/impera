@@ -44,7 +44,7 @@ workshop-build/ImperaWorkshop --project my-mod.imperaproject
 
 1. **New Mod**: choose the original DOS game directory. Workshop does not load
    installed mods into the base game; you can explicitly import a package.
-2. **Name Mod**: give the project a name used in Impera's diagnostics.
+2. **Mod Overview → Mod details**: set the mod name, author, description, and optional screenshot shown in Impera.
 3. Workshop opens Britannia centered on Lord British’s Castle. Choose locations or other content from the sidebar and edit it.
 4. **Save Project** creates `.imperaproject` JSON containing the original folder
    reference/checksums and changed resources. Keep this project for future editing;

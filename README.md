@@ -707,9 +707,12 @@ is off. Older saves start with no recorded NPC names. Actors without an ordinary
 conversation retain their existing Look descriptions. Looking never executes
 dialogue actions or introduces the characters.
 
-Mod Overview → Mod details includes an Author field. In Engine Options, clicking
-a mod’s checkbox or name toggles it; click the screenshot or press Enter for
-details. Screenshots use the same small 44 × 24 thumbnail size and smooth,
+Mod Overview → Mod details contains the mod name, author, description, and screenshot.
+Workshop has its own I-and-W application icon across desktop platforms.
+In Engine Options, full-width mod names appear above the selected mod’s details. Clicking
+a mod’s checkbox or name toggles it; click the details area or press Enter for
+details. Typographic quotes and dashes use their DOS-font equivalents.
+Screenshots use the same small 44 × 24 thumbnail size and smooth,
 display-resolution rendering as save previews. The retired DOS Enhanced option is no longer listed; old saved choices
 fall back to DOS. Graphics → Tilesets has Import/Export tileset PNG controls at
 the top for complete sheets, including all 512 tiles in a 512 × 256 DOS PNG.

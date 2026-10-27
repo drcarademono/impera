@@ -63,9 +63,9 @@ def pe_resources(data):
     return result
 
 
-def verify_windows(executable):
+def verify_windows(executable, icon="impera"):
     resources = pe_resources(executable.read_bytes())
-    expected = ico_images((ROOT / 'packaging/impera.ico').read_bytes())
+    expected = ico_images((ROOT / f'packaging/{icon}.ico').read_bytes())
     groups = [value for key, value in resources.items() if key[0] == 14]
     assert groups, 'Missing RT_GROUP_ICON in Impera.exe'
     for group in groups:
@@ -84,33 +84,34 @@ def verify_windows(executable):
     raise AssertionError('Embedded Windows icon does not match Impera ICO')
 
 
-def verify_mac(archive, bundle='Impera.app'):
+def verify_mac(archive, bundle='Impera.app', icon='impera'):
     with tarfile.open(archive) as stream:
         names = stream.getnames()
         plist = next(name for name in names if name.endswith(f'/{bundle}/Contents/Info.plist'))
         metadata = plistlib.loads(stream.extractfile(plist).read())
-        assert metadata['CFBundleIconFile'] == 'impera.icns', 'Missing bundle icon metadata'
-        icon = plist.removesuffix('Info.plist')+'Resources/impera.icns'
-        assert stream.extractfile(icon).read() == (ROOT / 'packaging/impera.icns').read_bytes(), 'Incorrect macOS icon'
+        assert metadata['CFBundleIconFile'] == icon+'.icns', 'Missing bundle icon metadata'
+        icon_path = plist.removesuffix('Info.plist')+'Resources/'+icon+'.icns'
+        assert stream.extractfile(icon_path).read() == (ROOT / f'packaging/{icon}.icns').read_bytes(), 'Incorrect macOS icon'
 
 
-def verify_appdir(appdir, desktop='impera.desktop'):
-    assert (appdir / 'impera.svg').read_bytes() == (ROOT / 'packaging/impera.svg').read_bytes()
-    assert (appdir / '.DirIcon').resolve() == (appdir / 'impera.svg').resolve()
-    assert 'Icon=impera\n' in (appdir / desktop).read_text()
+def verify_appdir(appdir, desktop='impera.desktop', icon='impera', extension='svg'):
+    assert (appdir / f'{icon}.{extension}').read_bytes() == (ROOT / f'packaging/{icon}.{extension}').read_bytes()
+    assert (appdir / '.DirIcon').resolve() == (appdir / f'{icon}.{extension}').resolve()
+    assert f'Icon={icon}\n' in (appdir / desktop).read_text()
 
 
 def verify(platform, directory, workshop=False):
+    icon='impera-workshop' if workshop else 'impera'
     if platform.startswith('windows-'):
-        verify_windows(next(directory.glob('*/bin/ImperaWorkshop.exe' if workshop else '*/Impera.exe')))
+        verify_windows(next(directory.glob('*/bin/ImperaWorkshop.exe' if workshop else '*/Impera.exe')), icon)
     elif platform.startswith('macos-'):
-        verify_mac(next(directory.glob(f'*-{platform}.tar.gz')), 'ImperaWorkshop.app' if workshop else 'Impera.app')
+        verify_mac(next(directory.glob(f'*-{platform}.tar.gz')), 'ImperaWorkshop.app' if workshop else 'Impera.app', icon)
     else:
         appimage = next(directory.glob('*.AppImage')).resolve()
         with tempfile.TemporaryDirectory() as temporary:
             subprocess.run([str(appimage), '--appimage-extract'], cwd=temporary,
                            check=True, stdout=subprocess.DEVNULL)
-            verify_appdir(Path(temporary) / 'squashfs-root', 'impera-workshop.desktop' if workshop else 'impera.desktop')
+            verify_appdir(Path(temporary) / 'squashfs-root', 'impera-workshop.desktop' if workshop else 'impera.desktop', icon, 'png' if workshop else 'svg')
     print(f'{platform}: packaged Impera icon verified')
 
 

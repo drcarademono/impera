@@ -135,14 +135,14 @@ export LD_LIBRARY_PATH="$app_dir/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 exec "$app_dir/bin/ImperaWorkshop" "$@"
 ''')
         launcher.chmod(0o755)
-        shutil.copy2(ROOT / 'packaging/impera.svg', stage / 'impera.svg')
-        (stage / '.DirIcon').symlink_to('impera.svg')
+        shutil.copy2(ROOT / 'packaging/impera-workshop.png', stage / 'impera-workshop.png')
+        (stage / '.DirIcon').symlink_to('impera-workshop.png')
         (stage / 'impera-workshop.desktop').write_text('''[Desktop Entry]
 Type=Application
 Name=Impera Workshop
 Comment=Create Ultima 5 mods for Impera
 Exec=ImperaWorkshop
-Icon=impera
+Icon=impera-workshop
 Categories=Game;Development;
 Terminal=false
 ''')
