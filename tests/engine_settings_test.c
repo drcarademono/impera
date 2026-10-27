@@ -100,7 +100,7 @@ static Uint32 listCaseInput(void *data,SDL_TimerID timer,Uint32 interval) {
     }
     case 3:
         assert(!MOD_Available(listCaseCount-1)->enabled);
-        expectUIText(232,45+(listCaseCount-1-tail)*14,"Details",15,0);clickUI(270,48+(listCaseCount-1-tail)*14);break;
+        expectUIText(280,45+(listCaseCount-1-tail)*14,">",15,0);clickUI(284,48+(listCaseCount-1-tail)*14);break;
     case 4: {
         char title[40];SDL_snprintf(title,sizeof(title),"Test mod %02d",listCaseCount-1);
         expectUIText(72,60,title,15,0);
@@ -180,11 +180,11 @@ static Uint32 modInput(void* data, SDL_TimerID timer, Uint32 interval) {
     /* List redraws must not leave the details screenshot overlay behind. */
     ENGINE_DrawSettings(0);
     ENGINE_DrawSettings(0);
-    byte titlePixels[8][184];
-    for(int y=0;y<8;y++) memcpy(titlePixels[y],g_linearEgaBuffer0+(44+y)*320+32,184);
-    ENGINE_UIRect(32,44,184,8,15);
-    ENGINE_UIText(32,44,"Zhelkas' Enhanced Sp...",0);
-    for(int y=0;y<8;y++) assert(!memcmp(titlePixels[y],g_linearEgaBuffer0+(44+y)*320+32,184));
+    byte titlePixels[8][232];
+    for(int y=0;y<8;y++) memcpy(titlePixels[y],g_linearEgaBuffer0+(44+y)*320+32,232);
+    ENGINE_UIRect(32,44,232,8,15);
+    ENGINE_UIText(32,44,"Zhelkas' Enhanced Sprites",0);
+    for(int y=0;y<8;y++) assert(!memcmp(titlePixels[y],g_linearEgaBuffer0+(44+y)*320+32,232));
     SDL_Surface *shot=GRAP_SDL_CaptureFrame(); assert(shot);
     Uint8 r,g,b,a;
     assert(SDL_ReadSurfacePixel(shot,shot->w*36/320,shot->h*128/200,&r,&g,&b,&a));

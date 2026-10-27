@@ -279,13 +279,13 @@ static void drawMods(void) {
         for (int row = 0; row < rows && row + s_modTop < (int)count; ++row) {
             const ModInfo *item = MOD_Available(row + s_modTop); int y = 44 + row * 14;
             bool selected = row + s_modTop == s_modSelected;
-            if (selected) ENGINE_UIRect(16, y - 1, 208, 12, 15);
+            if (selected) ENGINE_UIRect(16, y - 1, 248, 12, 15);
             checkbox(20, y, item->enabled);
             char title[257]; modText(item->title, title, sizeof(title));
-            int chars=23;
+            int chars=29;
             if (strlen(title) > (size_t)chars) { memcpy(title+chars-3,"...",3); title[chars] = 0; }
             ENGINE_UIText(32, y, title, selected ? 0 : 15);
-            modButton(224,y-1,72,"Details");
+            modButton(272,y-1,24,">");
         }
         if(count>modListRows()) {
             ENGINE_UIRect(300,44,4,112,8);
@@ -532,7 +532,7 @@ void ENGINE_ShowOptions(bool gameplay)
                             int item = s_modTop + ((int)y - 43) / 14;
                             if(item<count && (int)y<44+(item-s_modTop)*14+11) {
                                 s_modSelected=item; s_modScroll=0;
-                                if(x>=224) {modGrab=-1;s_modDetails=true;}
+                                if(x>=272) {modGrab=-1;s_modDetails=true;}
                                 else if(event.button.clicks<=1) toggleMod();
                             }
                         }
