@@ -161,6 +161,11 @@ static void titleFixture(bool small) {
     if(count) assert(fputc(bits & 255,f)!=EOF);
     assert(!fclose(f)); free(data);
 }
+static bool refreshingTitle;
+static unsigned titleRefreshYields;
+static void countTitleRefreshYields(void) {
+    if (refreshingTitle) ++titleRefreshYields;
+}
 static void refreshTitle(void) {
     TextWindow windows[4]; memcpy(windows,D_535e_textWindows,sizeof(windows));
     TextWindow *oldWindow=D_539a_currentTextWindow;
@@ -170,10 +175,14 @@ static void refreshTitle(void) {
     ULTIMA_1c9e_SelectCharset(0);
     D_13b0_brightWhiteColor=15;
     int oldImmediate = EVT_SetImmediateExit(1);
-    titleFixture(false); INTRO_RefreshTitle();
+    EVT_RegisterCallback(countTitleRefreshYields);
+    ULTIMA_1c22_SetTextWindowSize(0,0,0,39,24);
+    titleFixture(false); refreshingTitle=true; INTRO_RefreshTitle(); refreshingTitle=false;
+    assert(titleRefreshYields==0); /* A menu refresh must not enter the timed animation loop. */
     assert(g_linearEgaBuffer0[40*320+100]==2);
     byte *first=D_bb1a;
-    titleFixture(true); INTRO_RefreshTitle();
+    titleFixture(true); refreshingTitle=true; INTRO_RefreshTitle(); refreshingTitle=false;
+    assert(titleRefreshYields==0);
     assert(g_linearEgaBuffer0[40*320+100]==0); /* Old full-width logo removed. */
     assert(g_linearEgaBuffer0[0]==0 && g_linearEgaBuffer0[1]==2); /* Masked pixels clear to black. */
     for(int frame=0;frame<4;++frame) {
