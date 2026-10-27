@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate native icon derivatives of packaging/impera.svg (CairoSVG + Pillow).
+"""Generate native icons from the Impera SVG and Workshop SVG sources.
 
 --check uses only the Python standard library and checks source/derivative hashes.
 """
@@ -13,7 +13,8 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / 'packaging/impera.svg'
 MANIFEST = ROOT / 'packaging/icon-manifest.json'
 OUTPUTS = ['packaging/impera.png', 'packaging/impera.ico', 'packaging/impera.icns',
-           'src/common/icon_pixels.h']
+           'src/common/icon_pixels.h', 'packaging/impera-workshop.png',
+           'packaging/impera-workshop.ico', 'packaging/impera-workshop.icns']
 
 
 def hashes():
@@ -21,7 +22,18 @@ def hashes():
     return {name: hashlib.sha256(
                 (ROOT / name).read_text(encoding='utf-8').encode('utf-8')
                 if name.endswith(('.svg', '.h')) else (ROOT / name).read_bytes()).hexdigest()
-            for name in ['packaging/impera.svg', *OUTPUTS]}
+            for name in ['packaging/impera.svg', 'packaging/impera-workshop.svg', *OUTPUTS]}
+
+
+def generate_workshop():
+    import cairosvg
+    from PIL import Image
+    def render(size):
+        return Image.open(io.BytesIO(cairosvg.svg2png(url=str(ROOT / 'packaging/impera-workshop.svg'),
+                          output_width=size, output_height=size))).convert('RGBA')
+    render(256).save(ROOT / 'packaging/impera-workshop.png')
+    render(256).save(ROOT / 'packaging/impera-workshop.ico', sizes=[(n,n) for n in [16,32,48,64,128,256]])
+    render(1024).save(ROOT / 'packaging/impera-workshop.icns')
 
 
 def generate():
@@ -42,6 +54,7 @@ def generate():
         '/* Generated from packaging/impera.svg by scripts/generate-icons.py. */\n'
         'static const unsigned char impera_icon_rgba[32 * 32 * 4] = {\n' +
         '\n'.join(lines) + '\n};\n')
+    generate_workshop()
     MANIFEST.write_text(json.dumps(hashes(), indent=2) + '\n')
 
 

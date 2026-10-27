@@ -181,13 +181,12 @@ WorkshopWindow::WorkshopWindow() {
     connect(messages, &QStatusBar::messageChanged, messages,
             [messages](const QString &message) { messages->setVisible(!message.isEmpty()); });
     resize(1320, 860);
-    setWindowIcon(QIcon(":/impera.png"));
+    setWindowIcon(QIcon(":/impera-workshop.png"));
     const QMap<QString, QString> help{
         {"New Mod",
          "Start a mod using the remembered Ultima 5 game folder, or locate it if unavailable."},
         {"Open Project", "Open an editable Impera Workshop project."},
         {"Save Project", "Save your editable project; original game files are left untouched."},
-        {"Name Mod", "Set the name included in the exported mod package."},
         {"Export Package", "Validate and export a mod package for Impera’s Mods folder."},
         {"Import Package", "Import a mod package into an editable Workshop project."},
         {"Change Game Folder", "Locate a different set of original Ultima 5 game files."},
@@ -285,17 +284,6 @@ WorkshopWindow::WorkshopWindow() {
         if (flushDraft && !flushDraft())
             return;
         history.redo();
-    });
-    action("Name Mod", {}, [this] {
-        if (project.resources.isEmpty())
-            return;
-        bool ok;
-        QString title = QInputDialog::getText(
-            this, "Mod name", "Name shown in Impera:", QLineEdit::Normal, project.title, &ok);
-        if (ok) {
-            project.title = title;
-            updateSummary();
-        }
     });
     action("Export Package", QKeySequence(Qt::CTRL | Qt::Key_E), [this] {
         if (flushDraft && !flushDraft())
@@ -466,14 +454,14 @@ void WorkshopWindow::updateSummary() {
     setWindowModified(!history.isClean() || project.title != savedTitle);
     setWindowTitle("Impera Workshop — " + project.title + "[*]");
     const auto focus = QApplication::focusWidget();
-    const bool editingDetails = focus && (focus->objectName() == "modDescription" || focus->objectName() == "modAuthor");
+    const bool editingDetails = focus && (focus->objectName() == "modDescription" || focus->objectName() == "modAuthor" || focus->objectName() == "modName");
     if (current == "@overview" && !editingDetails && !rebuildPending) {
         rebuildPending = true;
         QTimer::singleShot(0, this, [this] {
             rebuildPending = false;
             auto focus = QApplication::focusWidget();
             if (current == "@overview" && (!focus ||
-                (focus->objectName() != "modDescription" && focus->objectName() != "modAuthor"))) rebuildEditor();
+                (focus->objectName() != "modDescription" && focus->objectName() != "modAuthor" && focus->objectName() != "modName"))) rebuildEditor();
         });
     }
 }
@@ -1020,6 +1008,11 @@ QWidget *WorkshopWindow::overviewEditor() {
     details->setObjectName("overviewModDetails");
     auto detailsLayout = new QHBoxLayout(details);
     auto textLayout = new QVBoxLayout;
+    auto name = new QLineEdit(project.title);
+    name->setObjectName("modName"); name->setMaxLength(256);
+    name->setPlaceholderText("Name your mod");
+    name->setToolTip("Name shown in Impera’s Mods tab. Up to 256 UTF-8 bytes.");
+    textLayout->addWidget(new QLabel("Name")); textLayout->addWidget(name);
     auto author = new QLineEdit;
     author->setObjectName("modAuthor"); author->setMaxLength(MODINFO_MAX_AUTHOR);
     author->setPlaceholderText("Mod author");
@@ -1069,9 +1062,14 @@ QWidget *WorkshopWindow::overviewEditor() {
     detailsLayout->addLayout(imageLayout);
     auto timer = new QTimer(details);
     timer->setSingleShot(true); timer->setInterval(350);
-    auto applyDetails = [this, author, description, screenshot, timer] {
+    auto applyDetails = [this, name, title, author, description, screenshot, timer] {
         timer->stop();
         return guard([&] {
+            require(!name->text().trimmed().isEmpty() && name->text().toUtf8().size()<=256 && !name->text().contains(QChar(0)),
+                    "Mod name must contain 1–256 UTF-8 bytes");
+            project.title=name->text();
+            title->setText("Mod Overview — "+project.title);
+            updateSummary();
             auto text = description->toPlainText().toUtf8();
             require(text.size() <= MODINFO_MAX_TEXT, "Description exceeds 4096 UTF-8 bytes");
             auto by = author->text().toUtf8();
@@ -1088,13 +1086,16 @@ QWidget *WorkshopWindow::overviewEditor() {
         });
     };
     flushDraft = applyDetails;
-    connect(timer, &QTimer::timeout, details, applyDetails);
+    connect(timer, &QTimer::timeout, details, [name, applyDetails] {
+        if(!name->text().trimmed().isEmpty() && name->text().toUtf8().size()<=256) applyDetails();
+    });
     auto updateBudget = [description, remaining] {
         int length = description->toPlainText().toUtf8().size();
         remaining->setText(QString("%1 / 4096 bytes").arg(length));
         remaining->setStyleSheet(length > MODINFO_MAX_TEXT ? "color:#ff5555" : "");
     };
     updateBudget();
+    connect(name, &QLineEdit::textChanged, details, [timer] { timer->start(); });
     connect(author, &QLineEdit::textChanged, details, [timer] { timer->start(); });
     connect(description, &QPlainTextEdit::textChanged, details, [timer, description, updateBudget] {
         updateBudget();

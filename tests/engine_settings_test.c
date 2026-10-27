@@ -57,6 +57,113 @@ static Uint32 mouseBurst(void *data, SDL_TimerID timer, Uint32 interval) {
     key(SDLK_ESCAPE);
     return 0;
 }
+static void packageNumber(FILE *f,unsigned value);
+static void hoverUI(float x,float y) {
+    int n,w,h;SDL_Window **windows=SDL_GetWindows(&n);assert(n==1);
+    assert(SDL_GetWindowSize(windows[0],&w,&h));SDL_free(windows);
+    float ux,uy,vx,vy;
+    assert(GRAP_SDL_MouseUIPoint(w/2.0f,h/2.0f,&ux,&uy));
+    assert(GRAP_SDL_MouseUIPoint(w/2.0f+1,h/2.0f+1,&vx,&vy));
+    SDL_Event e={0};e.type=SDL_EVENT_MOUSE_MOTION;
+    e.motion.x=w/2.0f+(x-ux)/(vx-ux);e.motion.y=h/2.0f+(y-uy)/(vy-uy);
+    assert(SDL_PushEvent(&e));
+}
+static int listCaseCount,listCaseStep;
+static void expectUIText(int x,int y,const char *text,byte color,byte background) {
+    byte original[8][288];int width=(int)strlen(text)*8;assert(width<=288);
+    for(int row=0;row<8;row++) memcpy(original[row],g_linearEgaBuffer0+(y+row)*320+x,width);
+    ENGINE_UIRect(x,y,width,8,background);ENGINE_UIText(x,y,text,color);
+    for(int row=0;row<8;row++) {
+        if(memcmp(original[row],g_linearEgaBuffer0+(y+row)*320+x,width))
+            fprintf(stderr,"Missing UI text '%s' at %d,%d: count=%d step=%d row=%d\n",text,x,y,listCaseCount,listCaseStep,row);
+        assert(!memcmp(original[row],g_linearEgaBuffer0+(y+row)*320+x,width));
+    }
+}
+static void expectRange(int top) {
+    char range[40];SDL_snprintf(range,sizeof(range),"%d-%d of %d",top+1,SDL_min(listCaseCount,top+8),listCaseCount);
+    expectUIText(16,158,range,7,0);
+}
+static Uint32 listCaseInput(void *data,SDL_TimerID timer,Uint32 interval) {
+    (void)data;(void)timer;
+    int tail=SDL_max(0,listCaseCount-8);
+    switch(listCaseStep++) {
+    case 0:key(SDLK_TAB);key(SDLK_HOME);break;
+    case 1:
+        if(!listCaseCount) {expectUIText(16,64,"No mods in the Mods folder",7,0);expectUIText(16,180,"Return",15,0);key(SDLK_ESCAPE);return 0;}
+        expectRange(0);
+        key(SDLK_END);break;
+    case 2: {
+        expectRange(tail);
+        const char *path=getenv("IMPERA_MODS_LIST_SCREENSHOT");
+        if(path && listCaseCount==24) {SDL_Surface *shot=GRAP_SDL_CaptureFrame();assert(shot);assert(SDL_SavePNG(shot,path));SDL_DestroySurface(shot);}
+        key(SDLK_SPACE);break;
+    }
+    case 3:
+        assert(!MOD_Available(listCaseCount-1)->enabled);
+        expectUIText(280,45+(listCaseCount-1-tail)*14,">",15,0);clickUI(284,48+(listCaseCount-1-tail)*14);break;
+    case 4: {
+        char title[40];SDL_snprintf(title,sizeof(title),"Test mod %02d",listCaseCount-1);
+        expectUIText(72,60,title,15,0);
+        assert(g_linearEgaBuffer0[165*320+21]==0);
+        expectUIText(24,180,"Back",15,0);clickUI(302,162);break;
+    }
+    case 5:expectUIText(72,156,"End of description.",15,0);clickUI(48,184);break;
+    case 6:expectRange(tail);hoverUI(200,48);break;
+    case 7:
+        assert(MOD_Available(tail)->enabled==(tail!=listCaseCount-1));
+        assert(g_linearEgaBuffer0[44*320+220]==15); /* Hover selects without toggling. */
+        if(listCaseCount>8) clickUI(302,44);else key(SDLK_HOME);
+        break;
+    case 8:expectRange(0);if(listCaseCount>8) hoverUI(302,154);else key(SDLK_END);break;
+    case 9: {
+        expectRange(tail);
+        SDL_Event up={0};up.type=SDL_EVENT_MOUSE_BUTTON_UP;up.button.button=SDL_BUTTON_LEFT;assert(SDL_PushEvent(&up));
+        key(SDLK_HOME);key(SDLK_PAGEDOWN);break;
+    }
+    case 10:expectRange(SDL_min(8,SDL_max(0,listCaseCount-8)));key(SDLK_PAGEUP);break;
+    case 11: {
+        expectRange(0);
+        for(int i=0;i<7;i++) {SDL_Event wheel={0};wheel.type=SDL_EVENT_MOUSE_WHEEL;wheel.wheel.y=-1;assert(SDL_PushEvent(&wheel));}
+        break;
+    }
+    case 12:expectRange(0);clickUI(48,184);return 0;
+    }
+    return interval;
+}
+static void modListCases(void) {
+    assert(SDL_CreateDirectory("mod-list-fixture"));assert(SDL_CreateDirectory("mod-list-fixture/Mods"));
+    /* A failed assertion may leave the previous fixture behind. */
+    for(int i=0;i<24;i++) {char path[160];SDL_snprintf(path,sizeof(path),"mod-list-fixture/Mods/%02d.imperamod",i);remove(path);}
+    remove("mod-list-fixture/Mods/mods.cfg");
+    assert(!SDL_setenv_unsafe("U5D_MODS_DIR","mod-list-fixture/Mods",1));
+    const int counts[]={0,1,8,9,24};
+    for(unsigned c=0;c<sizeof(counts)/sizeof(counts[0]);c++) {
+        listCaseCount=counts[c];
+        for(int i=0;i<listCaseCount;i++) {
+            char path[160],title[200],description[1600];description[0]=0;
+            SDL_snprintf(path,sizeof(path),"mod-list-fixture/Mods/%02d.imperamod",i);
+            SDL_snprintf(title,sizeof(title),"Test mod %02d Supercalifragilisticexpialidocious with a very long complete title",i);
+            for(int line=0;line<40;line++) strcat(description,"Description line.\n");
+            strcat(description,"End of description.");
+            size_t length=strlen(description),size=16+length;
+            byte metadata[1616]={0};memcpy(metadata,"IMETA001",8);
+            for(int n=0;n<4;n++) metadata[8+n]=(byte)(length>>(8*n));
+            memcpy(metadata+16,description,length);
+            FILE *f=fopen(path,"wb");assert(f);
+            assert(fwrite("IMOD0027",1,8,f)==8);packageNumber(f,(unsigned)strlen(title));packageNumber(f,1);
+            assert(fwrite(title,1,strlen(title),f)==strlen(title));packageNumber(f,11);assert(fwrite("MODINFO.DAT",1,11,f)==11);
+            packageNumber(f,0);packageNumber(f,(unsigned)size);packageNumber(f,0);packageNumber(f,MOD_Crc32(metadata,size));
+            packageNumber(f,1);packageNumber(f,0);packageNumber(f,(unsigned)size);assert(fwrite(metadata,1,size,f)==size);assert(!fclose(f));
+        }
+        FILE_SetDataDirectory(".");assert(MOD_AvailableCount()==(unsigned)listCaseCount);
+        listCaseStep=0;assert(SDL_AddTimer(80,listCaseInput,NULL));ENGINE_ShowOptions(true);
+        FILE_SetDataDirectory(NULL);
+        for(int i=0;i<listCaseCount;i++) {char path[160];SDL_snprintf(path,sizeof(path),"mod-list-fixture/Mods/%02d.imperamod",i);remove(path);}
+        remove("mod-list-fixture/Mods/mods.cfg");
+    }
+    assert(!SDL_unsetenv_unsafe("U5D_MODS_DIR"));
+    assert(SDL_RemovePath("mod-list-fixture/Mods"));assert(SDL_RemovePath("mod-list-fixture"));
+}
 static Uint32 selectAmiga(void* data, SDL_TimerID timer, Uint32 interval) {
     (void)data; (void)timer; (void)interval;
     key(SDLK_DOWN); key(SDLK_RETURN); /* Tileset popup, initially DOS. */
@@ -70,20 +177,27 @@ static Uint32 modInput(void* data, SDL_TimerID timer, Uint32 interval) {
     if (!modStep++) { key(SDLK_TAB); return interval; }
     /* Same seven-pixel checkbox as the ordinary engine options. */
     assert(g_linearEgaBuffer0[45*320+21] == (expectedModEnabled ? 10 : 0));
-    /* Repainting must retain the cached screenshot overlay. */
+    /* List redraws must not leave the details screenshot overlay behind. */
     ENGINE_DrawSettings(0);
     ENGINE_DrawSettings(0);
+    byte titlePixels[8][232];
+    for(int y=0;y<8;y++) memcpy(titlePixels[y],g_linearEgaBuffer0+(44+y)*320+32,232);
+    ENGINE_UIRect(32,44,232,8,15);
+    ENGINE_UIText(32,44,"Zhelkas' Enhanced Sprites",0);
+    for(int y=0;y<8;y++) assert(!memcmp(titlePixels[y],g_linearEgaBuffer0+(44+y)*320+32,232));
     SDL_Surface *shot=GRAP_SDL_CaptureFrame(); assert(shot);
     Uint8 r,g,b,a;
-    assert(SDL_ReadSurfacePixel(shot,shot->w*164/320,shot->h*64/200,&r,&g,&b,&a));
-    assert(r==200 && g==40 && b==60);
-    /* The preview is a display-resolution overlay, not baked into the pixel UI. */
-    assert(g_linearEgaBuffer0[64*320+164] == 0);
-    /* Match the small save-slot thumbnail footprint (44 by 24 logical pixels). */
-    assert(SDL_ReadSurfacePixel(shot,shot->w*196/320,shot->h*64/200,&r,&g,&b,&a));
+    assert(SDL_ReadSurfacePixel(shot,shot->w*36/320,shot->h*128/200,&r,&g,&b,&a));
     assert(r==0 && g==0 && b==0);
+    /* The preview is a display-resolution overlay, not baked into the pixel UI. */
+    assert(g_linearEgaBuffer0[128*320+36] == 0);
+    /* Match the small save-slot thumbnail footprint (44 by 24 logical pixels). */
+    assert(SDL_ReadSurfacePixel(shot,shot->w*68/320,shot->h*128/200,&r,&g,&b,&a));
+    assert(r==0 && g==0 && b==0);
+    const char *screenshot=getenv("IMPERA_MODS_SCREENSHOT");
+    if(screenshot) assert(SDL_SavePNG(shot,screenshot));
     SDL_DestroySurface(shot);
-    clickUI(72,48); /* Clicking the mod name must toggle it. */
+    clickUI(200,48); /* Clicking the mod name must toggle it. */
     key(SDLK_ESCAPE);
     return 0;
 }
@@ -92,6 +206,15 @@ static void packageNumber(FILE *f, unsigned value) {
     assert(fwrite(b,1,4,f)==4);
 }
 static void modOptions(void) {
+    byte font[256*8];
+    byte *previousFont=D_539c[0];
+    for(int c=0;c<256;c++) for(int y=0;y<8;y++) font[c*8+y]=(byte)c;
+    const char *fontPath=getenv("IMPERA_MODS_FONT");
+    if(fontPath) {
+        FILE *file=fopen(fontPath,"rb");assert(file);
+        assert(fread(font,1,1024,file)==1024);assert(!fclose(file));
+    }
+    D_539c[0]=font;
     assert(SDL_CreateDirectory("mod-manager-fixture"));
     assert(SDL_CreateDirectory("mod-manager-fixture/Mods"));
     SDL_Surface *image = SDL_CreateSurface(320,200,SDL_PIXELFORMAT_RGBA32); assert(image);
@@ -108,8 +231,9 @@ static void modOptions(void) {
     memcpy(metadata+20,text,strlen(text)); memcpy(metadata+20+strlen(text),author,strlen(author));
     memcpy(metadata+20+strlen(text)+strlen(author),png,pngSize); SDL_free(png);
     FILE *f=fopen("mod-manager-fixture/Mods/test.imperamod","wb"); assert(f);
-    assert(fwrite("IMOD0028",1,8,f)==8); packageNumber(f,6); packageNumber(f,1);
-    assert(fwrite("UI mod",1,6,f)==6); packageNumber(f,11); assert(fwrite("MODINFO.DAT",1,11,f)==11);
+    const char *title="Zhelkas\xe2\x80\x99 Enhanced Sprites";
+    assert(fwrite("IMOD0028",1,8,f)==8); packageNumber(f,(unsigned)strlen(title)); packageNumber(f,1);
+    assert(fwrite(title,1,strlen(title),f)==strlen(title)); packageNumber(f,11); assert(fwrite("MODINFO.DAT",1,11,f)==11);
     packageNumber(f,0); packageNumber(f,(unsigned)size); packageNumber(f,0);
     packageNumber(f,MOD_Crc32(metadata,size)); packageNumber(f,1);
     packageNumber(f,0); packageNumber(f,(unsigned)size); assert(fwrite(metadata,1,size,f)==size);
@@ -132,6 +256,7 @@ static void modOptions(void) {
     remove("mod-manager-fixture/image.png"); remove("mod-manager-fixture/Mods/test.imperamod");
     remove("mod-manager-fixture/Mods/mods.cfg");
     assert(SDL_RemovePath("mod-manager-fixture/Mods")); assert(SDL_RemovePath("mod-manager-fixture"));
+    D_539c[0]=previousFont;
 }
 static void literalCode(FILE *f, unsigned code, unsigned *bits, int *count) {
     *bits |= code << *count; *count += 9;
@@ -305,6 +430,7 @@ int main(int argc, char** argv)
     assert(SDL_AddTimer(80,mouseBurst,NULL)); ENGINE_ShowOptions(false);
     ENGINE_Set(ENGINE_CRT,0);
     modOptions();
+    modListCases();
     ENGINE_Set(ENGINE_ENHANCED_LOOK,0);
     assert(SDL_AddTimer(80,optionLabelClick,NULL)); ENGINE_ShowOptions(false);
     assert(ENGINE_Get(ENGINE_ENHANCED_LOOK)); ENGINE_Set(ENGINE_ENHANCED_LOOK,0);
