@@ -63,6 +63,39 @@ static bool checkAnimation;
 static bool checkWater;
 static bool checkDarkness;
 static bool checkDither;
+static bool profileDark;
+static unsigned hiddenTerrainSamples;
+static unsigned scrollingTextureAllocations, darknessUploads;
+static int profileMaskWidth,profileMaskHeight;
+SDL_Texture *__real_SDL_CreateTexture(SDL_Renderer *,SDL_PixelFormat,SDL_TextureAccess,int,int);
+SDL_Texture *__wrap_SDL_CreateTexture(SDL_Renderer *r,SDL_PixelFormat format,
+                                     SDL_TextureAccess access,int w,int h) {
+    if(profileDark) ++scrollingTextureAllocations;
+    return __real_SDL_CreateTexture(r,format,access,w,h);
+}
+SDL_Texture *__real_SDL_CreateTextureFromSurface(SDL_Renderer *,SDL_Surface *);
+SDL_Texture *__wrap_SDL_CreateTextureFromSurface(SDL_Renderer *r,SDL_Surface *surface) {
+    if(profileDark) ++scrollingTextureAllocations;
+    return __real_SDL_CreateTextureFromSurface(r,surface);
+}
+bool __real_SDL_UpdateTexture(SDL_Texture *,const SDL_Rect *,const void *,int);
+bool __wrap_SDL_UpdateTexture(SDL_Texture *texture,const SDL_Rect *rect,const void *pixels,int pitch) {
+    float w,h;
+    if(profileDark && SDL_GetTextureSize(texture,&w,&h) && w==profileMaskWidth && h==profileMaskHeight)
+        ++darknessUploads;
+    return __real_SDL_UpdateTexture(texture,rect,pixels,pitch);
+}
+byte __real_WIDE_TerrainPixel(int dx,int dy,int x,int y);
+byte __wrap_WIDE_TerrainPixel(int dx,int dy,int x,int y) {
+    if (profileDark) {
+        bool visible=MAP_IN_VIEW(dx,dy) ? GetMapViewport(dx+MAP_CENTER_X,dy+MAP_CENTER_Y)!=255
+                                      : WIDE_Visible(dx,dy);
+        if (!visible) ++hiddenTerrainSamples;
+    }
+    return __real_WIDE_TerrainPixel(dx,dy,x,y);
+}
+static Uint64 darkStepStarted, darkPreparationTicks;
+static unsigned darkSteps;
 static bool checkCRT;
 static int ditherDx,ditherDy;
 static unsigned ditherPattern;
@@ -81,6 +114,9 @@ bool __real_SDL_RenderPresent(SDL_Renderer* renderer);
 bool __wrap_SDL_RenderPresent(SDL_Renderer* renderer)
 {
     presented++;
+    if((checkDither || profileDark) && presented==1 && darkStepStarted) {
+        darkPreparationTicks+=SDL_GetPerformanceCounter()-darkStepStarted; ++darkSteps;
+    }
     ticks+=renderCost;
     if (checkCombatOrder) {
         SDL_Surface *image = SDL_RenderReadPixels(renderer, NULL);
@@ -95,6 +131,12 @@ bool __wrap_SDL_RenderPresent(SDL_Renderer* renderer)
         assert(SDL_ReadSurfacePixel(image, x, y, &r, &g, &b, &a));
         assert(orderSelection ? (r == 255 && g == 255 && b == 255)
                               : (r == 85 && g == 255 && b == 85));
+        x=(image->w-layout.width*layout.scale)/2+
+          (layout.mapX+(layout.columns/2-5+8)*16+8)*layout.scale;
+        y=SDL_ceilf((image->h-layout.height*layout.scaleY)/2+
+                    (layout.mapY+(layout.rows/2-5+8)*16+8)*layout.scaleY);
+        assert(SDL_ReadSurfacePixel(image,x,y,&r,&g,&b,&a));
+        assert(r==255 && g==85 && b==85); /* Native marker/effect survives every frame. */
         SDL_DestroySurface(image);
     }
     if(checkCombatMargins) {
@@ -1125,10 +1167,28 @@ int main(int argc, char** argv)
     for(int sy=-1;sy<=1;sy++) for(int sx=-1;sx<=1;sx++) {
         if(!sx && !sy) continue;
         ditherDx=sx;ditherDy=sy;presented=0;
+        darkStepStarted=SDL_GetPerformanceCounter();
         D_5896_map_x+=sx;D_5897_map_y+=sy;
         GRAP_SDL_MapDrawn();GRAP_SDL_FlushFrame();assert(presented==9);
     }
     checkDither=false;
+    printf("Dithered movement preparation: %.3f ms/step (%u steps)\n",
+           1000.0*darkPreparationTicks/SDL_GetPerformanceFrequency()/darkSteps,darkSteps);
+    darkPreparationTicks=0;darkSteps=0;
+    GRAP_BUF_SetTransparentSprites(true);
+    profileMaskWidth=(l.columns+2)*16;profileMaskHeight=(l.rows+2)*16;
+    profileDark=true;
+    for(int step=0;step<8;step++) {
+        presented=0;darkStepStarted=SDL_GetPerformanceCounter();
+        D_5896_map_x+=(step&1)?-1:1;
+        GRAP_SDL_MapDrawn();GRAP_SDL_FlushFrame();assert(presented==9);
+    }
+    profileDark=false;
+    assert(scrollingTextureAllocations==0); /* Steady movement reuses upload storage. */
+    assert(darknessUploads==0); /* Constant torch visibility needs no repeated mask uploads. */
+    assert(hiddenTerrainSamples==0); /* Darkness must not reconstruct invisible terrain. */
+    printf("Transparent dithered movement preparation: %.3f ms/step\n",
+           1000.0*darkPreparationTicks/SDL_GetPerformanceFrequency()/darkSteps);
     GRAP_BUF_SetTransparentSprites(transparentSprites);
     WIDE_SetDitheredDarkness(false);
     CRT_SetEnabled(true);GRAP_SDL_MapDrawn();GRAP_SDL_FlushFrame();
@@ -1433,6 +1493,10 @@ int main(int argc, char** argv)
                 memcpy(D_ab02, D_ad14, sizeof(D_ab02));
                 ULTIMA_5394();
                 ULTIMA_56ac_DrawMap();
+                /* 255 can mark native combat cells/effects; it is not a
+                 * world-map darkness classification. */
+                *ULTIMA_4402_GetTileAddr(8,8)=255;
+                for(int y=136;y<152;y++) memset(g_linearEgaBuffer0+y*320+136,12,16);
                 if (selected)
                     paintCombatCursor(D_ba14[7].x, 4);
                 GRAP_SDL_FlushFrame();
@@ -1442,6 +1506,10 @@ int main(int argc, char** argv)
                 memcpy(D_ab02, D_ad14, sizeof(D_ab02));
                 ULTIMA_5394();
                 ULTIMA_56ac_DrawMap();
+                /* 255 can mark native combat cells/effects; it is not a
+                 * world-map darkness classification. */
+                *ULTIMA_4402_GetTileAddr(8,8)=255;
+                for(int y=136;y<152;y++) memset(g_linearEgaBuffer0+y*320+136,12,16);
                 if (selected)
                     paintCombatCursor(3, 4);
                 if (selected)

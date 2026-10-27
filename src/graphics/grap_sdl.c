@@ -66,6 +66,59 @@ static bool s_completedWideValid;
 static int s_completedWideMap,s_completedWideLevel;
 static bool s_expandedFrame;
 static bool s_smoothMovement, s_mapDrawn, s_previousValid;
+/* Keep turn uploads alive: deleting/recreating graphics resources while
+ * their previous frames are in flight can stall the rendering driver. */
+static SDL_Texture *s_scrollTerrain[2], *s_scrollPlayer[2], *s_darknessUploads[2];
+static SDL_Texture **s_scrollActors[2];
+static int s_scrollActorCapacity[2];
+static SDL_Surface *s_scrollClean, *s_scrollPadded, *s_darknessSurface;
+static unsigned s_scrollUpload, s_darknessUpload;
+static SDL_Surface *ScratchSurface(SDL_Surface **slot,int w,int h) {
+    if (*slot && ((*slot)->w!=w || (*slot)->h!=h)) {
+        SDL_DestroySurface(*slot); *slot=NULL;
+    }
+    if (!*slot) *slot=SDL_CreateSurface(w,h,SDL_PIXELFORMAT_ARGB8888);
+    return *slot;
+}
+static SDL_Texture *UploadTexture(SDL_Texture **slot,int w,int h,bool blend) {
+    float width,height;
+    if (*slot && (!SDL_GetTextureSize(*slot,&width,&height) || width!=w || height!=h)) {
+        SDL_DestroyTexture(*slot); *slot=NULL;
+    }
+    if (!*slot) {
+        *slot=SDL_CreateTexture(s_sdlRenderer,SDL_PIXELFORMAT_ARGB8888,SDL_TEXTUREACCESS_STREAMING,w,h);
+        if (*slot) {
+            SDL_SetTextureScaleMode(*slot,SDL_SCALEMODE_NEAREST);
+            SDL_SetTextureBlendMode(*slot,blend?SDL_BLENDMODE_BLEND:SDL_BLENDMODE_NONE);
+        }
+    }
+    return *slot;
+}
+static SDL_Texture *ScrollActorTexture(unsigned upload,int index) {
+    if(index>=s_scrollActorCapacity[upload]) {
+        int capacity=index+8;
+        SDL_Texture **textures=realloc(s_scrollActors[upload],(size_t)capacity*sizeof(*textures));
+        if(!textures) return NULL;
+        memset(textures+s_scrollActorCapacity[upload],0,
+               (capacity-s_scrollActorCapacity[upload])*sizeof(*textures));
+        s_scrollActors[upload]=textures;s_scrollActorCapacity[upload]=capacity;
+    }
+    return UploadTexture(&s_scrollActors[upload][index],68,68,true);
+}
+static void ClearScrollResources(void) {
+    s_darknessTexture=NULL;
+    for(int i=0;i<2;i++) {
+        for(int j=0;j<s_scrollActorCapacity[i];j++) SDL_DestroyTexture(s_scrollActors[i][j]);
+        free(s_scrollActors[i]);s_scrollActors[i]=NULL;s_scrollActorCapacity[i]=0;
+        SDL_DestroyTexture(s_scrollTerrain[i]);s_scrollTerrain[i]=NULL;
+        SDL_DestroyTexture(s_scrollPlayer[i]);s_scrollPlayer[i]=NULL;
+        SDL_DestroyTexture(s_darknessUploads[i]);s_darknessUploads[i]=NULL;
+    }
+    SDL_DestroySurface(s_scrollClean);s_scrollClean=NULL;
+    SDL_DestroySurface(s_scrollPadded);s_scrollPadded=NULL;
+    SDL_DestroySurface(s_darknessSurface);s_darknessSurface=NULL;
+    s_scrollUpload=s_darknessUpload=0;
+}
 static float s_movementSpeed = 1.0f;
 static bool s_customMovementSpeed;
 static int s_previousWidth, s_previousHeight, s_previousX, s_previousY, s_previousMap, s_previousLevel;
@@ -437,7 +490,7 @@ void GRAP_SDL_Cleanup(void)
     GRAP_BUF_Cleanup();
     s_previousValid = s_mapDrawn = false;
 
-    SDL_DestroyTexture(s_darknessTexture);s_darknessTexture=NULL;
+    ClearScrollResources();
     SDL_DestroyTexture(s_wideTexture);
     SDL_DestroySurface(s_wideSurface);
     TILESET_Unregister(s_widePixels);
@@ -509,33 +562,39 @@ static void PrepareDarkness(int columns,int rows,bool completed)
 {
     if (!WIDE_DitheredDarkness() || EVT_ImmediateExitEnabled() || s_pixelUI || !D_58a4 ||
         !MAPS_Outside(D_5893_map_id)) {
-        SDL_DestroyTexture(s_darknessTexture);s_darknessTexture=NULL;return;
+        s_darknessTexture=NULL;return;
     }
     if(!completed && s_darknessTexture && columns==s_darknessColumns && rows==s_darknessRows && s_darknessMap==D_5893_map_id && s_darknessLevel==D_5895_map_level) return;
     /* One tile of padding keeps the mask over every exposed scrolling edge. */
     int width=(columns+2)*16,height=(rows+2)*16;
     byte* mask=malloc((size_t)width*height);
-    SDL_Surface* surface=SDL_CreateSurface(width,height,SDL_PIXELFORMAT_ARGB8888);
+    SDL_Surface* surface=ScratchSurface(&s_darknessSurface,width,height);
     if(mask && surface && WIDE_DarknessMask(mask,columns+2,rows+2)) {
         static const byte pattern[16]={0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5};
+        bool unchanged=s_darknessTexture && columns==s_darknessColumns && rows==s_darknessRows;
         for(int y=0;y<height;y++) {
             Uint32* pixels=(Uint32*)((byte*)surface->pixels+y*surface->pitch);
-            for(int x=0;x<width;x++) pixels[x]=pattern[(y&3)*4+(x&3)]<mask[y*width+x]?0xff000000:0;
-        }
-        /* Reuse GPU storage while walking; only dimensions require a new
-         * texture. Changing darkness should be an upload, not reallocation. */
-        bool reuse=s_darknessTexture && columns==s_darknessColumns && rows==s_darknessRows;
-        SDL_Texture* next=reuse?s_darknessTexture:SDL_CreateTextureFromSurface(s_sdlRenderer,surface);
-        if(next && (!reuse || SDL_UpdateTexture(next,NULL,surface->pixels,surface->pitch))) {
-            if(!reuse) {
-                SDL_SetTextureBlendMode(next,SDL_BLENDMODE_BLEND);
-                SDL_SetTextureScaleMode(next,SDL_SCALEMODE_NEAREST);
-                SDL_DestroyTexture(s_darknessTexture);s_darknessTexture=next;
+            for(int x=0;x<width;x++) {
+                Uint32 next=pattern[(y&3)*4+(x&3)]<mask[y*width+x]?0xff000000:0;
+                if(unchanged && pixels[x]!=next) unchanged=false;
+                pixels[x]=next;
             }
-            s_darknessColumns=columns;s_darknessRows=rows;s_darknessMap=D_5893_map_id;s_darknessLevel=D_5895_map_level;
-        } else DEBUG_Error("Cannot update dithered darkness texture: %s",SDL_GetError());
+        }
+        /* Most steps preserve the light shape. Do not upload an identical
+         * mask; changed masks alternate storage rather than overwrite the
+         * texture sampled by the immediately preceding turn. */
+        if(!unchanged) {
+            SDL_Texture* next=UploadTexture(&s_darknessUploads[s_darknessUpload++ & 1],width,height,true);
+            if(next && SDL_UpdateTexture(next,NULL,surface->pixels,surface->pitch))
+                s_darknessTexture=next;
+            else {
+                s_darknessTexture=NULL;
+                DEBUG_Error("Cannot update dithered darkness texture: %s",SDL_GetError());
+            }
+        }
+        s_darknessColumns=columns;s_darknessRows=rows;s_darknessMap=D_5893_map_id;s_darknessLevel=D_5895_map_level;
     } else DEBUG_Error("Cannot allocate dithered darkness mask");
-    free(mask);SDL_DestroySurface(surface);
+    free(mask);
 }
 static void DrawDarkness(SDL_FRect dst,int width,int height,int mapX,int mapY,int columns,int rows)
 {
@@ -558,7 +617,8 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
         !s_mapDrawn || !D_58a4 || (!MAPS_Outside(D_5893_map_id) && D_5893_map_id < 128))
         return;
     s_mapDrawn = false;
-    SDL_Surface* clean = SDL_CreateSurface(w*2, h*2, SDL_PIXELFORMAT_ARGB8888);
+    Uint64 smoothingStarted=SDL_GetTicks();
+    SDL_Surface* clean = ScratchSurface(&s_scrollClean,w*2,h*2);
     if (!clean) { s_previousValid = false; return; }
     for (int y = 0; y < h; y++) for(int sy=0;sy<2;sy++) {
         Uint32* row = (Uint32*)((byte*)clean->pixels + (y*2+sy) * clean->pitch);
@@ -591,7 +651,6 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
         free(moving);
         free(actorTextures);
         s_previousValid = false;
-        SDL_DestroySurface(clean);
         return;
     }
     CaptureActors(actors,indices,w,mapX,mapY,columns,rows);
@@ -670,12 +729,14 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
                     }
     }
     if (animate) {
+        unsigned upload=s_scrollUpload++ & 1;
+        int uploadedActors=0;
         debug("Smooth movement: offset=%d,%d\n", dx, dy);
         /* One padded current map covers all exposed edges, including diagonal
          * corner gaps. Never splice old/new water animation phases together. */
         int paddedWidth=(columns+2)*16,paddedHeight=(rows+2)*16;
         bool* hidden=calloc((size_t)(columns+2)*(rows+2),sizeof(bool));
-        SDL_Surface* padded=hidden?SDL_CreateSurface(paddedWidth*2,paddedHeight*2,SDL_PIXELFORMAT_ARGB8888):NULL;
+        SDL_Surface* padded=hidden?ScratchSurface(&s_scrollPadded,paddedWidth*2,paddedHeight*2):NULL;
         if(padded) for(int row=-1;row<=rows;row++) for(int col=-1;col<=columns;col++) {
             bool interior=col>=0 && col<columns && row>=0 && row<rows;
             int tx=col-columns/2,ty=row-rows/2;
@@ -684,8 +745,14 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
             bool valid=WIDE_MapTile(tx,ty)!=255;
             for(int y=0;y<16;y++) for(int sy=0;sy<2;sy++) {
                 Uint32* dest=(Uint32*)((byte*)padded->pixels+(((row+1)*16+y)*2+sy)*padded->pitch)+(col+1)*32;
+                /* Only unseen world/location cells have full darkness
+                 * coverage. Combat cells, including native marker tiles, must
+                 * retain their completed framebuffer and terrain handling. */
+                if (!combat && !lit) {
+                    for (int x=0;x<32;x++) dest[x]=0xff000000;
+                }
                 /* Partial edge rows contain terrain, never the static frame. */
-                if(interior && mapY+row*16+y>=mapTop && mapY+row*16+y<mapBottom && (combat || lit))
+                else if(interior && mapY+row*16+y>=mapTop && mapY+row*16+y<mapBottom && (combat || lit))
                     memcpy(dest,(byte*)clean->pixels+((mapY+row*16+y)*2+sy)*clean->pitch+(mapX+col*16)*8,32*4);
                 else for(int x=0;x<16;x++) {
                     int color=valid?WIDE_TerrainPixel(tx,ty,x,y):0;
@@ -694,15 +761,22 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
                 }
             }
         }
-        SDL_Texture* next=padded?SDL_CreateTextureFromSurface(s_sdlRenderer,padded):NULL;
-        SDL_DestroySurface(padded);
+        SDL_Texture* next=NULL;
+        if(padded) {
+            if(combat) next=SDL_CreateTextureFromSurface(s_sdlRenderer,padded);
+            else {
+                next=UploadTexture(&s_scrollTerrain[upload],padded->w,padded->h,false);
+                if(next && !SDL_UpdateTexture(next,NULL,padded->pixels,padded->pitch)) next=NULL;
+            }
+        }
         if (next) {
             SDL_SetTextureScaleMode(next,SDL_SCALEMODE_NEAREST);
 
             for (int i = 0; i < actorCount; i++)
                 if (moving[i] || (combat && actors[i].visible)) {
-                    actorTextures[i] = SDL_CreateTexture(s_sdlRenderer, SDL_PIXELFORMAT_ARGB8888,
-                                                         SDL_TEXTUREACCESS_STATIC, 68, 68);
+                    actorTextures[i] = combat
+                        ? SDL_CreateTexture(s_sdlRenderer,SDL_PIXELFORMAT_ARGB8888,SDL_TEXTUREACCESS_STATIC,68,68)
+                        : ScrollActorTexture(upload,uploadedActors++);
                     if (actorTextures[i]) {
                         SDL_UpdateTexture(actorTextures[i], NULL,
                                           actors[i].visible ? actors[i].sprite
@@ -727,7 +801,7 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
                     for(int sy=0;sy<2;sy++) for(int sx=0;sx<2;sx++)
                         sprite[(y*2+sy)*36+x*2+sx]=TILESET_LastSpriteColor(color,sx,sy,s_egaPalette,GRAP_BUF_SpriteIsTransparent(256+GetActorMap(5,5)));
                 }
-                playerTexture=SDL_CreateTexture(s_sdlRenderer,SDL_PIXELFORMAT_ARGB8888,SDL_TEXTUREACCESS_STATIC,36,36);
+                playerTexture=UploadTexture(&s_scrollPlayer[upload],36,36,true);
                 if(playerTexture) {
                     SDL_UpdateTexture(playerTexture,NULL,sprite,36*4);
                     SDL_SetTextureScaleMode(playerTexture,SDL_SCALEMODE_NEAREST);
@@ -749,6 +823,11 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
                     SDL_SetTextureBlendMode(selectionTexture, SDL_BLENDMODE_BLEND);
                 }
             }
+            Uint64 preparation=SDL_GetTicks()-smoothingStarted;
+            if(preparation>50)
+                debug("Slow smooth preparation: %llu ms map=%d position=%d,%d tiles=%dx%d CRT=%d",
+                      (unsigned long long)preparation,D_5893_map_id,D_5896_map_x,D_5897_map_y,
+                      columns,rows,CRT_Enabled());
             for (int frame = 1; frame <= 8; frame++) {
                 Uint64 frameStarted=SDL_GetTicks();
                 float t = frame / 8.0f;
@@ -828,6 +907,11 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
                 else
                     SDL_PumpEvents();
                 MOUSE_UpdateCursor();
+                Uint64 frameElapsed=SDL_GetTicks()-frameStarted;
+                if(frameElapsed>50)
+                    debug("Slow smooth frame: %llu ms frame=%d map=%d position=%d,%d CRT=%d",
+                          (unsigned long long)frameElapsed,frame,D_5893_map_id,
+                          D_5896_map_x,D_5897_map_y,CRT_Enabled());
                 if (frame < 8) {
                     Uint64 elapsed=SDL_GetTicks()-frameStarted;
                     Uint32 interval=(Uint32)SDL_roundf(16.0f/s_movementSpeed);
@@ -835,11 +919,10 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
                 }
             }
             SDL_DestroyTexture(selectionTexture);
-            SDL_DestroyTexture(playerTexture);
-            for (int i = 0; i < actorCount; i++)
+            if(combat) for (int i = 0; i < actorCount; i++)
                 SDL_DestroyTexture(actorTextures[i]);
         }
-        SDL_DestroyTexture(next);
+        if(combat) SDL_DestroyTexture(next);
         free(hidden);
         /* The caller still presents the completed frame (and may capture it).
          * Rebuild that backbuffer after the last interpolation presentation. */
@@ -858,7 +941,6 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
     s_previousValid = true;
     s_previousWidth=w; s_previousHeight=h; s_previousX=D_5896_map_x; s_previousY=D_5897_map_y;
     s_previousMap=D_5893_map_id; s_previousLevel=D_5895_map_level;
-    SDL_DestroySurface(clean);
 }
 
 /* Thumbnails are rendered at display resolution over the pixel UI. */

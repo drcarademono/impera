@@ -13,6 +13,8 @@ static const float curvatureX=0.004f,curvatureY=0.007f;
 static const float displayBrightness=1.04f,displayContrast=1.02f;
 static float averageBeam;
 static bool enabled,active;
+static bool cursorPending;
+static Uint64 cursorFrameTime;
 static SDL_Renderer* owner;
 static SDL_Texture *frame,*scene,*soft,*glow,*halo,*mask;
 static int width,height;
@@ -20,6 +22,7 @@ void CRT_SetEnabled(bool value) { enabled=value;if(!value && SDL_WasInit(SDL_INI
 bool CRT_Enabled(void) { return enabled; }
 void CRT_Cleanup(void)
 {
+    cursorPending=false; cursorFrameTime=0;
     MOUSE_ReleaseFilteredCursors();
     if(owner && active) SDL_SetRenderTarget(owner,NULL);
     if(SDL_WasInit(SDL_INIT_VIDEO)) SDL_ShowCursor();
@@ -122,6 +125,8 @@ static void ScreenMesh(SDL_Renderer* renderer,SDL_Texture* texture,int intensity
 void CRT_EndFrame(SDL_Renderer* renderer)
 {
     if(!active) return;
+    cursorFrameTime=SDL_GetTicks();
+    cursorPending=false;
     /* DOS Monitor: Lottes-style beam modulation and phosphor reconstruction,
      * expressed in SDL render passes to work on OpenGL and software alike. */
     SDL_SetRenderTarget(renderer,scene);
@@ -162,12 +167,23 @@ void CRT_EndFrame(SDL_Renderer* renderer)
 }
 void CRT_ResumeFrame(SDL_Renderer* renderer)
 {
-    if(active) SDL_SetRenderTarget(renderer,frame);
+    if(active) {
+        SDL_SetRenderTarget(renderer,frame);
+        /* Present may block in the driver. Start the idle-cursor interval
+         * after that work finishes, not before filtering/presentation. */
+        cursorFrameTime=SDL_GetTicks();
+    }
 }
 
-void CRT_RefreshCursor(void)
+void CRT_RefreshCursor(bool moved)
 {
-    if(active && enabled && owner) {
+    if(!active || !enabled || !owner) { cursorPending=false;return; }
+    cursorPending |= moved;
+    /* EVT_Yield can poll a high-rate mouse many times per millisecond. A
+     * cursor refresh runs the entire CRT filter, so coalesce motions to the
+     * latest SDL position instead of submitting hundreds of GPU frames.
+     * Retain the final motion until its deadline even if no more arrive. */
+    if(cursorPending && SDL_GetTicks()-cursorFrameTime>=16) {
         CRT_EndFrame(owner);SDL_RenderPresent(owner);CRT_ResumeFrame(owner);
     }
 }

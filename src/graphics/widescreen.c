@@ -421,16 +421,22 @@ bool WIDE_Compose(byte* pixels, WideLayout l)
             }
         }
     free(sprites);
+    /* The small combat board is centered independently of the active
+     * fighter. Large combat and world maps use a moving native viewport. */
+    int viewCenterX = D_5893_map_id >= 128 && !MAP_LARGE_COMBAT ? 5 : MAP_CENTER_X;
+    int viewCenterY = D_5893_map_id >= 128 && !MAP_LARGE_COMBAT ? 5 : MAP_CENTER_Y;
     /* Restore outline margins at the seam after copying central effects. */
     for (int row = 0; row < l.rows; row++)
         for (int col = 0; col < l.columns; col++) {
             int dx = col - cx, dy = row - cy;
-            if (abs(dx) > 5 || abs(dy) > 5 || (abs(dx) != 5 && abs(dy) != 5)) continue;
+            int vx=dx+viewCenterX,vy=dy+viewCenterY;
+            if (vx<0 || vx>=11 || vy<0 || vy>=11 ||
+                (vx!=0 && vx!=10 && vy!=0 && vy!=10)) continue;
             int tile;
-            if (GetMapViewport(dx + MAP_CENTER_X, dy + MAP_CENTER_Y) == 0 &&
-                GetActorMap(dx + MAP_CENTER_X, dy + MAP_CENTER_Y) != 0x16)
-                tile = 256 + GetActorMap(dx + MAP_CENTER_X, dy + MAP_CENTER_Y);
-            else if (GetMapViewport(dx + MAP_CENTER_X, dy + MAP_CENTER_Y) != 255 &&
+            if (GetMapViewport(vx, vy) == 0 &&
+                GetActorMap(vx, vy) != 0x16)
+                tile = 256 + GetActorMap(vx, vy);
+            else if (GetMapViewport(vx, vy) != 255 &&
                      WIDE_GroundTile(dx, dy) != WIDE_MapTile(dx, dy))
                 tile=D_b11e[WIDE_MapTile(dx,dy)];
             else continue;
@@ -438,10 +444,10 @@ bool WIDE_Compose(byte* pixels, WideLayout l)
                 for (int sx = -1; sx <= 16; sx++) {
                     int px = col * 16 + sx, py = row * 16 + sy;
                     if (px < 0 || py < 0 || px >= l.columns * 16 || py >= l.rows * 16) continue;
-                    if (px >= (cx - (MAP_LARGE_COMBAT ? MAP_CENTER_X : 5)) * 16 &&
-                        px < (cx + 6) * 16 &&
-                        py >= (cy - (MAP_LARGE_COMBAT ? MAP_CENTER_Y : 5)) * 16 &&
-                        py < (cy + 6) * 16)
+                    if (px >= (cx - viewCenterX) * 16 &&
+                        px < (cx - viewCenterX + 11) * 16 &&
+                        py >= (cy - viewCenterY) * 16 &&
+                        py < (cy - viewCenterY + 11) * 16)
                         continue;
                     if (l.mapY+py>=8 && l.mapY+py<l.height-8 && WIDE_SpritePixel(tile, dx, dy, sx, sy) == 0)
                         pixels[(l.mapY + py) * l.width + l.mapX + px] = 0;

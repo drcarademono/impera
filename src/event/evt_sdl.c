@@ -81,7 +81,7 @@ void EVT_PollMessages(void)
             break;
 		}
 	}
-    if(cursorMoved) CRT_RefreshCursor();
+    CRT_RefreshCursor(cursorMoved);
 }
 
 void EVT_Yield(void)
