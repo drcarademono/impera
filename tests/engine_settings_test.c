@@ -59,6 +59,9 @@ static Uint32 modInput(void* data, SDL_TimerID timer, Uint32 interval) {
     assert(r==200 && g==40 && b==60);
     /* The preview is a display-resolution overlay, not baked into the pixel UI. */
     assert(g_linearEgaBuffer0[64*320+164] == 0);
+    /* Match the small save-slot thumbnail footprint (44 by 24 logical pixels). */
+    assert(SDL_ReadSurfacePixel(shot,shot->w*196/320,shot->h*64/200,&r,&g,&b,&a));
+    assert(r==0 && g==0 && b==0);
     SDL_DestroySurface(shot);
     clickUI(72,48); /* Clicking the mod name must toggle it. */
     key(SDLK_ESCAPE);

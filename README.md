@@ -709,7 +709,7 @@ dialogue actions or introduces the characters.
 
 Mod Overview → Mod details includes an Author field. In Engine Options, clicking
 a mod’s checkbox or name toggles it; click the screenshot or press Enter for
-details. Screenshots use the same smooth, display-resolution rendering as save
-previews. The retired DOS Enhanced option is no longer listed; old saved choices
+details. Screenshots use the same small 44 × 24 thumbnail size and smooth,
+display-resolution rendering as save previews. The retired DOS Enhanced option is no longer listed; old saved choices
 fall back to DOS. Graphics → Tilesets has Import/Export tileset PNG controls at
 the top for complete sheets, including all 512 tiles in a 512 × 256 DOS PNG.

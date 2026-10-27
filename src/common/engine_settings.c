@@ -184,8 +184,8 @@ static int descriptionLines(const char *text, int columns, int first, int visibl
 static void modImage(const ModInfo *info) {
     if (info && info->imageSize)
         GRAP_SDL_UIThumbnailPNG(0, info->image, info->imageSize, s_modDetails ? 16 : 144,
-                               s_modDetails ? 60 : 44, 160, 100);
-    else ENGINE_UIText(s_modDetails ? 40 : 168, s_modDetails ? 100 : 84, "No screenshot", 8);
+                               s_modDetails ? 60 : 44, 44, 24);
+    else ENGINE_UIText(s_modDetails ? 16 : 144, s_modDetails ? 68 : 52, "No image", 8);
 }
 static void drawMods(void) {
     unsigned count = MOD_AvailableCount();
@@ -200,9 +200,9 @@ static void drawMods(void) {
         SDL_snprintf(details, sizeof(details), "%s%s%s%s", *info->author ? "By " : "", info->author,
                      *info->author ? "\n\n" : "", *info->description ? info->description : "No description provided.");
         const char *description = details;
-        int lines = descriptionLines(description, 15, 0, 0, 184, 52);
-        s_modScroll = SDL_clamp(s_modScroll, 0, SDL_max(0, lines - 15));
-        descriptionLines(description, 15, s_modScroll, 15, 184, 52);
+        int lines = descriptionLines(description, 28, 0, 0, 72, 60);
+        s_modScroll = SDL_clamp(s_modScroll, 0, SDL_max(0, lines - 13));
+        descriptionLines(description, 28, s_modScroll, 13, 72, 60);
         ENGINE_UIText(16, 180, "Esc: Back  Space: On/Off", 7);
     } else {
         if (s_modSelected < s_modTop) s_modTop = s_modSelected;
@@ -220,10 +220,10 @@ static void drawMods(void) {
         if (*info->author) {
             char author[300]; SDL_snprintf(author, sizeof(author), "By %s", info->author);
             char display[300]; modText(author, display, sizeof(display)); display[20] = 0;
-            ENGINE_UIText(144, 148, display, 7);
+            ENGINE_UIText(144, 76, display, 7);
         }
         descriptionLines(*info->description ? info->description : "No description provided.", 20, 0,
-                         *info->author ? 2 : 3, 144, *info->author ? 156 : 148);
+                         *info->author ? 9 : 10, 144, *info->author ? 88 : 76);
         ENGINE_UIText(16, 170, "Space: On/Off  Enter: Details", 7);
         ENGINE_UIText(16, 180, "Return", 15);
     }
@@ -236,8 +236,8 @@ static void drawMods(void) {
     }
     if (s_modDetails && *info->error) {
         GRAP_SDL_ClearUIThumbnails();
-        ENGINE_UIRect(16, 60, 160, 100, 0);
-        descriptionLines(info->error, 20, 0, 12, 16, 60);
+        ENGINE_UIRect(72, 60, 232, 104, 0);
+        descriptionLines(info->error, 28, 0, 13, 72, 60);
     }
 }
 static void toggleMod(void) {
