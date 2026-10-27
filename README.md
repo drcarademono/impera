@@ -712,7 +712,7 @@ Workshop uses the same application frame with a white block W replacing Impera�
 In Engine Options, six full-width mod rows scroll above a fixed details preview.
 A scrollbar and range indicator show additional mods; hover or use arrows to select,
 and use Home/End or Page Up/Down to navigate longer lists. Clicking
-a mod’s checkbox or name toggles it; click the details area or press Enter for
+a mod’s checkbox or name toggles it; click Details or press Enter for
 details with the complete name and scrollable description. Typographic quotes and dashes use their DOS-font equivalents.
 Screenshots use the same small 44 × 24 thumbnail size and smooth,
 display-resolution rendering as save previews. The retired DOS Enhanced option is no longer listed; old saved choices

@@ -241,6 +241,11 @@ static void modImage(const ModInfo *info) {
         ENGINE_UIText(16,y+4,"No",8); ENGINE_UIText(16,y+12,"image",8);
     }
 }
+static void modButton(int x,int y,int width,const char *label) {
+    ENGINE_UIRect(x,y,width,12,7);
+    ENGINE_UIRect(x+1,y+1,width-2,10,0);
+    ENGINE_UIText(x+8,y+2,label,15);
+}
 static void drawMods(void) {
     unsigned count = MOD_AvailableCount();
     if (!count) {
@@ -265,7 +270,8 @@ static void drawMods(void) {
             ENGINE_UIRect(300,60,4,104,8);
             ENGINE_UIRect(300,modTextThumbTop(),4,modTextThumbHeight(),15);
         }
-        ENGINE_UIText(16, 180, "Esc: Back  Space: On/Off", 7);
+        modButton(16,178,64,"Back");
+        ENGINE_UIText(120,180,"Space: On/Off",7);
     } else {
         if (s_modSelected < s_modTop) s_modTop = s_modSelected;
         int rows=modListRows();
@@ -287,6 +293,7 @@ static void drawMods(void) {
         }
         char range[40]; SDL_snprintf(range,sizeof(range),"%d-%d of %u",s_modTop+1,SDL_min((int)count,s_modTop+6),count);
         ENGINE_UIText(16,106,range,7);
+        modButton(232,104,72,"Details");
         int detailsY=modDetailsTop();
         ENGINE_UIRect(16,detailsY-4,288,1,8);
         modImage(info);
@@ -527,7 +534,7 @@ void ENGINE_ShowOptions(bool gameplay)
                                 modGrab=y>=top && y<top+height?(int)y-top:height/2;
                                 modTextScrollbar(y,modGrab);
                             } else if(y>=162 && y<173 && x>=16 && x<136) toggleMod();
-                            else if(y>=178) s_modDetails = false;
+                            else if(y>=178 && y<190 && x>=16 && x<80) {modGrab=-1;s_modDetails=false;}
                         } else if(count>6 && x>=298 && x<306 && y>=44 && y<104) {
                             int top=modThumbTop(count),height=modThumbHeight(count);
                             modGrab=y>=top && y<top+height?(int)y-top:height/2;
@@ -535,7 +542,8 @@ void ENGINE_ShowOptions(bool gameplay)
                         } else if(y>=44 && y<44+modListRows()*10 && x>=16 && x<(count>6?296:304)) {
                             int item = s_modTop + ((int)y - 44) / 10;
                             if(item<count) { s_modSelected=item; s_modScroll=0; if(event.button.clicks<=1) toggleMod(); }
-                        } else if(x>=16 && x<304 && y>=modDetailsTop() && y<164 && count) { modGrab=-1;s_modDetails=true; s_modScroll=0; }
+                        } else if(count && ((x>=232 && x<304 && y>=104 && y<116) ||
+                                            (x>=16 && x<304 && y>=modDetailsTop() && y<164))) { modGrab=-1;s_modDetails=true; s_modScroll=0; }
                         else if(y>=178 && x<136) done=true;
                     }
                 }

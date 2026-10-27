@@ -98,13 +98,16 @@ static Uint32 listCaseInput(void *data,SDL_TimerID timer,Uint32 interval) {
         if(path && listCaseCount==24) {SDL_Surface *shot=GRAP_SDL_CaptureFrame();assert(shot);assert(SDL_SavePNG(shot,path));SDL_DestroySurface(shot);}
         key(SDLK_SPACE);break;
     }
-    case 3:assert(!MOD_Available(listCaseCount-1)->enabled);key(SDLK_RETURN);break;
+    case 3:
+        assert(!MOD_Available(listCaseCount-1)->enabled);
+        expectUIText(240,106,"Details",15,0);clickUI(270,110);break;
     case 4: {
         char title[40];SDL_snprintf(title,sizeof(title),"Test mod %02d",listCaseCount-1);
         expectUIText(72,60,title,15,0);
-        assert(g_linearEgaBuffer0[165*320+21]==0);key(SDLK_END);break;
+        assert(g_linearEgaBuffer0[165*320+21]==0);
+        expectUIText(24,180,"Back",15,0);clickUI(302,162);break;
     }
-    case 5:expectUIText(72,156,"End of description.",15,0);key(SDLK_ESCAPE);break;
+    case 5:expectUIText(72,156,"End of description.",15,0);clickUI(48,184);break;
     case 6:expectRange(tail);hoverUI(200,48);break;
     case 7:
         assert(MOD_Available(tail)->enabled==(tail!=listCaseCount-1));
@@ -123,7 +126,7 @@ static Uint32 listCaseInput(void *data,SDL_TimerID timer,Uint32 interval) {
         for(int i=0;i<7;i++) {SDL_Event wheel={0};wheel.type=SDL_EVENT_MOUSE_WHEEL;wheel.wheel.y=-1;assert(SDL_PushEvent(&wheel));}
         break;
     }
-    case 12:expectRange(listCaseCount>7?2:listCaseCount>6?1:0);key(SDLK_ESCAPE);return 0;
+    case 12:expectRange(listCaseCount>7?2:listCaseCount>6?1:0);clickUI(48,184);return 0;
     }
     return interval;
 }
