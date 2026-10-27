@@ -684,8 +684,14 @@ static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
             bool valid=WIDE_MapTile(tx,ty)!=255;
             for(int y=0;y<16;y++) for(int sy=0;sy<2;sy++) {
                 Uint32* dest=(Uint32*)((byte*)padded->pixels+(((row+1)*16+y)*2+sy)*padded->pitch)+(col+1)*32;
+                /* Unseen cells have full darkness coverage in both visibility
+                 * modes. Do not reconstruct their terrain/transparency: it can
+                 * dominate turn preparation in a mostly dark viewport. */
+                if (!lit || !valid) {
+                    for (int x=0;x<32;x++) dest[x]=0xff000000;
+                }
                 /* Partial edge rows contain terrain, never the static frame. */
-                if(interior && mapY+row*16+y>=mapTop && mapY+row*16+y<mapBottom && (combat || lit))
+                else if(interior && mapY+row*16+y>=mapTop && mapY+row*16+y<mapBottom && (combat || lit))
                     memcpy(dest,(byte*)clean->pixels+((mapY+row*16+y)*2+sy)*clean->pitch+(mapX+col*16)*8,32*4);
                 else for(int x=0;x<16;x++) {
                     int color=valid?WIDE_TerrainPixel(tx,ty,x,y):0;

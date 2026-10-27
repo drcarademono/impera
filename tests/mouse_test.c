@@ -63,6 +63,19 @@ static bool checkAnimation;
 static bool checkWater;
 static bool checkDarkness;
 static bool checkDither;
+static bool profileDark;
+static unsigned hiddenTerrainSamples;
+byte __real_WIDE_TerrainPixel(int dx,int dy,int x,int y);
+byte __wrap_WIDE_TerrainPixel(int dx,int dy,int x,int y) {
+    if (profileDark) {
+        bool visible=MAP_IN_VIEW(dx,dy) ? GetMapViewport(dx+MAP_CENTER_X,dy+MAP_CENTER_Y)!=255
+                                      : WIDE_Visible(dx,dy);
+        if (!visible) ++hiddenTerrainSamples;
+    }
+    return __real_WIDE_TerrainPixel(dx,dy,x,y);
+}
+static Uint64 darkStepStarted, darkPreparationTicks;
+static unsigned darkSteps;
 static bool checkCRT;
 static int ditherDx,ditherDy;
 static unsigned ditherPattern;
@@ -81,6 +94,9 @@ bool __real_SDL_RenderPresent(SDL_Renderer* renderer);
 bool __wrap_SDL_RenderPresent(SDL_Renderer* renderer)
 {
     presented++;
+    if((checkDither || profileDark) && presented==1 && darkStepStarted) {
+        darkPreparationTicks+=SDL_GetPerformanceCounter()-darkStepStarted; ++darkSteps;
+    }
     ticks+=renderCost;
     if (checkCombatOrder) {
         SDL_Surface *image = SDL_RenderReadPixels(renderer, NULL);
@@ -1125,10 +1141,25 @@ int main(int argc, char** argv)
     for(int sy=-1;sy<=1;sy++) for(int sx=-1;sx<=1;sx++) {
         if(!sx && !sy) continue;
         ditherDx=sx;ditherDy=sy;presented=0;
+        darkStepStarted=SDL_GetPerformanceCounter();
         D_5896_map_x+=sx;D_5897_map_y+=sy;
         GRAP_SDL_MapDrawn();GRAP_SDL_FlushFrame();assert(presented==9);
     }
     checkDither=false;
+    printf("Dithered movement preparation: %.3f ms/step (%u steps)\n",
+           1000.0*darkPreparationTicks/SDL_GetPerformanceFrequency()/darkSteps,darkSteps);
+    darkPreparationTicks=0;darkSteps=0;
+    GRAP_BUF_SetTransparentSprites(true);
+    profileDark=true;
+    for(int step=0;step<8;step++) {
+        presented=0;darkStepStarted=SDL_GetPerformanceCounter();
+        D_5896_map_x+=(step&1)?-1:1;
+        GRAP_SDL_MapDrawn();GRAP_SDL_FlushFrame();assert(presented==9);
+    }
+    profileDark=false;
+    assert(hiddenTerrainSamples==0); /* Darkness must not reconstruct invisible terrain. */
+    printf("Transparent dithered movement preparation: %.3f ms/step\n",
+           1000.0*darkPreparationTicks/SDL_GetPerformanceFrequency()/darkSteps);
     GRAP_BUF_SetTransparentSprites(transparentSprites);
     WIDE_SetDitheredDarkness(false);
     CRT_SetEnabled(true);GRAP_SDL_MapDrawn();GRAP_SDL_FlushFrame();
