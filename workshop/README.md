@@ -757,3 +757,10 @@ Mod Overview → Mod details edits the description and screenshot shown by Imper
 Mods tab. Import image fits artwork into a 320 × 200 preview without cropping;
 Remove clears the screenshot. These edits support undo/redo, project saves and
 package import/export. Metadata requires package version 27.
+
+Mod details also has an Author field (package 28 when populated). Automatic saves
+keep the focused description/author editor intact. In Graphics → Tilesets, the
+Import tileset PNG and Export tileset PNG buttons operate on the complete sheet
+and retain every slot in its original order. Transparent pixels in artwork
+sheets are composited onto black; DOS imports use the EGA palette, while full
+alternate sheets preserve their imported palette within engine format limits.

@@ -882,6 +882,18 @@ SDL_Surface* GRAP_SDL_CaptureFrame(void)
     s_capturedFrame=NULL;
     return frame;
 }
+void GRAP_SDL_UIThumbnailPNG(int i, const void *png, size_t size, int x, int y, int w, int h) {
+    if (i < 0 || i >= 4) return;
+    SDL_DestroyTexture(s_uiThumbnails[i]); s_uiThumbnails[i] = NULL;
+    SDL_IOStream *stream = png && size ? SDL_IOFromConstMem(png, size) : NULL;
+    SDL_Surface *image = stream ? SDL_LoadPNG_IO(stream, true) : NULL;
+    if (image) {
+        s_uiThumbnails[i] = SDL_CreateTextureFromSurface(s_sdlRenderer, image);
+        SDL_DestroySurface(image);
+        if (s_uiThumbnails[i]) SDL_SetTextureScaleMode(s_uiThumbnails[i], SDL_SCALEMODE_LINEAR);
+    }
+    s_uiThumbnailRects[i] = (SDL_FRect){x,y,w,h};
+}
 void GRAP_SDL_UIThumbnail(int i,const char* path,int x,int y,int w,int h)
 {
     if(i<0 || i>=4) return;

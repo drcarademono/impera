@@ -281,11 +281,12 @@ void MOD_MountDirectory(const char *directory) {
             const ModResource *meta = resourceIn(p, "MODINFO.DAT");
             if (meta) {
                 unsigned text = MODINFO_U32(meta->data + 8), image = MODINFO_U32(meta->data + 12);
-                memcpy(item->description, meta->data + 16, text);
+                memcpy(item->description, meta->data + MODINFO_Header(meta->data), text);
+                memcpy(item->author, meta->data + MODINFO_Header(meta->data) + text, MODINFO_AuthorSize(meta->data));
                 if (image) {
                     item->image = malloc(image);
                     if (item->image) {
-                        memcpy(item->image, meta->data + 16 + text, image);
+                        memcpy(item->image, meta->data + MODINFO_ImageOffset(meta->data), image);
                         item->imageSize = image;
                     }
                 }

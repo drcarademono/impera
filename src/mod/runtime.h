@@ -12,7 +12,7 @@ unsigned MOD_FrameColor(void);
 #define MOD_CATALOG_LIMIT 128
 #define MOD_FILENAME_LIMIT 1024
 typedef struct ModInfo {
-    char filename[MOD_FILENAME_LIMIT], title[257], description[4097], error[256];
+    char filename[MOD_FILENAME_LIMIT], title[257], author[257], description[4097], error[256];
     unsigned char *image;
     size_t imageSize;
     int enabled, startupEnabled, active;

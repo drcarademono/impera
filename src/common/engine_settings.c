@@ -53,6 +53,7 @@ void ENGINE_Set(int row,float value)
 {
     if(!isfinite(value) || row<0 || row>=ENGINE_SETTING_COUNT) return;
     if(row==ENGINE_FULLSCREEN && value!=0 && value!=1 && value!=2) return;
+    if(row==ENGINE_TILESET && value==TILESET_ZHELKAS) value=TILESET_DOS;
     if(row==ENGINE_TILESET && (value<0 || value>=TILESET_COUNT || value!=(int)value)) return;
     if(row!=ENGINE_FULLSCREEN && row!=ENGINE_TILESET && !isSpeed(row) && value!=0 && value!=1) return;
     if(isSpeed(row) && (value<0.1f || value>10)) return;
@@ -138,9 +139,14 @@ static int rowY(int row)
 static bool s_gameplay;
 static int s_optionsTab, s_modSelected, s_modTop, s_modScroll;
 static bool s_modDetails;
-static SDL_Surface *s_modImage;
-static unsigned s_modImageRevision = ~0u;
+static unsigned s_modImageRevision;
 static int s_modImageIndex = -1;
+static bool s_modImageDetails;
+static void clearModImage(void) {
+    GRAP_SDL_ClearUIThumbnails();
+    s_modImageIndex = -1;
+}
+
 static void checkbox(int x, int y, bool enabled) {
     ENGINE_UIRect(x, y, 7, 7, 7);
     ENGINE_UIRect(x + 1, y + 1, 5, 5, enabled ? 10 : 0);
@@ -161,7 +167,7 @@ static void modText(const char *text, char *out, size_t capacity) {
     out[n] = 0;
 }
 static int descriptionLines(const char *text, int columns, int first, int visible, int x, int y) {
-    char decoded[4097]; modText(text, decoded, sizeof(decoded));
+    char decoded[4608]; modText(text, decoded, sizeof(decoded));
     const char *p = decoded;
     int row = 0;
     while (*p) {
@@ -183,41 +189,34 @@ static int descriptionLines(const char *text, int columns, int first, int visibl
     return row;
 }
 static void modImage(const ModInfo *info) {
-    if (s_modImageRevision != MOD_Revision() || s_modImageIndex != s_modSelected) {
-        SDL_DestroySurface(s_modImage); s_modImage = NULL;
-        s_modImageRevision = MOD_Revision(); s_modImageIndex = s_modSelected;
-        if (info && info->imageSize) {
-            SDL_IOStream *stream = SDL_IOFromConstMem(info->image, info->imageSize);
-            SDL_Surface *source = stream ? SDL_LoadPNG_IO(stream, true) : NULL;
-            if (source && source->w == 320 && source->h == 200) {
-                SDL_Surface *scaled = SDL_ScaleSurface(source, 160, 100, SDL_SCALEMODE_NEAREST);
-                if (scaled) { s_modImage = SDL_ConvertSurface(scaled, SDL_PIXELFORMAT_RGBA32); SDL_DestroySurface(scaled); }
-            }
-            SDL_DestroySurface(source);
-        }
+    if (s_modImageIndex != s_modSelected || s_modImageRevision != MOD_Revision() ||
+        s_modImageDetails != s_modDetails) {
+        clearModImage();
+        s_modImageIndex = s_modSelected;
+        s_modImageRevision = MOD_Revision();
+        s_modImageDetails = s_modDetails;
+        if (info && info->imageSize)
+            GRAP_SDL_UIThumbnailPNG(0, info->image, info->imageSize, s_modDetails ? 16 : 144,
+                                   s_modDetails ? 60 : 44, 44, 24);
     }
-    if (s_modImage) {
-        int page = D_52ba_vdp._52d8_page; D_52ba_vdp._52d8_page = 0;
-        /* SDL may pad rows; pass one tightly packed RGBA scanline at a time. */
-        int x = s_modDetails ? 16 : 144, y = s_modDetails ? 60 : 44;
-        for (int row = 0; row < 100; ++row)
-            GRAP_BUF_PutRGBA((const unsigned char *)s_modImage->pixels + row * s_modImage->pitch, 160, 1, x, y + row);
-        D_52ba_vdp._52d8_page = page;
-    } else ENGINE_UIText(s_modDetails ? 40 : 168, s_modDetails ? 100 : 84, "No screenshot", 8);
+    if (!info || !info->imageSize) ENGINE_UIText(s_modDetails ? 16 : 144, s_modDetails ? 68 : 52, "No image", 8);
 }
 static void drawMods(void) {
     unsigned count = MOD_AvailableCount();
-    if (!count) { ENGINE_UIText(40, 72, "No mods in the Mods folder", 7); return; }
+    if (!count) { clearModImage(); ENGINE_UIText(40, 72, "No mods in the Mods folder", 7); return; }
     s_modSelected = SDL_clamp(s_modSelected, 0, (int)count - 1);
     const ModInfo *info = MOD_Available(s_modSelected);
     if (s_modDetails) {
         char title[257]; modText(info->title, title, sizeof(title)); title[36] = 0;
         ENGINE_UIText(16, 44, title, 15); modImage(info);
         checkbox(20, 164, info->enabled); ENGINE_UIText(32, 164, info->enabled ? "Enabled" : "Disabled", 15);
-        const char *description = *info->description ? info->description : "No description provided.";
-        int lines = descriptionLines(description, 15, 0, 0, 184, 52);
-        s_modScroll = SDL_clamp(s_modScroll, 0, SDL_max(0, lines - 15));
-        descriptionLines(description, 15, s_modScroll, 15, 184, 52);
+        char details[4608];
+        SDL_snprintf(details, sizeof(details), "%s%s%s%s", *info->author ? "By " : "", info->author,
+                     *info->author ? "\n\n" : "", *info->description ? info->description : "No description provided.");
+        const char *description = details;
+        int lines = descriptionLines(description, 28, 0, 0, 72, 60);
+        s_modScroll = SDL_clamp(s_modScroll, 0, SDL_max(0, lines - 13));
+        descriptionLines(description, 28, s_modScroll, 13, 72, 60);
         ENGINE_UIText(16, 180, "Esc: Back  Space: On/Off", 7);
     } else {
         if (s_modSelected < s_modTop) s_modTop = s_modSelected;
@@ -232,7 +231,13 @@ static void drawMods(void) {
             ENGINE_UIText(32, y, title, selected ? 0 : 15);
         }
         modImage(info);
-        descriptionLines(*info->description ? info->description : "No description provided.", 20, 0, 3, 144, 148);
+        if (*info->author) {
+            char author[300]; SDL_snprintf(author, sizeof(author), "By %s", info->author);
+            char display[300]; modText(author, display, sizeof(display)); display[20] = 0;
+            ENGINE_UIText(144, 76, display, 7);
+        }
+        descriptionLines(*info->description ? info->description : "No description provided.", 20, 0,
+                         *info->author ? 9 : 10, 144, *info->author ? 88 : 76);
         ENGINE_UIText(16, 170, "Space: On/Off  Enter: Details", 7);
         ENGINE_UIText(16, 180, "Return", 15);
     }
@@ -244,8 +249,8 @@ static void drawMods(void) {
         ENGINE_UIText(16, 180, message, 14);
     }
     if (s_modDetails && *info->error) {
-        ENGINE_UIRect(16, 60, 160, 100, 0);
-        descriptionLines(info->error, 20, 0, 12, 16, 60);
+        ENGINE_UIRect(72, 60, 232, 104, 0);
+        descriptionLines(info->error, 28, 0, 13, 72, 60);
     }
 }
 static void toggleMod(void) {
@@ -263,7 +268,9 @@ static void toggleMod(void) {
 static int s_videoChoice=-1;
 static int s_dropdownRow=ENGINE_FULLSCREEN;
 static int choiceTop(void) { return rowY(s_dropdownRow)+12; }
-static int choices(void) { return s_dropdownRow==ENGINE_TILESET?TILESET_COUNT:3; }
+static const int tilesetChoices[] = {TILESET_DOS, TILESET_AMIGA, TILESET_APPLE, TILESET_GRAY, TILESET_SHARP, TILESET_CUSTOM};
+#define TILESET_CHOICES ((int)(sizeof(tilesetChoices)/sizeof(tilesetChoices[0])))
+static int choices(void) { return s_dropdownRow==ENGINE_TILESET?TILESET_CHOICES:3; }
 static const char* videoLabel(int choice)
 {
     if(choice==0) return "Windowed";
@@ -285,8 +292,7 @@ static int videoChoice(void)
     for(int i=0;i<3;i++) if(videoModes[i]==GRAP_SDL_VideoMode()) return i;
     return 0;
 }
-static const int tilesetChoices[] = {TILESET_DOS, TILESET_ZHELKAS, TILESET_AMIGA,
-    TILESET_APPLE, TILESET_GRAY, TILESET_SHARP, TILESET_CUSTOM};
+
 static const char* choiceLabel(int choice) { return s_dropdownRow==ENGINE_TILESET?TILESET_Label(tilesetChoices[choice]):videoLabel(choice); }
 static int choiceWidth(void)
 {
@@ -321,11 +327,12 @@ static void openChoice(int row) {
     s_dropdownRow=row;
     s_videoChoice=videoChoice();
     if(row==ENGINE_TILESET)
-        for(int i=0;i<TILESET_COUNT;i++)
+        for(int i=0;i<TILESET_CHOICES;i++)
             if(tilesetChoices[i]==TILESET_Selected()) { s_videoChoice=i; break; }
 }
 void ENGINE_DrawSettings(int selected)
 {
+    if (!s_optionsTab) clearModImage();
     TILESET_Copy(g_linearEgaBuffer0, NULL, 320*200);
     memset(g_linearEgaBuffer0,0,320*200);
     ENGINE_UIFrame();
@@ -408,19 +415,27 @@ void ENGINE_ShowOptions(bool gameplay)
     ENGINE_DrawSettings(selected);
     while(!done) {
         SDL_Event event;
+        bool redraw = false, cursorMoved = false;
+        /* Drain queued input before presenting: a vsynced present for every
+         * mouse event can leave clicks seconds behind a high-rate mouse. */
         while(SDL_PollEvent(&event)) {
+            if (event.type == SDL_EVENT_MOUSE_MOTION || event.type == SDL_EVENT_WINDOW_MOUSE_ENTER ||
+                event.type == SDL_EVENT_WINDOW_MOUSE_LEAVE) cursorMoved = true;
+            int previousSelected = selected;
+            int previousChoice = s_videoChoice;
+            float previousSpeed = drag >= 0 ? ENGINE_Get(drag) : 0;
             if(event.type==SDL_EVENT_QUIT ||
                (event.type==SDL_EVENT_KEY_DOWN && event.key.key==SDLK_E &&
                 (event.key.mod & SDL_KMOD_CTRL))) { if(changed) ENGINE_Save();exit(0); }
             if(event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_TAB) {
                 s_optionsTab = !s_optionsTab; s_videoChoice = -1; drag = -1; s_modDetails = false;
-                ENGINE_DrawSettings(selected); continue;
+                redraw = true; continue;
             }
             if(event.type == SDL_EVENT_MOUSE_BUTTON_DOWN && event.button.button == SDL_BUTTON_LEFT) {
                 float x, y;
                 if(GRAP_SDL_MouseUIPoint(event.button.x, event.button.y, &x, &y) && y >= 24 && y < 37 && x >= 20 && x < 152) {
                     s_optionsTab = x >= 96; s_videoChoice = -1; drag = -1; s_modDetails = false;
-                    ENGINE_DrawSettings(selected); continue;
+                    redraw = true; continue;
                 }
             }
             if(s_optionsTab) {
@@ -449,12 +464,15 @@ void ENGINE_ShowOptions(bool gameplay)
                             else if(y>=178) s_modDetails = false;
                         } else if(y>=44 && y<164 && x>=16 && x<136) {
                             int item = s_modTop + ((int)y - 44) / 10;
-                            if(item<count) { s_modSelected=item; s_modScroll=0; if(x<32) toggleMod(); else if(event.button.clicks>=2) s_modDetails=true; }
+                            if(item<count) { s_modSelected=item; s_modScroll=0; if(event.button.clicks<=1) toggleMod(); }
                         } else if(x>=144 && y>=44 && y<174 && count) { s_modDetails=true; s_modScroll=0; }
                         else if(y>=178 && x<136) done=true;
                     }
                 }
-                ENGINE_DrawSettings(selected); continue;
+                if (event.type == SDL_EVENT_KEY_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ||
+                    event.type == SDL_EVENT_MOUSE_WHEEL || event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED)
+                    redraw = true;
+                continue;
             }
             if(s_videoChoice>=0) {
                 if(event.type==SDL_EVENT_KEY_DOWN) {
@@ -477,7 +495,10 @@ void ENGINE_ShowOptions(bool gameplay)
                         }
                     } else if(event.type==SDL_EVENT_MOUSE_BUTTON_DOWN) s_videoChoice=-1;
                 }
-                ENGINE_DrawSettings(selected);continue;
+                if (event.type == SDL_EVENT_KEY_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ||
+                    event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED || previousChoice != s_videoChoice)
+                    redraw = true;
+                continue;
             }
             if(event.type==SDL_EVENT_KEY_DOWN) {
                 switch(event.key.key) {
@@ -522,12 +543,19 @@ void ENGINE_ShowOptions(bool gameplay)
                 }
             }
             if(event.type==SDL_EVENT_KEY_DOWN || event.type==SDL_EVENT_MOUSE_BUTTON_DOWN ||
-               event.type==SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED || event.type==SDL_EVENT_MOUSE_MOTION || drag>=0) ENGINE_DrawSettings(selected);
+               event.type==SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED || previousSelected != selected ||
+               (drag >= 0 && previousSpeed != ENGINE_Get(drag))) redraw = true;
         }
         MOUSE_UpdateCursor();
+        if (!done) {
+            if (redraw) ENGINE_DrawSettings(selected);
+            /* CRT draws the pointer into the frame instead of using the OS
+             * cursor. Refresh it once per input batch even on unchanged rows. */
+            else if (cursorMoved && CRT_Enabled()) GRAP_BUF_Present();
+        }
         SDL_Delay(16);
     }
-    SDL_DestroySurface(s_modImage); s_modImage = NULL; s_modImageIndex = -1; s_optionsTab = 0;
+    clearModImage(); s_optionsTab = 0;
     if(changed && !ENGINE_Save()) fprintf(stderr,"Unable to save engine settings\n");
     KEY_SDL_ClearInput();MOUSE_Cancel();
     GRAP_SDL_SetPixelUI(false);

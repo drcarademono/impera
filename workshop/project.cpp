@@ -320,7 +320,7 @@ QByteArray Project::package() const {
         portableConditions |= contents.refill > 2;
     const bool masks = usesMasks(*this);
     QByteArray out(
-        list.contains("MODINFO.DAT") ? "IMOD0027"
+        list.contains("MODINFO.DAT") ? (data("MODINFO.DAT").startsWith("IMETA002") ? "IMOD0028" : "IMOD0027")
         : list.contains("INTERFACE.OVR") ? "IMOD0026"
         : masks                        ? "IMOD0025"
         : list.contains("GATES.OVR") ? "IMOD0024"
@@ -503,7 +503,7 @@ void Project::save(const QString &path) {
     }
     if (changed().contains("MODINFO.DAT")) {
         requirements["modMetadata"] = 1;
-        requirements["packageVersion"] = 27;
+        requirements["packageVersion"] = data("MODINFO.DAT").startsWith("IMETA002") ? 28 : 27;
     }
     if (!requirements.isEmpty())
         root["requires"] = requirements;

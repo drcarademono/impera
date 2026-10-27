@@ -465,11 +465,15 @@ bool WorkshopWindow::guard(const std::function<void()> &operation) {
 void WorkshopWindow::updateSummary() {
     setWindowModified(!history.isClean() || project.title != savedTitle);
     setWindowTitle("Impera Workshop — " + project.title + "[*]");
-    if (current == "@overview" && !rebuildPending) {
+    const auto focus = QApplication::focusWidget();
+    const bool editingDetails = focus && (focus->objectName() == "modDescription" || focus->objectName() == "modAuthor");
+    if (current == "@overview" && !editingDetails && !rebuildPending) {
         rebuildPending = true;
         QTimer::singleShot(0, this, [this] {
             rebuildPending = false;
-            if (current == "@overview") rebuildEditor();
+            auto focus = QApplication::focusWidget();
+            if (current == "@overview" && (!focus ||
+                (focus->objectName() != "modDescription" && focus->objectName() != "modAuthor"))) rebuildEditor();
         });
     }
 }
@@ -1016,6 +1020,11 @@ QWidget *WorkshopWindow::overviewEditor() {
     details->setObjectName("overviewModDetails");
     auto detailsLayout = new QHBoxLayout(details);
     auto textLayout = new QVBoxLayout;
+    auto author = new QLineEdit;
+    author->setObjectName("modAuthor"); author->setMaxLength(MODINFO_MAX_AUTHOR);
+    author->setPlaceholderText("Mod author");
+    author->setToolTip("Author shown in Impera’s Mods tab. Up to 256 UTF-8 bytes.");
+    textLayout->addWidget(new QLabel("Author")); textLayout->addWidget(author);
     textLayout->addWidget(new QLabel("Description"));
     auto description = new QPlainTextEdit;
     description->setObjectName("modDescription");
@@ -1026,8 +1035,9 @@ QWidget *WorkshopWindow::overviewEditor() {
     if (MODINFO_Validate(info.constData(), info.size())) {
         auto bytes = reinterpret_cast<const unsigned char *>(info.constData());
         unsigned length = MODINFO_U32(bytes + 8);
-        description->setPlainText(QString::fromUtf8(info.constData() + 16, length));
-        *screenshot = info.mid(16 + length);
+        description->setPlainText(QString::fromUtf8(info.constData() + MODINFO_Header(bytes), length));
+        author->setText(QString::fromUtf8(info.constData() + MODINFO_Header(bytes) + length, MODINFO_AuthorSize(bytes)));
+        *screenshot = info.mid(MODINFO_ImageOffset(bytes));
     }
     textLayout->addWidget(description, 1);
     auto remaining = new QLabel;
@@ -1059,17 +1069,20 @@ QWidget *WorkshopWindow::overviewEditor() {
     detailsLayout->addLayout(imageLayout);
     auto timer = new QTimer(details);
     timer->setSingleShot(true); timer->setInterval(350);
-    auto applyDetails = [this, description, screenshot, timer] {
+    auto applyDetails = [this, author, description, screenshot, timer] {
         timer->stop();
         return guard([&] {
             auto text = description->toPlainText().toUtf8();
             require(text.size() <= MODINFO_MAX_TEXT, "Description exceeds 4096 UTF-8 bytes");
-            QByteArray bytes("IMETA001", 8);
+            auto by = author->text().toUtf8();
+            require(by.size() <= MODINFO_MAX_AUTHOR, "Author exceeds 256 UTF-8 bytes");
+            QByteArray bytes(by.isEmpty() ? "IMETA001" : "IMETA002", 8);
             for (unsigned n : {unsigned(text.size()), unsigned(screenshot->size())})
                 for (int i = 0; i < 4; ++i) bytes.append(char(n >> (8 * i)));
-            bytes += text; bytes += *screenshot;
+            if (!by.isEmpty()) for (int i = 0; i < 4; ++i) bytes.append(char(unsigned(by.size()) >> (8 * i)));
+            bytes += text; bytes += by; bytes += *screenshot;
             require(MODINFO_Validate(bytes.constData(), bytes.size()), "Invalid mod details");
-            if (text.isEmpty() && screenshot->isEmpty() &&
+            if (text.isEmpty() && by.isEmpty() && screenshot->isEmpty() &&
                 project.resources.value("MODINFO.DAT").edited.isEmpty()) return;
             edit({{"MODINFO.DAT", bytes}}, "Edit mod details");
         });
@@ -1082,6 +1095,7 @@ QWidget *WorkshopWindow::overviewEditor() {
         remaining->setStyleSheet(length > MODINFO_MAX_TEXT ? "color:#ff5555" : "");
     };
     updateBudget();
+    connect(author, &QLineEdit::textChanged, details, [timer] { timer->start(); });
     connect(description, &QPlainTextEdit::textChanged, details, [timer, description, updateBudget] {
         updateBudget();
         if (description->toPlainText().toUtf8().size() <= MODINFO_MAX_TEXT) timer->start();
@@ -1098,7 +1112,7 @@ QWidget *WorkshopWindow::overviewEditor() {
             auto source = reader.read(); require(!source.isNull(), "Cannot read image");
             QImage image(320, 200, QImage::Format_RGB32); image.fill(Qt::black);
             QPainter painter(&image);
-            auto fitted = source.scaled(320, 200, Qt::KeepAspectRatio, Qt::FastTransformation);
+            auto fitted = source.scaled(320, 200, Qt::KeepAspectRatio, Qt::SmoothTransformation);
             painter.drawImage((320 - fitted.width()) / 2, (200 - fitted.height()) / 2, fitted);
             painter.end();
             QByteArray png; QBuffer buffer(&png); buffer.open(QIODevice::WriteOnly);
@@ -1648,7 +1662,9 @@ QWidget *WorkshopWindow::graphicsEditor(const QString &name) {
     auto heading = new QLabel(Workshop::artworkTitle(name));
     heading->setObjectName("artworkTitle");
     heading->setToolTip("Source: " + name + ". Numbered images retain their original slot ordering.");
-    layout->addWidget(heading);
+    auto fileActions = new QHBoxLayout;
+    fileActions->addWidget(heading, 1);
+    layout->addLayout(fileActions);
     auto row = new QHBoxLayout;
     auto slot = new QComboBox;
     auto tileLabel = [graphics](int i) {
@@ -1793,7 +1809,7 @@ QWidget *WorkshopWindow::graphicsEditor(const QString &name) {
         });
     });
     if (graphics->tiles) {
-        button(actions, "Export tilesheet", [=] {
+        auto exportTiles = button(fileActions, "Export tileset PNG…", [=] {
             guard([&] {
                 QString path =
                     QFileDialog::getSaveFileName(this, "Export tilesheet", {}, "PNG (*.png)");
@@ -1813,35 +1829,48 @@ QWidget *WorkshopWindow::graphicsEditor(const QString &name) {
                 require(sheet.save(path, "PNG"), "Cannot export PNG");
             });
         });
-        button(actions, "Import tilesheet", [=] {
+        exportTiles->setObjectName("exportTilesetPNG");
+        auto importTiles = button(fileActions, "Import tileset PNG…", [=] {
             QString path =
                 QFileDialog::getOpenFileName(this, "Import tilesheet", {}, "PNG (*.png)");
             if (path.isEmpty())
                 return;
             guard([&] {
-                QImage sheet(path);
+                QImageReader reader(path);
                 const QSize cell = graphics->images[0].size();
-                require(sheet.size() == QSize(graphics->columns * cell.width(), 16 * cell.height()),
+                require(reader.size() == QSize(graphics->columns * cell.width(), 16 * cell.height()),
                         "Tilesheet dimensions must match the current source sheet");
+                QImage sheet = reader.read();
+                require(!sheet.isNull(), "Cannot read tileset PNG");
                 auto next = *graphics;
+                if (!MOD_IsTilesetMask(name.toLatin1().constData())) {
+                    QImage opaque(sheet.size(), QImage::Format_RGB32); opaque.fill(Qt::black);
+                    QPainter painter(&opaque); painter.drawImage(0, 0, sheet); painter.end();
+                    sheet = opaque;
+                }
                 for (int i = 0; i < graphics->images.size(); i++)
                     next.images[i] = sheet
                                          .copy((i % graphics->columns) * cell.width(),
                                                (i / graphics->columns) * cell.height(),
                                                cell.width(), cell.height())
                                          .convertToFormat(QImage::Format_ARGB32);
-                for (auto &image : next.images)
-                    image = Workshop::paletteImage(image, colors);
+                if (graphics->pngResource.isEmpty())
+                    for (auto &image : next.images) image = Workshop::paletteImage(image, colors);
                 auto bytes = U5::writeGraphics(next);
                 edit({{name, bytes}}, "Import tilesheet");
                 *graphics = next;
-                palette->setColors(colors, !graphics->tiles);
+                palette->setColors(Workshop::artworkColors(next), !graphics->tiles);
                 canvas->image = graphics->images[slot->currentIndex()];
                 canvas->size();
                 for (int i = 0; i < graphics->images.size(); i++)
                     gallery->item(i)->setIcon(artworkPreview(graphics->images[i]));
+                if (!graphics->pngResource.isEmpty()) QTimer::singleShot(0, this, [this] { rebuildEditor(); });
             });
         });
+        importTiles->setObjectName("importTilesetPNG");
+        importTiles->setToolTip(QString("Replace all %1 tiles from a %2 × %3 PNG, preserving tile order.")
+                                  .arg(graphics->images.size()).arg(graphics->columns * graphics->images[0].width())
+                                  .arg(16 * graphics->images[0].height()));
     }
     actions->addStretch();
     layout->addLayout(actions);

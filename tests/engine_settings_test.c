@@ -30,10 +30,37 @@ void GRAP_SDL_Cleanup(void);
 
 static void key(SDL_Keycode code)
 { SDL_Event e={0};e.type=SDL_EVENT_KEY_DOWN;e.key.key=code;assert(SDL_PushEvent(&e)); }
-static Uint32 selectEnhanced(void* data, SDL_TimerID timer, Uint32 interval) {
+static void clickUI(float x, float y) {
+    int n,w,h; SDL_Window **windows=SDL_GetWindows(&n); assert(n==1);
+    assert(SDL_GetWindowSize(windows[0],&w,&h)); SDL_free(windows);
+    float ux,uy,vx,vy;
+    assert(GRAP_SDL_MouseUIPoint(w/2.0f,h/2.0f,&ux,&uy));
+    assert(GRAP_SDL_MouseUIPoint(w/2.0f+1,h/2.0f+1,&vx,&vy));
+    SDL_Event e={0}; e.type=SDL_EVENT_MOUSE_BUTTON_DOWN; e.button.button=SDL_BUTTON_LEFT;
+    e.button.x=w/2.0f+(x-ux)/(vx-ux); e.button.y=h/2.0f+(y-uy)/(vy-uy);
+    assert(SDL_PushEvent(&e));
+}
+static Uint32 mouseBurst(void *data, SDL_TimerID timer, Uint32 interval) {
+    (void)data; (void)timer; (void)interval;
+    int n,w,h; SDL_Window **windows=SDL_GetWindows(&n); assert(n==1);
+    assert(SDL_GetWindowSize(windows[0],&w,&h)); SDL_free(windows);
+    /* A high-rate mouse may queue hundreds of motions before a click/key.
+       Include both tabs so a slow present per event cannot hide in either. */
+    for (int tab=0;tab<2;tab++) {
+        for (int i=0;i<1024;i++) {
+            SDL_Event e={0}; e.type=SDL_EVENT_MOUSE_MOTION;
+            e.motion.x=w/2.0f; e.motion.y=h*(0.3f+(i%2)*0.3f);
+            assert(SDL_PushEvent(&e));
+        }
+        key(SDLK_TAB);
+    }
+    key(SDLK_ESCAPE);
+    return 0;
+}
+static Uint32 selectAmiga(void* data, SDL_TimerID timer, Uint32 interval) {
     (void)data; (void)timer; (void)interval;
     key(SDLK_DOWN); key(SDLK_RETURN); /* Tileset popup, initially DOS. */
-    key(SDLK_DOWN); key(SDLK_RETURN); /* Enhanced must be immediately beneath DOS. */
+    key(SDLK_DOWN); key(SDLK_RETURN); /* Amiga is immediately beneath DOS. */
     key(SDLK_ESCAPE);
     return 0;
 }
@@ -43,8 +70,21 @@ static Uint32 modInput(void* data, SDL_TimerID timer, Uint32 interval) {
     if (!modStep++) { key(SDLK_TAB); return interval; }
     /* Same seven-pixel checkbox as the ordinary engine options. */
     assert(g_linearEgaBuffer0[45*320+21] == (expectedModEnabled ? 10 : 0));
-    assert((TILESET_UIBufferColor(g_linearEgaBuffer0+64*320+164, IMPERA_TextPalette) & 0xffffffu) == 0xc8283cu);
-    key(SDLK_SPACE); key(SDLK_ESCAPE);
+    /* Repainting must retain the cached screenshot overlay. */
+    ENGINE_DrawSettings(0);
+    ENGINE_DrawSettings(0);
+    SDL_Surface *shot=GRAP_SDL_CaptureFrame(); assert(shot);
+    Uint8 r,g,b,a;
+    assert(SDL_ReadSurfacePixel(shot,shot->w*164/320,shot->h*64/200,&r,&g,&b,&a));
+    assert(r==200 && g==40 && b==60);
+    /* The preview is a display-resolution overlay, not baked into the pixel UI. */
+    assert(g_linearEgaBuffer0[64*320+164] == 0);
+    /* Match the small save-slot thumbnail footprint (44 by 24 logical pixels). */
+    assert(SDL_ReadSurfacePixel(shot,shot->w*196/320,shot->h*64/200,&r,&g,&b,&a));
+    assert(r==0 && g==0 && b==0);
+    SDL_DestroySurface(shot);
+    clickUI(72,48); /* Clicking the mod name must toggle it. */
+    key(SDLK_ESCAPE);
     return 0;
 }
 static void packageNumber(FILE *f, unsigned value) {
@@ -56,16 +96,19 @@ static void modOptions(void) {
     assert(SDL_CreateDirectory("mod-manager-fixture/Mods"));
     SDL_Surface *image = SDL_CreateSurface(320,200,SDL_PIXELFORMAT_RGBA32); assert(image);
     assert(SDL_FillSurfaceRect(image,NULL,SDL_MapSurfaceRGBA(image,200,40,60,255)));
+    for(int y=40;y<60;y++) for(int x=100;x<120;x++)
+        assert(SDL_WriteSurfacePixel(image,x,y,x%2?20:200,40,60,255));
     assert(SDL_SavePNG(image,"mod-manager-fixture/image.png")); SDL_DestroySurface(image);
     size_t pngSize; void *png = SDL_LoadFile("mod-manager-fixture/image.png",&pngSize); assert(png);
-    const char *text = "A test mod description.";
-    size_t size = 16 + strlen(text) + pngSize;
+    const char *text = "A test mod description."; const char *author="Test Author";
+    size_t size = 20 + strlen(text) + strlen(author) + pngSize;
     unsigned char *metadata = calloc(1,size); assert(metadata);
-    memcpy(metadata,"IMETA001",8); metadata[8]=(unsigned char)strlen(text);
+    memcpy(metadata,"IMETA002",8); metadata[16]=(unsigned char)strlen(author); metadata[8]=(unsigned char)strlen(text);
     for(int i=0;i<4;i++) metadata[12+i]=(unsigned char)(pngSize>>(8*i));
-    memcpy(metadata+16,text,strlen(text)); memcpy(metadata+16+strlen(text),png,pngSize); SDL_free(png);
+    memcpy(metadata+20,text,strlen(text)); memcpy(metadata+20+strlen(text),author,strlen(author));
+    memcpy(metadata+20+strlen(text)+strlen(author),png,pngSize); SDL_free(png);
     FILE *f=fopen("mod-manager-fixture/Mods/test.imperamod","wb"); assert(f);
-    assert(fwrite("IMOD0027",1,8,f)==8); packageNumber(f,6); packageNumber(f,1);
+    assert(fwrite("IMOD0028",1,8,f)==8); packageNumber(f,6); packageNumber(f,1);
     assert(fwrite("UI mod",1,6,f)==6); packageNumber(f,11); assert(fwrite("MODINFO.DAT",1,11,f)==11);
     packageNumber(f,0); packageNumber(f,(unsigned)size); packageNumber(f,0);
     packageNumber(f,MOD_Crc32(metadata,size)); packageNumber(f,1);
@@ -74,6 +117,7 @@ static void modOptions(void) {
     assert(SDL_setenv_unsafe("U5D_MODS_DIR","mod-manager-fixture/Mods",1)==0);
     FILE_SetDataDirectory(".");
     assert(MOD_LoadedCount()==1 && MOD_AvailableCount()==1);
+    assert(!strcmp(MOD_Available(0)->author,"Test Author"));
     unsigned revision=MOD_Revision();
     modStep=0; expectedModEnabled=1;
     assert(SDL_AddTimer(80,modInput,NULL)); ENGINE_ShowOptions(false);
@@ -117,6 +161,11 @@ static void titleFixture(bool small) {
     if(count) assert(fputc(bits & 255,f)!=EOF);
     assert(!fclose(f)); free(data);
 }
+static bool refreshingTitle;
+static unsigned titleRefreshYields;
+static void countTitleRefreshYields(void) {
+    if (refreshingTitle) ++titleRefreshYields;
+}
 static void refreshTitle(void) {
     TextWindow windows[4]; memcpy(windows,D_535e_textWindows,sizeof(windows));
     TextWindow *oldWindow=D_539a_currentTextWindow;
@@ -126,10 +175,14 @@ static void refreshTitle(void) {
     ULTIMA_1c9e_SelectCharset(0);
     D_13b0_brightWhiteColor=15;
     int oldImmediate = EVT_SetImmediateExit(1);
-    titleFixture(false); INTRO_RefreshTitle();
+    EVT_RegisterCallback(countTitleRefreshYields);
+    ULTIMA_1c22_SetTextWindowSize(0,0,0,39,24);
+    titleFixture(false); refreshingTitle=true; INTRO_RefreshTitle(); refreshingTitle=false;
+    assert(titleRefreshYields==0); /* A menu refresh must not enter the timed animation loop. */
     assert(g_linearEgaBuffer0[40*320+100]==2);
     byte *first=D_bb1a;
-    titleFixture(true); INTRO_RefreshTitle();
+    titleFixture(true); refreshingTitle=true; INTRO_RefreshTitle(); refreshingTitle=false;
+    assert(titleRefreshYields==0);
     assert(g_linearEgaBuffer0[40*320+100]==0); /* Old full-width logo removed. */
     assert(g_linearEgaBuffer0[0]==0 && g_linearEgaBuffer0[1]==2); /* Masked pixels clear to black. */
     for(int frame=0;frame<4;++frame) {
@@ -143,6 +196,10 @@ static void refreshTitle(void) {
     D_5398_currentCharset=oldFont; D_5386_current_text_window_idx=oldIndex;
     EVT_SetImmediateExit(oldImmediate);
     remove("ULTIMA.16");
+}
+static Uint32 optionLabelClick(void *data, SDL_TimerID timer, Uint32 interval) {
+    (void)data; (void)timer; (void)interval;
+    clickUI(80,42+ENGINE_ENHANCED_LOOK*10+3); key(SDLK_ESCAPE); return 0;
 }
 static int musicPickerMode,musicInputStep;
 static Uint32 musicInput(void* data,SDL_TimerID timer,Uint32 interval)
@@ -241,12 +298,21 @@ int main(int argc, char** argv)
         fputs("Ctrl+E was consumed without exiting\n",stderr);
         return 1;
     }
+    assert(SDL_AddTimer(80,mouseBurst,NULL));
+    Uint64 burstStart=SDL_GetTicks(); ENGINE_ShowOptions(false);
+    printf("Options/Mods input burst: %llu ms\n", (unsigned long long)(SDL_GetTicks()-burstStart));
+    ENGINE_Set(ENGINE_CRT,1);
+    assert(SDL_AddTimer(80,mouseBurst,NULL)); ENGINE_ShowOptions(false);
+    ENGINE_Set(ENGINE_CRT,0);
     modOptions();
+    ENGINE_Set(ENGINE_ENHANCED_LOOK,0);
+    assert(SDL_AddTimer(80,optionLabelClick,NULL)); ENGINE_ShowOptions(false);
+    assert(ENGINE_Get(ENGINE_ENHANCED_LOOK)); ENGINE_Set(ENGINE_ENHANCED_LOOK,0);
     refreshTitle();
     assert(TILESET_Select(TILESET_DOS));
-    assert(SDL_AddTimer(80, selectEnhanced, NULL));
+    assert(SDL_AddTimer(80, selectAmiga, NULL));
     ENGINE_ShowOptions(false);
-    assert(TILESET_Selected() == TILESET_ZHELKAS);
+    assert(TILESET_Selected() == TILESET_AMIGA);
     assert(TILESET_Select(TILESET_DOS));
     ENGINE_Set(ENGINE_MOVEMENT_SPEED,0.5f);ENGINE_Set(ENGINE_ANIMATION_SPEED,0.75f);
     assert(!ENGINE_Get(ENGINE_ENHANCED_LOOK));

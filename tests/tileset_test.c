@@ -229,8 +229,7 @@ static void chooseTileset(void)
     event.key.key = SDLK_RETURN;
     assert(SDL_PushEvent(&event));
     event.key.key = SDLK_DOWN;
-    assert(SDL_PushEvent(&event)); /* DOS -> Enhanced -> Amiga */
-    assert(SDL_PushEvent(&event));
+    assert(SDL_PushEvent(&event)); /* DOS -> Amiga */
     event.key.key = SDLK_RETURN;
     assert(SDL_PushEvent(&event));
     event.key.key = SDLK_ESCAPE;
@@ -263,7 +262,7 @@ static void chooseCustomOption(void)
     e.key.key = SDLK_RETURN;
     assert(SDL_PushEvent(&e));
     e.key.key = SDLK_DOWN;
-    for (int i = 0; i < TILESET_COUNT - 1; i++) /* Custom is the last menu entry. */
+    for (int i = 0; i < TILESET_COUNT - 2; i++) /* Custom is last; the legacy Enhanced ID is hidden. */
         assert(SDL_PushEvent(&e));
     e.key.key = SDLK_RETURN;
     assert(SDL_PushEvent(&e));
@@ -810,7 +809,7 @@ static void baselineMasksAndEnhancedDOS(byte *bank) {
     ENGINE_Set(ENGINE_TILESET, TILESET_ZHELKAS);
     assert(ENGINE_Save());
     assert(TILESET_Select(TILESET_DOS));
-    ENGINE_Load(); assert(TILESET_Selected() == TILESET_ZHELKAS);
+    ENGINE_Load(); assert(TILESET_Selected() == TILESET_DOS); /* Retired option maps to DOS. */
     remove("ENGINE.CFG");
     free(raw);
     assert(SDL_setenv_unsafe("IMPERA_TILESETS", directory, 1) == 0);

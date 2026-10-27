@@ -324,6 +324,24 @@ static void INTRO_04e0_DrawMenuBorders(void)
     int local_4;
 
     ULTIMA_1cca_SetTextForegroundColor(MOD_FrameColor());
+#if defined(TARGET_SDL)
+    /* Border layout must not wrap text: the legacy wrap path sleeps for
+     * each row and pumps events while the title is only partly rebuilt. */
+    D_538e = 0;
+    for (int y = 15; y <= 24; ++y) {
+        for (int x = 0; x < 40; ++x) {
+            if (y != 15 && y != 24 && x != 0 && x != 39) continue;
+            int glyph = 0x7f;
+            if (y == 15 && x == 0) glyph = 0x7b;
+            if (y == 15 && x == 39) glyph = 0x7c;
+            if (y == 24 && x == 0) glyph = 0x7d;
+            if (y == 24 && x == 39) glyph = 0x7e;
+            ULTIMA_1bf2_SetTextPosition(x, y);
+            ULTIMA_16ba_PrintChar(glyph);
+        }
+    }
+    D_538e = 1;
+#else
     ULTIMA_1bf2_SetTextPosition(0, 0xf);
     ULTIMA_16ba_PrintChar(0x7b);
 
@@ -351,6 +369,7 @@ static void INTRO_04e0_DrawMenuBorders(void)
     D_538e = 0;
     ULTIMA_16ba_PrintChar(0x7e);
     D_538e = 1;
+#endif
     ULTIMA_0a70_GRAP_2d_SetPenColor(D_13b0_brightWhiteColor);
     ULTIMA_0b10_GRAP_Line(7, 127, 312, 127);
     ULTIMA_0f90_GRAP_Pen(312, 192);
@@ -410,7 +429,9 @@ static void INTRO_05b0_DisplayTitle(int param_1) // (0 for fast display)
         ULTIMA_0fdc_FreeBitImage(local_4);
     }
     ULTIMA_0c22_GRAP_0f_SelectPage(0);
-    INTRO_2090_AnimateWD();
+    /* Restoring a menu is not an animation step: do not wait a DOS tick. */
+    if (param_1 != 0) INTRO_2090_AnimateWD();
+    else DRV_69(0, 0);
     D_a9bd[1] = 0;
     INTRO_04e0_DrawMenuBorders();
 }
@@ -792,6 +813,11 @@ static void INTRO_RunMain(void) // intro_main (initialize video) (8b46)
             s_titleMenuActive=true;
 #endif
             INTRO_06bc_BuildMainMenu(0);
+#if defined(TARGET_SDL)
+        resumeTitleMenu:
+            MOUSE_Cancel();
+            s_titleMenuActive = true;
+#endif
             do
             {
                 // 0d4d
@@ -896,8 +922,14 @@ static void INTRO_RunMain(void) // intro_main (initialize video) (8b46)
                 ULTIMA_1d02_LoadCharset("RUNES.CH", 1);
                 ULTIMA_1c9e_SelectCharset(0);
                 INTRO_RefreshTitle();
+                INTRO_043e(_TEXT(0x31c1, "Copyright 1988 Lord British"));
+                INTRO_06bc_BuildMainMenu(6);
             }
-            break;
+            /* Engine Options restored the saved framebuffer when no mod
+             * changed. Keep the menu/text windows and selection instead of
+             * clearing and rebuilding the menu through the outer loop. */
+            local_c = 6;
+            goto resumeTitleMenu;
         }
 #endif
         case 0x4a: // 'J'
