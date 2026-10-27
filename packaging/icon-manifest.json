@@ -1,11 +1,11 @@
 {
   "packaging/impera.svg": "1d4064575d936634a5bc7d3e439135d5541a1e73655309708be0837216a0cf47",
-  "packaging/impera-workshop.svg": "75fac7049813afe82e130b5fd4e40d83b03b0a900ad8ff0846daf8efb165d382",
+  "packaging/impera-workshop.svg": "3622c705984dfb22c3d8a3263ce577abb9a05720fe7f2891815393b0019443d7",
   "packaging/impera.png": "71bd783128254aa15884deceb70d0fcdc2eae3ee7dfa7f898e5c358d9d8026e1",
   "packaging/impera.ico": "007e5f19add5b8efe96c7d3fff76d71ee6cfa9ce0a53c602a3f972617a37a753",
   "packaging/impera.icns": "a1feb6b19c10bf3275ae2edc981d1282d3533e51da63000191a425fe64348413",
   "src/common/icon_pixels.h": "153eb2907dbcf816f9832eb9680dc09db7e840d8bf8b474fe79614786c85de9c",
-  "packaging/impera-workshop.png": "9a4414450a8170aeb4162b4fafc6656051fc14db83bc97175364b7e26b174ac2",
-  "packaging/impera-workshop.ico": "1dc87514c0cde49a9c70da79d2252adde1aecc352caf77a15d8f7933555436c2",
-  "packaging/impera-workshop.icns": "f4e97f47b73817a2b9e08506c6714ad6928b1e52aa91783e705e52b016ff2e67"
+  "packaging/impera-workshop.png": "c4aff277aa30393fbae34ac2cd1c0e946f4608792a4bf348a68fa837bdc8ac74",
+  "packaging/impera-workshop.ico": "b5e77eff8b6e716aef2fe7a01e540405cf90876998fcf67f1f44bd00a185903d",
+  "packaging/impera-workshop.icns": "22e0be1d7f451df08a8a8ccbba70a62e2f333f301c5f61ff5983b411cb3d4d9a"
 }
