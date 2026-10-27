@@ -6,10 +6,14 @@
 #include "graphics/crt.h"
 #ifdef TEST_FILTERED_CURSOR
 static bool testCursor;
+static unsigned cursorDraws;
+static Uint64 cursorTicks=2000;
+Uint64 __wrap_SDL_GetTicks(void) { return cursorTicks; }
 static float cursorX=100;
 bool __wrap_MOUSE_DrawFilteredCursor(SDL_Renderer* r,float cx,float cy)
 {
     (void)cx;(void)cy;
+    ++cursorDraws;
     if(!testCursor) return false;
     SDL_FRect rect={cursorX,100,16,16};
     assert(SDL_SetRenderDrawColor(r,255,255,255,255));
@@ -62,6 +66,27 @@ int main(void)
     cursorX=200;CRT_ResumeFrame(r);finish(r);
     assert(red(output,108,108)==0); /* backing frame has no cursor trails */
     assert(red(output,208,108)>180);
+    /* Motion polling must not run the CRT pass more often than the game
+     * display interval, and a throttled final motion must not get lost. */
+    unsigned draws=cursorDraws;
+    cursorX=300;
+    for(int i=0;i<1000;i++) CRT_RefreshCursor(true);
+    assert(cursorDraws==draws);
+    cursorTicks+=15;CRT_RefreshCursor(false);assert(cursorDraws==draws);
+    cursorTicks++;CRT_RefreshCursor(false);assert(cursorDraws==draws+1);
+    assert(SDL_FlushRenderer(r));
+    assert(red(output,208,108)==0 && red(output,308,108)>180);
+    cursorTicks+=16;CRT_RefreshCursor(false);assert(cursorDraws==draws+1);
+    for(int i=0;i<1000;i++) {
+        cursorTicks++;CRT_RefreshCursor(true);
+    }
+    assert(cursorDraws<=draws+64); /* 1000 Hz input cannot become 1000 CRT frames. */
+    cursorX=400;CRT_RefreshCursor(true);
+    cursorTicks+=16;CRT_RefreshCursor(false);assert(SDL_FlushRenderer(r));
+    assert(red(output,308,108)==0 && red(output,408,108)>180);
+    /* A normal game frame already draws the latest cursor. */
+    CRT_RefreshCursor(true);CRT_EndFrame(r);draws=cursorDraws;
+    cursorTicks+=16;CRT_RefreshCursor(false);assert(cursorDraws==draws);
     testCursor=false;
 #endif
     CRT_ResumeFrame(r);CRT_SetEnabled(false);CRT_BeginFrame(r);
