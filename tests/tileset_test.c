@@ -765,20 +765,13 @@ static void nativeProtectionMasks(byte *bank) {
     SDL_free(original);
 }
 
-static void baselineMasksAndEnhancedDOS(byte *bank) {
+static void baselineMasksAndRetiredTileset(byte *bank) {
     bool oldTransparency = GRAP_BUF_TransparentSprites();
     char *directory = SDL_strdup(SDL_getenv("IMPERA_TILESETS"));
     assert(directory);
-    char path[4096];
-    SDL_snprintf(path, sizeof(path), "%s/TILES_Zhelkas.16", directory);
-    FILE *source = fopen(path, "rb");
-    assert(source);
-    u8 *raw = NULL; u32 size = 0;
-    assert(!LzwDecompressFile(source, &raw, &size) && size == 65536);
-    fclose(source);
-    /* No mod directory or external artwork: both assets must be embedded. */
+    /* No mod directory or external artwork: base masks must be embedded. */
     assert(SDL_unsetenv_unsafe("IMPERA_TILESETS") == 0);
-    const int packs[] = {TILESET_ZHELKAS, TILESET_DOS, TILESET_AMIGA, TILESET_GRAY};
+    const int packs[] = {TILESET_DOS, TILESET_AMIGA, TILESET_GRAY};
     byte original[128]; memcpy(original, bank + 508 * 128, 128);
     memset(bank + 508 * 128, 0, 128);
     for (unsigned i = 0; i < sizeof(packs)/sizeof(packs[0]); ++i) {
@@ -797,21 +790,11 @@ static void baselineMasksAndEnhancedDOS(byte *bank) {
         assert(GRAP_BUF_SpritePixel(508, 0, 0) >= 0);
     }
     memcpy(bank + 508 * 128, original, 128);
-    assert(TILESET_Select(TILESET_ZHELKAS));
-    for (int tile = 0; tile < 512; ++tile)
-        for (int y = 0; y < 16; ++y)
-            for (int x = 0; x < 16; ++x) {
-                int packed = raw[tile * 128 + y * 8 + x / 2];
-                unsigned expected = x & 1 ? packed & 15 : packed >> 4;
-                int actual = GRAP_BUF_TilePixel(tile, x, y);
-                assert(TILESET_LastColor(actual, 0, 0, IMPERA_TextPalette) == IMPERA_TextPalette[expected]);
-            }
     ENGINE_Set(ENGINE_TILESET, TILESET_ZHELKAS);
     assert(ENGINE_Save());
     assert(TILESET_Select(TILESET_DOS));
     ENGINE_Load(); assert(TILESET_Selected() == TILESET_DOS); /* Retired option maps to DOS. */
     remove("ENGINE.CFG");
-    free(raw);
     assert(SDL_setenv_unsafe("IMPERA_TILESETS", directory, 1) == 0);
     SDL_free(directory);
     assert(TILESET_Select(TILESET_DOS));
@@ -828,7 +811,7 @@ int main(void)
     GRAP_BUF_LoadTileset(bank);
     for (int i = 0; i < 16; i++)
         ega[i] = 0xff000000u | i * 0x111111u;
-    baselineMasksAndEnhancedDOS(bank);
+    baselineMasksAndRetiredTileset(bank);
     scriptedSceneOptions(bank);
     nativeProtectionMasks(bank);
     customTypeGame();
