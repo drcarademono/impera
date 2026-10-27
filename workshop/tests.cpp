@@ -130,12 +130,27 @@ int main(int argc, char **argv) {
             auto overview = window.findChild<QWidget *>("modOverview");
             auto description = overview->findChild<QPlainTextEdit *>("modDescription");
             check(description, "Description editor missing");
+            window.show(); window.activateWindow(); app.processEvents();
+            description->setFocus(); app.processEvents();
+            QPointer<QPlainTextEdit> typingEditor(description);
             description->setPlainText("Explore a new world.\nA second paragraph.");
             waitFor([&] { return !window.projectForTests().data("MODINFO.DAT").isEmpty(); });
+            check(typingEditor && description->hasFocus() && window.findChild<QPlainTextEdit *>("modDescription") == description,
+                  "Autosave replaced the description editor or stole focus");
+            description->moveCursor(QTextCursor::End); description->insertPlainText(" Still typing.");
+            waitFor([&] { return window.projectForTests().data("MODINFO.DAT").endsWith(" Still typing."); });
+            check(typingEditor && description->hasFocus(), "Repeated autosave stole description focus");
             auto &project = window.projectForTests();
             auto metadata = project.data("MODINFO.DAT");
             check(MODINFO_Validate(metadata.constData(), metadata.size()), "Metadata not applied");
             check(metadata.mid(16) == description->toPlainText().toUtf8(), "Description changed");
+            auto author = overview->findChild<QLineEdit *>("modAuthor"); check(author, "Author editor missing");
+            author->setFocus(); author->setText("Test Author");
+            waitFor([&] { return project.data("MODINFO.DAT").startsWith("IMETA002"); });
+            check(author->hasFocus(), "Author autosave lost focus");
+            metadata = project.data("MODINFO.DAT");
+            const auto authorData = reinterpret_cast<const unsigned char *>(metadata.constData());
+            check(MODINFO_AuthorSize(authorData) == 11, "Author metadata missing");
             QImage image(640, 400, QImage::Format_RGB32); image.fill(QColor(200, 40, 60));
             QString path = dir.filePath("screenshot.png"); check(image.save(path), "Screenshot fixture");
             QTimer::singleShot(0, [path] {
@@ -146,11 +161,11 @@ int main(int argc, char **argv) {
             overview->findChild<QPushButton *>("importModScreenshot")->click();
             metadata = project.data("MODINFO.DAT");
             auto data = reinterpret_cast<const unsigned char *>(metadata.constData());
-            auto png = metadata.mid(16 + MODINFO_U32(data + 8));
+            auto png = metadata.mid(MODINFO_ImageOffset(data));
             auto screenshot = QImage::fromData(png);
             check(screenshot.size() == QSize(320, 200) && screenshot.pixelColor(160, 100) == QColor(200, 40, 60),
                   "Screenshot lost size or artwork");
-            auto package = project.package(); check(package.startsWith("IMOD0027"), "Metadata version missing");
+            auto package = project.package(); check(package.startsWith("IMOD0028"), "Author metadata version missing");
             auto imported = fixture(dir.path()); imported.importPackage(package);
             check(imported.data("MODINFO.DAT") == metadata, "Metadata package transfer");
             project.save(dir.filePath("mod.imperaproject")); Project restored; restored.load(project.projectPath);
@@ -165,6 +180,40 @@ int main(int argc, char **argv) {
             auto invalid = metadata; invalid[8] = char(255); invalid[9] = char(255);
             project.resources["MODINFO.DAT"].edited = invalid;
             rejects([&] { project.validate(); });
+        });
+        test("Full tileset PNG import handles all slots, transparency, export and undo", [&] {
+            QTemporaryDir dir; auto p = fixture(dir.path());
+            QImage sheet(512, 256, QImage::Format_ARGB32); sheet.fill(Qt::transparent);
+            auto colors = U5::palette();
+            for (int tile = 0; tile < 512; ++tile)
+                sheet.setPixel((tile % 32) * 16 + 8, (tile / 32) * 16 + 8, colors[tile % 16]);
+            auto input = dir.filePath("full.png"); check(sheet.save(input), "Tileset fixture PNG");
+            WorkshopWindow window; check(window.openGame(dir.path()), "Tileset fixture open");
+            window.selectResource("TILES.16");
+            auto choose = [](const QString &path) {
+                QTimer::singleShot(0, [path] {
+                    auto dialog = qobject_cast<QFileDialog *>(QApplication::activeModalWidget());
+                    check(dialog, "Tileset file dialog missing"); dialog->selectFile(path);
+                    QMetaObject::invokeMethod(dialog, "accept", Qt::DirectConnection);
+                });
+            };
+            app.processEvents(); QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+            auto import = window.findChild<QPushButton *>("importTilesetPNG");
+            check(import, "Full tileset import action missing"); choose(input); import->click();
+            auto graphics = U5::readGraphics("TILES.16", window.projectForTests().data("TILES.16"));
+            check(graphics.images.size() == 512, "Tileset slots lost");
+            for (int tile = 0; tile < 512; ++tile) {
+                check(graphics.images[tile].pixel(8, 8) == colors[tile % 16], "Tileset order or pixels changed");
+                check(graphics.images[tile].pixelColor(0, 0) == Qt::black, "Transparent pixels must import as opaque black");
+            }
+            QTemporaryDir output; auto path = output.filePath("tiles.png"); choose(path);
+            auto exportButton = window.findChild<QPushButton *>("exportTilesetPNG");
+            check(exportButton, "Full tileset export action missing"); exportButton->click();
+            QImage exported(path); check(exported.size() == QSize(512, 256), "Full tileset export dimensions");
+            for (auto action : window.findChildren<QAction *>())
+                if (action->text().startsWith("Undo ")) { action->trigger(); break; }
+            app.processEvents(); app.processEvents();
+            check(window.projectForTests().data("TILES.16") == p.data("TILES.16"), "Full tileset undo failed");
         });
         test("Interface frame colors preview, undo and transfer without changing artwork", [&] {
             QTemporaryDir dir;

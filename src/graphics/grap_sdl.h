@@ -5,6 +5,7 @@
 
 struct SDL_Surface;
 struct SDL_Surface* GRAP_SDL_CaptureFrame(void);
+void GRAP_SDL_UIThumbnailPNG(int index, const void *png, size_t size, int x, int y, int w, int h);
 void GRAP_SDL_UIThumbnail(int index,const char* path,int x,int y,int w,int h);
 void GRAP_SDL_ClearUIThumbnails(void);
 

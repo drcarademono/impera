@@ -518,12 +518,19 @@ static void modCatalog(void) {
     MOD_Free(&decoded);
     memcpy(package.bytes, "IMOD0026", 8);
     assert(!MOD_Decode(package.bytes, package.size, readBase, NULL, &decoded, error, sizeof(error)));
+    unsigned char by[128]="IMETA002"; by[8]=1; by[16]=11;
+    memcpy(by+20,"XTest Author",12);
+    assert(MODINFO_Validate(by,32));
+    by[21]='\n'; assert(!MODINFO_Validate(by,32)); by[21]='T';
+    header(&package,1); memcpy(package.bytes,"IMOD0027",8);
+    rawEntry(&package,"MODINFO.DAT","",0,by,32);
+    assert(!MOD_Decode(package.bytes,package.size,readBase,NULL,&decoded,error,sizeof(error)));
     const char *names[] = {"FIRST.DAT", "SECOND.DAT"};
     const char *paths[] = {"application/Mods/a.imperamod", "application/Mods/b.imperamod"};
     put("game/FIRST.DAT", "base", 4); put("game/SECOND.DAT", "base", 4);
     for (int i = 0; i < 2; ++i) {
-        header(&package, 2); memcpy(package.bytes, "IMOD0027", 8);
-        rawEntry(&package, "MODINFO.DAT", "", 0, metadata, metadataSize);
+        header(&package, 2); memcpy(package.bytes, i ? "IMOD0027" : "IMOD0028", 8);
+        rawEntry(&package, "MODINFO.DAT", "", 0, i ? metadata : by, i ? metadataSize : 32);
         entry(&package, names[i], "base", "modded");
         put(paths[i], package.bytes, package.size);
     }
@@ -531,7 +538,8 @@ static void modCatalog(void) {
     FILE_SetDataDirectory("game");
     assert(MOD_LoadedCount() == 2 && MOD_AvailableCount() == 3);
     assert(!MOD_Available(3));
-    assert(!strcmp(MOD_Available(0)->description, description));
+    assert(!strcmp(MOD_Available(0)->description,"X") && !strcmp(MOD_Available(0)->author,"Test Author"));
+    assert(!*MOD_Available(1)->author && !strcmp(MOD_Available(1)->description,description));
     assert(MOD_Available(0)->active && MOD_Available(1)->active);
     assert(*MOD_Available(2)->error && !MOD_Available(2)->active);
     assert(SDL_CreateDirectory("application/Mods/mods.cfg.tmp"));
@@ -546,7 +554,8 @@ static void modCatalog(void) {
     assert(!MOD_ChangesPending() && MOD_LoadedCount() == 1 && MOD_Revision() != revision);
     assert(!MOD_Available(0)->enabled && !MOD_Available(0)->active);
     assert(MOD_Available(1)->enabled && MOD_Available(1)->active);
-    assert(!strcmp(MOD_Available(0)->description, description));
+    assert(!strcmp(MOD_Available(0)->description,"X") && !strcmp(MOD_Available(0)->author,"Test Author"));
+    assert(!*MOD_Available(1)->author && !strcmp(MOD_Available(1)->description,description));
     value("FIRST.DAT", "base", 1);
     assert(MOD_SetEnabled(0, 1)); FILE_ReloadMods();
     assert(MOD_LoadedCount() == 2 && MOD_Available(0)->active);

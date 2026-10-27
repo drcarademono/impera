@@ -30,7 +30,7 @@ All integers are unsigned little-endian 32-bit values; there is no padding.
 
 | Header | Encoding |
 | --- | --- |
-| Magic/version | Eight ASCII bytes `IMOD0001` through `IMOD0027` |
+| Magic/version | Eight ASCII bytes `IMOD0001` through `IMOD0028` |
 | Title length | 1–256 UTF-8 bytes |
 | Resource count | 1–512 |
 | Title | Length bytes; embedded NUL forbidden |
@@ -652,3 +652,12 @@ truncated, oversized or corrupt records reject the save before applying it.
 Learning is recorded when the normal name response completes, including the
 automatic “I am called” introduction, whether Enhanced Look is enabled or not.
 Looking never updates this bitmap or executes conversation actions.
+
+### Mod authors (package version 28)
+
+`IMETA002` metadata retains the version 1 description and screenshot lengths,
+then adds a little-endian u32 author length at offset 16. Its header is 20 bytes.
+Payload order is description, author, screenshot. Authors are single-line UTF-8
+without NUL/control characters, limited to 256 bytes. Existing metadata and
+packages still load with an empty author. The version 2 payload requires package
+28; descriptions without an author can continue to use version 1/package 27.
