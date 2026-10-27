@@ -40,6 +40,23 @@ static void clickUI(float x, float y) {
     e.button.x=w/2.0f+(x-ux)/(vx-ux); e.button.y=h/2.0f+(y-uy)/(vy-uy);
     assert(SDL_PushEvent(&e));
 }
+static Uint32 mouseBurst(void *data, SDL_TimerID timer, Uint32 interval) {
+    (void)data; (void)timer; (void)interval;
+    int n,w,h; SDL_Window **windows=SDL_GetWindows(&n); assert(n==1);
+    assert(SDL_GetWindowSize(windows[0],&w,&h)); SDL_free(windows);
+    /* A high-rate mouse may queue hundreds of motions before a click/key.
+       Include both tabs so a slow present per event cannot hide in either. */
+    for (int tab=0;tab<2;tab++) {
+        for (int i=0;i<1024;i++) {
+            SDL_Event e={0}; e.type=SDL_EVENT_MOUSE_MOTION;
+            e.motion.x=w/2.0f; e.motion.y=h*(0.3f+(i%2)*0.3f);
+            assert(SDL_PushEvent(&e));
+        }
+        key(SDLK_TAB);
+    }
+    key(SDLK_ESCAPE);
+    return 0;
+}
 static Uint32 selectAmiga(void* data, SDL_TimerID timer, Uint32 interval) {
     (void)data; (void)timer; (void)interval;
     key(SDLK_DOWN); key(SDLK_RETURN); /* Tileset popup, initially DOS. */
@@ -272,6 +289,12 @@ int main(int argc, char** argv)
         fputs("Ctrl+E was consumed without exiting\n",stderr);
         return 1;
     }
+    assert(SDL_AddTimer(80,mouseBurst,NULL));
+    Uint64 burstStart=SDL_GetTicks(); ENGINE_ShowOptions(false);
+    printf("Options/Mods input burst: %llu ms\n", (unsigned long long)(SDL_GetTicks()-burstStart));
+    ENGINE_Set(ENGINE_CRT,1);
+    assert(SDL_AddTimer(80,mouseBurst,NULL)); ENGINE_ShowOptions(false);
+    ENGINE_Set(ENGINE_CRT,0);
     modOptions();
     ENGINE_Set(ENGINE_ENHANCED_LOOK,0);
     assert(SDL_AddTimer(80,optionLabelClick,NULL)); ENGINE_ShowOptions(false);

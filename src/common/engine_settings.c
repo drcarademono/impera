@@ -415,19 +415,27 @@ void ENGINE_ShowOptions(bool gameplay)
     ENGINE_DrawSettings(selected);
     while(!done) {
         SDL_Event event;
+        bool redraw = false, cursorMoved = false;
+        /* Drain queued input before presenting: a vsynced present for every
+         * mouse event can leave clicks seconds behind a high-rate mouse. */
         while(SDL_PollEvent(&event)) {
+            if (event.type == SDL_EVENT_MOUSE_MOTION || event.type == SDL_EVENT_WINDOW_MOUSE_ENTER ||
+                event.type == SDL_EVENT_WINDOW_MOUSE_LEAVE) cursorMoved = true;
+            int previousSelected = selected;
+            int previousChoice = s_videoChoice;
+            float previousSpeed = drag >= 0 ? ENGINE_Get(drag) : 0;
             if(event.type==SDL_EVENT_QUIT ||
                (event.type==SDL_EVENT_KEY_DOWN && event.key.key==SDLK_E &&
                 (event.key.mod & SDL_KMOD_CTRL))) { if(changed) ENGINE_Save();exit(0); }
             if(event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_TAB) {
                 s_optionsTab = !s_optionsTab; s_videoChoice = -1; drag = -1; s_modDetails = false;
-                ENGINE_DrawSettings(selected); continue;
+                redraw = true; continue;
             }
             if(event.type == SDL_EVENT_MOUSE_BUTTON_DOWN && event.button.button == SDL_BUTTON_LEFT) {
                 float x, y;
                 if(GRAP_SDL_MouseUIPoint(event.button.x, event.button.y, &x, &y) && y >= 24 && y < 37 && x >= 20 && x < 152) {
                     s_optionsTab = x >= 96; s_videoChoice = -1; drag = -1; s_modDetails = false;
-                    ENGINE_DrawSettings(selected); continue;
+                    redraw = true; continue;
                 }
             }
             if(s_optionsTab) {
@@ -463,7 +471,7 @@ void ENGINE_ShowOptions(bool gameplay)
                 }
                 if (event.type == SDL_EVENT_KEY_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ||
                     event.type == SDL_EVENT_MOUSE_WHEEL || event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED)
-                    ENGINE_DrawSettings(selected);
+                    redraw = true;
                 continue;
             }
             if(s_videoChoice>=0) {
@@ -487,7 +495,10 @@ void ENGINE_ShowOptions(bool gameplay)
                         }
                     } else if(event.type==SDL_EVENT_MOUSE_BUTTON_DOWN) s_videoChoice=-1;
                 }
-                ENGINE_DrawSettings(selected);continue;
+                if (event.type == SDL_EVENT_KEY_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ||
+                    event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED || previousChoice != s_videoChoice)
+                    redraw = true;
+                continue;
             }
             if(event.type==SDL_EVENT_KEY_DOWN) {
                 switch(event.key.key) {
@@ -532,9 +543,16 @@ void ENGINE_ShowOptions(bool gameplay)
                 }
             }
             if(event.type==SDL_EVENT_KEY_DOWN || event.type==SDL_EVENT_MOUSE_BUTTON_DOWN ||
-               event.type==SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED || event.type==SDL_EVENT_MOUSE_MOTION || drag>=0) ENGINE_DrawSettings(selected);
+               event.type==SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED || previousSelected != selected ||
+               (drag >= 0 && previousSpeed != ENGINE_Get(drag))) redraw = true;
         }
         MOUSE_UpdateCursor();
+        if (!done) {
+            if (redraw) ENGINE_DrawSettings(selected);
+            /* CRT draws the pointer into the frame instead of using the OS
+             * cursor. Refresh it once per input batch even on unchanged rows. */
+            else if (cursorMoved && CRT_Enabled()) GRAP_BUF_Present();
+        }
         SDL_Delay(16);
     }
     clearModImage(); s_optionsTab = 0;
