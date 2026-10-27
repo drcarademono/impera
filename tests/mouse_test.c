@@ -65,6 +65,26 @@ static bool checkDarkness;
 static bool checkDither;
 static bool profileDark;
 static unsigned hiddenTerrainSamples;
+static unsigned scrollingTextureAllocations, darknessUploads;
+static int profileMaskWidth,profileMaskHeight;
+SDL_Texture *__real_SDL_CreateTexture(SDL_Renderer *,SDL_PixelFormat,SDL_TextureAccess,int,int);
+SDL_Texture *__wrap_SDL_CreateTexture(SDL_Renderer *r,SDL_PixelFormat format,
+                                     SDL_TextureAccess access,int w,int h) {
+    if(profileDark) ++scrollingTextureAllocations;
+    return __real_SDL_CreateTexture(r,format,access,w,h);
+}
+SDL_Texture *__real_SDL_CreateTextureFromSurface(SDL_Renderer *,SDL_Surface *);
+SDL_Texture *__wrap_SDL_CreateTextureFromSurface(SDL_Renderer *r,SDL_Surface *surface) {
+    if(profileDark) ++scrollingTextureAllocations;
+    return __real_SDL_CreateTextureFromSurface(r,surface);
+}
+bool __real_SDL_UpdateTexture(SDL_Texture *,const SDL_Rect *,const void *,int);
+bool __wrap_SDL_UpdateTexture(SDL_Texture *texture,const SDL_Rect *rect,const void *pixels,int pitch) {
+    float w,h;
+    if(profileDark && SDL_GetTextureSize(texture,&w,&h) && w==profileMaskWidth && h==profileMaskHeight)
+        ++darknessUploads;
+    return __real_SDL_UpdateTexture(texture,rect,pixels,pitch);
+}
 byte __real_WIDE_TerrainPixel(int dx,int dy,int x,int y);
 byte __wrap_WIDE_TerrainPixel(int dx,int dy,int x,int y) {
     if (profileDark) {
@@ -1156,6 +1176,7 @@ int main(int argc, char** argv)
            1000.0*darkPreparationTicks/SDL_GetPerformanceFrequency()/darkSteps,darkSteps);
     darkPreparationTicks=0;darkSteps=0;
     GRAP_BUF_SetTransparentSprites(true);
+    profileMaskWidth=(l.columns+2)*16;profileMaskHeight=(l.rows+2)*16;
     profileDark=true;
     for(int step=0;step<8;step++) {
         presented=0;darkStepStarted=SDL_GetPerformanceCounter();
@@ -1163,6 +1184,8 @@ int main(int argc, char** argv)
         GRAP_SDL_MapDrawn();GRAP_SDL_FlushFrame();assert(presented==9);
     }
     profileDark=false;
+    assert(scrollingTextureAllocations==0); /* Steady movement reuses upload storage. */
+    assert(darknessUploads==0); /* Constant torch visibility needs no repeated mask uploads. */
     assert(hiddenTerrainSamples==0); /* Darkness must not reconstruct invisible terrain. */
     printf("Transparent dithered movement preparation: %.3f ms/step\n",
            1000.0*darkPreparationTicks/SDL_GetPerformanceFrequency()/darkSteps);

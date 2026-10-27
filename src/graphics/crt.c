@@ -167,7 +167,12 @@ void CRT_EndFrame(SDL_Renderer* renderer)
 }
 void CRT_ResumeFrame(SDL_Renderer* renderer)
 {
-    if(active) SDL_SetRenderTarget(renderer,frame);
+    if(active) {
+        SDL_SetRenderTarget(renderer,frame);
+        /* Present may block in the driver. Start the idle-cursor interval
+         * after that work finishes, not before filtering/presentation. */
+        cursorFrameTime=SDL_GetTicks();
+    }
 }
 
 void CRT_RefreshCursor(bool moved)

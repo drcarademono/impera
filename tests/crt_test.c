@@ -9,6 +9,12 @@ static bool testCursor;
 static unsigned cursorDraws;
 static Uint64 cursorTicks=2000;
 Uint64 __wrap_SDL_GetTicks(void) { return cursorTicks; }
+static Uint64 presentCost;
+bool __real_SDL_RenderPresent(SDL_Renderer *renderer);
+bool __wrap_SDL_RenderPresent(SDL_Renderer *renderer) {
+    cursorTicks+=presentCost;
+    return __real_SDL_RenderPresent(renderer);
+}
 static float cursorX=100;
 bool __wrap_MOUSE_DrawFilteredCursor(SDL_Renderer* r,float cx,float cy)
 {
@@ -87,6 +93,12 @@ int main(void)
     /* A normal game frame already draws the latest cursor. */
     CRT_RefreshCursor(true);CRT_EndFrame(r);draws=cursorDraws;
     cursorTicks+=16;CRT_RefreshCursor(false);assert(cursorDraws==draws);
+    /* A slow present must not immediately trigger another expensive idle
+     * pass when control returns to the input loop. */
+    cursorTicks+=16;presentCost=50;CRT_RefreshCursor(true);draws=cursorDraws;
+    CRT_RefreshCursor(true);assert(cursorDraws==draws);
+    presentCost=0;cursorTicks+=15;CRT_RefreshCursor(false);assert(cursorDraws==draws);
+    cursorTicks++;CRT_RefreshCursor(false);assert(cursorDraws==draws+1);
     testCursor=false;
 #endif
     CRT_ResumeFrame(r);CRT_SetEnabled(false);CRT_BeginFrame(r);
