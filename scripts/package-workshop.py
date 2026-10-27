@@ -135,8 +135,8 @@ export LD_LIBRARY_PATH="$app_dir/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 exec "$app_dir/bin/ImperaWorkshop" "$@"
 ''')
         launcher.chmod(0o755)
-        shutil.copy2(ROOT / 'packaging/impera-workshop.png', stage / 'impera-workshop.png')
-        (stage / '.DirIcon').symlink_to('impera-workshop.png')
+        shutil.copy2(ROOT / 'packaging/impera-workshop.svg', stage / 'impera-workshop.svg')
+        (stage / '.DirIcon').symlink_to('impera-workshop.svg')
         (stage / 'impera-workshop.desktop').write_text('''[Desktop Entry]
 Type=Application
 Name=Impera Workshop

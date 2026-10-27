@@ -111,7 +111,7 @@ def verify(platform, directory, workshop=False):
         with tempfile.TemporaryDirectory() as temporary:
             subprocess.run([str(appimage), '--appimage-extract'], cwd=temporary,
                            check=True, stdout=subprocess.DEVNULL)
-            verify_appdir(Path(temporary) / 'squashfs-root', 'impera-workshop.desktop' if workshop else 'impera.desktop', icon, 'png' if workshop else 'svg')
+            verify_appdir(Path(temporary) / 'squashfs-root', 'impera-workshop.desktop' if workshop else 'impera.desktop', icon, 'svg')
     print(f'{platform}: packaged Impera icon verified')
 
 
