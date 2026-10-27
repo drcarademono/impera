@@ -139,6 +139,13 @@ static int rowY(int row)
 static bool s_gameplay;
 static int s_optionsTab, s_modSelected, s_modTop, s_modScroll;
 static bool s_modDetails;
+static unsigned s_modImageRevision;
+static int s_modImageIndex = -1;
+static bool s_modImageDetails;
+static void clearModImage(void) {
+    GRAP_SDL_ClearUIThumbnails();
+    s_modImageIndex = -1;
+}
 
 static void checkbox(int x, int y, bool enabled) {
     ENGINE_UIRect(x, y, 7, 7, 7);
@@ -182,14 +189,21 @@ static int descriptionLines(const char *text, int columns, int first, int visibl
     return row;
 }
 static void modImage(const ModInfo *info) {
-    if (info && info->imageSize)
-        GRAP_SDL_UIThumbnailPNG(0, info->image, info->imageSize, s_modDetails ? 16 : 144,
-                               s_modDetails ? 60 : 44, 44, 24);
-    else ENGINE_UIText(s_modDetails ? 16 : 144, s_modDetails ? 68 : 52, "No image", 8);
+    if (s_modImageIndex != s_modSelected || s_modImageRevision != MOD_Revision() ||
+        s_modImageDetails != s_modDetails) {
+        clearModImage();
+        s_modImageIndex = s_modSelected;
+        s_modImageRevision = MOD_Revision();
+        s_modImageDetails = s_modDetails;
+        if (info && info->imageSize)
+            GRAP_SDL_UIThumbnailPNG(0, info->image, info->imageSize, s_modDetails ? 16 : 144,
+                                   s_modDetails ? 60 : 44, 44, 24);
+    }
+    if (!info || !info->imageSize) ENGINE_UIText(s_modDetails ? 16 : 144, s_modDetails ? 68 : 52, "No image", 8);
 }
 static void drawMods(void) {
     unsigned count = MOD_AvailableCount();
-    if (!count) { ENGINE_UIText(40, 72, "No mods in the Mods folder", 7); return; }
+    if (!count) { clearModImage(); ENGINE_UIText(40, 72, "No mods in the Mods folder", 7); return; }
     s_modSelected = SDL_clamp(s_modSelected, 0, (int)count - 1);
     const ModInfo *info = MOD_Available(s_modSelected);
     if (s_modDetails) {
@@ -235,7 +249,6 @@ static void drawMods(void) {
         ENGINE_UIText(16, 180, message, 14);
     }
     if (s_modDetails && *info->error) {
-        GRAP_SDL_ClearUIThumbnails();
         ENGINE_UIRect(72, 60, 232, 104, 0);
         descriptionLines(info->error, 28, 0, 13, 72, 60);
     }
@@ -319,7 +332,7 @@ static void openChoice(int row) {
 }
 void ENGINE_DrawSettings(int selected)
 {
-    GRAP_SDL_ClearUIThumbnails();
+    if (!s_optionsTab) clearModImage();
     TILESET_Copy(g_linearEgaBuffer0, NULL, 320*200);
     memset(g_linearEgaBuffer0,0,320*200);
     ENGINE_UIFrame();
@@ -448,7 +461,10 @@ void ENGINE_ShowOptions(bool gameplay)
                         else if(y>=178 && x<136) done=true;
                     }
                 }
-                ENGINE_DrawSettings(selected); continue;
+                if (event.type == SDL_EVENT_KEY_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ||
+                    event.type == SDL_EVENT_MOUSE_WHEEL || event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED)
+                    ENGINE_DrawSettings(selected);
+                continue;
             }
             if(s_videoChoice>=0) {
                 if(event.type==SDL_EVENT_KEY_DOWN) {
@@ -521,7 +537,7 @@ void ENGINE_ShowOptions(bool gameplay)
         MOUSE_UpdateCursor();
         SDL_Delay(16);
     }
-    GRAP_SDL_ClearUIThumbnails(); s_optionsTab = 0;
+    clearModImage(); s_optionsTab = 0;
     if(changed && !ENGINE_Save()) fprintf(stderr,"Unable to save engine settings\n");
     KEY_SDL_ClearInput();MOUSE_Cancel();
     GRAP_SDL_SetPixelUI(false);

@@ -53,6 +53,9 @@ static Uint32 modInput(void* data, SDL_TimerID timer, Uint32 interval) {
     if (!modStep++) { key(SDLK_TAB); return interval; }
     /* Same seven-pixel checkbox as the ordinary engine options. */
     assert(g_linearEgaBuffer0[45*320+21] == (expectedModEnabled ? 10 : 0));
+    /* Repainting must retain the cached screenshot overlay. */
+    ENGINE_DrawSettings(0);
+    ENGINE_DrawSettings(0);
     SDL_Surface *shot=GRAP_SDL_CaptureFrame(); assert(shot);
     Uint8 r,g,b,a;
     assert(SDL_ReadSurfacePixel(shot,shot->w*164/320,shot->h*64/200,&r,&g,&b,&a));
