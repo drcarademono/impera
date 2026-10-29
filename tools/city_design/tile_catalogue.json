@@ -1,0 +1,2750 @@
+{
+  "sources": {
+    "docs/workshop-tile-catalog-audit.md": "86962c1487e64e6c09e255291276dc02493b862817edb909aba891d0bc4d1bb2",
+    "src/mod/type_defaults.h": "d9ad61f4492b45803f47589587421107516761a8dd4119a18419f52d79b5c6e8"
+  },
+  "movementScope": "Party on foot, shape 0x1c; src/mod/types.c TYPES_Walkable. Static terrain only; overrides take precedence.",
+  "tiles": [
+    {
+      "id": 0,
+      "hex": "00",
+      "description": "Magic flash",
+      "category": "other",
+      "roles": [],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 1,
+      "hex": "01",
+      "description": "Deep water",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 2,
+      "hex": "02",
+      "description": "Water",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 3,
+      "hex": "03",
+      "description": "Shoals",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 4,
+      "hex": "04",
+      "description": "Swamp",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": true
+    },
+    {
+      "id": 5,
+      "hex": "05",
+      "description": "Grass",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 6,
+      "hex": "06",
+      "description": "Brush",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 7,
+      "hex": "07",
+      "description": "Desert",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 8,
+      "hex": "08",
+      "description": "Brush",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 9,
+      "hex": "09",
+      "description": "Forest",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 10,
+      "hex": "0a",
+      "description": "Tropical forest",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 11,
+      "hex": "0b",
+      "description": "Hills",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 12,
+      "hex": "0c",
+      "description": "Mountains",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 13,
+      "hex": "0d",
+      "description": "High mountains",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 14,
+      "hex": "0e",
+      "description": "Foothills and grass",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 15,
+      "hex": "0f",
+      "description": "Foothills and forest",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 16,
+      "hex": "10",
+      "description": "Hut location",
+      "category": "other",
+      "roles": [],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 17,
+      "hex": "11",
+      "description": "Codex shrine location",
+      "category": "other",
+      "roles": [],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 18,
+      "hex": "12",
+      "description": "Keep location",
+      "category": "other",
+      "roles": [],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 19,
+      "hex": "13",
+      "description": "Village location",
+      "category": "other",
+      "roles": [],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 20,
+      "hex": "14",
+      "description": "Town location",
+      "category": "other",
+      "roles": [],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 21,
+      "hex": "15",
+      "description": "Castle location",
+      "category": "other",
+      "roles": [],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 22,
+      "hex": "16",
+      "description": "Cave entrance",
+      "category": "other",
+      "roles": [],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 23,
+      "hex": "17",
+      "description": "Mine entrance",
+      "category": "other",
+      "roles": [],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 24,
+      "hex": "18",
+      "description": "Dungeon entrance",
+      "category": "other",
+      "roles": [],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 25,
+      "hex": "19",
+      "description": "Shrine location",
+      "category": "other",
+      "roles": [],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 26,
+      "hex": "1a",
+      "description": "Ruined shrine location",
+      "category": "other",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 27,
+      "hex": "1b",
+      "description": "Lighthouse location",
+      "category": "other",
+      "roles": [],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 28,
+      "hex": "1c",
+      "description": "Banner",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 29,
+      "hex": "1d",
+      "description": "Bridge",
+      "category": "buildings",
+      "roles": [
+        "bridge"
+      ],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 30,
+      "hex": "1e",
+      "description": "Desert vegetation",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 31,
+      "hex": "1f",
+      "description": "Desert vegetation",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 32,
+      "hex": "20",
+      "description": "Road",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 33,
+      "hex": "21",
+      "description": "Road edge",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 34,
+      "hex": "22",
+      "description": "Road corner",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 35,
+      "hex": "23",
+      "description": "Road corner",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 36,
+      "hex": "24",
+      "description": "Road corner",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 37,
+      "hex": "25",
+      "description": "Road corner",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 38,
+      "hex": "26",
+      "description": "Road junction",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 39,
+      "hex": "27",
+      "description": "Roof",
+      "category": "buildings",
+      "roles": [
+        "roof"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 40,
+      "hex": "28",
+      "description": "Roof",
+      "category": "buildings",
+      "roles": [
+        "roof"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 41,
+      "hex": "29",
+      "description": "Crystal ball",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 42,
+      "hex": "2a",
+      "description": "Emblem",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 43,
+      "hex": "2b",
+      "description": "Hollow stump",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 44,
+      "hex": "2c",
+      "description": "Crops picked",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 45,
+      "hex": "2d",
+      "description": "Crops",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 46,
+      "hex": "2e",
+      "description": "Fruit tree",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 47,
+      "hex": "2f",
+      "description": "Cactus",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 48,
+      "hex": "30",
+      "description": "Grass edge",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 49,
+      "hex": "31",
+      "description": "Grass edge",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 50,
+      "hex": "32",
+      "description": "Road and grass",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 51,
+      "hex": "33",
+      "description": "Road and grass",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 52,
+      "hex": "34",
+      "description": "Riverbank",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 53,
+      "hex": "35",
+      "description": "Riverbank",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 54,
+      "hex": "36",
+      "description": "Riverbank",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 55,
+      "hex": "37",
+      "description": "Riverbank",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 56,
+      "hex": "38",
+      "description": "Gargoyle statue",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 57,
+      "hex": "39",
+      "description": "Blackthorn\u2019s castle location",
+      "category": "other",
+      "roles": [],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 58,
+      "hex": "3a",
+      "description": "Castle location tower",
+      "category": "other",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 59,
+      "hex": "3b",
+      "description": "Castle location battlements",
+      "category": "other",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 60,
+      "hex": "3c",
+      "description": "Castle location tower",
+      "category": "other",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 61,
+      "hex": "3d",
+      "description": "Castle location tower",
+      "category": "other",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 62,
+      "hex": "3e",
+      "description": "Lord British\u2019s castle location",
+      "category": "other",
+      "roles": [],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 63,
+      "hex": "3f",
+      "description": "Castle location tower",
+      "category": "other",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 64,
+      "hex": "40",
+      "description": "Wood floor",
+      "category": "ground",
+      "roles": [
+        "floor"
+      ],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 65,
+      "hex": "41",
+      "description": "Codex",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 66,
+      "hex": "42",
+      "description": "Mast",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 67,
+      "hex": "43",
+      "description": "Railing",
+      "category": "buildings",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 68,
+      "hex": "44",
+      "description": "Brick floor",
+      "category": "ground",
+      "roles": [
+        "floor"
+      ],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 69,
+      "hex": "45",
+      "description": "Stone floor",
+      "category": "ground",
+      "roles": [
+        "floor"
+      ],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 70,
+      "hex": "46",
+      "description": "Pillar",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 71,
+      "hex": "47",
+      "description": "Bridge",
+      "category": "buildings",
+      "roles": [
+        "bridge"
+      ],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 72,
+      "hex": "48",
+      "description": "Bridge",
+      "category": "buildings",
+      "roles": [
+        "bridge"
+      ],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 73,
+      "hex": "49",
+      "description": "Bridge",
+      "category": "buildings",
+      "roles": [
+        "bridge"
+      ],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 74,
+      "hex": "4a",
+      "description": "Arrow slit",
+      "category": "buildings",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 75,
+      "hex": "4b",
+      "description": "Window",
+      "category": "buildings",
+      "roles": [
+        "window"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 76,
+      "hex": "4c",
+      "description": "Pile of rocks",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 77,
+      "hex": "4d",
+      "description": "Stone wall",
+      "category": "buildings",
+      "roles": [
+        "wall"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 78,
+      "hex": "4e",
+      "description": "Hidden door",
+      "category": "buildings",
+      "roles": [
+        "door"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 79,
+      "hex": "4f",
+      "description": "Wall",
+      "category": "buildings",
+      "roles": [
+        "wall"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 80,
+      "hex": "50",
+      "description": "Crenellation corner",
+      "category": "buildings",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 81,
+      "hex": "51",
+      "description": "Crenellation corner",
+      "category": "buildings",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 82,
+      "hex": "52",
+      "description": "Crenellation corner",
+      "category": "buildings",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 83,
+      "hex": "53",
+      "description": "Crenellation corner",
+      "category": "buildings",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 84,
+      "hex": "54",
+      "description": "Crenellation corner",
+      "category": "buildings",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 85,
+      "hex": "55",
+      "description": "Crenellation corner",
+      "category": "buildings",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 86,
+      "hex": "56",
+      "description": "Crenellation wall",
+      "category": "buildings",
+      "roles": [
+        "wall"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 87,
+      "hex": "57",
+      "description": "Crenellation wall",
+      "category": "buildings",
+      "roles": [
+        "wall"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 88,
+      "hex": "58",
+      "description": "Anvil",
+      "category": "objects",
+      "roles": [
+        "anvil"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 89,
+      "hex": "59",
+      "description": "Telescope",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 90,
+      "hex": "5a",
+      "description": "Window shelf",
+      "category": "buildings",
+      "roles": [
+        "window"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 91,
+      "hex": "5b",
+      "description": "Potted plant",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 92,
+      "hex": "5c",
+      "description": "Bookshelf",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 93,
+      "hex": "5d",
+      "description": "Bookshelf",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 94,
+      "hex": "5e",
+      "description": "Codex guardian",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 95,
+      "hex": "5f",
+      "description": "Codex guardian",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 96,
+      "hex": "60",
+      "description": "River",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 97,
+      "hex": "61",
+      "description": "River",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 98,
+      "hex": "62",
+      "description": "River",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 99,
+      "hex": "63",
+      "description": "River",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 100,
+      "hex": "64",
+      "description": "River",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 101,
+      "hex": "65",
+      "description": "River",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 102,
+      "hex": "66",
+      "description": "River",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 103,
+      "hex": "67",
+      "description": "River",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 104,
+      "hex": "68",
+      "description": "River",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 105,
+      "hex": "69",
+      "description": "River",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 106,
+      "hex": "6a",
+      "description": "Wooden bridge",
+      "category": "buildings",
+      "roles": [
+        "bridge"
+      ],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 107,
+      "hex": "6b",
+      "description": "Wooden bridge",
+      "category": "buildings",
+      "roles": [
+        "bridge"
+      ],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 108,
+      "hex": "6c",
+      "description": "River",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 109,
+      "hex": "6d",
+      "description": "River",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 110,
+      "hex": "6e",
+      "description": "River",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 111,
+      "hex": "6f",
+      "description": "River",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 112,
+      "hex": "70",
+      "description": "Dungeon corridor mask",
+      "category": "other",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 113,
+      "hex": "71",
+      "description": "Dungeon corridor mask",
+      "category": "other",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 114,
+      "hex": "72",
+      "description": "Dungeon corridor mask",
+      "category": "other",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 115,
+      "hex": "73",
+      "description": "Dungeon corridor mask",
+      "category": "other",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 116,
+      "hex": "74",
+      "description": "Dungeon corridor mask",
+      "category": "other",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 117,
+      "hex": "75",
+      "description": "Dungeon corridor mask",
+      "category": "other",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 118,
+      "hex": "76",
+      "description": "Dungeon corridor mask",
+      "category": "other",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 119,
+      "hex": "77",
+      "description": "Dungeon corridor mask",
+      "category": "other",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 120,
+      "hex": "78",
+      "description": "Dungeon corridor mask",
+      "category": "other",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 121,
+      "hex": "79",
+      "description": "Dungeon corridor mask",
+      "category": "other",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 122,
+      "hex": "7a",
+      "description": "Dungeon corridor mask",
+      "category": "other",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 123,
+      "hex": "7b",
+      "description": "Dungeon corridor mask",
+      "category": "other",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 124,
+      "hex": "7c",
+      "description": "Dungeon corridor mask",
+      "category": "other",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 125,
+      "hex": "7d",
+      "description": "Dungeon corridor mask",
+      "category": "other",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 126,
+      "hex": "7e",
+      "description": "Dungeon corridor mask",
+      "category": "other",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 127,
+      "hex": "7f",
+      "description": "Dungeon corridor mask",
+      "category": "other",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 128,
+      "hex": "80",
+      "description": "Pendulum",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 129,
+      "hex": "81",
+      "description": "Pendulum",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 130,
+      "hex": "82",
+      "description": "Pendulum",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 131,
+      "hex": "83",
+      "description": "Pendulum",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 132,
+      "hex": "84",
+      "description": "Stocks",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 133,
+      "hex": "85",
+      "description": "Manacles",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 134,
+      "hex": "86",
+      "description": "Metal grate",
+      "category": "buildings",
+      "roles": [],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 135,
+      "hex": "87",
+      "description": "Archway",
+      "category": "buildings",
+      "roles": [],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 136,
+      "hex": "88",
+      "description": "Cannonballs",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 137,
+      "hex": "89",
+      "description": "Cross",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 138,
+      "hex": "8a",
+      "description": "Gravestone",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 139,
+      "hex": "8b",
+      "description": "Torture rack",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 140,
+      "hex": "8c",
+      "description": "Loose brick / trapdoor",
+      "category": "buildings",
+      "roles": [
+        "door"
+      ],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 141,
+      "hex": "8d",
+      "description": "Harpsichord",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 142,
+      "hex": "8e",
+      "description": "Guillotine",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 143,
+      "hex": "8f",
+      "description": "Lava",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": true
+    },
+    {
+      "id": 144,
+      "hex": "90",
+      "description": "Chair",
+      "category": "objects",
+      "roles": [
+        "chair",
+        "furniture"
+      ],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 145,
+      "hex": "91",
+      "description": "Chair",
+      "category": "objects",
+      "roles": [
+        "chair",
+        "furniture"
+      ],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 146,
+      "hex": "92",
+      "description": "Chair",
+      "category": "objects",
+      "roles": [
+        "chair",
+        "furniture"
+      ],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 147,
+      "hex": "93",
+      "description": "Chair",
+      "category": "objects",
+      "roles": [
+        "chair",
+        "furniture"
+      ],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 148,
+      "hex": "94",
+      "description": "Table",
+      "category": "objects",
+      "roles": [
+        "table",
+        "furniture"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 149,
+      "hex": "95",
+      "description": "Table",
+      "category": "objects",
+      "roles": [
+        "table",
+        "furniture"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 150,
+      "hex": "96",
+      "description": "Table",
+      "category": "objects",
+      "roles": [
+        "table",
+        "furniture"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 151,
+      "hex": "97",
+      "description": "Odd door",
+      "category": "buildings",
+      "roles": [
+        "door"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": true,
+      "hazard": false
+    },
+    {
+      "id": 152,
+      "hex": "98",
+      "description": "Odd door",
+      "category": "buildings",
+      "roles": [
+        "door"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": true,
+      "hazard": false
+    },
+    {
+      "id": 153,
+      "hex": "99",
+      "description": "Bars",
+      "category": "buildings",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 154,
+      "hex": "9a",
+      "description": "Table",
+      "category": "objects",
+      "roles": [
+        "table",
+        "furniture"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 155,
+      "hex": "9b",
+      "description": "Table",
+      "category": "objects",
+      "roles": [
+        "table",
+        "furniture"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 156,
+      "hex": "9c",
+      "description": "Table",
+      "category": "objects",
+      "roles": [
+        "table",
+        "furniture"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 157,
+      "hex": "9d",
+      "description": "Mirror",
+      "category": "objects",
+      "roles": [
+        "furniture"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 158,
+      "hex": "9e",
+      "description": "Mirror",
+      "category": "objects",
+      "roles": [
+        "furniture"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 159,
+      "hex": "9f",
+      "description": "Mirror broken",
+      "category": "objects",
+      "roles": [
+        "furniture"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 160,
+      "hex": "a0",
+      "description": "Signpost",
+      "category": "objects",
+      "roles": [
+        "sign"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 161,
+      "hex": "a1",
+      "description": "Well",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 162,
+      "hex": "a2",
+      "description": "Hitching post",
+      "category": "objects",
+      "roles": [
+        "furniture"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 163,
+      "hex": "a3",
+      "description": "Stack of logs",
+      "category": "objects",
+      "roles": [
+        "logs",
+        "furniture"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 164,
+      "hex": "a4",
+      "description": "Stone cross",
+      "category": "objects",
+      "roles": [
+        "furniture"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 165,
+      "hex": "a5",
+      "description": "Desk",
+      "category": "objects",
+      "roles": [
+        "furniture"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 166,
+      "hex": "a6",
+      "description": "Barrel",
+      "category": "objects",
+      "roles": [
+        "furniture"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 167,
+      "hex": "a7",
+      "description": "Wine cask",
+      "category": "objects",
+      "roles": [
+        "furniture"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 168,
+      "hex": "a8",
+      "description": "Vanity",
+      "category": "objects",
+      "roles": [
+        "furniture"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 169,
+      "hex": "a9",
+      "description": "Pitcher",
+      "category": "objects",
+      "roles": [
+        "furniture"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 170,
+      "hex": "aa",
+      "description": "Carpet",
+      "category": "objects",
+      "roles": [
+        "furniture"
+      ],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 171,
+      "hex": "ab",
+      "description": "Bed",
+      "category": "objects",
+      "roles": [
+        "bed",
+        "furniture"
+      ],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 172,
+      "hex": "ac",
+      "description": "Bed",
+      "category": "objects",
+      "roles": [
+        "bed",
+        "furniture"
+      ],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 173,
+      "hex": "ad",
+      "description": "Dresser",
+      "category": "objects",
+      "roles": [
+        "furniture"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 174,
+      "hex": "ae",
+      "description": "End table",
+      "category": "objects",
+      "roles": [
+        "table",
+        "furniture"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 175,
+      "hex": "af",
+      "description": "Trunk",
+      "category": "objects",
+      "roles": [
+        "furniture"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 176,
+      "hex": "b0",
+      "description": "Wall torch",
+      "category": "objects",
+      "roles": [
+        "wall"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 177,
+      "hex": "b1",
+      "description": "Wall torch",
+      "category": "objects",
+      "roles": [
+        "wall"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 178,
+      "hex": "b2",
+      "description": "Brazier",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 179,
+      "hex": "b3",
+      "description": "Roasting spit",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 180,
+      "hex": "b4",
+      "description": "Cannon",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 181,
+      "hex": "b5",
+      "description": "Cannon",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 182,
+      "hex": "b6",
+      "description": "Cannon",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 183,
+      "hex": "b7",
+      "description": "Cannon",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 184,
+      "hex": "b8",
+      "description": "Door",
+      "category": "buildings",
+      "roles": [
+        "door"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": true,
+      "hazard": false
+    },
+    {
+      "id": 185,
+      "hex": "b9",
+      "description": "Door",
+      "category": "buildings",
+      "roles": [
+        "door"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": true,
+      "hazard": false
+    },
+    {
+      "id": 186,
+      "hex": "ba",
+      "description": "Door",
+      "category": "buildings",
+      "roles": [
+        "door"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": true,
+      "hazard": false
+    },
+    {
+      "id": 187,
+      "hex": "bb",
+      "description": "Door",
+      "category": "buildings",
+      "roles": [
+        "door"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": true,
+      "hazard": false
+    },
+    {
+      "id": 188,
+      "hex": "bc",
+      "description": "Fireplace",
+      "category": "buildings",
+      "roles": [],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": true
+    },
+    {
+      "id": 189,
+      "hex": "bd",
+      "description": "Street lamp",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 190,
+      "hex": "be",
+      "description": "Candelabrum",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 191,
+      "hex": "bf",
+      "description": "Stove",
+      "category": "objects",
+      "roles": [
+        "stove"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 192,
+      "hex": "c0",
+      "description": "Stone rendering fragment",
+      "category": "other",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 193,
+      "hex": "c1",
+      "description": "Stone rendering fragment",
+      "category": "other",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 194,
+      "hex": "c2",
+      "description": "Stone rendering fragment",
+      "category": "other",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 195,
+      "hex": "c3",
+      "description": "Rendering fragment",
+      "category": "other",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 196,
+      "hex": "c4",
+      "description": "Stair",
+      "category": "buildings",
+      "roles": [
+        "stair"
+      ],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 197,
+      "hex": "c5",
+      "description": "Stairs",
+      "category": "buildings",
+      "roles": [
+        "stair"
+      ],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 198,
+      "hex": "c6",
+      "description": "Stairs",
+      "category": "buildings",
+      "roles": [
+        "stair"
+      ],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 199,
+      "hex": "c7",
+      "description": "Stairs",
+      "category": "buildings",
+      "roles": [
+        "stair"
+      ],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 200,
+      "hex": "c8",
+      "description": "Ladder up",
+      "category": "buildings",
+      "roles": [
+        "ladder"
+      ],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 201,
+      "hex": "c9",
+      "description": "Ladder down",
+      "category": "buildings",
+      "roles": [
+        "ladder"
+      ],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 202,
+      "hex": "ca",
+      "description": "Wooden fence",
+      "category": "buildings",
+      "roles": [
+        "fence"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 203,
+      "hex": "cb",
+      "description": "Wooden fence",
+      "category": "buildings",
+      "roles": [
+        "fence"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 204,
+      "hex": "cc",
+      "description": "Brick rendering fragment",
+      "category": "other",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 205,
+      "hex": "cd",
+      "description": "Brick rendering fragment",
+      "category": "other",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 206,
+      "hex": "ce",
+      "description": "Vegetation rendering fragment",
+      "category": "other",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 207,
+      "hex": "cf",
+      "description": "Vegetation rendering fragment",
+      "category": "other",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 208,
+      "hex": "d0",
+      "description": "Diagonal wall mask",
+      "category": "other",
+      "roles": [
+        "wall"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 209,
+      "hex": "d1",
+      "description": "Diagonal wall mask",
+      "category": "other",
+      "roles": [
+        "wall"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 210,
+      "hex": "d2",
+      "description": "Diagonal wall mask",
+      "category": "other",
+      "roles": [
+        "wall"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 211,
+      "hex": "d3",
+      "description": "Diagonal wall mask",
+      "category": "other",
+      "roles": [
+        "wall"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 212,
+      "hex": "d4",
+      "description": "Waterfall",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 213,
+      "hex": "d5",
+      "description": "Waterfall animation",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 214,
+      "hex": "d6",
+      "description": "Waterfall animation",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 215,
+      "hex": "d7",
+      "description": "Waterfall animation",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 216,
+      "hex": "d8",
+      "description": "Fountain",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 217,
+      "hex": "d9",
+      "description": "Fountain animation",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 218,
+      "hex": "da",
+      "description": "Fountain animation",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 219,
+      "hex": "db",
+      "description": "Fountain animation",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 220,
+      "hex": "dc",
+      "description": "Moongate",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 221,
+      "hex": "dd",
+      "description": "Desert animation",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 222,
+      "hex": "de",
+      "description": "Sacred flame",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 223,
+      "hex": "df",
+      "description": "Collapsed dungeon entrance",
+      "category": "other",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 224,
+      "hex": "e0",
+      "description": "Multi-tile object base",
+      "category": "other",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 225,
+      "hex": "e1",
+      "description": "Multi-tile object left edge",
+      "category": "other",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 226,
+      "hex": "e2",
+      "description": "Multi-tile object right edge",
+      "category": "other",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 227,
+      "hex": "e3",
+      "description": "Flagpole",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 228,
+      "hex": "e4",
+      "description": "Water",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 229,
+      "hex": "e5",
+      "description": "Water edge",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 230,
+      "hex": "e6",
+      "description": "Water edge",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 231,
+      "hex": "e7",
+      "description": "Water",
+      "category": "ground",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 232,
+      "hex": "e8",
+      "description": "Hourglass",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 233,
+      "hex": "e9",
+      "description": "Hourglass",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 234,
+      "hex": "ea",
+      "description": "Hourglass",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 235,
+      "hex": "eb",
+      "description": "Hourglass",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 236,
+      "hex": "ec",
+      "description": "Britannia banner",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 237,
+      "hex": "ed",
+      "description": "Britannia banner",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 238,
+      "hex": "ee",
+      "description": "Britannia banner",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 239,
+      "hex": "ef",
+      "description": "Britannia banner",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 240,
+      "hex": "f0",
+      "description": "Provisioner sign",
+      "category": "objects",
+      "roles": [
+        "sign"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 241,
+      "hex": "f1",
+      "description": "Government sign",
+      "category": "objects",
+      "roles": [
+        "sign"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 242,
+      "hex": "f2",
+      "description": "Armoury sign",
+      "category": "objects",
+      "roles": [
+        "sign"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 243,
+      "hex": "f3",
+      "description": "Healer sign",
+      "category": "objects",
+      "roles": [
+        "sign"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 244,
+      "hex": "f4",
+      "description": "Stable sign",
+      "category": "objects",
+      "roles": [
+        "table",
+        "sign"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 245,
+      "hex": "f5",
+      "description": "Guild sign",
+      "category": "objects",
+      "roles": [
+        "sign"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 246,
+      "hex": "f6",
+      "description": "Inn sign",
+      "category": "objects",
+      "roles": [
+        "sign"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 247,
+      "hex": "f7",
+      "description": "Apothecary sign",
+      "category": "objects",
+      "roles": [
+        "sign"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 248,
+      "hex": "f8",
+      "description": "Sign",
+      "category": "objects",
+      "roles": [
+        "sign"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 249,
+      "hex": "f9",
+      "description": "Shipwright sign",
+      "category": "objects",
+      "roles": [
+        "sign"
+      ],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 250,
+      "hex": "fa",
+      "description": "Clock",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 251,
+      "hex": "fb",
+      "description": "Clock animation",
+      "category": "objects",
+      "roles": [],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 252,
+      "hex": "fc",
+      "description": "Bellows",
+      "category": "objects",
+      "roles": [
+        "bellows"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 253,
+      "hex": "fd",
+      "description": "Bellows",
+      "category": "objects",
+      "roles": [
+        "bellows"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 254,
+      "hex": "fe",
+      "description": "Bellows",
+      "category": "objects",
+      "roles": [
+        "bellows"
+      ],
+      "partyWalkable": false,
+      "doorInteraction": false,
+      "hazard": false
+    },
+    {
+      "id": 255,
+      "hex": "ff",
+      "description": "Bellows",
+      "category": "objects",
+      "roles": [
+        "bellows"
+      ],
+      "partyWalkable": true,
+      "doorInteraction": false,
+      "hazard": false
+    }
+  ]
+}
