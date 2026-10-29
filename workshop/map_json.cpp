@@ -1,3 +1,4 @@
+#include "save_dialog.h"
 #include "map_json.h"
 #include "map_editor.h"
 #include "dungeon_editor.h"
@@ -1069,7 +1070,7 @@ QMap<QString, QByteArray> importMapJson(const Project &source, const QString &r,
     return edits;
 }
 void saveMapJson(QWidget *owner, const Project &p, const QString &r, int page) {
-    auto path = QFileDialog::getSaveFileName(owner, "Export map", {}, "Map JSON (*.json)");
+    auto path = Workshop::saveFileName(owner, "Export map", {}, "Map JSON (*.json)", "json");
     if (path.isEmpty())
         return;
     require(QFileInfo(path).absolutePath() != p.sourceDirectory,

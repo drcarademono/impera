@@ -1,3 +1,4 @@
+#include "save_dialog.h"
 #include "mod/metadata.h"
 #include "native_dialogue_frame.h"
 #include "mod/interface.h"
@@ -292,12 +293,10 @@ WorkshopWindow::WorkshopWindow() {
             if (!reviewPackage(false))
                 return;
             auto bytes = project.package();
-            QString path = QFileDialog::getSaveFileName(this, "Export mod package", {},
-                                                        "Impera mod (*.imperamod)");
+            QString path = Workshop::saveFileName(this, "Export mod package", {},
+                                                        "Impera mod (*.imperamod)", "imperamod");
             if (path.isEmpty())
                 return;
-            if (!path.endsWith(".imperamod", Qt::CaseInsensitive))
-                path += ".imperamod";
             require(QFileInfo(path).absolutePath() != project.sourceDirectory,
                     "Place mod packages in the Mods subfolder, or another "
                     "distribution folder");
@@ -490,11 +489,11 @@ bool WorkshopWindow::saveProject() {
         return false;
     QString path = project.projectPath;
     if (path.isEmpty())
-        path = QFileDialog::getSaveFileName(this, "Save mod project", {},
-                                            "Impera project (*.imperaproject)");
+        path = Workshop::saveFileName(this, "Save mod project", {},
+                                            "Impera project (*.imperaproject)", "imperaproject");
     if (path.isEmpty())
         return false;
-    if (!path.endsWith(".imperaproject"))
+    if (!path.endsWith(".imperaproject", Qt::CaseInsensitive))
         path += ".imperaproject";
     return guard([&] {
         project.save(path);
@@ -1801,7 +1800,7 @@ QWidget *WorkshopWindow::graphicsEditor(const QString &name) {
     });
     button(actions, "Export slot PNG", [=] {
         guard([&] {
-            QString path = QFileDialog::getSaveFileName(this, "Export PNG", {}, "PNG (*.png)");
+            QString path = Workshop::saveFileName(this, "Export PNG", {}, "PNG (*.png)", "png");
             if (path.isEmpty())
                 return;
             require(QFileInfo(path).absolutePath() != project.sourceDirectory,
@@ -1813,7 +1812,7 @@ QWidget *WorkshopWindow::graphicsEditor(const QString &name) {
         auto exportTiles = button(fileActions, "Export tileset PNG…", [=] {
             guard([&] {
                 QString path =
-                    QFileDialog::getSaveFileName(this, "Export tilesheet", {}, "PNG (*.png)");
+                    Workshop::saveFileName(this, "Export tilesheet", {}, "PNG (*.png)", "png");
                 if (path.isEmpty())
                     return;
                 require(QFileInfo(path).absolutePath() != project.sourceDirectory,

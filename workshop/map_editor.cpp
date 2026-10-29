@@ -1,3 +1,4 @@
+#include "save_dialog.h"
 #include "mod/npcs.h"
 #include "map_editor.h"
 #include "gates_editor.h"
@@ -3679,11 +3680,11 @@ void MapWorkspace::locateNpc() {
 
 void MapWorkspace::exportImage(bool ids, bool preview) {
     try {
-        auto path = QFileDialog::getSaveFileName(this,
+        auto path = Workshop::saveFileName(this,
                                                  preview ? "Export visible preview with overlays"
                                                  : ids   ? "Export tile IDs"
                                                          : "Export terrain",
-                                                 {}, "PNG (*.png)");
+                                                 {}, "PNG (*.png)", "png");
         if (path.isEmpty())
             return;
         require(QFileInfo(path).absolutePath() != project->sourceDirectory,

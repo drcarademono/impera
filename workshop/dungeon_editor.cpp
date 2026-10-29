@@ -1,3 +1,4 @@
+#include "save_dialog.h"
 #include "map_positions.h"
 #include "extended_maps.h"
 #include "dungeon_editor.h"
@@ -706,7 +707,7 @@ DungeonWorkspace::DungeonWorkspace(
     exportMenu->addAction("Map PNG…", this, [=] {
         try {
             auto path =
-                QFileDialog::getSaveFileName(this, "Export dungeon floor", {}, "PNG (*.png)");
+                Workshop::saveFileName(this, "Export dungeon floor", {}, "PNG (*.png)", "png");
             if (path.isEmpty())
                 return;
             U5::require(QFileInfo(path).absolutePath() != p->sourceDirectory,
