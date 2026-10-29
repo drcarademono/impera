@@ -1,0 +1,74 @@
+{
+  "method": "Real Workshop importMapJson, Project::validate, exportMapJson, U5::readGraphics; private in-memory project, not GUI interaction or game play-testing.",
+  "nativeMovementParity": "passed (all 256 terrain tiles, party shape 0x1c)",
+  "arrival": [
+    {
+      "arrivalX": 32,
+      "arrivalY": 62,
+      "entranceX": 159,
+      "entranceY": 20,
+      "map": 5,
+      "world": 0
+    }
+  ],
+  "globalNewGameStateChanged": false,
+  "companionModSha256": "92af739daad7f16c18467d06d030f7ca264e95959d90dabb7de164ed8ba2c4c2",
+  "packageResourceRoundtrip": "passed",
+  "gamePlayTested": false,
+  "stages": [
+    {
+      "stage": "01-initial",
+      "jsonSha256": "56865ef5572e19e96109ec61e85779096fe3470430e7e9fc72bee22e46ff7a99",
+      "nativeImport": "passed",
+      "nativeProjectValidation": "passed",
+      "reexportTerrainParity": "passed",
+      "reexportMetadataParityWithSourceImport": "passed (explicit authorized gate changes accounted for)",
+      "pixelParity": "passed (both floors)"
+    },
+    {
+      "stage": "02-revised",
+      "jsonSha256": "32f76bf5522a7833a3a4deecff5573553cc260098f07dfe6bc247f58979ad5dc",
+      "nativeImport": "passed",
+      "nativeProjectValidation": "passed",
+      "reexportTerrainParity": "passed",
+      "reexportMetadataParityWithSourceImport": "passed (explicit authorized gate changes accounted for)",
+      "pixelParity": "passed (both floors)"
+    },
+    {
+      "stage": "03-access-revised",
+      "jsonSha256": "9ae99ac4cb1cf0df64d096ae155398f7992a0b075455c78c0d06c531a6185aef",
+      "nativeImport": "passed",
+      "nativeProjectValidation": "passed",
+      "reexportTerrainParity": "passed",
+      "reexportMetadataParityWithSourceImport": "passed (explicit authorized gate changes accounted for)",
+      "pixelParity": "passed (both floors)"
+    },
+    {
+      "stage": "04-furnished",
+      "jsonSha256": "5459b6613a8abcd1f667806ad46b01754c9622f27aed8cfc2325d91490234a8c",
+      "nativeImport": "passed",
+      "nativeProjectValidation": "passed",
+      "reexportTerrainParity": "passed",
+      "reexportMetadataParityWithSourceImport": "passed (explicit authorized gate changes accounted for)",
+      "pixelParity": "passed (both floors)"
+    },
+    {
+      "stage": "05-paved",
+      "jsonSha256": "991ab12b515eb5a47f2de793f521143e9b8402698467b91c5ccb2cedcf9c74cf",
+      "nativeImport": "passed",
+      "nativeProjectValidation": "passed",
+      "reexportTerrainParity": "passed",
+      "reexportMetadataParityWithSourceImport": "passed (explicit authorized gate changes accounted for)",
+      "pixelParity": "passed (both floors)"
+    },
+    {
+      "stage": "06-final",
+      "jsonSha256": "ca35533566dcacf6764c0f871930f9c0b844dad37500196fd55f7782670d911c",
+      "nativeImport": "passed",
+      "nativeProjectValidation": "passed",
+      "reexportTerrainParity": "passed",
+      "reexportMetadataParityWithSourceImport": "passed (explicit authorized gate changes accounted for)",
+      "pixelParity": "passed (both floors)"
+    }
+  ]
+}
