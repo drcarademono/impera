@@ -1,0 +1,1162 @@
+{
+  "source": "maps/Minoc.json",
+  "sourceSha256": "878ab6e0d37afa44469758cbd0e75b1b22efc82f2919283b81a7623a5ae565a2",
+  "sourceCommit": "1074c9c1c067698d53883412d5cbbecd9dd29011",
+  "stages": [
+    {
+      "stage": "01-initial",
+      "preservationErrors": [],
+      "ground": {
+        "floor": 0,
+        "errors": [],
+        "warnings": [
+          "foundry work floor: route requires door/lock interaction",
+          "housing common room: route requires door/lock interaction",
+          "timber work floor: route requires door/lock interaction"
+        ],
+        "targets": [
+          {
+            "name": "industrial lane",
+            "x": 35,
+            "y": 32,
+            "status": "reachable"
+          },
+          {
+            "name": "foundry entrance",
+            "x": 47,
+            "y": 30,
+            "status": "reachable"
+          },
+          {
+            "name": "foundry work floor",
+            "x": 47,
+            "y": 25,
+            "status": "door-dependent"
+          },
+          {
+            "name": "housing door",
+            "x": 28,
+            "y": 53,
+            "status": "reachable"
+          },
+          {
+            "name": "housing common room",
+            "x": 28,
+            "y": 49,
+            "status": "door-dependent"
+          },
+          {
+            "name": "timber yard",
+            "x": 47,
+            "y": 54,
+            "status": "reachable"
+          },
+          {
+            "name": "timber work floor",
+            "x": 48,
+            "y": 48,
+            "status": "door-dependent"
+          }
+        ],
+        "limitations": [
+          "Static four-neighbor party-on-foot analysis, not an engine simulation or play-test.",
+          "Actors, time-dependent gates/drawbridges, locks, scripts, diagonals, vehicles and dynamic objects can alter accessibility; inspect these in Workshop and play-test.",
+          "Door-relaxed routes are conditional, not verified traversable routes.",
+          "Terrain rendering omits NPC overlays, runtime animation, lighting and sprite-ground inference.",
+          "Custom type records receive structural checks, not a complete TYPES_Validate proof; use the native Workshop importer probe for authoritative validation.",
+          "Reachable does not mean safe: poison, fire and other terrain effects still need review."
+        ],
+        "hazards": [
+          {
+            "x": 52,
+            "y": 19,
+            "tile": 188
+          },
+          {
+            "x": 51,
+            "y": 20,
+            "tile": 188
+          },
+          {
+            "x": 51,
+            "y": 23,
+            "tile": 188
+          }
+        ],
+        "reachableCells": 2832,
+        "walkableCellsOutsideStartComponent": 817
+      },
+      "upper": {
+        "floor": 1,
+        "errors": [],
+        "warnings": [],
+        "targets": [],
+        "limitations": [
+          "Static four-neighbor party-on-foot analysis, not an engine simulation or play-test.",
+          "Actors, time-dependent gates/drawbridges, locks, scripts, diagonals, vehicles and dynamic objects can alter accessibility; inspect these in Workshop and play-test.",
+          "Door-relaxed routes are conditional, not verified traversable routes.",
+          "Terrain rendering omits NPC overlays, runtime animation, lighting and sprite-ground inference.",
+          "Custom type records receive structural checks, not a complete TYPES_Validate proof; use the native Workshop importer probe for authoritative validation.",
+          "Reachable does not mean safe: poison, fire and other terrain effects still need review."
+        ],
+        "hazards": []
+      }
+    },
+    {
+      "stage": "02-revised",
+      "preservationErrors": [],
+      "ground": {
+        "floor": 0,
+        "errors": [],
+        "warnings": [
+          "foundry work floor: route requires door/lock interaction",
+          "housing common room: route requires door/lock interaction",
+          "timber work floor: route requires door/lock interaction"
+        ],
+        "targets": [
+          {
+            "name": "industrial lane",
+            "x": 35,
+            "y": 32,
+            "status": "reachable"
+          },
+          {
+            "name": "foundry entrance",
+            "x": 47,
+            "y": 30,
+            "status": "reachable"
+          },
+          {
+            "name": "foundry work floor",
+            "x": 47,
+            "y": 25,
+            "status": "door-dependent"
+          },
+          {
+            "name": "housing door",
+            "x": 28,
+            "y": 53,
+            "status": "reachable"
+          },
+          {
+            "name": "housing common room",
+            "x": 28,
+            "y": 49,
+            "status": "door-dependent"
+          },
+          {
+            "name": "timber yard",
+            "x": 47,
+            "y": 54,
+            "status": "reachable"
+          },
+          {
+            "name": "timber work floor",
+            "x": 48,
+            "y": 48,
+            "status": "door-dependent"
+          }
+        ],
+        "limitations": [
+          "Static four-neighbor party-on-foot analysis, not an engine simulation or play-test.",
+          "Actors, time-dependent gates/drawbridges, locks, scripts, diagonals, vehicles and dynamic objects can alter accessibility; inspect these in Workshop and play-test.",
+          "Door-relaxed routes are conditional, not verified traversable routes.",
+          "Terrain rendering omits NPC overlays, runtime animation, lighting and sprite-ground inference.",
+          "Custom type records receive structural checks, not a complete TYPES_Validate proof; use the native Workshop importer probe for authoritative validation.",
+          "Reachable does not mean safe: poison, fire and other terrain effects still need review."
+        ],
+        "hazards": [
+          {
+            "x": 52,
+            "y": 19,
+            "tile": 188
+          },
+          {
+            "x": 51,
+            "y": 20,
+            "tile": 188
+          },
+          {
+            "x": 51,
+            "y": 23,
+            "tile": 188
+          }
+        ],
+        "reachableCells": 2820,
+        "walkableCellsOutsideStartComponent": 817
+      },
+      "upper": {
+        "floor": 1,
+        "errors": [],
+        "warnings": [],
+        "targets": [],
+        "limitations": [
+          "Static four-neighbor party-on-foot analysis, not an engine simulation or play-test.",
+          "Actors, time-dependent gates/drawbridges, locks, scripts, diagonals, vehicles and dynamic objects can alter accessibility; inspect these in Workshop and play-test.",
+          "Door-relaxed routes are conditional, not verified traversable routes.",
+          "Terrain rendering omits NPC overlays, runtime animation, lighting and sprite-ground inference.",
+          "Custom type records receive structural checks, not a complete TYPES_Validate proof; use the native Workshop importer probe for authoritative validation.",
+          "Reachable does not mean safe: poison, fire and other terrain effects still need review."
+        ],
+        "hazards": []
+      }
+    },
+    {
+      "stage": "03-access-revised",
+      "preservationErrors": [],
+      "ground": {
+        "floor": 0,
+        "errors": [],
+        "warnings": [
+          "foundry work floor: route requires door/lock interaction",
+          "housing common room: route requires door/lock interaction",
+          "timber work floor: route requires door/lock interaction"
+        ],
+        "targets": [
+          {
+            "name": "industrial lane",
+            "x": 35,
+            "y": 32,
+            "status": "reachable"
+          },
+          {
+            "name": "foundry entrance",
+            "x": 47,
+            "y": 30,
+            "status": "reachable"
+          },
+          {
+            "name": "foundry work floor",
+            "x": 47,
+            "y": 25,
+            "status": "door-dependent"
+          },
+          {
+            "name": "housing door",
+            "x": 28,
+            "y": 53,
+            "status": "reachable"
+          },
+          {
+            "name": "housing common room",
+            "x": 28,
+            "y": 49,
+            "status": "door-dependent"
+          },
+          {
+            "name": "timber yard",
+            "x": 47,
+            "y": 54,
+            "status": "reachable"
+          },
+          {
+            "name": "timber work floor",
+            "x": 48,
+            "y": 48,
+            "status": "door-dependent"
+          }
+        ],
+        "limitations": [
+          "Static four-neighbor party-on-foot analysis, not an engine simulation or play-test.",
+          "Actors, time-dependent gates/drawbridges, locks, scripts, diagonals, vehicles and dynamic objects can alter accessibility; inspect these in Workshop and play-test.",
+          "Door-relaxed routes are conditional, not verified traversable routes.",
+          "Terrain rendering omits NPC overlays, runtime animation, lighting and sprite-ground inference.",
+          "Custom type records receive structural checks, not a complete TYPES_Validate proof; use the native Workshop importer probe for authoritative validation.",
+          "Reachable does not mean safe: poison, fire and other terrain effects still need review."
+        ],
+        "hazards": [
+          {
+            "x": 52,
+            "y": 19,
+            "tile": 188
+          },
+          {
+            "x": 51,
+            "y": 20,
+            "tile": 188
+          },
+          {
+            "x": 51,
+            "y": 23,
+            "tile": 188
+          }
+        ],
+        "reachableCells": 2816,
+        "walkableCellsOutsideStartComponent": 817
+      },
+      "upper": {
+        "floor": 1,
+        "errors": [],
+        "warnings": [],
+        "targets": [],
+        "limitations": [
+          "Static four-neighbor party-on-foot analysis, not an engine simulation or play-test.",
+          "Actors, time-dependent gates/drawbridges, locks, scripts, diagonals, vehicles and dynamic objects can alter accessibility; inspect these in Workshop and play-test.",
+          "Door-relaxed routes are conditional, not verified traversable routes.",
+          "Terrain rendering omits NPC overlays, runtime animation, lighting and sprite-ground inference.",
+          "Custom type records receive structural checks, not a complete TYPES_Validate proof; use the native Workshop importer probe for authoritative validation.",
+          "Reachable does not mean safe: poison, fire and other terrain effects still need review."
+        ],
+        "hazards": []
+      }
+    },
+    {
+      "stage": "04-furnished",
+      "preservationErrors": [],
+      "ground": {
+        "floor": 0,
+        "errors": [],
+        "warnings": [
+          "foundry work floor: route requires door/lock interaction",
+          "housing common room: route requires door/lock interaction",
+          "timber work floor: route requires door/lock interaction"
+        ],
+        "targets": [
+          {
+            "name": "industrial lane",
+            "x": 35,
+            "y": 32,
+            "status": "reachable"
+          },
+          {
+            "name": "foundry entrance",
+            "x": 47,
+            "y": 30,
+            "status": "reachable"
+          },
+          {
+            "name": "foundry work floor",
+            "x": 47,
+            "y": 25,
+            "status": "door-dependent"
+          },
+          {
+            "name": "housing door",
+            "x": 28,
+            "y": 53,
+            "status": "reachable"
+          },
+          {
+            "name": "housing common room",
+            "x": 28,
+            "y": 49,
+            "status": "door-dependent"
+          },
+          {
+            "name": "timber yard",
+            "x": 47,
+            "y": 54,
+            "status": "reachable"
+          },
+          {
+            "name": "timber work floor",
+            "x": 48,
+            "y": 48,
+            "status": "door-dependent"
+          }
+        ],
+        "limitations": [
+          "Static four-neighbor party-on-foot analysis, not an engine simulation or play-test.",
+          "Actors, time-dependent gates/drawbridges, locks, scripts, diagonals, vehicles and dynamic objects can alter accessibility; inspect these in Workshop and play-test.",
+          "Door-relaxed routes are conditional, not verified traversable routes.",
+          "Terrain rendering omits NPC overlays, runtime animation, lighting and sprite-ground inference.",
+          "Custom type records receive structural checks, not a complete TYPES_Validate proof; use the native Workshop importer probe for authoritative validation.",
+          "Reachable does not mean safe: poison, fire and other terrain effects still need review."
+        ],
+        "hazards": [
+          {
+            "x": 52,
+            "y": 19,
+            "tile": 188
+          },
+          {
+            "x": 51,
+            "y": 20,
+            "tile": 188
+          },
+          {
+            "x": 51,
+            "y": 23,
+            "tile": 188
+          }
+        ],
+        "reachableCells": 2808,
+        "walkableCellsOutsideStartComponent": 802
+      },
+      "upper": {
+        "floor": 1,
+        "errors": [],
+        "warnings": [],
+        "targets": [],
+        "limitations": [
+          "Static four-neighbor party-on-foot analysis, not an engine simulation or play-test.",
+          "Actors, time-dependent gates/drawbridges, locks, scripts, diagonals, vehicles and dynamic objects can alter accessibility; inspect these in Workshop and play-test.",
+          "Door-relaxed routes are conditional, not verified traversable routes.",
+          "Terrain rendering omits NPC overlays, runtime animation, lighting and sprite-ground inference.",
+          "Custom type records receive structural checks, not a complete TYPES_Validate proof; use the native Workshop importer probe for authoritative validation.",
+          "Reachable does not mean safe: poison, fire and other terrain effects still need review."
+        ],
+        "hazards": []
+      }
+    },
+    {
+      "stage": "05-paved",
+      "preservationErrors": [],
+      "ground": {
+        "floor": 0,
+        "errors": [],
+        "warnings": [
+          "foundry work floor: route requires door/lock interaction",
+          "housing common room: route requires door/lock interaction",
+          "timber work floor: route requires door/lock interaction"
+        ],
+        "targets": [
+          {
+            "name": "industrial lane",
+            "x": 35,
+            "y": 32,
+            "status": "reachable"
+          },
+          {
+            "name": "foundry entrance",
+            "x": 47,
+            "y": 30,
+            "status": "reachable"
+          },
+          {
+            "name": "foundry work floor",
+            "x": 47,
+            "y": 25,
+            "status": "door-dependent"
+          },
+          {
+            "name": "housing door",
+            "x": 28,
+            "y": 53,
+            "status": "reachable"
+          },
+          {
+            "name": "housing common room",
+            "x": 28,
+            "y": 49,
+            "status": "door-dependent"
+          },
+          {
+            "name": "timber yard",
+            "x": 47,
+            "y": 54,
+            "status": "reachable"
+          },
+          {
+            "name": "timber work floor",
+            "x": 48,
+            "y": 48,
+            "status": "door-dependent"
+          }
+        ],
+        "limitations": [
+          "Static four-neighbor party-on-foot analysis, not an engine simulation or play-test.",
+          "Actors, time-dependent gates/drawbridges, locks, scripts, diagonals, vehicles and dynamic objects can alter accessibility; inspect these in Workshop and play-test.",
+          "Door-relaxed routes are conditional, not verified traversable routes.",
+          "Terrain rendering omits NPC overlays, runtime animation, lighting and sprite-ground inference.",
+          "Custom type records receive structural checks, not a complete TYPES_Validate proof; use the native Workshop importer probe for authoritative validation.",
+          "Reachable does not mean safe: poison, fire and other terrain effects still need review."
+        ],
+        "hazards": [
+          {
+            "x": 52,
+            "y": 19,
+            "tile": 188
+          },
+          {
+            "x": 51,
+            "y": 20,
+            "tile": 188
+          },
+          {
+            "x": 51,
+            "y": 23,
+            "tile": 188
+          }
+        ],
+        "reachableCells": 2808,
+        "walkableCellsOutsideStartComponent": 802
+      },
+      "upper": {
+        "floor": 1,
+        "errors": [],
+        "warnings": [],
+        "targets": [],
+        "limitations": [
+          "Static four-neighbor party-on-foot analysis, not an engine simulation or play-test.",
+          "Actors, time-dependent gates/drawbridges, locks, scripts, diagonals, vehicles and dynamic objects can alter accessibility; inspect these in Workshop and play-test.",
+          "Door-relaxed routes are conditional, not verified traversable routes.",
+          "Terrain rendering omits NPC overlays, runtime animation, lighting and sprite-ground inference.",
+          "Custom type records receive structural checks, not a complete TYPES_Validate proof; use the native Workshop importer probe for authoritative validation.",
+          "Reachable does not mean safe: poison, fire and other terrain effects still need review."
+        ],
+        "hazards": []
+      }
+    },
+    {
+      "stage": "06-final",
+      "preservationErrors": [],
+      "ground": {
+        "floor": 0,
+        "errors": [],
+        "warnings": [
+          "foundry work floor: route requires door/lock interaction",
+          "housing common room: route requires door/lock interaction",
+          "timber work floor: route requires door/lock interaction"
+        ],
+        "targets": [
+          {
+            "name": "industrial lane",
+            "x": 35,
+            "y": 32,
+            "status": "reachable"
+          },
+          {
+            "name": "foundry entrance",
+            "x": 47,
+            "y": 30,
+            "status": "reachable"
+          },
+          {
+            "name": "foundry work floor",
+            "x": 47,
+            "y": 25,
+            "status": "door-dependent"
+          },
+          {
+            "name": "housing door",
+            "x": 28,
+            "y": 53,
+            "status": "reachable"
+          },
+          {
+            "name": "housing common room",
+            "x": 28,
+            "y": 49,
+            "status": "door-dependent"
+          },
+          {
+            "name": "timber yard",
+            "x": 47,
+            "y": 54,
+            "status": "reachable"
+          },
+          {
+            "name": "timber work floor",
+            "x": 48,
+            "y": 48,
+            "status": "door-dependent"
+          }
+        ],
+        "limitations": [
+          "Static four-neighbor party-on-foot analysis, not an engine simulation or play-test.",
+          "Actors, time-dependent gates/drawbridges, locks, scripts, diagonals, vehicles and dynamic objects can alter accessibility; inspect these in Workshop and play-test.",
+          "Door-relaxed routes are conditional, not verified traversable routes.",
+          "Terrain rendering omits NPC overlays, runtime animation, lighting and sprite-ground inference.",
+          "Custom type records receive structural checks, not a complete TYPES_Validate proof; use the native Workshop importer probe for authoritative validation.",
+          "Reachable does not mean safe: poison, fire and other terrain effects still need review."
+        ],
+        "hazards": [
+          {
+            "x": 52,
+            "y": 19,
+            "tile": 188
+          },
+          {
+            "x": 51,
+            "y": 20,
+            "tile": 188
+          },
+          {
+            "x": 51,
+            "y": 23,
+            "tile": 188
+          }
+        ],
+        "reachableCells": 3180,
+        "walkableCellsOutsideStartComponent": 310
+      },
+      "upper": {
+        "floor": 1,
+        "errors": [],
+        "warnings": [],
+        "targets": [],
+        "limitations": [
+          "Static four-neighbor party-on-foot analysis, not an engine simulation or play-test.",
+          "Actors, time-dependent gates/drawbridges, locks, scripts, diagonals, vehicles and dynamic objects can alter accessibility; inspect these in Workshop and play-test.",
+          "Door-relaxed routes are conditional, not verified traversable routes.",
+          "Terrain rendering omits NPC overlays, runtime animation, lighting and sprite-ground inference.",
+          "Custom type records receive structural checks, not a complete TYPES_Validate proof; use the native Workshop importer probe for authoritative validation.",
+          "Reachable does not mean safe: poison, fire and other terrain effects still need review."
+        ],
+        "hazards": []
+      }
+    }
+  ],
+  "authorizedTerrainChanges": [
+    {
+      "floor": 0,
+      "cells": [
+        [
+          1,
+          31
+        ],
+        [
+          2,
+          30
+        ],
+        [
+          3,
+          30
+        ],
+        [
+          4,
+          30
+        ],
+        [
+          5,
+          30
+        ],
+        [
+          6,
+          30
+        ],
+        [
+          7,
+          30
+        ],
+        [
+          8,
+          30
+        ],
+        [
+          9,
+          30
+        ],
+        [
+          10,
+          30
+        ],
+        [
+          11,
+          29
+        ],
+        [
+          11,
+          30
+        ],
+        [
+          12,
+          28
+        ],
+        [
+          12,
+          29
+        ],
+        [
+          13,
+          28
+        ],
+        [
+          15,
+          28
+        ],
+        [
+          17,
+          28
+        ],
+        [
+          18,
+          28
+        ],
+        [
+          18,
+          29
+        ],
+        [
+          19,
+          29
+        ],
+        [
+          19,
+          30
+        ],
+        [
+          20,
+          30
+        ],
+        [
+          21,
+          30
+        ],
+        [
+          22,
+          30
+        ],
+        [
+          23,
+          30
+        ],
+        [
+          24,
+          30
+        ],
+        [
+          25,
+          30
+        ],
+        [
+          26,
+          30
+        ],
+        [
+          27,
+          30
+        ],
+        [
+          28,
+          30
+        ],
+        [
+          29,
+          30
+        ],
+        [
+          30,
+          2
+        ],
+        [
+          30,
+          3
+        ],
+        [
+          30,
+          4
+        ],
+        [
+          30,
+          5
+        ],
+        [
+          30,
+          6
+        ],
+        [
+          30,
+          7
+        ],
+        [
+          30,
+          8
+        ],
+        [
+          30,
+          9
+        ],
+        [
+          30,
+          10
+        ],
+        [
+          30,
+          11
+        ],
+        [
+          30,
+          12
+        ],
+        [
+          30,
+          13
+        ],
+        [
+          30,
+          14
+        ],
+        [
+          30,
+          15
+        ],
+        [
+          30,
+          16
+        ],
+        [
+          30,
+          17
+        ],
+        [
+          30,
+          18
+        ],
+        [
+          30,
+          19
+        ],
+        [
+          30,
+          20
+        ],
+        [
+          30,
+          21
+        ],
+        [
+          30,
+          22
+        ],
+        [
+          30,
+          23
+        ],
+        [
+          30,
+          24
+        ],
+        [
+          30,
+          25
+        ],
+        [
+          30,
+          26
+        ],
+        [
+          30,
+          27
+        ],
+        [
+          30,
+          28
+        ],
+        [
+          30,
+          29
+        ],
+        [
+          30,
+          30
+        ],
+        [
+          31,
+          1
+        ]
+      ],
+      "reason": "User requested an irregular expanded perimeter and bottom-center gate; only declared old exterior/gateway and new perimeter-border cells may change."
+    },
+    {
+      "floor": 1,
+      "cells": [
+        [
+          1,
+          31
+        ],
+        [
+          2,
+          30
+        ],
+        [
+          3,
+          30
+        ],
+        [
+          4,
+          30
+        ],
+        [
+          5,
+          30
+        ],
+        [
+          6,
+          30
+        ],
+        [
+          7,
+          30
+        ],
+        [
+          8,
+          30
+        ],
+        [
+          9,
+          30
+        ],
+        [
+          10,
+          30
+        ],
+        [
+          11,
+          29
+        ],
+        [
+          11,
+          30
+        ],
+        [
+          12,
+          28
+        ],
+        [
+          12,
+          29
+        ],
+        [
+          13,
+          28
+        ],
+        [
+          15,
+          28
+        ],
+        [
+          17,
+          28
+        ],
+        [
+          18,
+          28
+        ],
+        [
+          18,
+          29
+        ],
+        [
+          19,
+          29
+        ],
+        [
+          19,
+          30
+        ],
+        [
+          20,
+          30
+        ],
+        [
+          21,
+          30
+        ],
+        [
+          22,
+          30
+        ],
+        [
+          23,
+          30
+        ],
+        [
+          24,
+          30
+        ],
+        [
+          25,
+          30
+        ],
+        [
+          26,
+          30
+        ],
+        [
+          27,
+          30
+        ],
+        [
+          28,
+          30
+        ],
+        [
+          29,
+          30
+        ],
+        [
+          30,
+          2
+        ],
+        [
+          30,
+          3
+        ],
+        [
+          30,
+          4
+        ],
+        [
+          30,
+          5
+        ],
+        [
+          30,
+          6
+        ],
+        [
+          30,
+          7
+        ],
+        [
+          30,
+          8
+        ],
+        [
+          30,
+          9
+        ],
+        [
+          30,
+          10
+        ],
+        [
+          30,
+          11
+        ],
+        [
+          30,
+          12
+        ],
+        [
+          30,
+          13
+        ],
+        [
+          30,
+          14
+        ],
+        [
+          30,
+          15
+        ],
+        [
+          30,
+          16
+        ],
+        [
+          30,
+          17
+        ],
+        [
+          30,
+          18
+        ],
+        [
+          30,
+          19
+        ],
+        [
+          30,
+          20
+        ],
+        [
+          30,
+          21
+        ],
+        [
+          30,
+          22
+        ],
+        [
+          30,
+          23
+        ],
+        [
+          30,
+          24
+        ],
+        [
+          30,
+          25
+        ],
+        [
+          30,
+          26
+        ],
+        [
+          30,
+          27
+        ],
+        [
+          30,
+          28
+        ],
+        [
+          30,
+          29
+        ],
+        [
+          30,
+          30
+        ],
+        [
+          31,
+          1
+        ]
+      ],
+      "reason": "User requested an irregular expanded perimeter and bottom-center gate; only declared old exterior/gateway and new perimeter-border cells may change."
+    }
+  ],
+  "authorizedMetadataChanges": [
+    {
+      "path": [
+        "map",
+        "floors",
+        0,
+        "gates"
+      ],
+      "value": [
+        [
+          5,
+          0,
+          31,
+          62,
+          1,
+          2,
+          68,
+          153,
+          5,
+          20,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          5,
+          0,
+          32,
+          62,
+          1,
+          2,
+          68,
+          153,
+          5,
+          20,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      ],
+      "reason": "User requested the relocated entrance gate; add two always-open gate cells."
+    }
+  ],
+  "arrival": {
+    "cell": [
+      32,
+      62
+    ],
+    "requiresCompanionMod": true,
+    "reason": "Location JSON has no portal-arrival field; use the native mod."
+  },
+  "workshopImportStatus": "See native-validation.json; Python generation does not run Workshop.",
+  "gamePlayTested": false
+}
