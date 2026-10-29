@@ -1,3 +1,4 @@
+#include "save_dialog.h"
 #include "custom_tiles.h"
 #include "mod/maps.h"
 #include "extended_maps.h"
@@ -2254,14 +2255,12 @@ QWidget *editor(Project *p, Workshop::TextCommit commit, QMap<QString, int> *sta
                         pixels.scaled(size, Qt::IgnoreAspectRatio, Qt::FastTransformation));
                 }
             }
-            auto path = QFileDialog::getSaveFileName(
+            auto path = Workshop::saveFileName(
                 w, sheet ? "Export animation sheet" : "Export frame",
                 QString::fromUtf8(draft->def.name) + (sheet ? "-animation.png" : "-frame.png"),
-                "PNG images (*.png)");
+                "PNG images (*.png)", "png");
             if (path.isEmpty())
                 return;
-            if (!path.endsWith(".png", Qt::CaseInsensitive))
-                path += ".png";
             require(output.save(path, "PNG"), "Cannot save PNG to the selected file");
         });
     };
