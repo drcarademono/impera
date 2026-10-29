@@ -74,3 +74,13 @@ pixels and movement bits. Record GUI interaction, native importer validation and
 actual game play-testing separately. Never call a map play-tested unless it was
 loaded and exercised in Impera. Stop for human review after the initial district;
 do not redesign the rest of the city or merge the PR autonomously.
+
+## Later fresh-layout experiment
+
+The user subsequently authorized starting terrain from scratch using an Ultima VII
+reference, without a town wall. That instruction applies to
+`experiments/minoc_u7/`, whose child AGENTS.md and report supersede the earlier
+terrain/wall restrictions only for that study. Preserve the earlier study unchanged.
+The fresh study adapts new terrain and loft access to the existing NPC/quest
+positions; it does not silently delete or relocate metadata. Follow its specific
+water, factory, shipyard and rough-walled dormitory requirements.
