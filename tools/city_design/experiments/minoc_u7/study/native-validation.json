@@ -1,0 +1,56 @@
+{
+  "method": "Real Workshop importMapJson, Project::validate, exportMapJson, U5::readGraphics; private in-memory project, not GUI interaction or game play-testing.",
+  "nativeMovementParity": "passed (all 256 terrain tiles, party shape 0x1c)",
+  "arrival": [
+    {
+      "arrivalX": 32,
+      "arrivalY": 62,
+      "entranceX": 159,
+      "entranceY": 20,
+      "map": 5,
+      "world": 0
+    }
+  ],
+  "globalNewGameStateChanged": false,
+  "companionModSha256": "d86e532be85658b71bbda8eb7113a33d046172a9c74c98442d3e89abe50ed8fe",
+  "packageResourceRoundtrip": "passed",
+  "gamePlayTested": false,
+  "stages": [
+    {
+      "stage": "01-layout",
+      "jsonSha256": "abb0ccc78ffd81432de8065beda6e4818f6fe4fb9e35ded5b00c2898cc3b00f6",
+      "nativeImport": "passed",
+      "nativeProjectValidation": "passed",
+      "reexportTerrainParity": "passed",
+      "reexportMetadataParityWithSourceImport": "passed (explicit authorized gate changes accounted for)",
+      "pixelParity": "passed (both floors)"
+    },
+    {
+      "stage": "02-coast-revised",
+      "jsonSha256": "e91507dc7d6c3c31a3b61e384b6376de110136f3f3cd87c9405dc3e65ec1c6c9",
+      "nativeImport": "passed",
+      "nativeProjectValidation": "passed",
+      "reexportTerrainParity": "passed",
+      "reexportMetadataParityWithSourceImport": "passed (explicit authorized gate changes accounted for)",
+      "pixelParity": "passed (both floors)"
+    },
+    {
+      "stage": "03-river-revised",
+      "jsonSha256": "b0feca583cd6b8c5e6b8a1cc7d256878e3eeedf6febc97875b9e4a3606a8e565",
+      "nativeImport": "passed",
+      "nativeProjectValidation": "passed",
+      "reexportTerrainParity": "passed",
+      "reexportMetadataParityWithSourceImport": "passed (explicit authorized gate changes accounted for)",
+      "pixelParity": "passed (both floors)"
+    },
+    {
+      "stage": "04-final",
+      "jsonSha256": "71dbe506fb42b6d0d3da353be5927f640876c9718c8a64ae1c7dffc34a47a035",
+      "nativeImport": "passed",
+      "nativeProjectValidation": "passed",
+      "reexportTerrainParity": "passed",
+      "reexportMetadataParityWithSourceImport": "passed (explicit authorized gate changes accounted for)",
+      "pixelParity": "passed (both floors)"
+    }
+  ]
+}

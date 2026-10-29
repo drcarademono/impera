@@ -11,6 +11,17 @@ that package into a separate Workshop project to retain the correct arrival; a
 location JSON transfer alone cannot carry portal arrival settings. The original is
 [`maps/Minoc.json`](../../maps/Minoc.json), preserved byte-for-byte.
 
+## Current reference study
+
+The new [Ultima VII reference study](experiments/minoc_u7/REPORT.md) starts from
+fresh 64×64 terrain, with no town wall, a southwest shipbuilder/bay, central and
+southeast factories, a connected river and four rough-walled workers' dormitories.
+Its [final JSON](experiments/minoc_u7/study/04-final.json) and
+[companion mod](experiments/minoc_u7/study/Minoc-U7-layout.imperamod) are separate
+from the earlier preserved-town experiment above. The latest user instruction
+explicitly permits replacing terrain for this fresh study; NPC/quest metadata is
+still preserved. See its child AGENTS.md and report for that scope.
+
 ## Setup and commands
 
 Python 3.10+ and Pillow 10–12 are required. From the repository root:
