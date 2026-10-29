@@ -11,7 +11,17 @@ that package into a separate Workshop project to retain the correct arrival; a
 location JSON transfer alone cannot carry portal arrival settings. The original is
 [`maps/Minoc.json`](../../maps/Minoc.json), preserved byte-for-byte.
 
-## Current reference study
+## Current architecture and furnishing revision
+
+Read the [Ultima V style guide](STYLE_GUIDE.md), based on all 32 original locations
+and a complete DOS artwork atlas. The [latest Minoc revision](experiments/minoc_furnished/REPORT.md)
+rebuilds the central factory as a hall with eight connected rooms, repairs corner
+joints, adds purpose-specific furniture, paves main routes, keeps dirt dormitory
+spurs and removes desert from the shoreline. Its outputs are separate from the
+previous layouts. The native probe also supports read-only `--survey-game` exports;
+`style_survey.py` produces the persistent evidence.
+
+## Previous reference study
 
 The new [Ultima VII reference study](experiments/minoc_u7/REPORT.md) starts from
 fresh 64×64 terrain, with no town wall, a southwest shipbuilder/bay, central and

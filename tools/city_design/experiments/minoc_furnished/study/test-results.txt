@@ -1,0 +1,56 @@
+test_authoritative_input_and_all_original_content_preserved (test_minoc.MinocStudyTests.test_authoritative_input_and_all_original_content_preserved) ... ok
+test_final_previews_match_actual_embedded_art (test_minoc.MinocStudyTests.test_final_previews_match_actual_embedded_art) ... ok
+test_final_streets_do_not_repeat_directional_dirt_components (test_minoc.MinocStudyTests.test_final_streets_do_not_repeat_directional_dirt_components) ... ok
+test_final_target_connectivity_and_ladders (test_minoc.MinocStudyTests.test_final_target_connectivity_and_ladders) ... ok
+test_perimeter_and_gate_do_not_cut_buildings (test_minoc.MinocStudyTests.test_perimeter_and_gate_do_not_cut_buildings) ... ok
+test_recipe_replays_identical_maps_without_touching_input (test_minoc.MinocStudyTests.test_recipe_replays_identical_maps_without_touching_input) ... ok
+test_factory_hall_and_all_eight_rooms_accessible (test_minoc_furnished.FurnishedMinocTests.test_factory_hall_and_all_eight_rooms_accessible) ... ok
+test_furniture_is_varied_and_complete (test_minoc_furnished.FurnishedMinocTests.test_furniture_is_varied_and_complete) ... ok
+test_main_roads_paved_dormitory_spurs_dirt (test_minoc_furnished.FurnishedMinocTests.test_main_roads_paved_dormitory_spurs_dirt) ... ok
+test_metadata_and_old_studies_preserved (test_minoc_furnished.FurnishedMinocTests.test_metadata_and_old_studies_preserved) ... ok
+test_native_style_evidence_covers_all_locations_and_slots (test_minoc_furnished.FurnishedMinocTests.test_native_style_evidence_covers_all_locations_and_slots) ... /workspace/impera/tools/city_design/tests/test_minoc_furnished.py:95: ResourceWarning: unclosed file <_io.BufferedReader name='/workspace/impera/tools/city_design/style_evidence/all-512-dos-slots.png'>
+  self.assertEqual(Image.open(ROOT/'style_evidence/all-512-dos-slots.png').size,(1152,2880))
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_no_diagonal_floor_grass_pinhole_at_factory_corners (test_minoc_furnished.FurnishedMinocTests.test_no_diagonal_floor_grass_pinhole_at_factory_corners) ... ok
+test_original_destinations_and_loft_routes_remain_passable (test_minoc_furnished.FurnishedMinocTests.test_original_destinations_and_loft_routes_remain_passable) ... ok
+test_render_and_replay (test_minoc_furnished.FurnishedMinocTests.test_render_and_replay) ... ok
+test_shore_has_no_desert_and_river_preserved (test_minoc_furnished.FurnishedMinocTests.test_shore_has_no_desert_and_river_preserved) ... ok
+test_continuous_river_separate_bay_and_correct_bridges (test_minoc_u7.UltimaVIIStudyTests.test_continuous_river_separate_bay_and_correct_bridges) ... ok
+test_fresh_dimensions_and_exact_original_metadata (test_minoc_u7.UltimaVIIStudyTests.test_fresh_dimensions_and_exact_original_metadata) ... ok
+test_no_town_wall_or_unintended_outdoor_flooring (test_minoc_u7.UltimaVIIStudyTests.test_no_town_wall_or_unintended_outdoor_flooring) ... ok
+test_original_schedules_and_contents_have_usable_new_spaces (test_minoc_u7.UltimaVIIStudyTests.test_original_schedules_and_contents_have_usable_new_spaces) ... ok
+test_paths_and_all_intended_work_areas_accessible_conditionally (test_minoc_u7.UltimaVIIStudyTests.test_paths_and_all_intended_work_areas_accessible_conditionally) ... ok
+test_previews_and_replay_match_saved_outputs (test_minoc_u7.UltimaVIIStudyTests.test_previews_and_replay_match_saved_outputs) ... ok
+test_worker_beds_paired_and_rough_walled (test_minoc_u7.UltimaVIIStudyTests.test_worker_beds_paired_and_rough_walled) ... ok
+test_blocked_entrance_and_isolated_interior (test_toolkit.ArchitectureTests.test_blocked_entrance_and_isolated_interior) ... ok
+test_catalogue_matches_audit_and_native_tables (test_toolkit.ArchitectureTests.test_catalogue_matches_audit_and_native_tables) ... ok
+test_custom_movement_overrides_native (test_toolkit.ArchitectureTests.test_custom_movement_overrides_native) ... ok
+test_directional_path_matches_bends_and_straights (test_toolkit.ArchitectureTests.test_directional_path_matches_bends_and_straights) ... ok
+test_patterns_have_accessible_interior_and_different_footprints (test_toolkit.ArchitectureTests.test_patterns_have_accessible_interior_and_different_footprints) ... ok
+test_stairs_warn_instead_of_inventing_vertical_passage (test_toolkit.ArchitectureTests.test_stairs_warn_instead_of_inventing_vertical_passage) ... ok
+test_atomic_protected_paint (test_toolkit.ModelTests.test_atomic_protected_paint) ... ok
+test_authorized_exceptions_are_narrow_and_exact (test_toolkit.ModelTests.test_authorized_exceptions_are_narrow_and_exact) ... ok
+test_crop_cannot_strand_schedule (test_toolkit.ModelTests.test_crop_cannot_strand_schedule) ... ok
+test_crop_cannot_strand_sign_or_gate (test_toolkit.ModelTests.test_crop_cannot_strand_sign_or_gate) ... ok
+test_duplicate_keys_rejected (test_toolkit.ModelTests.test_duplicate_keys_rejected) ... ok
+test_expand_preserves_every_original_cell_and_metadata (test_toolkit.ModelTests.test_expand_preserves_every_original_cell_and_metadata) ... ok
+test_export_roundtrip (test_toolkit.ModelTests.test_export_roundtrip) ... ok
+test_irregular_stamp_is_atomic (test_toolkit.ModelTests.test_irregular_stamp_is_atomic) ... ok
+test_multi_floor_preservation (test_toolkit.ModelTests.test_multi_floor_preservation) ... ok
+test_protect_new_area (test_toolkit.ModelTests.test_protect_new_area) ... ok
+test_protection_detects_direct_mutation (test_toolkit.ModelTests.test_protection_detects_direct_mutation) ... ok
+test_reject_duplicate_floor_and_missing_type (test_toolkit.ModelTests.test_reject_duplicate_floor_and_missing_type) ... ok
+test_reject_invalid_dimensions_and_rows (test_toolkit.ModelTests.test_reject_invalid_dimensions_and_rows) ... ok
+test_source_and_existing_outputs_cannot_be_overwritten (test_toolkit.ModelTests.test_source_and_existing_outputs_cannot_be_overwritten) ... ok
+test_unknown_metadata_is_not_discarded (test_toolkit.ModelTests.test_unknown_metadata_is_not_discarded) ... ok
+test_custom_artwork_fails_explicitly (test_toolkit.RenderingTests.test_custom_artwork_fails_explicitly) ... ok
+test_lzw_reset_width_growth_and_special_dictionary_entry (test_toolkit.RenderingTests.test_lzw_reset_width_growth_and_special_dictionary_entry) ... ok
+test_nibbles_palette_and_tile_boundaries (test_toolkit.RenderingTests.test_nibbles_palette_and_tile_boundaries) ... ok
+test_region_nearest_neighbor_and_comparison (test_toolkit.RenderingTests.test_region_nearest_neighbor_and_comparison) ... ok
+test_truncated_and_malformed_resources_rejected (test_toolkit.RenderingTests.test_truncated_and_malformed_resources_rejected) ... ok
+
+----------------------------------------------------------------------
+Ran 48 tests in 21.427s
+
+OK

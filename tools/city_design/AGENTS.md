@@ -84,3 +84,14 @@ terrain/wall restrictions only for that study. Preserve the earlier study unchan
 The fresh study adapts new terrain and loft access to the existing NPC/quest
 positions; it does not silently delete or relocate metadata. Follow its specific
 water, factory, shipyard and rough-walled dormitory requirements.
+
+## Latest architecture and furnishing requirements
+
+Read STYLE_GUIDE.md and the native survey evidence before designing buildings.
+The user rejected the earlier corner joints and sparse furniture. Follow the
+hall-and-eight-room factory reference, close concave masonry returns, furnish
+rooms with complete purpose-specific groups and correctly faced chairs, pave
+routes between main buildings, use dirt only for dormitory approaches, and never
+use desert tile 07 as a beach. The separate `experiments/minoc_furnished` revision
+implements these requirements without overwriting the earlier studies. Preserve
+NPC/quest metadata, ladders, doorway approaches and carrying space during furnishing.

@@ -1,0 +1,47 @@
+{
+  "method": "Real Workshop importMapJson, Project::validate, exportMapJson, U5::readGraphics; private in-memory project, not GUI interaction or game play-testing.",
+  "nativeMovementParity": "passed (all 256 terrain tiles, party shape 0x1c)",
+  "arrival": [
+    {
+      "arrivalX": 32,
+      "arrivalY": 62,
+      "entranceX": 159,
+      "entranceY": 20,
+      "map": 5,
+      "world": 0
+    }
+  ],
+  "globalNewGameStateChanged": false,
+  "companionModSha256": "70e30d0b8490f3470a7db2590ea9c10bfb41d5ec7cc627d0d672dec4a8bb47da",
+  "packageResourceRoundtrip": "passed",
+  "gamePlayTested": false,
+  "stages": [
+    {
+      "stage": "01-architecture",
+      "jsonSha256": "631a2cab1ae6a8cce45b13689c7172f02030d48868617379e45ccfbeb7944739",
+      "nativeImport": "passed",
+      "nativeProjectValidation": "passed",
+      "reexportTerrainParity": "passed",
+      "reexportMetadataParityWithSourceImport": "passed (explicit authorized gate changes accounted for)",
+      "pixelParity": "passed (both floors)"
+    },
+    {
+      "stage": "02-furnished",
+      "jsonSha256": "bfb781e61363e25bd36340e2e658dd67f8a2668daf5bff7771296a825cf498cd",
+      "nativeImport": "passed",
+      "nativeProjectValidation": "passed",
+      "reexportTerrainParity": "passed",
+      "reexportMetadataParityWithSourceImport": "passed (explicit authorized gate changes accounted for)",
+      "pixelParity": "passed (both floors)"
+    },
+    {
+      "stage": "03-final",
+      "jsonSha256": "8f9a7661bf4945cc61971b1c73ad8c3bc479bde60ad7578ce61c8b9419512922",
+      "nativeImport": "passed",
+      "nativeProjectValidation": "passed",
+      "reexportTerrainParity": "passed",
+      "reexportMetadataParityWithSourceImport": "passed (explicit authorized gate changes accounted for)",
+      "pixelParity": "passed (both floors)"
+    }
+  ]
+}

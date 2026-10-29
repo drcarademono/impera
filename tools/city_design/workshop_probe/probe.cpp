@@ -22,6 +22,26 @@ static void write(const QString &path, const QByteArray &data) {
 int main(int argc, char **argv) {
     QApplication app(argc, argv);
     try {
+        if (argc == 4 && QString::fromLocal8Bit(argv[1]) == "--survey-game") {
+            const QString output = QString::fromLocal8Bit(argv[3]);
+            U5::require(!QFile::exists(output) && QDir().mkpath(output), "Choose a new survey directory");
+            Project original;
+            original.openGame(QString::fromLocal8Bit(argv[2]));
+            unsigned count = 0;
+            for (const auto &resource : {"TOWNE.DAT", "DWELLING.DAT", "CASTLE.DAT", "KEEP.DAT"}) {
+                const auto pages = original.mapPages(resource);
+                for (int page = 0; page < pages.size(); ++page)
+                    if (pages[page].floor == 0) {
+                        const int id = Workshop::positionMap(resource, pages[page]);
+                        write(output + QString("/location-%1.json").arg(id, 2, 10, QChar('0')),
+                              Workshop::exportMapJson(original, resource, page));
+                        ++count;
+                    }
+            }
+            U5::require(count == 32, "Expected all 32 original locations");
+            puts("PASS read-only survey export of all 32 original Ultima V locations.");
+            return 0;
+        }
         U5::require(argc == 4 || (argc == 7 && QString::fromLocal8Bit(argv[4]) == "--arrival"),
                     "Usage: city_workshop_probe GAME_DIR INPUT_JSON NEW_OUTPUT_DIR [--arrival X Y]");
         const QString output = QString::fromLocal8Bit(argv[3]);
