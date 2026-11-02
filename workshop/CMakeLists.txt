@@ -121,6 +121,7 @@ qt_add_resources(impera_workshop_core alternate_tilesets PREFIX "/tilesets"
     ../textures/tilesets/Ultima_5_Tiles_Grayscale.png
     ../textures/tilesets/Ultima_5_Tiles_SharpX68000_World.png
     ../textures/tilesets/Ultima_5_Tiles_SharpX68000_NPC.png)
+target_sources(impera_workshop_core PRIVATE ../src/mod/party.c)
 target_include_directories(impera_workshop_core PUBLIC "${CMAKE_CURRENT_BINARY_DIR}")
 target_link_libraries(impera_workshop_core PUBLIC Qt6::Widgets)
 target_include_directories(impera_workshop_core PUBLIC . ../src)

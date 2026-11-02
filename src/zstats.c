@@ -489,6 +489,8 @@ static int ZSTATS_06e8(char* param_1, int param_2, byte* param_3, char** param_4
         case 0x34:
         case 0x35:
         case 0x36:
+        case 0x37:
+        case 0x38:
             // 0948
             local_8 = 1;
             break;
@@ -612,6 +614,8 @@ void ZSTATS_0a3a_ZstatsCmd(void)
         case 0x34:
         case 0x35:
         case 0x36:
+        case 0x37:
+        case 0x38:
             // 0b12 (NOT MATCHING)
             if (local_6 - 0x31 < D_585b)
             {

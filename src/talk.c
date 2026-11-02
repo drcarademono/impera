@@ -1,3 +1,4 @@
+#include "mod/party.h"
 #include "common/common.h"
 #include "funcs.h"
 #include "vars.h"
@@ -544,6 +545,8 @@ static void gameVitals(void *h) {
 static ImperaDialogueGame dialogueGame(void) {
     ImperaDialogueGame g = {0};
     g.party = (uint8_t *)D_55a8_party;
+    g.rosterCount = PARTY_RosterCount();
+    g.maxParty = PARTY_MaxActive();
     g.partyCount = &D_585b;
     g.food = (uint8_t *)&D_57a8;
     g.gold = (uint8_t *)&D_57aa;

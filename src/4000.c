@@ -1,3 +1,4 @@
+#include "mod/party.h"
 #include "mod/runtime.h"
 #include "mod/types.h"
 #include "common/common.h"
@@ -902,7 +903,7 @@ void ULTIMA_4f7c(int param_1)
 
 					// 5077
 					// TODO: loop counter
-					for (local_6 = 0; local_6 < 0x10; local_6++)
+					for (local_6 = 0; local_6 < (int)PARTY_RosterCount(); local_6++)
 					{
 						// 507a
 						if (D_55a8_party[local_6]._17 < 0x19)

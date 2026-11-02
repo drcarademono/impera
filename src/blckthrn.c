@@ -1,3 +1,4 @@
+#include "mod/party.h"
 #include "common/common.h"
 #include "funcs.h"
 #include "macros.h"
@@ -303,22 +304,22 @@ static void BLCKTHRN_03ae(int param_1)
 
     // NOT MATCHING
     local_24 = local_28;
-    for (; local_28 < 0xf; local_28++)
+    for (; local_28 < (int)PARTY_RosterCount() - 1; local_28++)
     {
         // a73b
         D_55a8_party[local_28] = D_55a8_party[local_28 + 1];
     }
 
     // a752
-    D_55a8_party[0xf] = local_22;
-    D_55a8_party[0xf].mapId = 0x7f;
+    D_55a8_party[PARTY_RosterCount() - 1] = local_22;
+    D_55a8_party[PARTY_RosterCount() - 1].mapId = 0x7f;
 
     D_585b--;
     ULTIMA_2900_UpdateVitalsDisplay();
     if (param_1 != 0)
     {
         ULTIMA_1850_PrintString(_TEXT(0x6f92, "\n\n"));
-        ULTIMA_1850_PrintString(D_55a8_party[0xf].name);
+        ULTIMA_1850_PrintString(D_55a8_party[PARTY_RosterCount() - 1].name);
         ULTIMA_1850_PrintString(_TEXT(0x6f96, " is sliced in half! "));
         ULTIMA_266c_GetChar();
         ULTIMA_1850_PrintString(

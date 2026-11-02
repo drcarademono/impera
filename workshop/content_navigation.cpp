@@ -190,7 +190,7 @@ QVector<ContentDestination> contentDestinations(const Project &project) {
             continue;
         if (name == "TYPEMAP.OVR")
             continue;
-        if (name == "MODINFO.DAT" || name == "INTERFACE.OVR") continue;
+        if (name == "PARTY.OVR" || name == "MODINFO.DAT" || name == "INTERFACE.OVR") continue;
         if (name == "CONTENTS.OVR" || name == "GATES.OVR")
             continue; // Edited through the map inspector.
         if (MAPS_LocationResource(name.toLatin1().constData())) {
@@ -241,6 +241,7 @@ QVector<ContentDestination> contentDestinations(const Project &project) {
                                      project.locationName(33 + dungeon), name, -1};
                 d.selection["DUNGEON.DAT/dungeon"] = dungeon;
                 d.sources = {name};
+        if(name=="INIT.GAM") d.sources.append("PARTY.OVR");
                 result.append(d);
             }
             continue;
@@ -352,6 +353,7 @@ QVector<ContentDestination> contentDestinations(const Project &project) {
             continue;
         ContentDestination d{"content/" + name, workspace, group, title, name, -1};
         d.sources = {name};
+        if(name=="INIT.GAM") d.sources.append("PARTY.OVR");
         if (name == "STORY.DAT" || name == "END.DAT") d.sources.append("CUTSCENE.OVR");
         if (name == "UNDER.OOL" && project.resources.contains("INIT.OOL")) d.sources.append("INIT.OOL");
         result.append(d);

@@ -1,3 +1,4 @@
+#include "party_data.h"
 #include "mod/maps.h"
 #include "mod/npcs.h"
 #include "native_dialogue_session.h"
@@ -49,10 +50,13 @@ NativeSetup nativeSetup(const Project &project, const QString &resource, int con
     U5::require(project.resources.contains("INIT.GAM"),
                 "Starting game state is required for Playtest");
     result.gameState = project.data("INIT.GAM");
+    auto roster=Workshop::partyData(project);
+    result.maxParty=TYPES_U32(roster.constData()+12);
+    for(unsigned i=0;i<PARTY_Count(roster.constData(),roster.size());i++) result.partyRecords.append(roster.mid(32+i*PARTY_RECORD_SIZE,32));
     U5::require(result.gameState.size() == 4192, "Invalid starting game state");
     auto byte = [&](int offset) { return uint8_t(result.gameState[offset]); };
     result.state.partySize = byte(0x2b5);
-    U5::require(result.state.partySize >= 1 && result.state.partySize <= 6,
+    U5::require(result.state.partySize >= 1 && result.state.partySize <= int(result.maxParty),
                 "Invalid starting party");
     result.state.partyNames.clear();
     for (int i = 0; i < result.state.partySize; ++i) {

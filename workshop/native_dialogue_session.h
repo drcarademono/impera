@@ -25,6 +25,8 @@ class NativeRandom {
 struct NativeSetup {
     Sandbox state;
     uint16_t seed = 42;
+    unsigned maxParty = 6;
+    QByteArray partyRecords;
     QByteArray gameState, npcRecords, scheduleRecords, actorRecords, shapes;
     int npc = -1;
     bool hasNpc = false;
@@ -48,6 +50,8 @@ struct NativeResult {
     int keysConsumed = 0, x = 0, y = 0, gold = 0, karma = 0, keys = 0;
     bool introduced = false, cancelled = false;
     QString error;
+    unsigned maxParty = 6;
+    QByteArray partyRecords;
     QByteArray gameState, npcRecords, scheduleRecords, actorRecords, shapes;
     int partySize = 0, randomDraws = 0, frames = 0;
     QVector<NativeBoundary> boundaries;

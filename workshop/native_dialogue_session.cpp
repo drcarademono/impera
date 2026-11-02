@@ -19,7 +19,7 @@ struct Execution {
     QVector<QByteArray> names;
     QVector<int> entryStarts;
     ImperaDialogueGame game{};
-    QByteArray extraKilled, extraMet;
+    QByteArray extraKilled, extraMet, roster;
     NativeRandom random;
     uint8_t dirty = 0, frameFlag = 0;
     uint64_t elapsed = 0;
@@ -52,9 +52,10 @@ struct Execution {
     Execution(const QByteArray &bytes, const QByteArray &normal, const QByteArray &runes,
               const NativeSetup &s)
         : window(normal, runes), vitalsWindow(normal, runes, 0), setup(s) {
+        window.setRows(setup.maxParty>6?11:13);
         window.setRecordGlyphs(false);
         U5::require(!bytes.isEmpty(), "Conversation is empty");
-        U5::require(s.state.partySize >= 1 && s.state.partySize <= 6 && s.state.gold >= 0 &&
+        U5::require(s.state.partySize >= 1 && s.state.partySize <= int(s.maxParty) && s.state.gold >= 0 &&
                         s.state.gold <= 9999 && s.state.karma >= 0 && s.state.karma <= 99,
                     "Invalid Playtest starting state");
         auto doc = parse(bytes);
@@ -108,7 +109,11 @@ struct Execution {
         state[0x204] = uint8_t(s.state.gold);
         state[0x205] = uint8_t(s.state.gold >> 8);
         state[0x2e2] = uint8_t(s.state.karma);
-        game.party = state + 2;
+        roster=setup.partyRecords;
+        if(roster.isEmpty()) roster=setup.gameState.mid(2,16*32);
+        std::copy(state+2,state+2+16*32,reinterpret_cast<uint8_t *>(roster.data()));
+        game.party=reinterpret_cast<uint8_t *>(roster.data());
+        game.rosterCount=roster.size()/32;game.maxParty=setup.maxParty;
         game.partyCount = state + 0x2b5;
         game.food = state + 0x202;
         game.gold = state + 0x204;
@@ -137,7 +142,7 @@ struct Execution {
         game.dirty = &dirty;
         game.host = this;
         game.vitals = [](void *h) { self(h).updateVitals(); };
-        vitalsWindow.setRows(9);
+        vitalsWindow.setRows(setup.maxParty>6?11:9);
         vitalsWindow.setRecordGlyphs(false);
         vitalsWindow.setSleeper([this](int ms) { delay(ms); });
         animate = state[0x2eb];
@@ -304,7 +309,7 @@ struct Execution {
             w.printString(
                 QString::number(n).rightJustified(width, QChar(fill)).toLatin1().constData());
         };
-        for (int i = 0; i < 6; ++i) {
+        for (int i = 0; i < (setup.maxParty>6?8:6); ++i) {
             w.setPosition(0, i);
             if (i >= *game.partyCount) {
                 w.printString("               ");
@@ -323,7 +328,7 @@ struct Execution {
             number(int16_t(p[16] | (p[17] << 8)), 4);
             w.print(p[11]);
         }
-        w.setPosition(0, 7);
+        w.setPosition(0,7+(setup.maxParty>6?2:0));
         w.printString("F:");
         number(int16_t(game.food[0] | (game.food[1] << 8)));
         while (w.cursor().currentX < 8)
@@ -334,7 +339,7 @@ struct Execution {
             if (game.actors[5] < 10)
                 w.print(' ');
         } else {
-            w.setPosition(8, 7);
+            w.setPosition(8,7+(setup.maxParty>6?2:0));
             int gold = int16_t(game.gold[0] | (game.gold[1] << 8));
             if (gold < 1000)
                 w.print(' ');
@@ -378,6 +383,8 @@ struct Execution {
         setup.gameState.replace(0x7b8, 512, setup.scheduleRecords.left(512));
         setup.gameState.replace(0x9b8, 512, setup.npcRecords.left(512));
         setup.gameState.replace(0xff8, 32, setup.shapes.left(32));
+        setup.gameState.replace(2,16*32,roster.left(16*32));
+        setup.partyRecords=roster;
         result.gameState = setup.gameState;
         result.npcRecords = setup.npcRecords;
         result.scheduleRecords = setup.scheduleRecords;

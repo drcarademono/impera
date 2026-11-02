@@ -1,3 +1,4 @@
+#include "mod/party.h"
 #include "mod/actors.h"
 #include "common/common.h"
 #include "common/movement.h"
@@ -2214,7 +2215,7 @@ int SJOG_21ce(void)
 {
     int local_4;
 
-    for (local_4 = 0; local_4 < 6; local_4++)
+    for (local_4 = 0; local_4 < (int)PARTY_MaxActive(); local_4++)
     {
         if ((D_ba14[local_4].flags & COMBAT_FLAGS_CHARMED) != 0 && (D_ba14[local_4].flags & COMBAT_FLAGS_PLAYER) != 0)
         {

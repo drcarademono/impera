@@ -1,3 +1,4 @@
+#include "mod/party.h"
 #include "dialogue_game.h"
 #include <string.h>
 static unsigned read16(const uint8_t *p) { return p[0] | ((unsigned)p[1] << 8); }
@@ -75,10 +76,10 @@ static const char *text(ImperaTalk *s, uint16_t address, const char *literal) {
 }
 int IMPERA_GameJoin(ImperaDialogueGame *g, ImperaTalk *s) {
     uint8_t *saved = *s->cursor;
-    int candidate = 15;
+    int candidate = (g->rosterCount ? g->rosterCount : 16) - 1;
     char name[4] = {0}, other[4] = {0};
     uint8_t swap[32];
-    if (*g->partyCount == 6) {
+    if (*g->partyCount >= (g->maxParty ? g->maxParty : 6)) {
         s->getChar(s->host);
         s->string(s->host, text(s, 0x9348, "\"Thou hast no room for me in thy party! "));
         s->string(s->host,
@@ -90,11 +91,21 @@ int IMPERA_GameJoin(ImperaDialogueGame *g, ImperaTalk *s) {
         return 1;
     memcpy(name, *s->cursor, 3);
     *s->cursor += 3;
+    char fullName[128];
+    IMPERA_TalkLookText(s->data,s->size,1,NULL,fullName,sizeof(fullName));
+    int exact=-1;
+    for(int i=*g->partyCount;i<(int)(g->rosterCount?g->rosterCount:16);i++)
+        if(PARTY_NameEqual(fullName,(const char *)g->party+i*32)) {exact=i;break;}
+    if(g->rosterCount>16 && exact<0) {
+        s->string(s->host,text(s,0x93a8,"\nSystem Error -\nNo Match!"));
+        *s->cursor=saved;return 1;
+    }
+    if(exact>=0) candidate=exact;
     for (;;) {
         memcpy(other, g->party + candidate * 32, 3);
         if (IMPERA_TalkCompare(name, other))
             break;
-        if (--candidate == 0) {
+        if (--candidate < *g->partyCount) {
             IMPERA_TalkAppend(s, 0x22);
             IMPERA_TalkAppend(s, 10);
             s->string(s->host, text(s, 0x93a8, "\nSystem Error -\nNo Match!"));

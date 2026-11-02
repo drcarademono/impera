@@ -1,3 +1,4 @@
+#include "mod/party.h"
 #include "talk.h"
 #include "npc.h"
 #include "common/common.h"
@@ -42,6 +43,7 @@ int FILE_ReadSavegameFile(char* fileName)
     stream = FILE_Open(fileName, "rb");
     if (!stream) { DEBUG_Error("Cannot open party save %s",fileName);return -1; }
 
+    if (!PARTY_Configure()) { fclose(stream); return -1; }
     /* Reject incomplete data before changing the active party/world. */
     if (fseek(stream, 0, SEEK_END) != 0 || ftell(stream) < 0x1060 ||
         fseek(stream, 0, SEEK_SET) != 0)
@@ -60,7 +62,7 @@ int FILE_ReadSavegameFile(char* fileName)
         return -1;
     }
     if (fseek(stream, 0x1060, SEEK_SET) || !MAPS_ReadState(stream, 0) ||
-        !NPC_ReadExtraState(stream, 0) || !TALK_ReadKnowledge(stream, 0) || !CONTENTS_ReadState(stream, 0) ||
+        !NPC_ReadExtraState(stream, 0) || !PARTY_ReadState(stream, 0) || !TALK_ReadKnowledge(stream, 0) || !CONTENTS_ReadState(stream, 0) ||
         fseek(stream, 0, SEEK_SET)) {
         DEBUG_Error("Invalid map contents save state");
         fclose(stream);
@@ -211,9 +213,11 @@ int FILE_ReadSavegameFile(char* fileName)
         TYPES_Reset();
         NPC_ResetExtra();
         TALK_ResetKnowledge();
+        PARTY_InitExtras();
     } else {
         MAPS_ReadState(stream, 1);
         NPC_ReadExtraState(stream, 1);
+        PARTY_ReadState(stream, 1);
         TALK_ReadKnowledge(stream, 1);
         CONTENTS_ReadState(stream, 1);
     }
@@ -382,7 +386,7 @@ int FILE_WriteSavegameFile(char* fileName)
     debug("Party serializer file=%s final offset=%d expected=4192",fileName,pos);
 
     int failed = ferror(stream) || !MAPS_WriteState(stream) || !NPC_WriteExtraState(stream) ||
-                 !TALK_WriteKnowledge(stream) || !CONTENTS_WriteState(stream);
+                 !PARTY_WriteState(stream) || !TALK_WriteKnowledge(stream) || !CONTENTS_WriteState(stream);
     if (fclose(stream) != 0) failed = 1;
 
     ASSERT(pos == 0x1060);

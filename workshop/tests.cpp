@@ -1,3 +1,4 @@
+#include "party_data.h"
 #include "mod/metadata.h"
 #include "custom_tiles.h"
 #include "map_positions.h"
@@ -2144,7 +2145,7 @@ int main(int argc, char **argv) {
             p.resources["INIT.GAM"].edited = p.resources["INIT.GAM"].original;
             w.selectResource("INIT.GAM");
             QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
-            auto field = w.findChild<QStackedWidget *>("workspaces")->currentWidget()->findChild<QSpinBox *>();
+            auto field = w.findChild<QStackedWidget *>("workspaces")->currentWidget()->findChild<QSpinBox *>("startingField_202");
             check(field && field->value() < field->maximum(), "Missing editable starting-state field");
             field->setValue(field->value() + 1);
             workspace->setCurrentText("Mod Overview");
@@ -5927,6 +5928,32 @@ int main(int argc, char **argv) {
                       window.projectForTests().data("TOWNE.TLK") == talkBefore,
                   "Conversation creation did not undo atomically");
         });
+        test("Companion creation, combat appearance and party limit persist and undo", [&] {
+            QTemporaryDir dir;fixture(dir.path());WorkshopWindow window;
+            check(window.openGame(dir.path()),"Party editor game load");window.selectResource("INIT.GAM");
+            auto active=[&]{return window.findChild<QStackedWidget *>("workspaces")->currentWidget();};
+            auto limit=active()->findChild<QSpinBox *>("maximumPartyMembers");
+            check(limit && limit->minimum()==1 && limit->maximum()==8 && limit->value()==6,"Party limit control missing");
+            limit->setValue(8);
+            auto avatar=active()->findChild<QComboBox *>("partyCombatSprite_0");
+            check(avatar && avatar->findData(336)>=0,"Combat appearance selector missing");avatar->setCurrentIndex(avatar->findData(336));
+            QTimer::singleShot(0,[&] {
+                auto dialog=qobject_cast<QInputDialog *>(QApplication::activeModalWidget());
+                check(dialog,"Companion name dialog missing");dialog->setTextValue("NewHero");dialog->accept();
+            });
+            active()->findChild<QPushButton *>("addPartyMember")->click();app.processEvents();
+            auto bytes=window.projectForTests().data("PARTY.OVR");
+            check(PARTY_Validate(bytes.constData(),bytes.size()) && PARTY_Count(bytes.constData(),bytes.size())==17,"New companion was not added");
+            check(bytes.mid(32+16*PARTY_RECORD_SIZE,8).startsWith("NewHero") && TYPES_U32(bytes.constData()+12)==8 && TYPES_U32(bytes.constData()+64)==336,"Party settings lost when adding a companion");
+            check(active()->findChild<QComboBox *>("partyMemberSelector")->currentIndex()==16,"New companion was not selected");
+            check(window.projectForTests().package().startsWith("IMOD0029"),"Party extension package version missing");
+            auto path=dir.filePath("party.imperaproject");window.projectForTests().save(path);Project restored;restored.load(path);
+            check(restored.data("PARTY.OVR")==bytes,"Companion roster did not persist in project");
+            for(auto action:window.findChildren<QAction *>()) if(action->text().startsWith("Undo ")) {action->trigger();break;}
+            app.processEvents();check(PARTY_Count(window.projectForTests().data("PARTY.OVR").constData(),window.projectForTests().data("PARTY.OVR").size())==16,"Companion creation did not undo");
+            for(auto action:window.findChildren<QAction *>()) if(action->text().startsWith("Redo ")) {action->trigger();break;}
+            app.processEvents();check(window.projectForTests().data("PARTY.OVR")==bytes,"Companion creation did not redo");
+        });
         test("Native widgets are read-only until an edit", [&] {
             QTemporaryDir dir;
             auto p = fixture(dir.path());
@@ -5953,7 +5980,7 @@ int main(int argc, char **argv) {
                         return false;
                     }(),
                 "Party member tab label is wrong");
-            check(tabs->widget(0)->findChildren<QSpinBox *>().size() == 13,
+            check(tabs->widget(0)->findChildren<QSpinBox *>().size() == 14,
                   "Party, time, and supplies page is empty or incomplete");
             check(statePage->findChild<QSpinBox *>("startingField_21a") &&
                       statePage->findChild<QSpinBox *>("startingField_24a") &&
