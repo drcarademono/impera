@@ -1,3 +1,4 @@
+#include "mod/party.h"
 #include "mod/runtime.h"
 #include "mod/actors.h"
 #include "mod/types_game.h"
@@ -221,6 +222,13 @@ static void frameCorner(void *host, uint8_t color, int x, int y, uint8_t ch) {
 }
 void ULTIMA_637e_DrawFrame(void) {
     ImperaGameFrame frame = {0};
+    frame.partyRows = PARTY_MaxActive();
+    static bool expandedPartyLayout;
+    if(PARTY_MaxActive()>6 || expandedPartyLayout) {
+        ULTIMA_1c22_SetTextWindowSize(1,24,1,39,PARTY_MaxActive()>6?11:9);
+        ULTIMA_1c22_SetTextWindowSize(2,24,PARTY_MaxActive()>6?13:11,39,23);
+    }
+    expandedPartyLayout=PARTY_MaxActive()>6;
     frame.blue = MOD_FrameColor();
     frame.white = D_13b0_brightWhiteColor;
     frame.fill = frameFill;
@@ -277,7 +285,7 @@ int ULTIMA_6506(int param_1, int param_2, int param_3, int param_4, int param_5)
     {
         if (param_2 == 0)
         {
-            local_a = 6;
+            local_a = PARTY_MaxActive();
         }
 
         // 6531
@@ -553,8 +561,9 @@ void ULTIMA_6936(void)
                 local_10 = 0;
             }
 
-            local_8 = D_1724[local_6];
-            local_e = D_172c[local_6];
+            local_8 = D_1724[local_6<6?local_6:0];
+            local_e = D_172c[local_6<6?local_6:0];
+            if(local_6>=6) {local_8=local_6==6?4:6;local_e=MAP_HEIGHT>6?MAP_HEIGHT-3:0;}
             local_a = ULTIMA_6506(local_6, 1, local_8, local_e, D_5895_map_level);
 
             D_5c5a[D_ba14[local_a].actorIdx]._7 = 0xff;
@@ -581,6 +590,10 @@ void ULTIMA_6936(void)
                 break;
             }
 
+            unsigned appearance=PARTY_CombatType(local_6);
+            TypeDef appearanceDef;
+            if(appearance && TYPES_Get(appearance,&appearanceDef) && appearanceDef.kind)
+                D_5c5a[D_ba14[local_a].actorIdx]._0_tile=appearanceDef.base;
             D_5c5a[D_ba14[local_a].actorIdx]._1_animTile = D_5c5a[D_ba14[local_a].actorIdx]._0_tile;
 
             if (D_55a8_party[local_6].status == STATUS_SLEEP)
@@ -594,6 +607,22 @@ void ULTIMA_6936(void)
         }
     }
 
+    /* Extra members and larger custom artwork need free complete footprints,
+     * rather than blindly sharing the six original formation markers. */
+    for(int entity=0;entity<32;entity++) if(D_ba14[entity].flags & COMBAT_FLAGS_PLAYER) {
+        unsigned member=D_ba14[entity].entityIdx, actor=D_ba14[entity].actorIdx;
+        unsigned type=PARTY_CombatType(member), width,height;
+        ACTORS_Size(actor,&width,&height);
+        if(PARTY_MaxActive()<=6 && width==1 && height==1) continue;
+        if(!type) type=(D_5c5a[actor]._0_tile-64)/4;
+        if(ACTORS_CanPlace(type,D_ba14[entity].x,D_ba14[entity].y,actor)) continue;
+        int best=INT_MAX,bx=-1,by=-1;
+        for(int y=0;y<MAP_HEIGHT;y++) for(int x=0;x<MAP_WIDTH;x++) {
+            int dx=x-D_ba14[entity].x,dy=y-D_ba14[entity].y;
+            if(dx*dx+dy*dy<best && ACTORS_CanPlace(type,x,y,actor)) {best=dx*dx+dy*dy;bx=x;by=y;}
+        }
+        if(bx>=0) {D_ba14[entity].x=D_5c5a[actor]._2_x=bx;D_ba14[entity].y=D_5c5a[actor]._3_y=by;}
+    }
     if (GetCombatMap(5, 5) == 0xdc)
     {
         local_c = ULTIMA_6506(1, 2, 5, 5, D_5895_map_level);
@@ -668,9 +697,9 @@ void ULTIMA_6bc2(int param_1, int param_2)
             local_6 = ULTIMA_2092_RandomRange(1, local_6);
         }
         ULTIMA_5910_UpdateFrame();
-        if (local_6 > 0x1f - 6)
+        if (local_6 > 32 - (int)PARTY_MaxActive())
         {
-            local_6 = 0x1a;
+            local_6 = 32 - PARTY_MaxActive();
         }
     }
 

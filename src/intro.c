@@ -1,3 +1,4 @@
+#include "mod/party.h"
 #include "audio/audio.h"
 #include "common/common.h"
 #include "key/mouse.h"
@@ -941,10 +942,12 @@ static void INTRO_RunMain(void) // intro_main (initialize video) (8b46)
 #endif
 
             // 0e7c
+            PARTY_Configure();
+            unsigned loadingPartyRows=PARTY_MaxActive();
             ULTIMA_637e_DrawFrame();
             ULTIMA_2e96_SetWindDirection(0);
             ULTIMA_1b94_SelectTextWindow(2);
-            ULTIMA_1bf2_SetTextPosition(0, 0xc);
+            ULTIMA_1bf2_SetTextPosition(0, 0xc-(PARTY_MaxActive()>6?2:0));
             if (D_5893_map_id == 0x40)
             {
                 while (ULTIMA_0ff4_LoadTileset(D_25f0[0]) == 0)
@@ -978,6 +981,7 @@ static void INTRO_RunMain(void) // intro_main (initialize video) (8b46)
             }
             else
             {
+                if((loadingPartyRows>6)!=(PARTY_MaxActive()>6)) ULTIMA_637e_DrawFrame();
                 // 0f26
                 ULTIMA_256e_ReadFileFromDisk(/*0x323f*/ "SAVED.OOL", D_b21e, 0x200, 0);
                 ULTIMA_251e_SwitchDisks(1);

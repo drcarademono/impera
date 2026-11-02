@@ -169,7 +169,7 @@ int CMDS_0000(int param_1, int param_2, int param_3)
                 if (param_2 > -1)
                 {
                     // 0254..026e..027a..027d
-                    for (local_24 = 0; local_24 < 6; local_24++)
+                    for (local_24 = 0; local_24 < D_585b; local_24++)
                     {
                         // 0283
                         local_22 = D_ba14[local_24].entityIdx;

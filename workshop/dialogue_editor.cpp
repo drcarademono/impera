@@ -530,7 +530,7 @@ ConversationEditor::ConversationEditor(
     stateRow2->addWidget(introduced);
     stateRow2->addWidget(seed);
     partySize = new QSpinBox;
-    partySize->setRange(1, 6);
+    partySize->setRange(1, 8);
     partySize->setValue(3);
     partySize->setPrefix("Party members ");
     stateRow2->addWidget(partySize);

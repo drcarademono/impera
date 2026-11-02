@@ -1,3 +1,4 @@
+#include "mod/party.h"
 #include "mod/maps.h"
 #include "mod/npcs.h"
 #ifndef _VARS_H
@@ -41,9 +42,9 @@ STUB u8 D_169c[0x38]; // ~16d4) some equip table
 STUB u8 D_16d4[0x30]; // ~1704)
 STUB u8 D_1704[0x10]; // ~1704)
 STUB u8 D_1714[0x10]; // ~1714)
-STUB u8 D_1724[6]; // ~172a)
+STUB u8 D_1724[8]; // ~172a)
 // gap 2
-STUB u8 D_172c[6]; // ~1732)
+STUB u8 D_172c[8]; // ~1732)
 // gap 2
 STUB u8 D_1734[8];
 
@@ -600,7 +601,7 @@ STUB u8 D_559e[8]; // ~55a6)
 // [55a6..6606): savegame (0x1060)
 STUB u16 D_55a6;    // +0x0
 
-STUB S_55a8 D_55a8_party[0x10]; // ~57a8)
+STUB S_55a8 D_55a8_party[IMPERA_PARTY_CAPACITY]; // ~57a8)
 
 // 5700
 STUB s16 D_57a8;        // +0x0202 Food // int (TALK_0682, MOVSX)

@@ -1,3 +1,5 @@
+#include <stdio.h>
+#include "mod/party.h"
 #include "common/common.h"
 #include "key/mouse.h"
 #include "funcs.h"
@@ -15,7 +17,7 @@ static int SHOPPES3_0000(void)
 
     local_4 = 0;
 
-    for (local_6 = 0; local_6 < 0x10; local_6++)
+    for (local_6 = 0; local_6 < (int)PARTY_RosterCount(); local_6++)
     {
         if (D_55a8_party[local_6].mapId == D_5893_map_id)
         {
@@ -266,12 +268,12 @@ static int SHOPPES3_02ae(int param_1, int param_2, int param_3)
 
                         local_22 = D_55a8_party[local_2a];
 
-                        for (local_28 = local_2a; local_28 < 0xf; local_28++)
+                        for (local_28 = local_2a; local_28 < (int)PARTY_RosterCount()-1; local_28++)
                         {
                             D_55a8_party[local_28] = D_55a8_party[local_28 + 1];
                         }
 
-                        D_55a8_party[0x10 - 1] = local_22;
+                        D_55a8_party[PARTY_RosterCount()-1] = local_22;
 
                         D_585b--;
                         ULTIMA_2900_UpdateVitalsDisplay();
@@ -300,7 +302,7 @@ static int SHOPPES3_0494(int param_1)
 
 static int SHOPPES3_04b6(int param_1)
 {
-    while (++param_1 < 0x10)
+    while (++param_1 < (int)PARTY_RosterCount())
     {
         if (D_55a8_party[param_1].mapId == D_5893_map_id)
         {
@@ -308,7 +310,7 @@ static int SHOPPES3_04b6(int param_1)
         }
     }
 
-    if (param_1 == 0x10)
+    if (param_1 == (int)PARTY_RosterCount())
     {
         return 0;
     }
@@ -331,7 +333,7 @@ static int SHOPPES3_04e6(int param_1, int param_2)
 
     local_4 = SHOPPES3_0000();
 
-    if (D_585b == 6)
+    if (D_585b >= PARTY_MaxActive())
     {
         ULTIMA_1850_PrintString(_TEXT(0x4f57, "\n\nOne must first be left behind!\n\n"));
     }
@@ -381,8 +383,36 @@ static int SHOPPES3_04e6(int param_1, int param_2)
             ULTIMA_1bf2_SetTextPosition(1, 2);
             ULTIMA_1850_PrintString(_TEXT(0x4fca, "  REGISTER:\n\n"));
 
+            if(local_4>5) {
+                int guests[IMPERA_PARTY_CAPACITY],guestCount=0,selected=0,top=0;
+                for(int i=1;i<(int)PARTY_RosterCount();i++) if(D_55a8_party[i].mapId==D_5893_map_id) guests[guestCount++]=i;
+                local_34=guests[0];
+                for(;;) {
+                    if(selected<top) top=selected;
+                    if(selected>=top+5) top=selected-4;
+                    ULTIMA_1b94_SelectTextWindow(1);
+                    ULTIMA_1bf2_SetTextPosition(1,3);
+                    char range[16];snprintf(range,sizeof(range),"%d-%d/%d",top+1,top+5<guestCount?top+5:guestCount,guestCount);
+                    ULTIMA_1850_PrintString("             ");ULTIMA_1bf2_SetTextPosition(1,3);ULTIMA_1850_PrintString(range);
+                    for(int row=0;row<5;row++) {
+                        ULTIMA_1bf2_SetTextPosition(1,4+row);ULTIMA_1850_PrintString("             ");
+                        if(top+row<guestCount) {ULTIMA_1bf2_SetTextPosition(4,4+row);ULTIMA_1850_PrintString(D_55a8_party[guests[top+row]].name);}
+                    }
+                    int y=40+(selected-top)*8;
+                    ULTIMA_0b86_GRAP_XorFillRect(198,y,305,y+7);
+                    ULTIMA_1b94_SelectTextWindow(2);
+                    int key=MOUSE_MenuRead(198,40,106,guestCount-top<5?guestCount-top:5,selected-top);
+                    ULTIMA_0b86_GRAP_XorFillRect(198,y,305,y+7);
+                    if(key==U5_KEY_ESC) {local_34=0;break;}
+                    if(key==U5_KEY_ENTER || key==U5_KEY_SPACE) {local_34=guests[selected];break;}
+                    if(key==U5_KEY_UP || key==U5_KEY_LEFT) {if(selected) selected--;}
+                    if(key==U5_KEY_DOWN || key==U5_KEY_RIGHT) {if(selected+1<guestCount) selected++;}
+                    if(key==U5_KEY_PGUP) selected=selected>5?selected-5:0;
+                    if(key==U5_KEY_PGDN) selected=selected+5<guestCount?selected+5:guestCount-1;
+                }
+            } else {
             // e7d6
-            for (local_34 = 1; local_34 < 0x10; local_34++)
+            for (local_34 = 1; local_34 < (int)PARTY_RosterCount(); local_34++)
             {
                 if (D_55a8_party[local_34].mapId == D_5893_map_id)
                 {
@@ -408,7 +438,7 @@ static int SHOPPES3_04e6(int param_1, int param_2)
                 do
                 {
                     int mouseCount = 0, mouseItem;
-                    for (mouseItem = 1; mouseItem < 16; mouseItem++)
+                    for (mouseItem = 1; mouseItem < (int)PARTY_RosterCount(); mouseItem++)
                         if (D_55a8_party[mouseItem].mapId == D_5893_map_id) mouseCount++;
                     local_32 = MOUSE_MenuRead(198, 40, 106, mouseCount, (local_30 - 40) / 8);
                     switch (local_32)
@@ -464,6 +494,7 @@ static int SHOPPES3_04e6(int param_1, int param_2)
                 } while (local_28 == 0);
             }
 
+            }
             // e8e0
             ULTIMA_4f3c();
             ULTIMA_2900_UpdateVitalsDisplay();

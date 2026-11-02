@@ -1,3 +1,4 @@
+#include "mod/party.h"
 #include "common/common.h"
 #include "text/text_input.h"
 #include "common/file.h"
@@ -564,7 +565,7 @@ void ULTIMA_2884_UpdateGoldDisplay(void)
 
     local_2 = D_5386_current_text_window_idx;
     ULTIMA_1b94_SelectTextWindow(1);
-    ULTIMA_1bf2_SetTextPosition(8, 7);
+    ULTIMA_1bf2_SetTextPosition(8, 7 + (PARTY_MaxActive()>6?2:0));
     if (D_57aa < 1000)
     {
         ULTIMA_16ba_PrintChar(' ');
@@ -589,6 +590,7 @@ void ULTIMA_2884_UpdateGoldDisplay(void)
 
 void ULTIMA_2900_UpdateVitalsDisplay(void)
 {
+    if(PARTY_MaxActive()>6) ULTIMA_1c22_SetTextWindowSize(1,24,1,39,11);
     int local_2;
 
     ULTIMA_1b94_SelectTextWindow(1);
@@ -598,9 +600,9 @@ void ULTIMA_2900_UpdateVitalsDisplay(void)
     {
         ULTIMA_2726(local_2);
         local_2++;
-    } while (local_2 < 6);
+    } while (local_2 < (PARTY_MaxActive()>6?8:6));
 
-    ULTIMA_1bf2_SetTextPosition(0, 7);
+    ULTIMA_1bf2_SetTextPosition(0, 7 + (PARTY_MaxActive()>6?2:0));
 
     // food
     ULTIMA_1850_PrintString(_TEXT(0x54ba, "F:"));
@@ -645,7 +647,7 @@ void ULTIMA_2900_UpdateVitalsDisplay(void)
         ULTIMA_16ba_PrintChar(' ');
     }
 
-    ULTIMA_1bf2_SetTextPosition(6, 6);
+    ULTIMA_1bf2_SetTextPosition(6, 6 + (PARTY_MaxActive()>6?2:0));
 
     // icon?
     if (D_587a != 0)
@@ -693,7 +695,7 @@ void ULTIMA_2a52(int param_1, uint param_2)
 void ULTIMA_2aa8(void)
 {
     int i;
-    for (i = 0; i < 6; i++)
+    for (i = 0; i < D_585b; i++)
     {
         if (i < D_585b && D_55a8_party[i].status != STATUS_DEAD)
         {
@@ -877,9 +879,9 @@ int ULTIMA_2d7a(int param_1)
         do
         {
             local_8 = MOUSE_MenuRead(192, 8, 120, D_585b, local_4);
-        } while (local_8 > '7');
+        } while (local_8 > '9');
 
-        if (local_8 > '0' && local_8 < '7' && local_8 - '1' < D_585b)
+        if (local_8 > '0' && local_8 < '9' && local_8 - '1' < D_585b)
         {
             local_4 = local_8 - '1';
         }
@@ -1047,7 +1049,7 @@ void ULTIMA_2fd0(int param_1)
         do
         {
             ULTIMA_2fa6(local_6a);
-        } while (++local_6a < 6);
+        } while (++local_6a < D_585b);
         break;
     }
 }

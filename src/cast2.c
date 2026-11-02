@@ -1,3 +1,5 @@
+#include "savegame.h"
+#include "mod/party.h"
 #include "common/common.h"
 #include "mod/runtime.h"
 #include "mod/types_game.h"
@@ -1040,7 +1042,7 @@ void CAST2_0e76_Shrine(void)
     ULTIMA_5910_UpdateFrame();
 
     // 0f44 (NOT MATCHING)
-    for (local_a = 1; local_a < 0x10; local_a++)
+    for (local_a = 1; local_a < (int)PARTY_RosterCount(); local_a++)
     {
         if (D_55a8_party[local_a].mapId == 0x7f)
         {
@@ -1092,7 +1094,7 @@ void CAST2_0e76_Shrine(void)
         }
 
         // 0fcf (OK)
-        for (local_a = 1; local_a < 0x10; local_a++)
+        for (local_a = 1; local_a < (int)PARTY_RosterCount(); local_a++)
         {
             if (D_55a8_party[local_a].mapId == 0x7f)
             {
@@ -1202,7 +1204,11 @@ static void CAST2_10fe_SaveGameIBM(void)
         }
 
         ULTIMA_251e_SwitchDisks(3);
+#if !defined(TARGET_DOS16)
+        FILE_WriteSavegameFile("SAVED.GAM");
+#else
         ULTIMA_25d8_WriteFileToDisk(/*0x9698*/ "SAVED.GAM", &D_55a6, ((int)&D_6606 - (int)&D_55a6) /*0x1060*/);
+#endif
         ULTIMA_25d8_WriteFileToDisk(/*0x96a2*/ "SAVED.OOL", D_b21e, 0x200);
         ULTIMA_251e_SwitchDisks(local_4);
         ULTIMA_1850_PrintString(_TEXT(0x96ac, "Done.\n"));

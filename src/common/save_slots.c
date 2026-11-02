@@ -1,3 +1,4 @@
+#include "mod/party.h"
 #include "save_slots.h"
 #include "mod/contents.h"
 #include "mod/runtime.h"
@@ -211,7 +212,7 @@ static bool SLOTS_Load_Impl(const char* id)
                   (i ? ftell(f) == 512
                      : (ftell(f) >= 0x1060 && fseek(f, 0x1060, SEEK_SET) == 0 &&
                         MAPS_ReadState(f, 0) && NPC_ReadExtraState(f, 0) &&
-                        TALK_ReadKnowledge(f, 0) && CONTENTS_ReadState(f, 0)));
+                        PARTY_ReadState(f, 0) && TALK_ReadKnowledge(f, 0) && CONTENTS_ReadState(f, 0)));
         fclose(f);
         if (!ok)
             return false;
@@ -378,7 +379,7 @@ static bool validLegacy(void)
                   (i ? ftell(f) == 512
                      : (ftell(f) >= 0x1060 && fseek(f, 0x1060, SEEK_SET) == 0 &&
                         MAPS_ReadState(f, 0) && NPC_ReadExtraState(f, 0) &&
-                        TALK_ReadKnowledge(f, 0) && CONTENTS_ReadState(f, 0)));
+                        PARTY_ReadState(f, 0) && TALK_ReadKnowledge(f, 0) && CONTENTS_ReadState(f, 0)));
         fclose(f);if(!ok) return false;
     }
     return true;

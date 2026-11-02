@@ -10,6 +10,7 @@ typedef struct ImperaGameFrame {
     void (*fill)(void *, uint8_t, int, int, int, int);
     void (*line)(void *, uint8_t, int, int, int, int);
     void (*corner)(void *, uint8_t, int, int, uint8_t);
+    unsigned partyRows; /* Zero retains the original six-row layout. */
 } ImperaGameFrame;
 void IMPERA_DrawGameFrame(const ImperaGameFrame *);
 /* Exact conversation crop of the original 320x200 frame, with no invented edges. */

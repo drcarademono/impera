@@ -718,3 +718,15 @@ Screenshots use the same small 44 × 24 thumbnail size and smooth,
 display-resolution rendering as save previews. The retired DOS Enhanced option is no longer listed; old saved choices
 fall back to DOS. Graphics → Tilesets has Import/Export tileset PNG controls at
 the top for complete sheets, including all 512 tiles in a 512 × 256 DOS PNG.
+
+Workshop’s **Game Rules → Starting party and world state** includes a maximum active
+party size of 1–8. The **Party members** tab edits the recruitable roster (up to 256
+companions), with **New companion…**, per-member **Combat appearance**, and ordinary
+starting-party membership controls. Combat appearance can inherit the class default,
+use any vanilla actor type, or use a custom NPC/monster type, including larger artwork.
+Create an NPC conversation with the same Name and a Join party action to recruit a new
+companion. Names retain Ultima V’s eight-character ASCII limit.
+
+These settings export as `PARTY.OVR` in package version 29. Additional companion
+records and the party limit survive save/load; original saves remain readable. Seven-
+and eight-member parties use a taller status panel and safe combat formation placement.

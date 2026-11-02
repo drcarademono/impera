@@ -634,7 +634,9 @@ static void COMBAT_063e_ProcessCommand(void)
                         case 0x34:
                         case 0x35:
                         case 0x36:
-                            /* '1' .. '6' */
+                        case 0x37:
+                        case 0x38:
+                            /* '1' .. '8' */
                             // ac8e
                             if (SJOG_1f7a_CombatSetActivePlayer(local_8 - 0x31) == 0)
                             {
@@ -764,7 +766,7 @@ static void COMBAT_063e_ProcessCommand(void)
         }
 
         // ae09
-        if (local_8 < 0x30 || local_8 > 0x36)
+        if (local_8 < 0x30 || local_8 > 0x38)
         {
             SJOG_2012();
             ULTIMA_5910_UpdateFrame();

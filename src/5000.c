@@ -1,3 +1,4 @@
+#include "mod/party.h"
 #include "mod/actors.h"
 #include "common/common.h"
 #include "mod/contents_game.h"
@@ -1133,7 +1134,7 @@ L_606c:
     ULTIMA_2900_UpdateVitalsDisplay();
 
     /* 0xff means no active character; never use it as a party index. */
-    if (local_4 < (int)(sizeof(D_55a8_party) / sizeof(D_55a8_party[0])) &&
+    if (local_4 >= 0 && local_4 < (int)PARTY_MaxActive() &&
         D_55a8_party[local_4].status != STATUS_DEAD && D_55a8_party[local_4].status != STATUS_SLEEP)
     {
         D_587b = local_4;

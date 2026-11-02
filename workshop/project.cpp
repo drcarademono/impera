@@ -1,3 +1,4 @@
+#include "mod/party.h"
 #include "dungeon_names.h"
 #include "mod/location_names.h"
 #include "mod/npcs.h"
@@ -48,7 +49,7 @@ void Project::openGame(const QString &directory) {
     require(dir.exists(), "Game folder does not exist");
     for (const auto &name : dir.entryList(QDir::Files, QDir::Name)) {
         QString upper = name.toUpper();
-        if (upper == "TYPES.OVR" || upper == "TYPEMAP.OVR" || upper == "CUTSCENE.OVR" ||
+        if (upper == "PARTY.OVR" || upper == "TYPES.OVR" || upper == "TYPEMAP.OVR" || upper == "CUTSCENE.OVR" ||
             upper == "MAPS.OVR" || MAPS_LocationResource(upper.toLatin1().constData()) ||
             upper == "LOCATIONS.OVR" || upper == "TEXT.OVR" || upper == "RULES.TBL" ||
             upper == "MODINFO.DAT" || upper == "INTERFACE.OVR" || upper == "GATES.OVR" || upper == "CONTENTS.OVR")
@@ -79,6 +80,7 @@ void Project::openGame(const QString &directory) {
                 readLimited(":/tilesets/" + QString::fromUtf8(sheet.filename), MOD_MAX_RESOURCE);
         next.resources.insert(QString::fromLatin1(sheet.resource), {bytes, bytes});
     }
+    next.resources.insert("PARTY.OVR", {{}, {}});
     next.resources.insert("TYPES.OVR", {{}, {}});
     next.resources.insert("TYPEMAP.OVR", {{}, {}});
     next.resources.insert("CUTSCENE.OVR", {{}, {}});
@@ -190,6 +192,11 @@ QStringList Project::changed() const {
     return list;
 }
 void Project::validate() const {
+    if(!resources.value("PARTY.OVR").edited.isEmpty()) {
+        const auto &party=data("PARTY.OVR");
+        require(PARTY_Validate(party.constData(),party.size()),"Invalid party definitions");
+        require(U5::byte(data("INIT.GAM"),0x2b5)<=int(TYPES_U32(party.constData()+12)),"Starting party exceeds the configured maximum");
+    }
     Workshop::validateExtendedMaps(*this);
     Workshop::validateGates(*this);
     require(!title.trimmed().isEmpty() && title.toUtf8().size() <= 256 && !title.contains(QChar(0)),
@@ -320,7 +327,8 @@ QByteArray Project::package() const {
         portableConditions |= contents.refill > 2;
     const bool masks = usesMasks(*this);
     QByteArray out(
-        list.contains("MODINFO.DAT") ? (data("MODINFO.DAT").startsWith("IMETA002") ? "IMOD0028" : "IMOD0027")
+        list.contains("PARTY.OVR") ? "IMOD0029"
+        : list.contains("MODINFO.DAT") ? (data("MODINFO.DAT").startsWith("IMETA002") ? "IMOD0028" : "IMOD0027")
         : list.contains("INTERFACE.OVR") ? "IMOD0026"
         : masks                        ? "IMOD0025"
         : list.contains("GATES.OVR") ? "IMOD0024"
@@ -505,6 +513,7 @@ void Project::save(const QString &path) {
         requirements["modMetadata"] = 1;
         requirements["packageVersion"] = data("MODINFO.DAT").startsWith("IMETA002") ? 28 : 27;
     }
+    if(changed().contains("PARTY.OVR")) {requirements["partyDefinitions"]=1;requirements["packageVersion"]=29;}
     if (!requirements.isEmpty())
         root["requires"] = requirements;
     QJsonObject annotations;
@@ -608,7 +617,7 @@ QVector<ModDiagnostic> validateMod(const Project &project, const QString &modsDi
                        "No modified resources; there is no package to export or test."});
     for (const auto &name : changes) {
         try {
-            if (name == "TYPES.OVR" || name == "TYPEMAP.OVR" || name == "CUTSCENE.OVR" ||
+            if (name == "PARTY.OVR" || name == "TYPES.OVR" || name == "TYPEMAP.OVR" || name == "CUTSCENE.OVR" ||
                 name == "MAPS.OVR" || MAPS_LocationResource(name.toLatin1().constData()) ||
                 name == "LOCATIONS.OVR" || name == "TEXT.OVR" || name == "RULES.TBL" ||
                 name == "MODINFO.DAT" || name == "INTERFACE.OVR" || name == "GATES.OVR" || name == "CONTENTS.OVR") {
@@ -955,7 +964,7 @@ QString prepareModTest(const Project &project, const QString &sessionsDirectory)
                 "Cannot make test file writable");
     }
     for (const auto &name : project.resources.keys()) {
-        if (name == "TYPES.OVR" || name == "TYPEMAP.OVR" || name == "CUTSCENE.OVR" ||
+        if (name == "PARTY.OVR" || name == "TYPES.OVR" || name == "TYPEMAP.OVR" || name == "CUTSCENE.OVR" ||
             name == "MAPS.OVR" || MAPS_LocationResource(name.toLatin1().constData()) ||
             name == "LOCATIONS.OVR" || name == "TEXT.OVR" || name == "RULES.TBL" ||
             name == "MODINFO.DAT" || name == "INTERFACE.OVR" || name == "GATES.OVR" || name == "CONTENTS.OVR" || MOD_TilesetSheet(name.toLatin1().constData()))

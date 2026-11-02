@@ -1,3 +1,4 @@
+#include "party.h"
 #include "actors.h"
 #include "vars.h"
 #include "contents.h"
@@ -56,7 +57,11 @@ unsigned ACTORS_Instance(unsigned actor) {
         return 0;
     unsigned type = 0;
     if (D_5893_map_id >= 128) {
-        for (unsigned i = 0; i < 32; i++)
+        for (unsigned i=0;i<32;i++)
+            if ((D_ba14[i].flags & COMBAT_FLAGS_PLAYER) && D_ba14[i].actorIdx==actor) {
+                type=PARTY_CombatType(D_ba14[i].entityIdx);break;
+            }
+        for (unsigned i = 0; !type && i < 32; i++)
             if ((D_ba14[i].flags & COMBAT_FLAGS_MONSTER) && D_ba14[i].actorIdx == actor) {
                 type = D_ba14[i].entityIdx >= 512 ? D_ba14[i].entityIdx : 0;
                 break;

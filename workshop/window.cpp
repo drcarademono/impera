@@ -1,3 +1,4 @@
+#include "party_data.h"
 #include "save_dialog.h"
 #include "mod/metadata.h"
 #include "native_dialogue_frame.h"
@@ -2030,7 +2031,7 @@ QWidget *WorkshopWindow::stateEditor() {
     auto activeMember = new QComboBox;
     activeMember->setObjectName("startingActiveMember");
     activeMember->addItem("None", 255);
-    for (int i = 0; i < qMin(6, int(U5::byte(project.data("INIT.GAM"), 0x2b5))); ++i)
+    for (int i = 0; i < qMin(8, int(U5::byte(project.data("INIT.GAM"), 0x2b5))); ++i)
         activeMember->addItem(
             QString::fromLatin1(project.data("INIT.GAM").mid(2 + i * 32, 9).split(char(0)).first()),
             i);
@@ -2044,6 +2045,16 @@ QWidget *WorkshopWindow::stateEditor() {
         auto b = project.data("INIT.GAM");
         b[0x2d5] = char(activeMember->currentData().toInt());
         edit({{"INIT.GAM", b}}, "Set active party member");
+    });
+    auto partyLimit=new QSpinBox;
+    partyLimit->setObjectName("maximumPartyMembers");partyLimit->setRange(1,8);
+    partyLimit->setValue(TYPES_U32(Workshop::partyData(project).constData()+12));
+    partyLimit->setToolTip("Maximum active party size. Up to eight members; other companions remain recruitable.");
+    form->addRow("Maximum active party members",partyLimit);
+    connect(partyLimit,&QSpinBox::valueChanged,values,[this,partyLimit](int limit) {
+        guard([&] {require(limit>=int(U5::byte(project.data("INIT.GAM"),0x2b5)),"Remove starting party members before lowering the limit");
+            auto b=Workshop::partyData(project);TYPES_Put32(b.data()+12,limit);
+            edit(Workshop::partyEdits(project,b),"Set maximum party members");});
     });
     const QStringList phaseNames{"New moon",       "Waxing crescent", "First quarter",
                                  "Waxing gibbous", "Full moon",       "Waning gibbous",
@@ -2231,25 +2242,59 @@ QWidget *WorkshopWindow::stateEditor() {
     QVBoxLayout *characterLayout;
     auto characters = panel(&characterLayout);
     auto selector = new QComboBox;
-    for (int i = 0; i < 16; i++)
+    const auto roster=Workshop::partyData(project);
+    const int rosterCount=PARTY_Count(roster.constData(),roster.size());
+    auto rosterActions=new QHBoxLayout;
+    auto addMember=new QPushButton("New companion…");addMember->setObjectName("addPartyMember");
+    addMember->setToolTip("Create another recruitable companion. Place an NPC with the same name and add Join party to its conversation.");
+    addMember->setEnabled(rosterCount<IMPERA_PARTY_CAPACITY);
+    rosterActions->addWidget(addMember);rosterActions->addStretch();characterLayout->addLayout(rosterActions);
+    connect(addMember,&QPushButton::clicked,characters,[this] {
+        guard([&] {auto b=Workshop::partyData(project);int count=PARTY_Count(b.constData(),b.size());
+            require(count<IMPERA_PARTY_CAPACITY,"Companion roster is full");
+            bool ok;QString name=QInputDialog::getText(this,"New companion","Name (1–8 ASCII characters)",QLineEdit::Normal,{},&ok);
+            if(!ok) return;require(!name.isEmpty() && name.size()<=8,"Names require 1–8 ASCII characters");
+            for(QChar c:name) require(c.unicode()>=32 && c.unicode()<=126,"Names require ASCII text");
+            QByteArray record(PARTY_RECORD_SIZE,0);record.replace(0,name.size(),name.toLatin1());
+            record[9]=11;record[10]='F';record[11]='G';record[12]=record[13]=record[14]=15;
+            record[16]=record[18]=100;record[22]=1;
+            for(int n=25;n<31;n++) record[n]=char(255);
+            b.append(record);TYPES_Put32(b.data()+8,count+1);Workshop::finishParty(b);
+            require(PARTY_Validate(b.constData(),b.size()),"Choose a unique companion name");
+            edit(Workshop::partyEdits(project,b),"Create companion");editorState["party/member"]=count;rebuildEditor();});
+    });
+    for (int i = 0; i < rosterCount; i++)
         selector->addItem(
             QString("%1 — %2%3")
                 .arg(i)
                 .arg(QString::fromLatin1(
-                    project.data("INIT.GAM").mid(2 + i * 32, 9).split(char(0)).first()))
+                    roster.mid(32+i*PARTY_RECORD_SIZE,9).split(char(0)).first()))
                 .arg(i < int(U5::byte(project.data("INIT.GAM"), 0x2b5)) ? " (party)" : ""));
     characterLayout->addWidget(selector);
+    auto recruitHelp=new QLabel("To recruit a companion, give an NPC conversation the same Name and add the Join party action.");
+    recruitHelp->setWordWrap(true);characterLayout->addWidget(recruitHelp);
     auto detail = new QStackedWidget;
     characterLayout->addWidget(detail, 1);
-    for (int i = 0; i < 16; i++) {
+    for (int i = 0; i < rosterCount; i++) {
         auto card = new QWidget;
         auto cf = new QFormLayout(card);
-        int base = 2 + i * 32;
+        int base = 32 + i * PARTY_RECORD_SIZE;
+        auto setMember=[this,i](int offset,int size,int value) {
+            auto b=Workshop::partyData(project);
+            for(int n=0;n<size;n++) b[32+i*PARTY_RECORD_SIZE+offset+n]=char(value>>(8*n));
+            edit(Workshop::partyEdits(project,b),"Edit companion");
+        };
+        auto memberNumber=[=](const QString &label,int offset,int size,const QString &hint=QString()) {
+            auto field=new QSpinBox;field->setRange(0,size==1?255:65535);
+            int value=U5::byte(roster,base+offset);if(size==2) value|=U5::byte(roster,base+offset+1)<<8;
+            field->setValue(value);field->setToolTip(hint);cf->addRow(label,field);
+            connect(field,&QSpinBox::valueChanged,card,[=](int v){setMember(offset,size,v);});
+        };
         auto name = new QLineEdit(
-            QString::fromLatin1(project.data("INIT.GAM").mid(base, 9).split(char(0)).first()));
+            QString::fromLatin1(roster.mid(base,9).split(char(0)).first()));
         name->setMaxLength(8);
         cf->addRow("Name (8 ASCII characters)", name);
-        connect(name, &QLineEdit::editingFinished, card, [this, name, base] {
+        connect(name, &QLineEdit::editingFinished, card, [this, name, i] {
             guard([&] {
                 QByteArray encoded;
                 for (QChar c : name->text()) {
@@ -2257,28 +2302,47 @@ QWidget *WorkshopWindow::stateEditor() {
                     encoded.append(char(c.unicode()));
                 }
                 encoded.append(QByteArray(9 - encoded.size(), 0));
-                auto bytes = project.data("INIT.GAM");
-                bytes.replace(base, 9, encoded);
-                edit({{"INIT.GAM", bytes}}, "Rename character");
+                auto bytes=Workshop::partyData(project);bytes.replace(32+i*PARTY_RECORD_SIZE,9,encoded);
+                Workshop::finishParty(bytes);require(PARTY_Validate(bytes.constData(),bytes.size()),"Choose a unique companion name");
+                edit(Workshop::partyEdits(project,bytes),"Rename companion");
             });
         });
-        const QStringList names = {"Gender (11 male / 12 female)",
-                                   "Class (ASCII code)",
-                                   "Status (ASCII code)",
-                                   "Strength",
-                                   "Dexterity",
-                                   "Intelligence",
-                                   "Magic"};
-        for (int j = 0; j < names.size(); j++)
-            numeric(cf, card, names[j], base + 9 + j, 1, {});
-        numeric(cf, card, "HP", base + 16, 2, {});
-        numeric(cf, card, "Maximum HP", base + 18, 2, {});
-        numeric(cf, card, "Experience", base + 20, 2, {});
-        numeric(cf, card, "Level", base + 22, 1, {});
+        auto choice=[=](const QString &label,int offset,const QList<QPair<QString,int>> &options) {
+            auto box=new QComboBox;for(auto option:options) box->addItem(option.first,option.second);
+            int value=U5::byte(roster,base+offset);if(box->findData(value)<0) box->addItem("Unassigned (preserved)",value);
+            box->setCurrentIndex(box->findData(value));box->setToolTip(label+" affects this companion's game statistics.");
+            cf->addRow(label,box);connect(box,&QComboBox::currentIndexChanged,card,[=]{setMember(offset,1,box->currentData().toInt());});
+        };
+        choice("Gender",9,{{"Male",11},{"Female",12}});
+        choice("Class",10,{{"Avatar",'A'},{"Bard",'B'},{"Druid",'D'},{"Fighter",'F'},{"Mage",'M'},
+                            {"Paladin",'P'},{"Ranger",'R'},{"Shepherd",'S'},{"Tinker",'T'}});
+        choice("Status",11,{{"Good",'G'},{"Poisoned",'P'},{"Sleeping",'S'},{"Dead",'D'}});
+        for(int field=0;field<4;field++) memberNumber(QStringList{"Strength","Dexterity","Intelligence","Magic"}[field],12+field,1);
+        memberNumber("HP",16,2);
+        memberNumber("Maximum HP",18,2);
+        memberNumber("Experience",20,2);
+        memberNumber("Level",22,1);
         for (int j = 0; j < 6; j++)
-            numeric(cf, card, QString("Equipment slot %1").arg(j + 1), base + 25 + j, 1, {});
-        numeric(cf, card, "Home map ID", base + 31, 1,
+            memberNumber(QString("Equipment slot %1").arg(j+1),25+j,1);
+        memberNumber("Home map ID",31,1,
                 "Party membership is a contiguous prefix, independent of this field");
+        auto appearance=new QComboBox;appearance->setObjectName(QString("partyCombatSprite_%1").arg(i));
+        appearance->addItem("Class default",0);
+        for(unsigned id=320;id<512;id+=4) {
+            TypeDef d;TYPES_Vanilla(1,id-256,&d);
+            if(id!=332 && (!d.name[0] || !strcmp(d.name,"x"))) continue;
+            appearance->addItem(id==332?QString("Avatar"):QString::fromUtf8(d.name),id);
+        }
+        const auto definitions=project.resources.value("TYPES.OVR").edited;
+        for(int off=32;off+256<=definitions.size();off+=TYPES_U32(definitions.constData()+off)) {
+            TypeDef d;TYPES_Decode(reinterpret_cast<const unsigned char *>(definitions.constData()+off),&d);
+            if(d.kind && d.id>=512) appearance->addItem(QString::fromUtf8(d.name)+" (custom)",d.id);
+        }
+        int selected=TYPES_U32(roster.constData()+base+32);
+        appearance->setCurrentIndex(appearance->findData(selected));
+        appearance->setToolTip("Combat appearance, independent of class. Custom NPC and monster artwork is supported, including multi-tile sprites.");
+        cf->addRow("Combat appearance",appearance);
+        connect(appearance,&QComboBox::currentIndexChanged,card,[=] {setMember(32,4,appearance->currentData().toInt());});
         auto membership = new QPushButton(i < int(U5::byte(project.data("INIT.GAM"), 0x2b5))
                                               ? "Remove from party…"
                                               : "Add to party");
@@ -2286,19 +2350,20 @@ QWidget *WorkshopWindow::stateEditor() {
         cf->addRow(membership);
         connect(membership, &QPushButton::clicked, card, [this, i] {
             guard([&] {
+                auto roster=Workshop::partyData(project);
                 auto b = project.data("INIT.GAM");
                 int count = U5::byte(b, 0x2b5);
-                require(count >= 1 && count <= 6, "Invalid party size");
+                require(count >= 1 && count <= int(TYPES_U32(roster.constData()+12)), "Invalid party size");
                 QVector<QByteArray> records;
                 QVector<int> order;
-                for (int r = 0; r < 16; r++) {
-                    records << b.mid(2 + r * 32, 32);
+                for (int r = 0; r < int(PARTY_Count(roster.constData(),roster.size())); r++) {
+                    records << roster.mid(32+r*PARTY_RECORD_SIZE,PARTY_RECORD_SIZE);
                     order << r;
                 }
                 if (i < count) {
                     bool ok;
                     int home = QInputDialog::getInt(this, "Companion home",
-                                                    "Settlement map ID (1–32)", 1, 1, 32, 1, &ok);
+                                                    "Home location ID (1–128)", 1, 1, 128, 1, &ok);
                     if (!ok)
                         return;
                     require(i != 0, "The Avatar cannot leave");
@@ -2308,7 +2373,7 @@ QWidget *WorkshopWindow::stateEditor() {
                     order.append(order.takeAt(i));
                     --count;
                 } else {
-                    require(count < 6 && records[i][0] != 0,
+                    require(count < int(TYPES_U32(roster.constData()+12)) && records[i][0] != 0,
                             "Party is full or selected record is empty");
                     records[i][31] = 0;
                     records.swapItemsAt(i, count);
@@ -2318,17 +2383,32 @@ QWidget *WorkshopWindow::stateEditor() {
                 int active = order.indexOf(U5::byte(b, 0x2d5));
                 b[0x2d5] = char(active >= 0 && active < count ? active : 255);
                 b[0x2b5] = char(count);
-                for (int r = 0; r < 16; r++)
-                    b.replace(2 + r * 32, 32, records[r]);
-                edit({{"INIT.GAM", b}}, "Change party membership");
+                for (int r = 0; r < int(PARTY_Count(roster.constData(),roster.size())); r++)
+                    roster.replace(32+r*PARTY_RECORD_SIZE,PARTY_RECORD_SIZE,records[r]);
+                auto edits=Workshop::partyEdits(project,roster);
+                edits["INIT.GAM"][0x2d5]=b[0x2d5];edits["INIT.GAM"][0x2b5]=b[0x2b5];
+                edit(edits,"Change party membership");
                 rebuildEditor();
             });
         });
+        if(i>=16) {
+            auto remove=new QPushButton("Delete companion");remove->setToolTip("Remove this additional companion from the mod roster.");
+            cf->addRow(remove);connect(remove,&QPushButton::clicked,card,[this,i] {
+                auto b=Workshop::partyData(project);b.remove(32+i*PARTY_RECORD_SIZE,PARTY_RECORD_SIZE);
+                TYPES_Put32(b.data()+8,PARTY_Count(b.constData(),b.size())-1);
+                edit(Workshop::partyEdits(project,b),"Delete companion");rebuildEditor();
+            });
+        }
         detail->addWidget(makeScroll(card, true));
     }
+    selector->setObjectName("partyMemberSelector");
     connect(selector, &QComboBox::currentIndexChanged, characters,
-            [=](int i) { detail->setCurrentIndex(i); });
+            [=](int i) { detail->setCurrentIndex(i);editorState["party/member"]=i; });
+    selector->setCurrentIndex(qBound(0,editorState.value("party/member",0),rosterCount-1));
+    detail->setCurrentIndex(selector->currentIndex());
     tabs->addTab(characters, "Party members");
+    tabs->setCurrentIndex(qBound(0,editorState.value("state/tab",0),tabs->count()-1));
+    connect(tabs,&QTabWidget::currentChanged,tabs,[this](int index){editorState["state/tab"]=index;});
     return tabs;
 }
 QWidget *WorkshopWindow::npcEditor(const QString &name) {

@@ -569,7 +569,7 @@ static void save_pixels(const char *directory, const char *name, const byte *pix
 static void save_game(const char *directory, const char *name) {
     byte state[4192] = {0};
 #define COPY(offset, value) memcpy(state + offset, &(value), sizeof(value))
-    COPY(2, D_55a8_party);
+    memcpy(state+2,D_55a8_party,16*32); /* Fixed legacy save prefix. */
     COPY(0x202, D_57a8);
     COPY(0x204, D_57aa);
     COPY(0x206, D_57ac);
