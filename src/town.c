@@ -769,7 +769,8 @@ int TOWN_09e6_AttackCmd(void)
             TYPES_GAME_Change(local_a, local_c, 3, TILE_MAP_MIRROR_BROKEN);
             ULTIMA_1850_PrintString(_TEXT(0x26f2, "Broken!\n"));
 
-            for (local_e = 2000; local_e < 20000; local_e += 1000)
+            if(AUDIO_HasSfx(112)) AUDIO_PlaySfx(112);
+            else for (local_e = 2000; local_e < 20000; local_e += 1000)
             {
                 ULTIMA_223c_AudioWhiteNoise(0x28, 0x78, local_e);
             }

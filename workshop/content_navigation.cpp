@@ -47,7 +47,7 @@ bool matchesSelection(const ContentDestination &d, const QMap<QString, int> &sta
     return true;
 }
 QStringList contentWorkspaces() {
-    return {"World", "Dialogue", "Cutscenes", "Graphics", "Game Rules", "Mod Overview"};
+    return {"World", "Dialogue", "Cutscenes", "Graphics", "Sound and Music", "Game Rules", "Mod Overview"};
 }
 QVector<ContentDestination> characterDestinations(const Project &project) {
     QVector<ContentDestination> result;
@@ -161,6 +161,8 @@ QVector<ContentDestination> contentDestinations(const Project &project) {
         if (destination.conversation >= 0)
             result.append(destination);
     result.append({"overview", "Mod Overview", "Project", "Mod overview", "@overview"});
+    ContentDestination music{"audio-music","Sound and Music","Audio","Music","AUDIO.OVR"};music.selection["audio/kind"]=0;result.append(music);
+    ContentDestination sounds{"audio-sounds","Sound and Music","Audio","Sound effects","AUDIO.OVR"};sounds.selection["audio/kind"]=1;result.append(sounds);
     result.append({"interface", "Graphics", "Interface", "Frame color", "INTERFACE.OVR"});
     bool usableScenes = false;
     if (project.resources.contains("MISCMAPS.DAT")) {
@@ -190,7 +192,7 @@ QVector<ContentDestination> contentDestinations(const Project &project) {
             continue;
         if (name == "TYPEMAP.OVR")
             continue;
-        if (name == "PARTY.OVR" || name == "MODINFO.DAT" || name == "INTERFACE.OVR") continue;
+        if (name == "AUDIO.OVR" || name == "PARTY.OVR" || name == "MODINFO.DAT" || name == "INTERFACE.OVR") continue;
         if (name == "CONTENTS.OVR" || name == "GATES.OVR")
             continue; // Edited through the map inspector.
         if (MAPS_LocationResource(name.toLatin1().constData())) {

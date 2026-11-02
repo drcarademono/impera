@@ -1,3 +1,4 @@
+#include "audio/mod_audio.h"
 #include "mod/runtime.h"
 #include "engine_settings.h"
 #include "graphics/crt.h"
@@ -439,7 +440,7 @@ void ENGINE_DrawSettings(int selected)
 static void adjust(int row,int direction)
 {
     float value=ENGINE_Get(row);
-    if(row==ENGINE_MUSIC && !value && !*SETUP_MusicDirectory()) {
+    if(row==ENGINE_MUSIC && !value && !*SETUP_MusicDirectory() && !AUDIO_MOD_HasMusic()) {
         if(FOLDER_SelectMusic(SETUP_MusicDirectory(),SETUP_SetMusicDirectory)) {
             AUDIO_ReloadMusic();ENGINE_Set(ENGINE_MUSIC,1);
             optionStatus="Music folder saved";

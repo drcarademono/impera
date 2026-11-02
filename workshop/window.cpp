@@ -1,3 +1,4 @@
+#include "audio_editor.h"
 #include "party_data.h"
 #include "save_dialog.h"
 #include "mod/metadata.h"
@@ -1260,6 +1261,7 @@ QWidget *WorkshopWindow::overviewEditor() {
     return root;
 }
 QWidget *WorkshopWindow::resourceEditor(const QString &name) {
+    if(name=="AUDIO.OVR") return Workshop::audioEditor(project,editorState.value("audio/kind",0),[this](const QByteArray &b,const QString &label){edit({{"AUDIO.OVR",b}},label);},nullptr,&flushDraft);
     if (name == "@overview" || name == "MODINFO.DAT") return overviewEditor();
     if (name == "INTERFACE.OVR") {
         auto root = new QWidget;

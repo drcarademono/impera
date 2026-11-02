@@ -1,3 +1,4 @@
+#include "audio/mod_audio.h"
 #include "mod/party.h"
 #include "audio/audio.h"
 #include "common/common.h"
@@ -776,7 +777,7 @@ static void INTRO_RunMain(void) // intro_main (initialize video) (8b46)
         if (local_a != 0)
         {
 #if defined(ENABLE_BGM)
-            AUDIO_PlayBgm(BGM_ID_1);
+            AUDIO_PlayEventMusic(1,BGM_ID_1);
 #endif
 
             FONT_04a4();
@@ -791,7 +792,7 @@ static void INTRO_RunMain(void) // intro_main (initialize video) (8b46)
     do
     {
 #if defined(ENABLE_BGM)
-        AUDIO_PlayBgm(BGM_ID_1);
+        AUDIO_PlayEventMusic(1,BGM_ID_1);
 #endif
 
         ULTIMA_1c22_SetTextWindowSize(0, 1, 0x10, 0x26, 0x17);
@@ -913,7 +914,8 @@ static void INTRO_RunMain(void) // intro_main (initialize video) (8b46)
             unsigned previousMods = MOD_Revision();
             ENGINE_ShowOptions(false);
             if (previousMods != MOD_Revision()) {
-                /* No gameplay is active: discard cached mod artwork/fonts. */
+                /* No gameplay is active: discard cached mod artwork/fonts/audio. */
+                AUDIO_ReloadMusic();AUDIO_PlayEventMusic(1,BGM_ID_1);
                 ULTIMA_102e_UnloadTileset();
                 for (int font = 0; font < 2; ++font) {
                     free(D_539c[font]);
@@ -1016,6 +1018,7 @@ static void INTRO_RunMain(void) // intro_main (initialize video) (8b46)
 
         case 0x43: // 'C'
             // 0fa8
+            {unsigned track=AUDIO_MOD_Assignment(2,2,0,~0u);if(track!=~0u) AUDIO_PlayBgm(track);}
             FONT_0b0a();
         L_0fab:
             ULTIMA_1c22_SetTextWindowSize(0, 0, 0, 0x27, 0x18);
@@ -1033,6 +1036,7 @@ static void INTRO_RunMain(void) // intro_main (initialize video) (8b46)
             AUDIO_StopBgm();
 #endif
 
+            AUDIO_PlayEventMusic(9,0);
             INTRO_014e_Introduction();
             INTRO_05b0_DisplayTitle(0);
             break;

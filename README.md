@@ -730,3 +730,24 @@ companion. Names retain Ultima V’s eight-character ASCII limit.
 These settings export as `PARTY.OVR` in package version 29. Additional companion
 records and the party limit survive save/load; original saves remain readable. Seven-
 and eight-member parties use a taller status panel and safe combat formation placement.
+
+Workshop’s **Sound and Music** workspace has searchable **Music** and **Sound effects**
+browsers. Preview, pause, stop, and preview volume do not change the player’s engine
+settings. Import WAV or Ogg Vorbis files to package replacement or new audio with a mod;
+original external recordings and PC speaker effects remain the fallback. Locate an
+external Music/Sound folder with the recordings-folder button if it is outside the
+game folder. Music has volume, looping, numeric loop points, and draggable waveform
+markers. Assign tracks to world/location/dungeon maps, individual combat maps, shared
+music slots, or menu/cutscene/gameplay events. Sound events can use original or new
+custom effects. Restore original removes an override; deletion removes assignments
+to a deleted custom asset. All changes support project persistence and undo/redo.
+
+**Export WAV…** exports one sound effect; **Export all sound effects…** writes separate,
+deterministically named stereo 48 kHz PCM WAVs for every available original, replaced,
+and custom effect. Synthesized effects use the engine’s original PC speaker renderer,
+including complete paired tones and shrine/mirror sequences. Title/subtitle reveal
+slots have no synthesized fallback; bulk export reports them when no recording exists.
+Export uses the asset audio, independent of editor preview volume. Music exports retain
+the source recording’s format. Audio definitions use `AUDIO.OVR` and mod package version
+30, with a 64 MiB audio-resource limit and a 128 MiB total package limit. Imported audio
+is limited to ten minutes per asset; music recordings remain compressed when possible.

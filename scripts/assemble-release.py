@@ -37,7 +37,8 @@ def assemble(artifacts, version, output, with_workshop=False):
         shutil.copy2(source / (name + '.sha256'), output / (name + '.sha256'))
     source = artifacts / 'Impera-windows-x86_64'
     files = {p.relative_to(source).as_posix() for p in source.rglob('*') if p.is_file()}
-    if files != WINDOWS_FILES or any(p.is_symlink() for p in source.rglob('*')):
+    runtime_files = {f for f in files if re.fullmatch(r'(vcruntime|msvcp|concrt)[A-Za-z0-9_]*\.dll', f, re.I)}
+    if files - runtime_files != WINDOWS_FILES or any(p.is_symlink() for p in source.rglob('*')):
         raise ValueError('Unexpected Windows package contents')
     name = f'Impera-{version}-windows-x86_64'
     archive = output / (name + '.zip')
@@ -70,7 +71,7 @@ def assemble_workshop(artifacts, version, output):
                 'plugins/platforms/qoffscreen.dll',
                 'bin/qt.conf', 'README.md', 'Run Workshop.cmd', 'Licenses/Qt-runtime.txt'}
     def allowed(file):
-        return (file in required or file.startswith('Licenses/Qt/') or
+        return (file in required or file in {'Licenses/SDL3.txt','Licenses/SDL3_mixer.txt','Licenses/stb_vorbis.txt'} or file.startswith('Licenses/Qt/') or
                 file.startswith(('bin/', 'plugins/')) and file.endswith('.dll'))
     if not required <= files or any(not allowed(f) for f in files) or any(p.is_symlink() for p in source.rglob('*')):
         raise ValueError('Unexpected or incomplete Windows Workshop package contents')

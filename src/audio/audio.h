@@ -32,6 +32,7 @@ void AUDIO_SetSoundEnabled(int enabled);
 extern void AUDIO_Cleanup(void);
 
 extern void AUDIO_PlayBgm(int id);
+void AUDIO_PlayEventMusic(unsigned event,int fallback);
 extern void AUDIO_QueueBgm(int id);
 extern void AUDIO_StopBgm(void);
 

@@ -1,3 +1,4 @@
+#include "mod/audio_resource.h"
 #include "mod/metadata.h"
 #include "mod/interface.h"
 #include "extended_maps.h"
@@ -22,6 +23,7 @@
 using U5::require;
 namespace Workshop {
 Capability capability(const QString &resource) {
+    if(resource=="AUDIO.OVR") return {"Sound and Music","Audio","Music and sound effects",EditorKind::Inspector};
     if (resource == "MODINFO.DAT")
         return {"Mod details", "Project", "Edited in Mod Overview", EditorKind::Inspector};
     if (resource == "INTERFACE.OVR")
@@ -223,6 +225,7 @@ QMap<QString, QByteArray> ResourceDocument::replace(const Entry &e, const QByteA
 void validateResource(const Project &project, const QString &name) {
     const auto &b = project.data(name);
     const auto kind = capability(name).editor;
+    if(name=="AUDIO.OVR") {require(MA_Validate(b.constData(),b.size()),"Invalid audio definitions");return;}
     if (name == "MODINFO.DAT") {
         require(MODINFO_Validate(b.constData(), b.size()), "Invalid mod description or screenshot");
         return;

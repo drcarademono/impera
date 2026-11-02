@@ -38,6 +38,15 @@ void AUDIO_DispatchPulse(int freq, int delay, int dur, int pulseWidth, int pulse
         return;
     }
 
+    const int ids[]={SFX_ID_GEMSHARD,SFX_ID_SHRINE1,SFX_ID_SHRINE2};
+    const int pitches[]={0xa50,0xa8c,0xc1c};
+    for(int i=0;i<3;i++) if(freq==pitches[i] && delay==1 && dur==(i==2?150:200) && pulseWidth>=2000 && pulseWidth<=25000 && pulseInc==0 && AUDIO_HasSfx(ids[i])) {
+        if(pulseWidth==2000) AUDIO_PlaySfx(ids[i]);return;
+    }
+    for(int i=1;i<9;i++) if(freq==D_4af6[i] && delay==1 && dur==i*4000+10000 && AUDIO_HasSfx(SFX_ID_CAST2_BASE+i-1)) {
+        if(pulseWidth==D_4b08[i] && pulseInc==D_4b2c[i]) {AUDIO_PlaySfx(SFX_ID_CAST2_BASE+i-1);return;}
+        if(pulseWidth==D_4b1a[i] && pulseInc==-D_4b2c[i]) return;
+    }
     bool played = false;
     // gemshard
     if (freq == 0xa50 && delay == 1 && dur == 200 && pulseWidth >= 2000 && pulseWidth <= 25000 && pulseInc == 0)

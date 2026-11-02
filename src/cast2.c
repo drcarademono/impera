@@ -1036,7 +1036,8 @@ void CAST2_0e76_Shrine(void)
     }
 
 #if defined(ENABLE_BGM)
-    AUDIO_PlayBgmForShrine();
+    if(local_6==TILE_MAP_CODEX) AUDIO_PlayEventMusic(10,5);
+    else AUDIO_PlayBgmForShrine();
 #endif
 
     ULTIMA_5910_UpdateFrame();

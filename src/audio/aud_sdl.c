@@ -8,6 +8,9 @@
 #include "aud_ops.h"
 #include "sfx_map.h"
 #include "pcspeaker.h"
+#include "audio_catalog.h"
+#include "mod_audio.h"
+#include "mod/runtime.h"
 #include "vars.h"
 
 #include <stdio.h>
@@ -22,15 +25,18 @@ static MIX_Track* s_bgmTrack;
 static MIX_Track* s_sfxTrack;
 static MIX_Track* s_synthTrack;
 static SDL_AudioStream* s_synthStream;
+static float s_speakerGain=1.0f;
 
 static SDL_PropertiesID s_bgmTrackProp;
 static SDL_PropertiesID s_synthTrackProp;
 
 static SDL_AudioSpec s_mixerSpec;
 
-static MIX_Audio* s_bgm[20];
-static MIX_Audio* s_sfx[256];
+static MIX_Audio* s_bgm[4096];
+static MIX_Audio* s_sfx[4096];
 
+static unsigned s_audioRevision=~0u;
+static struct {unsigned gain,start,end,loop;int present;} s_bgmSettings[4096];
 static int s_currentBgmId;
 static int s_queuedBgmId;
 
@@ -96,6 +102,7 @@ static void AUDIO_SDL_Init(void)
 
     MIX_SetTrackStoppedCallback(s_bgmTrack, AUDIO_SDL_OnBgmStopped, NULL);
 
+    AUDIO_MOD_Load();s_audioRevision=MOD_Revision();
     AUDIO_SDL_LoadBgmTable();
     AUDIO_SDL_LoadSfxTable();
     SDL_ClearError(); /* Optional missing files are not playback failures. */
@@ -108,8 +115,8 @@ static void AUDIO_SDL_Cleanup(void)
     MIX_DestroyTrack(s_sfxTrack);
     MIX_DestroyTrack(s_synthTrack);
     SDL_DestroyAudioStream(s_synthStream);
-    for (int i=0;i<20;i++) { MIX_DestroyAudio(s_bgm[i]); s_bgm[i]=NULL; }
-    for (int i=0;i<256;i++) { MIX_DestroyAudio(s_sfx[i]); s_sfx[i]=NULL; }
+    for (int i=0;i<4096;i++) { MIX_DestroyAudio(s_bgm[i]); s_bgm[i]=NULL; }
+    for (int i=0;i<4096;i++) { MIX_DestroyAudio(s_sfx[i]); s_sfx[i]=NULL; }
     SDL_DestroyProperties(s_bgmTrackProp);
     SDL_DestroyProperties(s_synthTrackProp);
     s_synthStream=NULL;
@@ -138,14 +145,26 @@ static SDL_EnumerationResult SDLCALL FindMusic(void* data, const char* directory
     return SDL_ENUM_CONTINUE;
 }
 
+static MIX_Audio *LoadModAudio(unsigned kind,unsigned id) {
+    const ModAudioClip *c=AUDIO_MOD_Clip(kind,id);
+    if(!c || !c->size) return NULL;
+    SDL_IOStream *io=SDL_IOFromConstMem(c->data,c->size);
+    return io?MIX_LoadAudio_IO(s_mixer,io,kind!=0,true):NULL;
+}
 static void AUDIO_SDL_LoadBgmTable(void)
 {
+    for(unsigned i=0;i<4096;i++) {
+        const ModAudioClip *c=AUDIO_MOD_Clip(0,i);s_bgmSettings[i].present=c!=NULL;
+        s_bgmSettings[i].gain=c?c->gain:100;s_bgmSettings[i].loop=c?c->loop:1;
+        s_bgmSettings[i].start=c?c->start:0;s_bgmSettings[i].end=c?c->end:0;
+    }
     char directory[FILE_PATH_SIZE];
     memset(s_musicPaths,0,sizeof(s_musicPaths));
     if (ResolveAudioPath("Music",directory,sizeof(directory)))
         SDL_EnumerateDirectory(directory,FindMusic,NULL);
     for (int i=1;i<=16;i++) {
-        if (s_musicPaths[i][0]) {
+        s_bgm[i]=LoadModAudio(0,i);
+        if (!s_bgm[i] && s_musicPaths[i][0]) {
             s_bgm[i]=AUDIO_SDL_LoadAudio(s_musicPaths[i],false);
             if (!s_bgm[i]) DEBUG_Error("Cannot load music %s: %s",s_musicPaths[i],SDL_GetError());
         }
@@ -156,24 +175,33 @@ static void AUDIO_SDL_LoadBgmTable(void)
         }
         debug("Music track=%d available=%d source=%s",i,s_bgm[i]!=NULL,s_musicPaths[i][0]?s_musicPaths[i]:"legacy BGM or absent");
     }
+    for(unsigned i=17;i<4096;i++) s_bgm[i]=LoadModAudio(0,i);
 }
 
 void AUDIO_SDL_ReloadMusic(void)
 {
     if(!s_mixer) return;
-    /* Detach music before releasing its audio; leave effects and synthesis intact. */
+    /* A music-folder change leaves effects intact; a mod change reloads both banks. */
+    bool reloadEffects=s_audioRevision!=MOD_Revision();
     MIX_SetTrackStoppedCallback(s_bgmTrack,NULL,NULL);
     MIX_StopTrack(s_bgmTrack,0);
     MIX_SetTrackAudio(s_bgmTrack,NULL);
     s_currentBgmId=s_queuedBgmId=0;
-    for(int i=0;i<20;i++) { MIX_DestroyAudio(s_bgm[i]);s_bgm[i]=NULL; }
-    AUDIO_SDL_LoadBgmTable();
+    for(int i=0;i<4096;i++) { MIX_DestroyAudio(s_bgm[i]);s_bgm[i]=NULL; }
+    if(reloadEffects) {
+        MIX_SetTrackAudio(s_sfxTrack,NULL);MIX_StopTrack(s_sfxTrack,0);
+        SDL_ClearAudioStream(s_synthStream);MIX_StopTrack(s_synthTrack,0);
+        for(int i=0;i<4096;i++) {MIX_DestroyAudio(s_sfx[i]);s_sfx[i]=NULL;}
+    }
+    AUDIO_MOD_Load();s_audioRevision=MOD_Revision();
+    AUDIO_SDL_LoadBgmTable();if(reloadEffects) AUDIO_SDL_LoadSfxTable();
     MIX_SetTrackStoppedCallback(s_bgmTrack,AUDIO_SDL_OnBgmStopped,NULL);
     SDL_ClearError();
 }
 
 static void AUDIO_SDL_LoadSfxTable(void)
 {
+    for(unsigned i=1;i<4096;i++) s_sfx[i]=LoadModAudio(1,i);
     for (int i = 0; i < SFX_RULE_COUNT; i++)
     {
         const SfxRule* r = &g_sfxRules[i];
@@ -194,16 +222,24 @@ static void AUDIO_SDL_LoadSfxTable(void)
 
 bool AUDIO_SDL_HasSfx(int id)
 {
-    return id>=0 && id<256 && s_sfx[id]!=NULL;
+    if(s_audioRevision!=MOD_Revision()) AUDIO_SDL_ReloadMusic();
+    return id>=0 && id<4096 && s_sfx[id]!=NULL;
 }
 
 static void AUDIO_SDL_PlaySfx(int id)
 {
     debug("AUDIO_SDL_PlaySfx(%d)", id);
 
-    if (!D_a9ce || !AUDIO_SDL_HasSfx(id))
-        return;
+    if (!D_a9ce || id<1 || id>=4096) return;
+    if(!AUDIO_SDL_HasSfx(id)) {
+        const ModAudioClip *clip=AUDIO_MOD_Clip(1,id);s_speakerGain=clip?clip->gain/100.0f:1.0f;
+        if(id<=115) {const AudioCatalog *c=&audioCatalog[id-1];for(unsigned i=0;i<c->count;i++) {
+            const AudioRecipe *r=&audioRecipes[c->first+i];PlaySpeaker(r->kind,r->p[0],r->p[1],r->p[2],r->p[3],r->p[4]);}}
+        s_speakerGain=1.0f;return;
+    }
 
+    const ModAudioClip *clip=AUDIO_MOD_Clip(1,id);
+    MIX_SetTrackGain(s_sfxTrack,0.2f*(clip?clip->gain/100.0f:1.0f));
     if (!MIX_SetTrackAudio(s_sfxTrack, s_sfx[id]) || !MIX_PlayTrack(s_sfxTrack, 0)) PrintError();
 }
 
@@ -231,23 +267,29 @@ static void AUDIO_SDL_PlayBgmSub(int id)
 {
     s_currentBgmId = id;
 
-    if (!s_mixer || id<1 || id>=20 || s_bgm[id] == NULL)
+    if (!s_mixer || id<1 || id>=4096 || s_bgm[id] == NULL)
         return;
 
     MIX_SetTrackAudio(s_bgmTrack, s_bgm[id]);
+    MIX_SetTrackGain(s_bgmTrack,0.3f*s_bgmSettings[id].gain/100.0f);
+    SDL_SetNumberProperty(s_bgmTrackProp,MIX_PROP_PLAY_LOOPS_NUMBER,s_bgmSettings[id].loop?-1:0);
+    SDL_SetNumberProperty(s_bgmTrackProp,MIX_PROP_PLAY_LOOP_START_MILLISECOND_NUMBER,s_bgmSettings[id].start);
+    SDL_SetNumberProperty(s_bgmTrackProp,MIX_PROP_PLAY_MAX_MILLISECONDS_NUMBER,s_bgmSettings[id].end?(Sint64)s_bgmSettings[id].end:-1);
     MIX_PlayTrack(s_bgmTrack, s_bgmTrackProp);
     PrintError();
 }
 
 static void AUDIO_SDL_PlayBgm(int id)
 {
+    if(s_audioRevision!=MOD_Revision()) AUDIO_SDL_ReloadMusic();
+    if(id<1 || id>=4096) return;
     debug("AUDIO_SDL_PlayBgm(%d)", id);
 
     s_queuedBgmId = 0;
 
     if (s_currentBgmId == id)
     {
-        MIX_SetTrackLoops(s_bgmTrack, -1);
+        MIX_SetTrackLoops(s_bgmTrack, s_bgmSettings[id].loop?-1:0);
         return;
     }
 
@@ -258,7 +300,7 @@ static void AUDIO_SDL_QueueBgm(int id)
 {
     debug("AUDIO_SDL_QueueBgm(%d)", id);
 
-    if (!s_mixer || id<1 || id>=20 || s_bgm[id] == NULL)
+    if (!s_mixer || id<1 || id>=4096 || s_bgm[id] == NULL)
         return;
 
     if (s_currentBgmId == 0 || !MIX_TrackPlaying(s_bgmTrack))
@@ -313,6 +355,7 @@ static int AUDIO_SDL_GetSfxType(void)
 static void PlaySpeaker(int kind, int a,int b,int c,int d,int e)
 {
     if (!s_synthStream || !D_a9ce) return;
+    MIX_SetTrackGain(s_synthTrack,0.2f*s_speakerGain);
     size_t frames;
     float* pcm=PCSPK_Render(kind,a,b,c,d,e,&D_5420,&frames);
     if (!pcm) return;

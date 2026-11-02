@@ -2316,7 +2316,7 @@ int main(int argc, char **argv) {
             auto graphicsWorkspace = w.findChild<QComboBox *>("contentWorkspace");
             auto graphicsTree = w.findChild<QWidget *>("resourceLibrary")->findChild<QTreeWidget *>();
             check(graphicsWorkspace->currentText() == "Graphics" &&
-                      graphicsWorkspace->count() == 6 &&
+                      graphicsWorkspace->findText("Sound and Music") >= 0 &&
                       graphicsWorkspace->findText("New Game") < 0 &&
                       graphicsTree->topLevelItem(0)->text(0) == "Tilesets" &&
                       graphicsTree->topLevelItem(0)->child(0)->text(0) == "DOS",
@@ -4161,7 +4161,7 @@ int main(int argc, char **argv) {
                       "Resource navigation replaced workspace or discarded draft");
             }
             auto selector = window.findChild<QComboBox *>("contentWorkspace");
-            check(selector && selector->count() == 6, "Content workspace selector missing");
+            check(selector && selector->findText("Sound and Music") >= 0, "Content workspace selector missing");
             window.selectResource("TOWNE.DAT");
             auto activeMap = window.findChild<QStackedWidget *>("workspaces")->currentWidget();
             check(activeMap->findChild<QTreeWidget *>("mapNavigation")->parentWidget()->isHidden(),

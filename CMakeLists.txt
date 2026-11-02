@@ -15,6 +15,7 @@ else()
 endif()
 
 set(SOURCES
+    src/audio/mod_audio.c
     src/mod/party_game.c
     src/mod/contents.c
     src/mod/actors.c
@@ -103,6 +104,15 @@ if(WIN32)
     enable_language(RC)
     target_sources(Impera PRIVATE packaging/impera.rc)
     target_include_directories(Impera PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/packaging")
+endif()
+
+if(MSVC)
+    set(CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS_SKIP TRUE)
+    include(InstallRequiredSystemLibraries)
+    foreach(runtime_library IN LISTS CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS)
+        add_custom_command(TARGET Impera POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${runtime_library}" "$<TARGET_FILE_DIR:Impera>")
+    endforeach()
 endif()
 
 option(U5D_BUILD_TESTS "Build native savegame regression tests" OFF)
@@ -402,6 +412,12 @@ if(U5D_BUILD_TESTS)
             WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/settings-runtime"
             ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software"
             TIMEOUT 10 RUN_SERIAL TRUE)
+        add_executable(u5d_mod_audio_test tests/mod_audio_test.c ${TEST_SOURCES})
+        list(APPEND U5D_TARGETS u5d_mod_audio_test)
+        file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/mod-audio-runtime")
+        add_test(NAME mod_audio COMMAND u5d_mod_audio_test)
+        set_tests_properties(mod_audio PROPERTIES WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/mod-audio-runtime"
+            ENVIRONMENT "SDL_AUDIO_DRIVER=dummy" TIMEOUT 15)
         add_executable(u5d_audio_test tests/audio_test.c ${TEST_SOURCES})
         list(APPEND U5D_TARGETS u5d_audio_test)
         target_link_options(u5d_audio_test PRIVATE "-Wl,--wrap=SDL_PutAudioStreamData" "-Wl,--wrap=MIX_SetTrackAudio" "-Wl,--wrap=SDL_GetBasePath")

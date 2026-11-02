@@ -5,9 +5,13 @@
 #include "aud_mus.h"
 
 #include "audio.h"
+#include "mod_audio.h"
+#include "mod/contents.h"
 
 void AUDIO_PlayBgmPerMap(void)
 {
+    unsigned override=AUDIO_MOD_Assignment(1,D_5893_map_id,D_5893_map_id?0:D_5895_map_level,~0u);
+    if(override!=~0u) {if(override) AUDIO_PlayBgm(override);else AUDIO_StopBgm();return;}
     // frigate / skiff
     switch (D_587c_partyTile & 0xfc)
     {
@@ -123,28 +127,30 @@ void AUDIO_PlayBgmPerMap(void)
 
 void AUDIO_PlayBgmForShrine(void)
 {
-    AUDIO_PlayBgm(BGM_ID_5);
+    AUDIO_PlayEventMusic(3,BGM_ID_5);
 }
 
 void AUDIO_PlayBgmForCombat(void)
 {
     // FMT: play(3)
-    AUDIO_PlayBgm(BGM_ID_4);
+    unsigned track=AUDIO_MOD_Assignment(5,CONTENTS_EncounterKind(),CONTENTS_EncounterMap(),~0u);
+    if(track!=~0u) {if(track) AUDIO_PlayBgm(track);else AUDIO_StopBgm();}
+    else AUDIO_PlayEventMusic(4,BGM_ID_4);
 }
 
 void AUDIO_PlayBgmForCombatVictory(void)
 {
-    AUDIO_PlayBgm(BGM_ID_1);
+    AUDIO_PlayEventMusic(5,BGM_ID_1);
 }
 
 void AUDIO_PlayBgmForHoleUp(void)
 {
     // FMT: play(4)
-    AUDIO_PlayBgm(BGM_ID_5);
+    AUDIO_PlayEventMusic(6,BGM_ID_5);
 }
 
 void AUDIO_PlayBgmForEnding(void)
 {
-    AUDIO_PlayBgm(BGM_ID_14);
-    AUDIO_QueueBgm(BGM_ID_15);
+    AUDIO_PlayEventMusic(7,BGM_ID_14);
+    AUDIO_QueueBgm(AUDIO_MOD_Assignment(2,8,0,BGM_ID_15));
 }

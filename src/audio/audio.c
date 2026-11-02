@@ -1,6 +1,8 @@
 #include "common/common.h"
 
 #include "audio.h"
+#include "mod_audio.h"
+#include "audio_catalog.h"
 #include "vars.h"
 
 #include "aud_ops.h"
@@ -77,14 +79,17 @@ void AUDIO_PlaySfx(int id)
     if (!s_sfxOps || !s_soundEnabled)
         return;
 
-    s_sfxOps->PlaySfx(id);
+    id=AUDIO_MOD_Assignment(4,id,0,id);
+    if(id) s_sfxOps->PlaySfx(id);
 }
 
 int AUDIO_HasSfx(int id)
 {
 #if defined(TARGET_SDL)
     extern bool AUDIO_SDL_HasSfx(int id);
-    return AUDIO_SDL_HasSfx(id);
+    unsigned mapped=AUDIO_MOD_Assignment(4,id,0,id);
+    const ModAudioClip *clip=AUDIO_MOD_Clip(1,mapped);
+    return !mapped || ((mapped!=id || clip) && mapped<=115 && audioCatalog[mapped-1].count) || AUDIO_SDL_HasSfx(mapped);
 #else
     return s_sfxOps != NULL;
 #endif
@@ -95,7 +100,7 @@ void AUDIO_PlayTitle1Sfx(void)
     if (!s_sfxOps || !s_soundEnabled)
         return;
 
-    s_sfxOps->PlayTitle1Sfx();
+    AUDIO_PlaySfx(114);
 }
 
 void AUDIO_PlayTitle2Sfx(void)
@@ -103,7 +108,7 @@ void AUDIO_PlayTitle2Sfx(void)
     if (!s_sfxOps || !s_soundEnabled)
         return;
 
-    s_sfxOps->PlayTitle2Sfx();
+    AUDIO_PlaySfx(115);
 }
 
 void AUDIO_StopSfx(void)
@@ -156,6 +161,8 @@ void AUDIO_PlaySynthSweepTone(int param_1, int param_2, int param_3, int param_4
 
 void AUDIO_PlayBgm(int id)
 {
+    id=AUDIO_MOD_Assignment(3,id,0,id);
+    if(!id) {AUDIO_StopBgm();return;}
     s_requestedBgm=id; s_requestedQueue=0;
     if (!s_musicOps || !s_musicEnabled)
         return;
@@ -165,6 +172,7 @@ void AUDIO_PlayBgm(int id)
 
 void AUDIO_QueueBgm(int id)
 {
+    id=AUDIO_MOD_Assignment(3,id,0,id);
     s_requestedQueue=id;
     if (!s_musicOps || !s_musicEnabled)
         return;
@@ -180,3 +188,5 @@ void AUDIO_StopBgm(void)
 
     s_musicOps->StopBgm();
 }
+
+void AUDIO_PlayEventMusic(unsigned event,int fallback) {AUDIO_PlayBgm(AUDIO_MOD_Assignment(2,event,0,fallback));}

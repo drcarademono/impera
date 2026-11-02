@@ -54,6 +54,9 @@ exec "$app_dir/MacOS/Impera-engine" "$@"
     else:
         shutil.copy2(source, stage / ('Impera.exe' if windows else 'Impera'))
         if windows:
+            for pattern in ('vcruntime*.dll', 'msvcp*.dll', 'concrt*.dll'):
+                for runtime_dll in source.parent.glob(pattern):
+                    shutil.copy2(runtime_dll, stage / runtime_dll.name)
             (stage / 'Run Impera.cmd').write_text('@echo off\r\ncd /d "%~dp0"\r\nImpera.exe %*\r\n', newline='')
         else:
             launcher = stage / 'Impera.sh'
