@@ -20,7 +20,26 @@ static AudioMusicDriverOps* s_musicOps;
 static AudioSfxDriverOps* s_sfxOps;
 static bool s_musicEnabled=true, s_soundEnabled=true;
 static int s_requestedBgm, s_requestedQueue;
-static float s_soundSpeed=1.0f;
+static float s_soundSpeed=1.0f, s_musicVolume=1.0f, s_soundVolume=1.0f;
+static bool s_footstepsEnabled=true;
+float AUDIO_MusicVolume(void) { return s_musicVolume; }
+float AUDIO_SoundVolume(void) { return s_soundVolume; }
+int AUDIO_FootstepsEnabled(void) { return s_footstepsEnabled; }
+void AUDIO_SetFootstepsEnabled(int enabled) { s_footstepsEnabled=enabled!=0; }
+static void applyVolumes(void) {
+#if defined(TARGET_SDL)
+    extern void AUDIO_SDL_ApplyVolumes(void);
+    AUDIO_SDL_ApplyVolumes();
+#endif
+}
+void AUDIO_SetMusicVolume(float volume) {
+    if(!(volume>=0 && volume<=1))return;
+    s_musicVolume=volume;applyVolumes();
+}
+void AUDIO_SetSoundVolume(float volume) {
+    if(!(volume>=0 && volume<=1))return;
+    s_soundVolume=volume;applyVolumes();
+}
 float AUDIO_SoundSpeed(void) { return s_soundSpeed; }
 void AUDIO_SetSoundSpeed(float speed) {
     if(!(speed>=0.1f && speed<=10.0f))return;
@@ -223,7 +242,7 @@ int AUDIO_SpeakerDelay(unsigned units) {
 int AUDIO_PlaySpeakerFootstep(void) {
 #if defined(TARGET_SDL)
     extern int AUDIO_SDL_PlaySpeakerFootstep(void);
-    if(!s_soundEnabled || !D_a9ce)return 1;
+    if(!s_soundEnabled || !D_a9ce || !s_footstepsEnabled)return 1;
     return AUDIO_SDL_PlaySpeakerFootstep();
 #else
     return 0;

@@ -40,6 +40,12 @@ extern void AUDIO_PlaySfx(int id);
 int AUDIO_HasSfx(int id);
 /* Queue the native two-click footstep, including its delay; false for overrides. */
 int AUDIO_PlaySpeakerFootstep(void);
+float AUDIO_MusicVolume(void);
+float AUDIO_SoundVolume(void);
+void AUDIO_SetMusicVolume(float volume);
+void AUDIO_SetSoundVolume(float volume);
+int AUDIO_FootstepsEnabled(void);
+void AUDIO_SetFootstepsEnabled(int enabled);
 float AUDIO_SoundSpeed(void);
 void AUDIO_SetSoundSpeed(float speed);
 extern void AUDIO_PlayTitle1Sfx(void);

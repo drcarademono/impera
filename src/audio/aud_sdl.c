@@ -25,7 +25,7 @@ static MIX_Track* s_bgmTrack;
 static MIX_Track* s_sfxTrack;
 static MIX_Track* s_synthTrack;
 static SDL_AudioStream* s_synthStream;
-static float s_speakerGain=1.0f;
+static float s_speakerGain=1.0f, s_recordingGain=1.0f, s_activeSpeakerGain=1.0f;
 static PCSPK_State s_speakerState;
 static unsigned s_rawFrequency;static Uint64 s_rawSince;static bool s_rawReload;
 
@@ -78,6 +78,12 @@ static void PrintError(void)
     }
 }
 
+void AUDIO_SDL_ApplyVolumes(void) {
+    if(s_bgmTrack)MIX_SetTrackGain(s_bgmTrack,0.3f*AUDIO_MusicVolume()*
+        (s_currentBgmId>0 && s_currentBgmId<4096?s_bgmSettings[s_currentBgmId].gain/100.0f:1.0f));
+    if(s_sfxTrack)MIX_SetTrackGain(s_sfxTrack,0.2f*AUDIO_SoundVolume()*s_recordingGain);
+    if(s_synthTrack)MIX_SetTrackGain(s_synthTrack,0.2f*AUDIO_SoundVolume()*s_activeSpeakerGain);
+}
 void AUDIO_SDL_SetSoundSpeed(float speed) {
     if(s_sfxTrack)MIX_SetTrackFrequencyRatio(s_sfxTrack,speed);
     if(s_synthTrack)MIX_SetTrackFrequencyRatio(s_synthTrack,speed);
@@ -86,6 +92,7 @@ void AUDIO_SDL_SetSoundSpeed(float speed) {
 static void AUDIO_SDL_Init(void)
 {
     s_rawFrequency=0;
+    s_recordingGain=s_activeSpeakerGain=1.0f;
     PCSPK_Init(&s_speakerState,PCSPK_NOISE_SEED);
     MIX_Init();
     s_mixer = MIX_CreateMixerDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, NULL);
@@ -100,12 +107,12 @@ static void AUDIO_SDL_Init(void)
     SDL_AudioSpec spec = { SDL_AUDIO_F32, 1, 48000 };
     s_synthStream = SDL_CreateAudioStream(&spec, &spec);
     MIX_SetTrackAudioStream(s_synthTrack, s_synthStream);
-    MIX_SetTrackGain(s_synthTrack, 0.2f);
+    MIX_SetTrackGain(s_synthTrack, 0.2f*AUDIO_SoundVolume());
     s_synthTrackProp = SDL_CreateProperties();
     SDL_SetBooleanProperty(s_synthTrackProp,MIX_PROP_PLAY_HALT_WHEN_EXHAUSTED_BOOLEAN,false);
 
-    MIX_SetTrackGain(s_bgmTrack, 0.3f);
-    MIX_SetTrackGain(s_sfxTrack, 0.2f);
+    MIX_SetTrackGain(s_bgmTrack, 0.3f*AUDIO_MusicVolume());
+    MIX_SetTrackGain(s_sfxTrack, 0.2f*AUDIO_SoundVolume());
 
     s_bgmTrackProp = SDL_CreateProperties();
     SDL_SetNumberProperty(s_bgmTrackProp, MIX_PROP_PLAY_LOOPS_NUMBER, -1);
@@ -250,7 +257,8 @@ static void AUDIO_SDL_PlaySfx(int id)
     }
 
     const ModAudioClip *clip=AUDIO_MOD_Clip(1,id);
-    MIX_SetTrackGain(s_sfxTrack,0.2f*(clip?clip->gain/100.0f:1.0f));
+    s_recordingGain=clip?clip->gain/100.0f:1.0f;
+    MIX_SetTrackGain(s_sfxTrack,0.2f*AUDIO_SoundVolume()*s_recordingGain);
     if (!MIX_SetTrackAudio(s_sfxTrack, s_sfx[id]) || !MIX_PlayTrack(s_sfxTrack, 0)) PrintError();
 }
 
@@ -284,7 +292,7 @@ static void AUDIO_SDL_PlayBgmSub(int id)
         return;
 
     MIX_SetTrackAudio(s_bgmTrack, s_bgm[id]);
-    MIX_SetTrackGain(s_bgmTrack,0.3f*s_bgmSettings[id].gain/100.0f);
+    MIX_SetTrackGain(s_bgmTrack,0.3f*AUDIO_MusicVolume()*s_bgmSettings[id].gain/100.0f);
     SDL_SetNumberProperty(s_bgmTrackProp,MIX_PROP_PLAY_LOOPS_NUMBER,s_bgmSettings[id].loop?-1:0);
     SDL_SetNumberProperty(s_bgmTrackProp,MIX_PROP_PLAY_LOOP_START_MILLISECOND_NUMBER,s_bgmSettings[id].start);
     SDL_SetNumberProperty(s_bgmTrackProp,MIX_PROP_PLAY_MAX_MILLISECONDS_NUMBER,s_bgmSettings[id].end?(Sint64)s_bgmSettings[id].end:-1);
@@ -368,7 +376,8 @@ static int AUDIO_SDL_GetSfxType(void)
 static void PlaySpeaker(int kind, int a,int b,int c,int d,int e)
 {
     if (!s_synthStream || !D_a9ce) return;
-    MIX_SetTrackGain(s_synthTrack,0.2f*s_speakerGain);
+    s_activeSpeakerGain=s_speakerGain;
+    MIX_SetTrackGain(s_synthTrack,0.2f*AUDIO_SoundVolume()*s_activeSpeakerGain);
     size_t frames;
     float* pcm=PCSPK_RenderState(&s_speakerState,kind,a,b,c,d,e,&frames);
     if (!pcm) return;

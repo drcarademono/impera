@@ -184,10 +184,15 @@ over a `Music` folder alongside the game files.
 
 Choose **Engine Options** below **Return to the View** in the main menu
 (or press `O`). Press `Ctrl+O` during gameplay to open Engine Options
-and return to your game with `Esc`. Video Mode, Mouse Control, Smooth Movement, Diagonal Movement,
-Transparent Sprites, Music, and Sound Effects can be switched on or off.
+and return to your game with `Esc`. Settings are grouped into **Graphics**,
+**Sound**, **Gameplay**, and **Mods** tabs. Click a tab or use Tab/Shift+Tab to
+switch. Graphics includes display, tileset, transparency, darkness, and animation
+settings; Gameplay includes Enhanced Look, mouse controls, and movement settings.
 Changes apply immediately. Sound Effect Speed, Movement Speed, and Animation Speed have sliders
 with ticks at 0.5, 0.75, and 1; use Left/Right or click and drag the slider.
+Music Volume and Sound Volume have continuous sliders from 0 (silent) to 1 (full
+volume). Volume changes apply immediately, including to audio already playing.
+Footstep Sounds can be disabled separately and are enabled by default.
 Up/Down selects a setting, Enter toggles it, and Escape returns to the menu or your game.
 The screen uses the original game font and integer-scaled pixels.
 
@@ -208,6 +213,9 @@ even when Mouse Control is off, so it can be turned back on.
 | Dithered Darkness | Fade visibility edges with an Ultima 6-style ordered pixel pattern. |
 | Music | Toggle playback. Switching on opens the folder browser only if no music folder is configured. |
 | Sound Effects | Enable or mute WAV overrides and synthesized effects. |
+| Footstep Sounds | Enable or mute footsteps independently of other effects; enabled by default. |
+| Music Volume | Continuous 0–1 master music volume, combined with mod track gain. |
+| Sound Volume | Continuous 0–1 volume for recorded and synthesized effects. |
 | Sound Effect Speed | Adjust synthesized and recorded effect playback speed (0.5, 0.75, or 1). Slower playback also lowers pitch; music is unchanged. |
 | Mouse Control | Enable map movement and contextual actions; options menus remain clickable when off. |
 | Smooth Movement | Animate camera scrolling and visible actor steps. |
@@ -695,10 +703,10 @@ and Grayscale when transparent sprites are enabled. No mod
 is required. White mask pixels preserve black ink; ordinary black mask pixels
 retain normal cutouts. Workshop starts those mask editors with the same defaults.
 
-Engine Options has Options and Mods tabs (Tab switches between them). The Mods
+Engine Options has Graphics, Sound, Gameplay, and Mods tabs. The Mods
 list uses the same checkboxes as other engine options. Space toggles a mod; Enter
 opens its screenshot and scrollable description. Click a checkbox to toggle it,
-or click the screenshot for details. Main-menu changes apply immediately; changes
+or click its > button for details. Main-menu changes apply immediately; changes
 made during gameplay are saved for the next launch. Mod files are kept intact.
 
 Enhanced Look in Engine Options uses an NPC’s dialogue description until their
@@ -715,8 +723,8 @@ A scrollbar and range indicator show additional mods; hover or use arrows to sel
 and use Home/End or Page Up/Down to navigate longer lists. Clicking
 a mod’s checkbox or name toggles it; click > or press Enter for
 details with the complete name and scrollable description. Typographic quotes and dashes use their DOS-font equivalents.
-Screenshots use the same small 44 × 24 thumbnail size and smooth,
-display-resolution rendering as save previews. The retired DOS Enhanced option is no longer listed; old saved choices
+Mod details screenshots fit a 112 × 70 logical-pixel area beside the description,
+with preserved aspect ratio and smooth display-resolution rendering. The retired DOS Enhanced option is no longer listed; old saved choices
 fall back to DOS. Graphics → Tilesets has Import/Export tileset PNG controls at
 the top for complete sheets, including all 512 tiles in a 512 × 256 DOS PNG.
 
