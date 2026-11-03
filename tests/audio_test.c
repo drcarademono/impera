@@ -12,10 +12,17 @@
 #include "vars.h"
 #include "key/key.h"
 
-static int queued, assigned, sleepCalls;
+static int queued, assigned, sleepCalls, sleepMs;
 static size_t queuedFrames;
+static int speedTracks;
+bool __real_MIX_SetTrackFrequencyRatio(MIX_Track*,float);
+bool __wrap_MIX_SetTrackFrequencyRatio(MIX_Track* track,float ratio) {
+    assert(ratio==AUDIO_SoundSpeed());
+    speedTracks++;
+    return __real_MIX_SetTrackFrequencyRatio(track,ratio);
+}
 void __real_TIME_SleepMs(int);
-void __wrap_TIME_SleepMs(int ms) {sleepCalls++;__real_TIME_SleepMs(ms);}
+void __wrap_TIME_SleepMs(int ms) {sleepCalls++;sleepMs+=ms;__real_TIME_SleepMs(ms);}
 const char* __wrap_SDL_GetBasePath(void) { return "Alongside/"; }
 bool __real_SDL_PutAudioStreamData(SDL_AudioStream*,const void*,int);
 bool __wrap_SDL_PutAudioStreamData(SDL_AudioStream* stream,const void* data,int len)
@@ -71,6 +78,10 @@ int main(void)
     wave("Sound/step0.wav");
     AUDIO_Initialize();
     assert(AUDIO_HasSfx(73) && !AUDIO_HasSfx(74));
+    int beforeSpeedTracks=speedTracks;
+    AUDIO_SetSoundSpeed(0.5f);
+    assert(speedTracks==beforeSpeedTracks+2); /* Synth and recordings; never music. */
+    AUDIO_SetSoundSpeed(1);
     assert(!AUDIO_PlaySpeakerFootstep()); /* Keep recordings on the override path. */
     AUDIO_PlayBgm(2); assert(assigned==1); /* descriptive numbered music filename */
     AUDIO_SetMusicEnabled(0);AUDIO_PlayBgm(2);assert(assigned==1);
@@ -115,6 +126,11 @@ int main(void)
     size_t stepFrames=queuedFrames-beforeFrames;
     assert(stepFrames>=285 && stepFrames<=305); /* ~6.1 ms, not two adjacent ~0.55 ms clicks. */
     assert(sleepCalls==beforeSleeps); /* The audio gap must not pause the game thread. */
+    AUDIO_SetSoundSpeed(0.5f);
+    int beforeMs=sleepMs;
+    AUDIO_DispatchTone(1000,200);
+    assert(sleepMs-beforeMs>=99 && sleepMs-beforeMs<=101); /* Twice the normal 50 ms. */
+    AUDIO_SetSoundSpeed(1);
     AUDIO_Cleanup();
     assert(SDL_CreateDirectory("Alongside/Music"));
     assert(SDL_CreateDirectory("Alongside/Sound"));

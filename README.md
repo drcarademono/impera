@@ -186,7 +186,7 @@ Choose **Engine Options** below **Return to the View** in the main menu
 (or press `O`). Press `Ctrl+O` during gameplay to open Engine Options
 and return to your game with `Esc`. Video Mode, Mouse Control, Smooth Movement, Diagonal Movement,
 Transparent Sprites, Music, and Sound Effects can be switched on or off.
-Changes apply immediately. Movement Speed and Animation Speed have sliders
+Changes apply immediately. Sound Effect Speed, Movement Speed, and Animation Speed have sliders
 with ticks at 0.5, 0.75, and 1; use Left/Right or click and drag the slider.
 Up/Down selects a setting, Enter toggles it, and Escape returns to the menu or your game.
 The screen uses the original game font and integer-scaled pixels.
@@ -208,6 +208,7 @@ even when Mouse Control is off, so it can be turned back on.
 | Dithered Darkness | Fade visibility edges with an Ultima 6-style ordered pixel pattern. |
 | Music | Toggle playback. Switching on opens the folder browser only if no music folder is configured. |
 | Sound Effects | Enable or mute WAV overrides and synthesized effects. |
+| Sound Effect Speed | Adjust synthesized and recorded effect playback speed (0.5, 0.75, or 1). Slower playback also lowers pitch; music is unchanged. |
 | Mouse Control | Enable map movement and contextual actions; options menus remain clickable when off. |
 | Smooth Movement | Animate camera scrolling and visible actor steps. |
 | Diagonal Movement | Enable eight-way movement, neighboring actions, and combat. |

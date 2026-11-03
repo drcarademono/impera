@@ -20,6 +20,16 @@ static AudioMusicDriverOps* s_musicOps;
 static AudioSfxDriverOps* s_sfxOps;
 static bool s_musicEnabled=true, s_soundEnabled=true;
 static int s_requestedBgm, s_requestedQueue;
+static float s_soundSpeed=1.0f;
+float AUDIO_SoundSpeed(void) { return s_soundSpeed; }
+void AUDIO_SetSoundSpeed(float speed) {
+    if(!(speed>=0.1f && speed<=10.0f))return;
+    s_soundSpeed=speed;
+#if defined(TARGET_SDL)
+    extern void AUDIO_SDL_SetSoundSpeed(float);
+    AUDIO_SDL_SetSoundSpeed(speed);
+#endif
+}
 int AUDIO_MusicEnabled(void) { return s_musicEnabled; }
 int AUDIO_SoundEnabled(void) { return s_soundEnabled; }
 void AUDIO_SetMusicEnabled(int enabled)

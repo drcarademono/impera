@@ -13,7 +13,7 @@ static void waitSpeaker(int kind,int a,int b,int c,int d,int e) {
     uint64_t clocks=PCSPK_Clocks(kind,a,b,c,d,e);
     /* Keep tiny footsteps asynchronous so smooth movement stays smooth. */
     if(kind==PCSPK_NOISE && clocks<PCSPK_CLOCK/1000) return;
-    carry+=clocks;unsigned ms=(unsigned)(carry/(PCSPK_CLOCK/1000));carry%=PCSPK_CLOCK/1000;
+    carry+=(uint64_t)(clocks/(double)AUDIO_SoundSpeed());unsigned ms=(unsigned)(carry/(PCSPK_CLOCK/1000));carry%=PCSPK_CLOCK/1000;
     if(ms) TIME_SleepMs(ms);
 }
 

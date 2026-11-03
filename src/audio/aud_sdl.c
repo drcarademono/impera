@@ -78,6 +78,11 @@ static void PrintError(void)
     }
 }
 
+void AUDIO_SDL_SetSoundSpeed(float speed) {
+    if(s_sfxTrack)MIX_SetTrackFrequencyRatio(s_sfxTrack,speed);
+    if(s_synthTrack)MIX_SetTrackFrequencyRatio(s_synthTrack,speed);
+}
+
 static void AUDIO_SDL_Init(void)
 {
     s_rawFrequency=0;
@@ -91,6 +96,7 @@ static void AUDIO_SDL_Init(void)
     s_bgmTrack = MIX_CreateTrack(s_mixer);
     s_sfxTrack = MIX_CreateTrack(s_mixer);
     s_synthTrack = MIX_CreateTrack(s_mixer);
+    AUDIO_SDL_SetSoundSpeed(AUDIO_SoundSpeed());
     SDL_AudioSpec spec = { SDL_AUDIO_F32, 1, 48000 };
     s_synthStream = SDL_CreateAudioStream(&spec, &spec);
     MIX_SetTrackAudioStream(s_synthTrack, s_synthStream);
@@ -124,6 +130,7 @@ static void AUDIO_SDL_Cleanup(void)
     SDL_DestroyProperties(s_bgmTrackProp);
     SDL_DestroyProperties(s_synthTrackProp);
     s_synthStream=NULL;
+    s_bgmTrack=s_sfxTrack=s_synthTrack=NULL;
     s_currentBgmId=s_queuedBgmId=0;
     MIX_DestroyMixer(s_mixer);
     s_mixer = NULL;
@@ -383,7 +390,7 @@ static void flushRaw(void) {
     Uint64 now=SDL_GetTicksNS();if(!s_rawFrequency || now<=s_rawSince)return;
     /* Presentation should not accumulate seconds of delayed sound. */
     Uint64 elapsed=now-s_rawSince;if(elapsed>100000000u)elapsed=100000000u;
-    uint64_t clocks=elapsed*PCSPK_CLOCK/1000000000u;
+    uint64_t clocks=(uint64_t)(elapsed*(double)AUDIO_SoundSpeed()*PCSPK_CLOCK/1000000000u);
     rawSpan(clocks);s_rawSince=now;
 }
 void AUDIO_SDL_SpeakerOn(unsigned frequency) {
@@ -397,7 +404,7 @@ void AUDIO_SDL_SpeakerOff(void) {
 int AUDIO_SDL_SpeakerDelay(unsigned units) {
     if(!s_rawFrequency || !D_a9ce)return -1;
     flushRaw();uint64_t clocks=PCSPK_Clocks(PCSPK_TONE,s_rawFrequency,units,0,0,0);
-    rawSpan(clocks);Uint64 ns=clocks*1000000000u/PCSPK_CLOCK;
+    rawSpan(clocks);Uint64 ns=(Uint64)(clocks*1000000000.0/(PCSPK_CLOCK*AUDIO_SoundSpeed()));
     s_rawSince=SDL_GetTicksNS()+ns;return (int)((ns+999999u)/1000000u);
 }
 int AUDIO_SDL_PlaySpeakerFootstep(void) {

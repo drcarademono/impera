@@ -420,7 +420,7 @@ if(U5D_BUILD_TESTS)
             ENVIRONMENT "SDL_AUDIO_DRIVER=dummy" TIMEOUT 15)
         add_executable(u5d_audio_test tests/audio_test.c ${TEST_SOURCES})
         list(APPEND U5D_TARGETS u5d_audio_test)
-        target_link_options(u5d_audio_test PRIVATE "-Wl,--wrap=SDL_PutAudioStreamData" "-Wl,--wrap=MIX_SetTrackAudio" "-Wl,--wrap=SDL_GetBasePath" "-Wl,--wrap=TIME_SleepMs")
+        target_link_options(u5d_audio_test PRIVATE "-Wl,--wrap=SDL_PutAudioStreamData" "-Wl,--wrap=MIX_SetTrackAudio" "-Wl,--wrap=SDL_GetBasePath" "-Wl,--wrap=TIME_SleepMs" "-Wl,--wrap=MIX_SetTrackFrequencyRatio")
         file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/audio-runtime")
         add_test(NAME audio COMMAND u5d_audio_test)
         set_tests_properties(audio PROPERTIES WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/audio-runtime"

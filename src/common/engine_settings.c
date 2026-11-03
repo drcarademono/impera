@@ -24,10 +24,10 @@
 #include <math.h>
 
 static const char* keys[]={"video_mode","tileset","crt_filter","transparent","dithered_darkness",
-    "music","sound","enhanced_look","mouse","smooth","diagonal","movement_speed","animation_speed"};
+    "music","sound","sound_speed","enhanced_look","mouse","smooth","diagonal","movement_speed","animation_speed"};
 static const char* labels[]={"Video Mode","Tileset","CRT Filter","Transparent Sprites","Dithered Darkness",
-    "Music","Sound Effects","Enhanced Look","Mouse Control","Smooth Movement","Diagonal Movement","Movement Speed","Animation Speed"};
-static bool isSpeed(int row) { return row==ENGINE_MOVEMENT_SPEED || row==ENGINE_ANIMATION_SPEED; }
+    "Music","Sound Effects","Sound Effect Speed","Enhanced Look","Mouse Control","Smooth Movement","Diagonal Movement","Movement Speed","Animation Speed"};
+static bool isSpeed(int row) { return row==ENGINE_SOUND_SPEED || row==ENGINE_MOVEMENT_SPEED || row==ENGINE_ANIMATION_SPEED; }
 static const char* optionStatus;
 static bool s_enhancedLook;
 static const float ticks[]={0.5f,0.75f,1.0f};
@@ -45,6 +45,7 @@ float ENGINE_Get(int row)
     case ENGINE_CRT:return CRT_Enabled();
     case ENGINE_MUSIC:return AUDIO_MusicEnabled();
     case ENGINE_SOUND:return AUDIO_SoundEnabled();
+    case ENGINE_SOUND_SPEED:return AUDIO_SoundSpeed();
     case ENGINE_MOVEMENT_SPEED:return GRAP_SDL_MovementSpeed();
     case ENGINE_ANIMATION_SPEED:return ANIMATION_Speed();
     default:return 0;
@@ -71,6 +72,7 @@ void ENGINE_Set(int row,float value)
     case ENGINE_CRT:CRT_SetEnabled(value!=0);break;
     case ENGINE_MUSIC:AUDIO_SetMusicEnabled(value!=0);break;
     case ENGINE_SOUND:AUDIO_SetSoundEnabled(value!=0);break;
+    case ENGINE_SOUND_SPEED:AUDIO_SetSoundSpeed(value);break;
     case ENGINE_MOVEMENT_SPEED:GRAP_SDL_SetMovementSpeed(value);break;
     case ENGINE_ANIMATION_SPEED:ANIMATION_SetSpeed(value);break;
     }
@@ -135,7 +137,7 @@ void ENGINE_UIFrame(void)
 }
 static int rowY(int row)
 {
-    return row == ENGINE_SETTING_COUNT ? 180 : 42 + row * 10;
+    return row == ENGINE_SETTING_COUNT ? 180 : 42 + row * 9;
 }
 static bool s_gameplay;
 static int s_optionsTab, s_modSelected, s_modTop, s_modScroll;
@@ -401,7 +403,7 @@ void ENGINE_DrawSettings(int selected)
         int y=rowY(row);
         bool highlighted=row==selected && s_videoChoice<0;
         byte foreground=highlighted?0:15;
-        if(highlighted) ENGINE_UIRect(16,y-1,288,10,15);
+        if(highlighted) ENGINE_UIRect(16,y-1,288,9,15);
         ENGINE_UIText(24,y,row==ENGINE_SETTING_COUNT?(s_gameplay?"Return to Game":"Return to Menu"):labels[row],foreground);
         if(row==ENGINE_SETTING_COUNT) continue;
         float value=ENGINE_Get(row);
@@ -602,7 +604,7 @@ void ENGINE_ShowOptions(bool gameplay)
             if(event.type==SDL_EVENT_MOUSE_BUTTON_DOWN && event.button.button==SDL_BUTTON_LEFT) {
                 float x,y;
                 if(GRAP_SDL_MouseUIPoint(event.button.x,event.button.y,&x,&y) && x>=16 && x<304)
-                    for(int row=0;row<=ENGINE_SETTING_COUNT;row++) if(y>=rowY(row)-1 && y<rowY(row)+9) {
+                    for(int row=0;row<=ENGINE_SETTING_COUNT;row++) if(y>=rowY(row)-1 && y<rowY(row)+8) {
                         selected=row;
                         if(row==ENGINE_FULLSCREEN || row==ENGINE_TILESET) openChoice(row);
                         else if(row==ENGINE_SETTING_COUNT) done=true;
@@ -619,7 +621,7 @@ void ENGINE_ShowOptions(bool gameplay)
                 float x,y;
                 if(GRAP_SDL_MouseUIPoint(event.motion.x,event.motion.y,&x,&y) && x>=16 && x<304)
                     for(int row=0;row<=ENGINE_SETTING_COUNT;row++)
-                        if(y>=rowY(row)-1 && y<rowY(row)+9) selected=row;
+                        if(y>=rowY(row)-1 && y<rowY(row)+8) selected=row;
             }
             if(event.type==SDL_EVENT_MOUSE_MOTION && drag>=0) {
                 float x,y;
