@@ -29,7 +29,7 @@ bool __wrap_SDL_PutAudioStreamData(SDL_AudioStream* stream,const void* data,int 
         assert(isfinite(pcm[i]) && fabsf(pcm[i])<=1);
         audible |= fabsf(pcm[i])>0.01f;
     }
-    assert(audible);
+    assert(audible || len<8*(int)sizeof(float)); /* A short raw span may contain only filter startup. */
     queued++;
     return __real_SDL_PutAudioStreamData(stream,data,len);
 }
@@ -54,10 +54,10 @@ int main(void)
     size_t frames;
     uint16_t state=0;
     float* tone=PCSPK_Render(PCSPK_TONE,1000,100,0,0,0,&state,&frames);
-    assert(tone && frames==240); /* 100 delay units * 50 us, frequency in Hz */
+    assert(tone && frames>=1190 && frames<=1210); /* DOSBox-calibrated 25 ms, frequency in Hz */
     int transitions=0;
     for(size_t i=1;i<frames;i++) if ((tone[i]>0)!=(tone[i-1]>0)) transitions++;
-    assert(transitions==9);
+    assert(transitions>=40 && transitions<=60); /* Band-limited square wave with AC coupling. */
     SDL_free(tone);
     assert(!PCSPK_Render(PCSPK_TONE,0,0,0,0,0,&state,&frames) && frames==0);
     D_a9ce=1;
@@ -72,7 +72,9 @@ int main(void)
     AUDIO_SetMusicEnabled(1);assert(assigned==2); /* resume requested music */
     AUDIO_DispatchWhiteNoise(1,25,1000);
     assert(assigned==3 && queued==0); /* WAV takes precedence */
+    D_5420=0xabcd;
     AUDIO_DispatchWhiteNoise(1,25,1500);
+    assert(D_5420==0xabcd); /* Speaker noise must never advance gameplay randomness. */
     assert(queued==1); /* individual missing WAV synthesizes */
     AUDIO_DispatchWhiteNoise(2,20,3000); assert(queued==2); /* unmapped effects also synthesize */
     AUDIO_DispatchPulse(1193,1,100,20000,-4); assert(queued==3);
@@ -96,6 +98,9 @@ int main(void)
     D_a9ce=0;
     AUDIO_DispatchTone(1000,100); assert(queued==5);
     D_a9ce=1;
+    int beforeRaw=queued;AUDIO_SpeakerOn(1200);
+    int speakerDelay=AUDIO_SpeakerDelay(20);assert(speakerDelay>=4 && speakerDelay<=6);
+    AUDIO_SpeakerOff();assert(queued>beforeRaw);
     AUDIO_StopSfx(); AUDIO_StopBgm(); AUDIO_Cleanup();
     remove("Music/02 - Britannic Lands.mp3"); remove("Sound/step0.wav");
     assert(SDL_RemovePath("Music")); assert(SDL_RemovePath("Sound"));

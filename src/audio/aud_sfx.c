@@ -4,6 +4,18 @@
 #include "time/time.h"
 
 #include "sfx_map.h"
+#include "pcspeaker.h"
+
+/* Preserve the original blocking sequence durations, with sub-ms carry
+ * instead of four unrelated approximations. TIME_SleepMs pumps keyboard input. */
+static void waitSpeaker(int kind,int a,int b,int c,int d,int e) {
+    static uint64_t carry;
+    uint64_t clocks=PCSPK_Clocks(kind,a,b,c,d,e);
+    /* Keep tiny footsteps asynchronous so smooth movement stays smooth. */
+    if(kind==PCSPK_NOISE && clocks<PCSPK_CLOCK/1000) return;
+    carry+=clocks;unsigned ms=(unsigned)(carry/(PCSPK_CLOCK/1000));carry%=PCSPK_CLOCK/1000;
+    if(ms) TIME_SleepMs(ms);
+}
 
 static int AUDIO_LookupSfx(int type, int a, int b, int c, int d, int e)
 {
@@ -41,11 +53,11 @@ void AUDIO_DispatchPulse(int freq, int delay, int dur, int pulseWidth, int pulse
     const int ids[]={SFX_ID_GEMSHARD,SFX_ID_SHRINE1,SFX_ID_SHRINE2};
     const int pitches[]={0xa50,0xa8c,0xc1c};
     for(int i=0;i<3;i++) if(freq==pitches[i] && delay==1 && dur==(i==2?150:200) && pulseWidth>=2000 && pulseWidth<=25000 && pulseInc==0 && AUDIO_HasSfx(ids[i])) {
-        if(pulseWidth==2000) AUDIO_PlaySfx(ids[i]);return;
+        if(pulseWidth==2000) AUDIO_PlaySfx(ids[i]);waitSpeaker(PCSPK_PULSE,freq,delay,dur,pulseWidth,pulseInc);return;
     }
     for(int i=1;i<9;i++) if(freq==D_4af6[i] && delay==1 && dur==i*4000+10000 && AUDIO_HasSfx(SFX_ID_CAST2_BASE+i-1)) {
-        if(pulseWidth==D_4b08[i] && pulseInc==D_4b2c[i]) {AUDIO_PlaySfx(SFX_ID_CAST2_BASE+i-1);return;}
-        if(pulseWidth==D_4b1a[i] && pulseInc==-D_4b2c[i]) return;
+        if(pulseWidth==D_4b08[i] && pulseInc==D_4b2c[i]) {AUDIO_PlaySfx(SFX_ID_CAST2_BASE+i-1);waitSpeaker(PCSPK_PULSE,freq,delay,dur,pulseWidth,pulseInc);return;}
+        if(pulseWidth==D_4b1a[i] && pulseInc==-D_4b2c[i]) {waitSpeaker(PCSPK_PULSE,freq,delay,dur,pulseWidth,pulseInc);return;}
     }
     bool played = false;
     // gemshard
@@ -145,11 +157,7 @@ void AUDIO_DispatchPulse(int freq, int delay, int dur, int pulseWidth, int pulse
 
     if (!played) AUDIO_PlaySynthPulse(freq, delay, dur, pulseWidth, pulseInc);
 
-    // approximation
-    if (dur > 100)
-    {
-        TIME_SleepMs(dur / 20);
-    }
+    waitSpeaker(PCSPK_PULSE,freq,delay,dur,pulseWidth,pulseInc);
 }
 
 // 223c
@@ -177,11 +185,8 @@ void AUDIO_DispatchWhiteNoise(uint rate, uint dur, uint limit)
     }
     else AUDIO_PlaySynthNoise(rate, dur, limit);
 
-    // approximation
-    if (dur > 100 && !(rate == 0x13 && dur == 16000 && limit == 0x96))
-    {
-        TIME_SleepMs(dur / 10);
-    }
+    if (!(rate == 0x13 && dur == 16000 && limit == 0x96))
+        waitSpeaker(PCSPK_NOISE,rate,dur,limit,0,0);
 }
 
 // 22c0
@@ -209,11 +214,7 @@ void AUDIO_DispatchTone(uint freq, uint dur)
     }
     else AUDIO_PlaySynthTone(freq, dur);
 
-    // approximation
-    if (dur > 100)
-    {
-        TIME_SleepMs(dur * 8 / 10);
-    }
+    waitSpeaker(PCSPK_TONE,freq,dur,0,0,0);
 }
 
 // 43ae
@@ -240,9 +241,5 @@ void AUDIO_DispatchSweepTone(int startFreq, int endFreq, int tickStep, int dur)
     }
     else AUDIO_PlaySynthSweepTone(startFreq, endFreq, tickStep, dur);
 
-    // approximation
-    if (dur > 100)
-    {
-        TIME_SleepMs(dur * 3 / 2);
-    }
+    waitSpeaker(PCSPK_SWEEP,startFreq,endFreq,tickStep,dur,0);
 }

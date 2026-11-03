@@ -26,6 +26,8 @@ static MIX_Track* s_sfxTrack;
 static MIX_Track* s_synthTrack;
 static SDL_AudioStream* s_synthStream;
 static float s_speakerGain=1.0f;
+static PCSPK_State s_speakerState;
+static unsigned s_rawFrequency;static Uint64 s_rawSince;static bool s_rawReload;
 
 static SDL_PropertiesID s_bgmTrackProp;
 static SDL_PropertiesID s_synthTrackProp;
@@ -78,6 +80,8 @@ static void PrintError(void)
 
 static void AUDIO_SDL_Init(void)
 {
+    s_rawFrequency=0;
+    PCSPK_Init(&s_speakerState,PCSPK_NOISE_SEED);
     MIX_Init();
     s_mixer = MIX_CreateMixerDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, NULL);
     if (!s_mixer) { DEBUG_Error("Audio device unavailable: %s", SDL_GetError()); return; }
@@ -255,6 +259,8 @@ static void AUDIO_SDL_PlayTitle2Sfx(void)
 
 static void AUDIO_SDL_StopSfx(void)
 {
+    s_rawFrequency=0;
+    uint16_t noise=s_speakerState.noise;PCSPK_Init(&s_speakerState,noise);
     if (!s_mixer) return;
     SDL_ClearAudioStream(s_synthStream);
     MIX_StopTrack(s_synthTrack,0);
@@ -357,12 +363,42 @@ static void PlaySpeaker(int kind, int a,int b,int c,int d,int e)
     if (!s_synthStream || !D_a9ce) return;
     MIX_SetTrackGain(s_synthTrack,0.2f*s_speakerGain);
     size_t frames;
-    float* pcm=PCSPK_Render(kind,a,b,c,d,e,&D_5420,&frames);
+    float* pcm=PCSPK_RenderState(&s_speakerState,kind,a,b,c,d,e,&frames);
     if (!pcm) return;
     /* Queue consecutive calls so paired footsteps and spell phrases survive. */
     if (!SDL_PutAudioStreamData(s_synthStream,pcm,(int)(frames*sizeof(float)))) PrintError();
     else if (!MIX_TrackPlaying(s_synthTrack) && !MIX_PlayTrack(s_synthTrack,s_synthTrackProp)) PrintError();
     SDL_free(pcm);
+}
+static void rawSpan(uint64_t clocks) {
+    if(!s_synthStream || !s_rawFrequency || !clocks) return;
+    size_t frames;float *pcm=PCSPK_RenderSpan(&s_speakerState,s_rawFrequency,clocks,s_rawReload,&frames);
+    s_rawReload=false;
+    if(pcm) {
+        SDL_PutAudioStreamData(s_synthStream,pcm,(int)(frames*sizeof(float)));SDL_free(pcm);
+        if(!MIX_TrackPlaying(s_synthTrack))MIX_PlayTrack(s_synthTrack,s_synthTrackProp);
+    }
+}
+static void flushRaw(void) {
+    Uint64 now=SDL_GetTicksNS();if(!s_rawFrequency || now<=s_rawSince)return;
+    /* Presentation should not accumulate seconds of delayed sound. */
+    Uint64 elapsed=now-s_rawSince;if(elapsed>100000000u)elapsed=100000000u;
+    uint64_t clocks=elapsed*PCSPK_CLOCK/1000000000u;
+    rawSpan(clocks);s_rawSince=now;
+}
+void AUDIO_SDL_SpeakerOn(unsigned frequency) {
+    flushRaw();if(!s_rawFrequency)s_rawSince=SDL_GetTicksNS();
+    s_rawFrequency=D_a9ce?frequency:0;s_rawReload=true;
+}
+void AUDIO_SDL_SpeakerOff(void) {
+    flushRaw();s_rawFrequency=0;size_t frames;
+    float *pcm=PCSPK_RenderSpan(&s_speakerState,0,0,false,&frames);SDL_free(pcm);
+}
+int AUDIO_SDL_SpeakerDelay(unsigned units) {
+    if(!s_rawFrequency || !D_a9ce)return -1;
+    flushRaw();uint64_t clocks=PCSPK_Clocks(PCSPK_TONE,s_rawFrequency,units,0,0,0);
+    rawSpan(clocks);Uint64 ns=clocks*1000000000u/PCSPK_CLOCK;
+    s_rawSince=SDL_GetTicksNS()+ns;return (int)((ns+999999u)/1000000u);
 }
 static void AUDIO_SDL_PlaySynthPulse(int freq,int delay,int dur,int width,int inc)
 { PlaySpeaker(PCSPK_PULSE,freq,delay,dur,width,inc); }

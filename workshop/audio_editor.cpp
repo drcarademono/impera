@@ -242,11 +242,11 @@ QByteArray audioSource(const Project &p, const AudioClip &c, QString *origin) {
         return {};
     const auto &recipe = audioCatalog[c.id - 1];
     QByteArray pcm;
-    uint16_t seed = 0;
+    PCSPK_State speaker;PCSPK_Init(&speaker,PCSPK_NOISE_SEED);
     for (unsigned i = 0; i < recipe.count; i++) {
         const auto &r = audioRecipes[recipe.first + i];
         size_t count = 0;
-        float *data = PCSPK_Render(r.kind, r.p[0], r.p[1], r.p[2], r.p[3], r.p[4], &seed, &count);
+        float *data = PCSPK_RenderState(&speaker,r.kind, r.p[0], r.p[1], r.p[2], r.p[3], r.p[4], &count);
         require(data, "Cannot render PC speaker sound");
         int previous = pcm.size();
         pcm.resize(previous + count * 4);

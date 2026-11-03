@@ -471,14 +471,14 @@ thresholds. Sweeps retain DOS signed 16-bit arithmetic and integer division.
 `sfx_map.h` remains the authoritative effect parameter table. Title effects
 without parameter tuples require their WAV recordings.
 
-SDL converts each calibrated delay unit to **50 microseconds**, consistently
-across all effects: tone duration is `dur` units, noise holds each frequency
-for `rate` units until elapsed reaches `dur`, PWM performs `dur` iterations
-of `delay` units, and sweeps hold each step for `tickStep` units. This is an
-explicit timing conversion, not an emulation of DOS CPU calibration via
-`D_5356`/`D_5426`; it does not alter the sound algorithms. PCM is sampled at
-48 kHz without frequency/duty clamps or click envelopes. Legacy `SFX` files
-also remain supported.
+Speaker timing uses the audited DOSBox simple/386_slow/5000-cycle reference:
+tone/sweep use the full calibrated delay, noise uses calibration >> 4, and PWM
+uses calibration / 24 plus its loop/I/O overhead. The renderer preserves the
+independent DOS noise seed, mode-3 counter updates, gate behavior, and fractional
+sample timing across calls. Eight-times oversampling and low-pass decimation
+avoid aliasing the gated carrier. See [the speaker audit](docs/pc-speaker-audit.md)
+for evidence, limitations, and a harness that runs the original DOS routines.
+Legacy `SFX` recordings remain supported.
 Audio is read directly from the optional selected music folder or the usual
 external audio directories; players can also place it in `build/runtime`.
 No audio assets are needed for synthesized effects. Do not set SDL's dummy video/audio drivers when playing on your desktop.

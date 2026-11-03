@@ -190,3 +190,22 @@ void AUDIO_StopBgm(void)
 }
 
 void AUDIO_PlayEventMusic(unsigned event,int fallback) {AUDIO_PlayBgm(AUDIO_MOD_Assignment(2,event,0,fallback));}
+
+void AUDIO_SpeakerOn(unsigned frequency) {
+#if defined(TARGET_SDL)
+    extern void AUDIO_SDL_SpeakerOn(unsigned);
+    if(s_soundEnabled) AUDIO_SDL_SpeakerOn(frequency);
+#endif
+}
+void AUDIO_SpeakerOff(void) {
+#if defined(TARGET_SDL)
+    extern void AUDIO_SDL_SpeakerOff(void);AUDIO_SDL_SpeakerOff();
+#endif
+}
+int AUDIO_SpeakerDelay(unsigned units) {
+#if defined(TARGET_SDL)
+    extern int AUDIO_SDL_SpeakerDelay(unsigned);return AUDIO_SDL_SpeakerDelay(units);
+#else
+    return -1;
+#endif
+}
