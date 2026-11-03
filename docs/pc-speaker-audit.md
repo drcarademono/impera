@@ -1,80 +1,88 @@
-# PC speaker audit
+# PC speaker timing and rendering
 
-The previous renderer was not an accurate reproduction of the original effects.
-Its unit tests checked a translation of the event arithmetic, but did not compare
-timing or the rendered PWM waveform against the original executable.
+The runtime and Workshop previews/exports share the original DOS speaker
+recipes and a common renderer. The timing reference is DOSBox 0.74-3,
+`core=simple`, `cputype=386_slow`, **cycles=1000**, 48 kHz mixer/speaker.
+This is a reproducible slower-machine profile, not a claim that DOSBox cycles
+are physical MHz or that every PC in 1988 sounded identical.
 
-Reference for this correction: DOSBox 0.74-3, `core=simple`,
-`cputype=386_slow`, `cycles=5000`, 48 kHz mixer/speaker. The original calibration
-routine returned 623 both in the isolated reference harness and in a memory
-dump of the running original game. Physical PCs and other
-DOSBox core/cycle settings can differ; this is a stable reference profile, not a
-claim of cycle-exact sound on every machine or a model of every speaker enclosure.
+## Why the previous baseline was too fast
+
+The initial audit used 5000 cycles. Its short primitive captures agreed with
+Impera, but this reproduced a fast-machine failure in the original game.
+Calibration at load-image 11b4 increments a **16-bit** counter at DS:5356
+between BIOS timer interrupts (11e5), then multiplies by 18 and divides by
+750 (1201–120b). The counter wraps at sufficiently high CPU budgets.
+
+Instrumenting the original executable's speaker writes produced:
+
+| DOSBox cycles | Calibration | Casting pulse (4480, 1, 65000, 300, 1) |
+| --- | --- | --- |
+| 500 | 219 | 5.123 seconds |
+| 1000 | 438 | 3.726 seconds |
+| 1500 | 658 | 3.347 seconds |
+| 2000 | 878 | 3.093 seconds |
+| 3000 | 1317 | 2.882 seconds |
+| 5000 | 623 (wrapped counter) | 1.016 seconds |
+
+A memory dump also confirmed calibration 623 in the running original game
+at 5000 cycles. Matching that value was insufficient evidence of intended
+slower-machine timing. The corrected baseline uses the nonwrapped 1000-cycle
+profile. The Sound Effect Speed slider remains an additional playback adjustment;
+existing saved choices still apply. Native timing changes leave the PIT tone
+frequencies intact, unlike simply resampling all audio at a lower rate.
 
 ## Original routines checked
 
-Addresses below are offsets in the original DOS executable's load image.
+Addresses are offsets in the original DOS executable's load image.
 
-- `11b4`: timer calibration, measured against BIOS ticks.
+- `11b4`: BIOS-tick CPU calibration.
 - `20c8`: calibrated delay. Tone/sweep use the full calibration.
 - `2192`: pulse/PWM. Uses calibration / 24, 16-bit wrapping phase and threshold,
   divisor 60, and both port 61h speaker bits. Pulse parameters are phase increments,
-  not frequencies in Hz. Gate transitions and average pin level matter.
-- `223c`: noise. Uses calibration >> 4 and its **own** unmasked PRNG at DS:545c,
-  initially 7664h. It must not use DS:5420, the general random state.
+  not frequencies in Hz. At 1000 cycles, DOSBox's extra I/O delay truncates to zero.
+- `223c`: noise. Uses calibration >> 4 and its own unmasked PRNG at DS:545c,
+  initially 7664h, separate from the gameplay PRNG at DS:5420.
 - `22c0` / `22e2` / `230e`: tone, speaker on, speaker off.
-- `43ae`: sweep. Keeps signed, truncated 16-bit arithmetic.
+- `433e`: two noise bursts with delay (1, 20) between them.
+- `43ae`: sweep, with signed, truncated 16-bit arithmetic.
 
-For noise (1, 5, 1000), initial state 7664h, the original writes PIT divisors
-0830h, 1132h, 04d3h, 099ch, 0578h. These were also verified by executing the
-original instructions in an isolated 16-bit emulator.
+Original speaker-write trace durations at the corrected reference:
 
-A tone (1000, 200) is approximately 50 ms in this profile; the previous renderer
-produced 10 ms. A clock pulse (3116, 1, 2000, 20000, -10) has an audible fundamental
-near 3 kHz in the DOSBox capture; the old uniform 50 us loop and bipolar carrier
-could not reproduce it. Tests now check clip duration and the audible spectrum,
-not just whether a nonzero buffer was returned.
+| Routine and arguments | Duration |
+| --- | --- |
+| Tone (1000, 200) | 175.993 ms |
+| Pulse (3116, 1, 2000, 20000, -10) | 114.427 ms |
+| Casting noise (800, 20800, 700) | 1187.408 ms |
+| Sweep (1000, 200, 5, 300) | 266.796 ms |
+
+Tests check duration, PWM spectrum, and register sequences. For noise (1, 5,
+1000), initial state 7664h, the original writes PIT divisors 0830h, 1132h,
+04d3h, 099ch, 0578h; these also match isolated execution of the original code.
 
 ## Rendering and playback
 
-The four primitives share the runtime/Workshop renderer. It uses distinct delay
-paths, a unipolar speaker pin, proper mode-3 pending counter loads at half-cycle
-boundaries, and gate restart behavior. Point sampling the gated high-frequency
-carrier aliases into the audible range, so rendering oversamples eight times,
-then uses a windowed-sinc low-pass decimator. A DC blocker models AC coupling;
-there is no invented per-effect attack/decay envelope or pitch clamp.
+The renderer uses separate delay paths, a unipolar speaker pin, mode-3 pending
+counter loads at half-cycle boundaries, and gate restart behavior. It oversamples
+eight times and uses a windowed-sinc low-pass decimator to avoid audible carrier
+aliasing. A DC blocker models AC coupling. There is no per-effect attack/decay
+envelope or pitch clamp.
 
 Consecutive calls retain fractional samples, filter history, and independent
-noise state. Runtime pacing derives from these same event durations rather than
-the previous unrelated pulse/noise/tone/sweep sleep approximations. Short
-footsteps remain asynchronous to preserve smooth movement. Direct speaker on/off
-calls, previously silent stubs, now also reach the renderer.
+noise state. Runtime waits use the same durations as rendering and account for
+the player's sound speed. Native footsteps queue their inter-click delay as
+speaker-off audio rather than pausing smooth movement. Recordings and remapped
+effects retain their existing dispatch path. Direct speaker on/off calls also
+reach the renderer.
 
-Title/subtitle reveal slots remain recording-only: there is no authored primitive
-recipe for those graphics-driver effects. This audit does not invent one.
+Title/subtitle reveal slots remain recording-only; there is no authored primitive
+recipe for those graphics-driver effects.
 
 ## Reproduce the original reference
 
 Run `scripts/speaker-reference.py --game "path/to/Ultima 5" --output /tmp/speaker-reference`,
-then DOSBox with `-conf /tmp/speaker-reference/speaker.conf`. The script builds a
-small local harness from the supplied executable/data files and runs their original
-calibration and speaker routines. Ctrl-F6 starts/stops DOSBox WAV recording.
-Generated harness files contain original game code and are not repository assets.
-
-## Sequence timing follow-up
-
-Instrumenting the original DOSBox speaker writes at the profile above measured
-49.979 ms for tone (1000, 200), 31.256 ms for pulse (3116, 1, 2000,
-20000, -10), and 75.685 ms for sweep (1000, 200, 5, 300). The long casting
-pulse (4480, 1, 65000, 300, 1) measured 1016.319 ms; casting noise
-(800, 20800, 700) measured 328.892 ms. These are close to the renderer's
-primitive durations, so they do not justify a global slowdown. Full spell
-sequences, including graphics work and waits between effects, need separate
-comparison when a discrepancy is reported.
-
-The original footstep at 433e has a calibrated delay (1, 20) between its
-two noise bursts. Smooth movement skipped this delay in native playback,
-compressing the pair. Native footsteps now queue the delay as speaker-off
-audio, preserving the sound sequence without blocking movement. Recordings
-and remapped effects keep their existing dispatch path. An audio integration
-test checks the pair duration and verifies that queuing it does not sleep.
+then DOSBox with `-conf /tmp/speaker-reference/speaker.conf`. The script builds
+local harnesses from the supplied executable/data files and executes their
+original calibration and speaker routines, including long casting effects.
+Ctrl-F6 starts/stops DOSBox WAV recording. Generated harnesses contain original
+game code and are not repository assets.

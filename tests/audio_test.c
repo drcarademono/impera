@@ -65,10 +65,10 @@ int main(void)
     size_t frames;
     uint16_t state=0;
     float* tone=PCSPK_Render(PCSPK_TONE,1000,100,0,0,0,&state,&frames);
-    assert(tone && frames>=1190 && frames<=1210); /* DOSBox-calibrated 25 ms, frequency in Hz */
+    assert(tone && frames>=4200 && frames<=4250); /* Slower-machine calibrated 88 ms, frequency in Hz */
     int transitions=0;
     for(size_t i=1;i<frames;i++) if ((tone[i]>0)!=(tone[i-1]>0)) transitions++;
-    assert(transitions>=40 && transitions<=60); /* Band-limited square wave with AC coupling. */
+    assert(transitions>=160 && transitions<=190); /* Band-limited square wave with AC coupling. */
     SDL_free(tone);
     assert(!PCSPK_Render(PCSPK_TONE,0,0,0,0,0,&state,&frames) && frames==0);
     D_a9ce=1;
@@ -115,7 +115,7 @@ int main(void)
     AUDIO_DispatchTone(1000,100); assert(queued==5);
     D_a9ce=1;
     int beforeRaw=queued;AUDIO_SpeakerOn(1200);
-    int speakerDelay=AUDIO_SpeakerDelay(20);assert(speakerDelay>=4 && speakerDelay<=6);
+    int speakerDelay=AUDIO_SpeakerDelay(20);assert(speakerDelay>=17 && speakerDelay<=19);
     AUDIO_SpeakerOff();assert(queued>beforeRaw);
     AUDIO_StopSfx(); AUDIO_StopBgm(); AUDIO_Cleanup();
     remove("Music/02 - Britannic Lands.mp3"); remove("Sound/step0.wav");
@@ -124,12 +124,12 @@ int main(void)
     size_t beforeFrames=queuedFrames;int beforeSleeps=sleepCalls;
     assert(AUDIO_PlaySpeakerFootstep());
     size_t stepFrames=queuedFrames-beforeFrames;
-    assert(stepFrames>=285 && stepFrames<=305); /* ~6.1 ms, not two adjacent ~0.55 ms clicks. */
+    assert(stepFrames>=1030 && stepFrames<=1070); /* ~22 ms, including the calibrated gap. */
     assert(sleepCalls==beforeSleeps); /* The audio gap must not pause the game thread. */
     AUDIO_SetSoundSpeed(0.5f);
     int beforeMs=sleepMs;
     AUDIO_DispatchTone(1000,200);
-    assert(sleepMs-beforeMs>=99 && sleepMs-beforeMs<=101); /* Twice the normal 50 ms. */
+    assert(sleepMs-beforeMs>=350 && sleepMs-beforeMs<=354); /* Twice the normal 176 ms. */
     AUDIO_SetSoundSpeed(1);
     AUDIO_Cleanup();
     assert(SDL_CreateDirectory("Alongside/Music"));

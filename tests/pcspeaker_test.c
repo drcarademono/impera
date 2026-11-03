@@ -59,11 +59,11 @@ int main(void) {
     PCSPK_Init(&renderer, PCSPK_NOISE_SEED);
     size_t frames;
     float *pcm = PCSPK_RenderState(&renderer, PCSPK_TONE, 1000, 200, 0, 0, 0, &frames);
-    assert(pcm && frames >= 2390 && frames <= 2410);
+    assert(pcm && frames >= 8420 && frames <= 8460);
     SDL_free(pcm);
     PCSPK_Init(&renderer, PCSPK_NOISE_SEED);
     pcm = PCSPK_RenderState(&renderer, PCSPK_NOISE, 1, 25, 1000, 0, 0, &frames);
-    assert(pcm && frames >= 24 && frames <= 30);
+    assert(pcm && frames >= 100 && frames <= 110);
     SDL_free(pcm);
     /* DOS's independent initial noise word is 0x7664. Its first PIT
      * writes are 0830,1132,04d3,099c,0578 (verified in ULTIMA.EXE). */
@@ -74,10 +74,10 @@ int main(void) {
         assert(events[i].divisor == originalNoise[i]);
     PCSPK_Init(&renderer, PCSPK_NOISE_SEED);
     pcm = PCSPK_RenderState(&renderer, PCSPK_PULSE, 3116, 1, 2000, 20000, -10, &frames);
-    assert(pcm && frames > 1300 && frames < 1600);
-    double best = 0, oldBand = 0;
+    assert(pcm && frames > 5400 && frames < 5600);
+    double best = 0, fastBand = 0;
     int peak = 0;
-    for (int hz = 800; hz <= 3500; hz += 10) {
+    for (int hz = 200; hz <= 3500; hz += 10) {
         double re = 0, im = 0;
         for (size_t i = 0; i < frames; i++) {
             double angle = 6.283185307179586 * hz * i / 48000.0;
@@ -85,15 +85,21 @@ int main(void) {
             im += pcm[i] * sin(angle);
         }
         double power = re * re + im * im;
-        if (hz <= 1100 && power > oldBand)
-            oldBand = power;
-        if (hz >= 2500 && power > best) {
+        if (hz >= 2500 && power > fastBand)
+            fastBand = power;
+        if (power > best) {
             best = power;
             peak = hz;
         }
     }
-    assert(peak >= 2850 && peak <= 3150 && best > oldBand * 10);
+    assert(peak >= 780 && peak <= 900 && best > fastBand);
     SDL_free(pcm);
+    /* Original 1000-cycle traces: full casting pulse 3.726 s, noise 1.187 s.
+     * These guard against reintroducing the fast-machine calibration wrap. */
+    double castingSeconds=PCSPK_Clocks(PCSPK_PULSE,4480,1,65000,300,1)/(double)PCSPK_CLOCK;
+    assert(castingSeconds>3.70 && castingSeconds<3.75);
+    double noiseSeconds=PCSPK_Clocks(PCSPK_NOISE,800,20800,700,0,0)/(double)PCSPK_CLOCK;
+    assert(noiseSeconds>1.17 && noiseSeconds<1.20);
     /* Consecutive small calls retain fractional samples and filter state. */
     PCSPK_Init(&renderer, PCSPK_NOISE_SEED);
     size_t total = 0;
@@ -103,7 +109,7 @@ int main(void) {
         total += frames;
         SDL_free(pcm);
     }
-    assert(total >= 3600 && total <= 3650);
+    assert(total >= 12700 && total <= 12900);
     /* Mode 3 defers a new count until the current half-cycle ends. */
     PCSPK_Init(&renderer, PCSPK_NOISE_SEED);
     renderer.count = renderer.pending = 1000;
@@ -112,7 +118,7 @@ int main(void) {
     pcm = PCSPK_RenderSpan(&renderer, 2000, 100, true, &frames);
     SDL_free(pcm);
     assert(renderer.count == 1000 && renderer.pending == 596 && renderer.phase > 100 &&
-           renderer.phase < 130);
+           renderer.phase < 230);
     pcm = PCSPK_RenderSpan(&renderer, 2000, 2000, false, &frames);
     SDL_free(pcm);
     assert(renderer.count == 596);
@@ -120,7 +126,7 @@ int main(void) {
     SDL_free(pcm);
     pcm = PCSPK_RenderSpan(&renderer, 500, 100, true, &frames);
     SDL_free(pcm);
-    assert(renderer.count == 2386 && renderer.phase < 30); /* GATE restarts pending count. */
+    assert(renderer.count == 2386 && renderer.phase < 130); /* GATE restarts pending count. */
     puts("DOS speaker event sequences passed");
     return 0;
 }

@@ -70,7 +70,7 @@ def build(game, output):
     config = f'''[cpu]
 core=simple
 cputype=386_slow
-cycles=5000
+cycles=1000
 [mixer]
 rate=48000
 [speaker]

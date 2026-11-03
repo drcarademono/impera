@@ -4,11 +4,12 @@
 #include <stddef.h>
 #include <stdint.h>
 enum { PCSPK_PULSE, PCSPK_NOISE, PCSPK_TONE, PCSPK_SWEEP };
-/* Stable reference: DOSBox 0.74, simple/386_slow, 5000 cycles. Original
- * calibration measured 623. Clock ticks describe its virtual CPU budget,
- * not a claim that an arbitrary physical PC has this exact timing. */
-#define PCSPK_CLOCK 5000000u
-#define PCSPK_CALIBRATION 623u
+/* Stable slower-machine reference: DOSBox simple/386_slow, 1000 cycles.
+ * Original calibration is 438, below its 16-bit counter overflow. The old
+ * 5000-cycle profile wrapped that counter and made effects much too short.
+ * DOSBox instruction budgets are not physical PC clock frequencies. */
+#define PCSPK_CLOCK 1000000u
+#define PCSPK_CALIBRATION 438u
 #define PCSPK_NOISE_SEED 0x7664u
 #define PCSPK_RATE 48000u
 #define PCSPK_OVERSAMPLE 8u

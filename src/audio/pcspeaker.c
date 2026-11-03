@@ -41,10 +41,10 @@ void PCSPK_Sequence(int kind, int a, int b, int c, int d, int e, uint16_t *state
             unsigned overhead = (i + 1 == iterations) ? (gate ? 12 : 13) : (gate ? 18 : 19);
             /* The original divides its calibration by 24 here, whereas
              * noise shifts by four and tone uses the full delay loop.
-             * IN/OUT 61h also consume an I/O delay in the DOSBox reference. */
+             * At the 1000-cycle reference DOSBox truncates its extra I/O delay to zero. */
             emit(context,
                  (PCSPK_Event){60, gate, i == 0, (uint16_t)b,
-                               delayClocks(PCSPK_CALIBRATION / 24, (uint16_t)b) + overhead + 8});
+                               delayClocks(PCSPK_CALIBRATION / 24, (uint16_t)b) + overhead});
             threshold = (uint16_t)(threshold + (uint16_t)e);
         }
     } else if (kind == PCSPK_SWEEP && (uint16_t)c && signedWord((uint16_t)d) > 0 && freq) {
