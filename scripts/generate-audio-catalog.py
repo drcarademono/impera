@@ -2,12 +2,12 @@
 """Generate authoring/export recipes from the engine's sound rules and DOS tables."""
 import pathlib, re
 root=pathlib.Path(__file__).resolve().parents[1]
-source=(root/'src/vars.c').read_text()
+source=(root/'src/vars.c').read_text(encoding='utf-8')
 def table(name):
     body=re.search(r'\b'+name+r'\[[^]]+\]\s*=\s*\{([^}]+)',source).group(1)
     return [int(x,0) for x in re.findall(r'-?0x[0-9a-fA-F]+|-?\d+',body)]
 rules={}
-for params,file,id,kind in re.findall(r'\{\s*\{([^{}]+)\},\s*"([^"]+)",\s*(\d+), SFX_TYPE_(\w+)\s*\}',(root/'src/audio/sfx_map.h').read_text()):
+for params,file,id,kind in re.findall(r'\{\s*\{([^{}]+)\},\s*"([^"]+)",\s*(\d+), SFX_TYPE_(\w+)\s*\}',(root/'src/audio/sfx_map.h').read_text(encoding='utf-8')):
     rules.setdefault(int(id),(file,kind,[int(x) for x in params.split(',')]))
 names={'chime':'Clock chime','blackapp':'Blackthorn apparition','sceptuse':'Sceptre activation','shadowin':'Shadowlord arrival','gatein':'Gate arrival','endmoon':'Moonstone removal','spiritin':'Spirit apparition','air':'Air spell','watrfall':'Waterfall','regurgit':'Regurgitation','introhit':'Introduction impact','shiphit':'Ship impact','tickhigh':'Clock tick (high)','ticklow':'Clock tick (low)','denyhi':'Denied (high)','denylo':'Denied (low)','foefire':'Enemy fire','trapfall':'Trapdoor fall','gemshard':'Gem / shard','shrine1':'Shrine ritual (rising)','shrine2':'Shrine ritual (falling)','mirror':'Mirror breaking','shake':'Earthquake','title1':'Title reveal','title2':'Subtitle reveal'}
 names.update({'step0':'Footstep (first)', 'step1':'Footstep (second)', 'dunstep0':'Dungeon footstep 1', 'dunstep1':'Dungeon footstep 2', 'dunstep2':'Dungeon footstep 3', 'dunstep3':'Dungeon footstep 4', 'shop0':'Shop confirmation 1', 'shop1':'Shop confirmation 2', 'shop2':'Shop confirmation 3', 'victory1':'Victory phrase 1', 'victory2':'Victory phrase 2', 'burst1':'Burst (short)', 'burst2':'Burst (long)'})
@@ -16,8 +16,9 @@ uses={}
 functions={'PULSE':'ULTIMA_2192_AudioPulse','NOISE':'ULTIMA_223c_AudioWhiteNoise','TONE':'ULTIMA_22c0_AudioTone','SWEEP':'ULTIMA_43ae_AudioSweepTone'}
 for id,(_,kind,p) in rules.items():
     found=[]
-    for path in (root/'src').glob('*.c'):
-        for args in re.findall(r'\b'+functions.get(kind,'__none__')+r'\(([^()]*)\)',path.read_text()):
+    # Filesystem enumeration differs between platforms and fresh checkouts.
+    for path in sorted((root/'src').glob('*.c')):
+        for args in re.findall(r'\b'+functions.get(kind,'__none__')+r'\(([^()]*)\)',path.read_text(encoding='utf-8')):
             try: values=[int(x.strip(),0) for x in args.split(',')]
             except ValueError: continue
             if values==p[:len(values)]: found.append(contexts.get(path.name,path.stem))
@@ -52,5 +53,5 @@ lines+=['static const AudioRecipe audioRecipes[] = {']+['    {'+str(k)+',{'+','.
 out='\n'.join(lines)
 path=root/'src/audio/audio_catalog.h'
 if '--check' in __import__('sys').argv:
-    if path.read_text()!=out: raise SystemExit('Audio catalog stale; run scripts/generate-audio-catalog.py')
-else:path.write_text(out)
+    if path.read_text(encoding='utf-8')!=out: raise SystemExit('Audio catalog stale; run scripts/generate-audio-catalog.py')
+else:path.write_text(out, encoding='utf-8', newline='\n')
