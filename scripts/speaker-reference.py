@@ -23,6 +23,9 @@ def build(game, output):
     effects = [('TONE', 0x22c0, [1000, 200]),
                ('PULSE', 0x2192, [3116, 1, 2000, 20000, -10]),
                ('STEP', 0x223c, [1, 25, 1000]),
+               ('FOOTSTEP', 0x433e, []),
+               ('SPELL', 0x2192, [0x1180, 1, 65000, 300, 1]),
+               ('CASTNOIS', 0x223c, [800, 20800, 700]),
                ('SWEEP', 0x43ae, [1000, 200, 5, 300])]
     for name, address, arguments in effects:
         image = bytearray(0x30000)
@@ -83,6 +86,9 @@ pause
 TONE.EXE
 PULSE.EXE
 STEP.EXE
+FOOTSTEP.EXE
+SPELL.EXE
+CASTNOIS.EXE
 SWEEP.EXE
 echo Stop WAV capture with Ctrl-F6. CALIB.BIN contains the measured delay calibration.
 '''

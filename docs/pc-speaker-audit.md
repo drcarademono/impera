@@ -6,7 +6,8 @@ timing or the rendered PWM waveform against the original executable.
 
 Reference for this correction: DOSBox 0.74-3, `core=simple`,
 `cputype=386_slow`, `cycles=5000`, 48 kHz mixer/speaker. The original calibration
-routine returned 623 in the isolated reference harness. Physical PCs and other
+routine returned 623 both in the isolated reference harness and in a memory
+dump of the running original game. Physical PCs and other
 DOSBox core/cycle settings can differ; this is a stable reference profile, not a
 claim of cycle-exact sound on every machine or a model of every speaker enclosure.
 
@@ -59,3 +60,21 @@ then DOSBox with `-conf /tmp/speaker-reference/speaker.conf`. The script builds 
 small local harness from the supplied executable/data files and runs their original
 calibration and speaker routines. Ctrl-F6 starts/stops DOSBox WAV recording.
 Generated harness files contain original game code and are not repository assets.
+
+## Sequence timing follow-up
+
+Instrumenting the original DOSBox speaker writes at the profile above measured
+49.979 ms for tone (1000, 200), 31.256 ms for pulse (3116, 1, 2000,
+20000, -10), and 75.685 ms for sweep (1000, 200, 5, 300). The long casting
+pulse (4480, 1, 65000, 300, 1) measured 1016.319 ms; casting noise
+(800, 20800, 700) measured 328.892 ms. These are close to the renderer's
+primitive durations, so they do not justify a global slowdown. Full spell
+sequences, including graphics work and waits between effects, need separate
+comparison when a discrepancy is reported.
+
+The original footstep at 433e has a calibrated delay (1, 20) between its
+two noise bursts. Smooth movement skipped this delay in native playback,
+compressing the pair. Native footsteps now queue the delay as speaker-off
+audio, preserving the sound sequence without blocking movement. Recordings
+and remapped effects keep their existing dispatch path. An audio integration
+test checks the pair duration and verifies that queuing it does not sleep.

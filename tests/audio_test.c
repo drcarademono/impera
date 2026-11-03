@@ -12,7 +12,10 @@
 #include "vars.h"
 #include "key/key.h"
 
-static int queued, assigned;
+static int queued, assigned, sleepCalls;
+static size_t queuedFrames;
+void __real_TIME_SleepMs(int);
+void __wrap_TIME_SleepMs(int ms) {sleepCalls++;__real_TIME_SleepMs(ms);}
 const char* __wrap_SDL_GetBasePath(void) { return "Alongside/"; }
 bool __real_SDL_PutAudioStreamData(SDL_AudioStream*,const void*,int);
 bool __wrap_SDL_PutAudioStreamData(SDL_AudioStream* stream,const void* data,int len)
@@ -30,6 +33,7 @@ bool __wrap_SDL_PutAudioStreamData(SDL_AudioStream* stream,const void* data,int 
         audible |= fabsf(pcm[i])>0.01f;
     }
     assert(audible || len<8*(int)sizeof(float)); /* A short raw span may contain only filter startup. */
+    queuedFrames+=len/sizeof(float);
     queued++;
     return __real_SDL_PutAudioStreamData(stream,data,len);
 }
@@ -67,6 +71,7 @@ int main(void)
     wave("Sound/step0.wav");
     AUDIO_Initialize();
     assert(AUDIO_HasSfx(73) && !AUDIO_HasSfx(74));
+    assert(!AUDIO_PlaySpeakerFootstep()); /* Keep recordings on the override path. */
     AUDIO_PlayBgm(2); assert(assigned==1); /* descriptive numbered music filename */
     AUDIO_SetMusicEnabled(0);AUDIO_PlayBgm(2);assert(assigned==1);
     AUDIO_SetMusicEnabled(1);assert(assigned==2); /* resume requested music */
@@ -104,6 +109,13 @@ int main(void)
     AUDIO_StopSfx(); AUDIO_StopBgm(); AUDIO_Cleanup();
     remove("Music/02 - Britannic Lands.mp3"); remove("Sound/step0.wav");
     assert(SDL_RemovePath("Music")); assert(SDL_RemovePath("Sound"));
+    AUDIO_Initialize();
+    size_t beforeFrames=queuedFrames;int beforeSleeps=sleepCalls;
+    assert(AUDIO_PlaySpeakerFootstep());
+    size_t stepFrames=queuedFrames-beforeFrames;
+    assert(stepFrames>=285 && stepFrames<=305); /* ~6.1 ms, not two adjacent ~0.55 ms clicks. */
+    assert(sleepCalls==beforeSleeps); /* The audio gap must not pause the game thread. */
+    AUDIO_Cleanup();
     assert(SDL_CreateDirectory("Alongside/Music"));
     assert(SDL_CreateDirectory("Alongside/Sound"));
     wave("Alongside/Music/06 - Greyson's Tale.mp3");

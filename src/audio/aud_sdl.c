@@ -400,6 +400,24 @@ int AUDIO_SDL_SpeakerDelay(unsigned units) {
     rawSpan(clocks);Uint64 ns=clocks*1000000000u/PCSPK_CLOCK;
     s_rawSince=SDL_GetTicksNS()+ns;return (int)((ns+999999u)/1000000u);
 }
+int AUDIO_SDL_PlaySpeakerFootstep(void) {
+    if(s_audioRevision!=MOD_Revision())AUDIO_SDL_ReloadMusic();
+    /* Retain authored/external replacements and their existing playback path. */
+    if(s_sfx[73] || s_sfx[74] || AUDIO_MOD_Assignment(4,73,0,73)!=73 ||
+       AUDIO_MOD_Assignment(4,74,0,74)!=74)return 0;
+    if(!s_synthStream)return 1;
+    AUDIO_SDL_PlaySfx(73);
+    /* DOS 433e calls SomeDelay(1,20) BETWEEN the two noise bursts.
+     * This belongs in the sound timeline, independently of movement pacing. */
+    size_t frames;float *gap=PCSPK_RenderSpan(&s_speakerState,0,
+        PCSPK_Clocks(PCSPK_TONE,1,20,0,0,0),false,&frames);
+    if(gap){
+        if(!SDL_PutAudioStreamData(s_synthStream,gap,(int)(frames*sizeof(float))))PrintError();
+        SDL_free(gap);
+    }
+    AUDIO_SDL_PlaySfx(74);
+    return 1;
+}
 static void AUDIO_SDL_PlaySynthPulse(int freq,int delay,int dur,int width,int inc)
 { PlaySpeaker(PCSPK_PULSE,freq,delay,dur,width,inc); }
 static void AUDIO_SDL_PlaySynthNoise(int rate,int dur,int limit)

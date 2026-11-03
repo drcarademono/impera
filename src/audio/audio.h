@@ -38,6 +38,8 @@ extern void AUDIO_StopBgm(void);
 
 extern void AUDIO_PlaySfx(int id);
 int AUDIO_HasSfx(int id);
+/* Queue the native two-click footstep, including its delay; false for overrides. */
+int AUDIO_PlaySpeakerFootstep(void);
 extern void AUDIO_PlayTitle1Sfx(void);
 extern void AUDIO_PlayTitle2Sfx(void);
 extern void AUDIO_StopSfx(void);

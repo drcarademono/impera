@@ -209,3 +209,13 @@ int AUDIO_SpeakerDelay(unsigned units) {
     return -1;
 #endif
 }
+
+int AUDIO_PlaySpeakerFootstep(void) {
+#if defined(TARGET_SDL)
+    extern int AUDIO_SDL_PlaySpeakerFootstep(void);
+    if(!s_soundEnabled || !D_a9ce)return 1;
+    return AUDIO_SDL_PlaySpeakerFootstep();
+#else
+    return 0;
+#endif
+}
