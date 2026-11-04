@@ -312,7 +312,6 @@ static void drawMods(void) {
             ENGINE_UIRect(300,modTextThumbTop(),4,modTextThumbHeight(),15);
         }
         modButton(16,178,64,"Back");
-        ENGINE_UIText(120,180,"Space: On/Off",7);
     } else {
         if (s_modSelected < s_modTop) s_modTop = s_modSelected;
         int rows=modListRows();
@@ -336,7 +335,6 @@ static void drawMods(void) {
         clearModImage();
         char range[40]; SDL_snprintf(range,sizeof(range),"%d-%d of %u",s_modTop+1,SDL_min((int)count,s_modTop+rows),count);
         ENGINE_UIText(16,158,range,7);
-        ENGINE_UIText(16, 170, "Space: On/Off  Enter: Details", 7);
         ENGINE_UIText(16, 180, "Return", 15);
     }
     const char *status = optionStatus ? optionStatus : MOD_ChangesPending() ? "Restart Impera to apply changes" : *info->error ? "Mod could not load: see details" : NULL;
