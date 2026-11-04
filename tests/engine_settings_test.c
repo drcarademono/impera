@@ -89,10 +89,11 @@ static Uint32 listCaseInput(void *data,SDL_TimerID timer,Uint32 interval) {
     switch(listCaseStep++) {
     case 0:clickUI(260,28);key(SDLK_HOME);break;
     case 1:
-        if(!listCaseCount) {expectUIText(16,64,"No mods in the Mods folder",7,0);expectUIText(16,180,"Return",15,0);key(SDLK_ESCAPE);return 0;}
+        if(!listCaseCount) {expectUIText(16,64,"No mods in the Mods folder",7,0);expectUIText(24,180,"Return to Game",15,0);hoverUI(250,184);break;}
         expectRange(0);
         key(SDLK_END);break;
     case 2: {
+        if(!listCaseCount) {expectUIText(24,180,"Return to Game",0,15);key(SDLK_RETURN);return 0;}
         expectRange(tail);
         const char *path=getenv("IMPERA_MODS_LIST_SCREENSHOT");
         if(path && listCaseCount==24) {SDL_Surface *shot=GRAP_SDL_CaptureFrame();assert(shot);assert(SDL_SavePNG(shot,path));SDL_DestroySurface(shot);}
@@ -126,7 +127,8 @@ static Uint32 listCaseInput(void *data,SDL_TimerID timer,Uint32 interval) {
         for(int i=0;i<7;i++) {SDL_Event wheel={0};wheel.type=SDL_EVENT_MOUSE_WHEEL;wheel.wheel.y=-1;assert(SDL_PushEvent(&wheel));}
         break;
     }
-    case 12:expectRange(0);clickUI(48,184);return 0;
+    case 12:expectRange(0);key(SDLK_HOME);key(SDLK_UP);break;
+    case 13:expectUIText(24,180,"Return to Game",0,15);key(SDLK_RETURN);return 0;
     }
     return interval;
 }
