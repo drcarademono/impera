@@ -482,7 +482,12 @@ without parameter tuples require their WAV recordings.
 Waterfall and fountain WAV overrides play continuously on separate ambience tracks
 while the source is nearby. Repeated map updates do not restart the clip; changing
 or leaving the source fades it out. Loop boundaries use a short tail/head crossfade.
-Other recorded effects have brief transition fades and do not interrupt ambience.
+Clock ticks/chimes, lute and harpsichord notes, and dungeon drips have separate,
+bounded one-shot voices so foreground effects do not cut off their tails. They
+retain their original trigger rhythm instead of looping. All recorded effects
+receive short start/end ramps as well as transition fades, reducing boundary
+clicks without changing clip length. Dungeon drips select their matching WAV
+variant when available. See [the playback audit](docs/audio-playback-audit.md).
 The same recording still plays once when triggered outside the ambient context.
 Sound Volume, Sound Effect Speed, and muting apply to ambience as well.
 

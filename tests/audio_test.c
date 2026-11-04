@@ -61,17 +61,23 @@ bool __real_MIX_SetTrackAudio(MIX_Track*,MIX_Audio*);
 bool __wrap_MIX_SetTrackAudio(MIX_Track* track,MIX_Audio* audio)
 { if(audio) {if(!assigned)musicTrack=track;assigned++;lastAssigned=track;lastAudio=audio;} return __real_MIX_SetTrackAudio(track,audio); }
 
-static void wave(const char* path)
+static void waveFrames(const char* path,int frames)
 {
     /* Small real WAV fixture; SDL detects the format from its contents. */
-    const unsigned char header[]={
+    unsigned char header[]={
         'R','I','F','F',36+96,0,0,0,'W','A','V','E','f','m','t',' ',16,0,0,0,
         1,0,1,0,0x80,0xbb,0,0,0,0x77,1,0,2,0,16,0,'d','a','t','a',96,0,0,0};
+    for(int i=0;i<4;i++) {
+        header[4+i]=(unsigned char)((36+frames*2)>>(8*i));
+        header[40+i]=(unsigned char)((frames*2)>>(8*i));
+    }
     FILE* f=fopen(path,"wb"); assert(f);
     assert(fwrite(header,1,sizeof(header),f)==sizeof(header));
-    for(int i=0;i<48;i++) { unsigned char sample[]={0,(unsigned char)(i%2?32:224)}; fwrite(sample,1,2,f); }
+    for(int i=0;i<frames;i++) { unsigned char sample[]={0,(unsigned char)(i%2?32:224)}; fwrite(sample,1,2,f); }
     fclose(f);
 }
+
+static void wave(const char* path) {waveFrames(path,48);}
 
 int main(void)
 {
@@ -94,7 +100,7 @@ int main(void)
     assert(!AUDIO_UpdateAmbience(71)); /* Missing WAV keeps the native speaker path. */
     int beforeSpeedTracks=speedTracks;
     AUDIO_SetSoundSpeed(0.5f);
-    assert(speedTracks==beforeSpeedTracks+5); /* Synth, recordings/tail, and two ambience tracks; never music. */
+    assert(speedTracks==beforeSpeedTracks+8); /* Every effect/ambience/note voice; never music. */
     AUDIO_SetSoundSpeed(1);
     assert(!AUDIO_PlaySpeakerFootstep()); /* Keep recordings on the override path. */
     AUDIO_PlayBgm(2); assert(assigned==1);
@@ -203,7 +209,22 @@ int main(void)
         assert(!fseek(stereo,22,SEEK_SET));assert(fwrite(format,1,sizeof(format),stereo)==sizeof(format));
         assert(!fclose(stereo));
     }
+    const char *accents[]={"chime","lute0","drip0","drip1","drip2"};
+    for(int i=0;i<5;i++){char path[80];SDL_snprintf(path,sizeof(path),"Sound/%s.wav",accents[i]);waveFrames(path,48000);}
     AUDIO_Initialize();
+    AUDIO_PlaySfx(1);MIX_Track *clock=lastAssigned;
+    AUDIO_PlaySfx(71);assert(lastAssigned!=clock && MIX_TrackPlaying(clock));
+    AUDIO_PlaySfx(30);MIX_Track *note=lastAssigned;
+    assert(note!=clock && MIX_TrackPlaying(clock));
+    AUDIO_PlaySfx(71);assert(lastAssigned!=note && lastAssigned!=clock && MIX_TrackPlaying(note));
+    AUDIO_SetSoundVolume(0.4f);AUDIO_SetSoundSpeed(0.75f);
+    assert(fabsf(MIX_GetTrackGain(note)-0.08f)<0.0001f && MIX_GetTrackFrequencyRatio(note)==0.75f);
+    int notePlays=plays;AUDIO_PlaySfx(30);assert(plays==notePlays+1 && lastAssigned!=note); /* Retrigger actual notes. */
+    AUDIO_SetSoundVolume(1);AUDIO_SetSoundSpeed(1);
+    AUDIO_DispatchSweepTone(3200,3500,1,12);MIX_Audio *drip=lastAudio;
+    AUDIO_PlaySfx(106);assert(lastAudio==drip);
+    AUDIO_DispatchSweepTone(3200,3500,1,4);drip=lastAudio;
+    AUDIO_PlaySfx(107);assert(lastAudio==drip); /* Select the proper recording variant. */
     assert(AUDIO_UpdateAmbience(71));
     MIX_Track *ambient=lastAssigned;MIX_Audio *loop=lastAudio;
     int beforePlays=plays,beforeAssigned=assigned;
@@ -230,7 +251,12 @@ int main(void)
     AUDIO_SetSoundEnabled(1);assert(AUDIO_UpdateAmbience(72));
     AUDIO_UpdateAmbience(0);SDL_Delay(120);assert(!MIX_TrackPlaying(lastAssigned));
     AUDIO_SetSoundVolume(1);AUDIO_SetSoundSpeed(1);AUDIO_Cleanup();
+    for(int i=0;i<5;i++){char path[80];SDL_snprintf(path,sizeof(path),"Sound/%s.wav",accents[i]);remove(path);}
     remove("Sound/watrfall.wav");remove("Sound/fountain.wav");assert(SDL_RemovePath("Sound"));
+    float edges[400];for(int i=0;i<200;i++){edges[i*2]=0.75f;edges[i*2+1]=-0.5f;}
+    AUDIO_FadeRecordingEdges(edges,200,2,48000);
+    assert(edges[0]==0 && edges[1]==0 && edges[398]==0 && edges[399]==0);
+    assert(edges[200]==0.75f && edges[201]==-0.5f); /* Keep the body and duration intact. */
     /* A 50 ms overlap joins adjacent head samples at the seam, in both channels. */
     float seam[400];
     for(int i=0;i<200;i++){seam[i*2]=i/200.0f;seam[i*2+1]=-seam[i*2];}

@@ -21,3 +21,21 @@ size_t AUDIO_CrossfadeLoop(float *pcm, size_t frames, int channels,
           (frames - overlap) * channels * sizeof(float));
   return frames - overlap;
 }
+
+void AUDIO_FadeRecordingEdges(float *pcm, size_t frames, int channels,
+                              unsigned rate) {
+  if (!pcm || channels < 1)
+    return;
+  size_t ramp = rate / 500;
+  if (ramp > frames / 4)
+    ramp = frames / 4;
+  if (ramp < 2)
+    return;
+  for (size_t i = 0; i < ramp; i++) {
+    float gain = (float)i / (ramp - 1);
+    for (int c = 0; c < channels; c++) {
+      pcm[i * channels + c] *= gain;
+      pcm[(frames - 1 - i) * channels + c] *= gain;
+    }
+  }
+}
