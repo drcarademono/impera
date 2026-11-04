@@ -37,6 +37,8 @@ extern void AUDIO_QueueBgm(int id);
 extern void AUDIO_StopBgm(void);
 
 extern void AUDIO_PlaySfx(int id);
+/* Returns true when recorded ambience handles this contextual water effect. */
+int AUDIO_UpdateAmbience(int id);
 int AUDIO_HasSfx(int id);
 /* Queue the native two-click footstep, including its delay; false for overrides. */
 int AUDIO_PlaySpeakerFootstep(void);

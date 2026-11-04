@@ -479,6 +479,13 @@ pulses gate the divisor-60 carrier using wrapping 16-bit accumulators and
 thresholds. Sweeps retain DOS signed 16-bit arithmetic and integer division.
 `sfx_map.h` remains the authoritative effect parameter table. Title effects
 without parameter tuples require their WAV recordings.
+Waterfall and fountain WAV overrides play continuously on separate ambience tracks
+while the source is nearby. Repeated map updates do not restart the clip; changing
+or leaving the source fades it out. Loop boundaries use a short tail/head crossfade.
+Other recorded effects have brief transition fades and do not interrupt ambience.
+The same recording still plays once when triggered outside the ambient context.
+Sound Volume, Sound Effect Speed, and muting apply to ambience as well.
+
 
 Speaker timing uses the audited DOSBox simple/386_slow/5000-cycle reference:
 tone/sweep use the full calibrated delay, noise uses calibration >> 4, and PWM

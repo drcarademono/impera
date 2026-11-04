@@ -7,8 +7,10 @@
 #include "common/common.h"
 #include "audio/audio.h"
 #include "common/data_setup.h"
+#include "common/file.h"
 #include "audio/aud_sfx.h"
 #include "audio/pcspeaker.h"
+#include "audio/ambient_loop.h"
 #include "vars.h"
 #include "key/key.h"
 #include "4000.h"
@@ -18,6 +20,13 @@ static int queued, assigned, sleepCalls, sleepMs;
 static size_t queuedFrames;
 static int speedTracks;
 static MIX_Track *effectTracks[2], *musicTrack;
+static MIX_Track *lastAssigned;
+static MIX_Audio *lastAudio;
+static int plays;
+bool __real_MIX_PlayTrack(MIX_Track*,SDL_PropertiesID);
+bool __wrap_MIX_PlayTrack(MIX_Track *track,SDL_PropertiesID options) {
+    plays++;return __real_MIX_PlayTrack(track,options);
+}
 bool __real_MIX_SetTrackFrequencyRatio(MIX_Track*,float);
 bool __wrap_MIX_SetTrackFrequencyRatio(MIX_Track* track,float ratio) {
     assert(ratio==AUDIO_SoundSpeed());
@@ -50,7 +59,7 @@ bool __wrap_SDL_PutAudioStreamData(SDL_AudioStream* stream,const void* data,int 
 }
 bool __real_MIX_SetTrackAudio(MIX_Track*,MIX_Audio*);
 bool __wrap_MIX_SetTrackAudio(MIX_Track* track,MIX_Audio* audio)
-{ if(audio) {if(!assigned)musicTrack=track;assigned++;} return __real_MIX_SetTrackAudio(track,audio); }
+{ if(audio) {if(!assigned)musicTrack=track;assigned++;lastAssigned=track;lastAudio=audio;} return __real_MIX_SetTrackAudio(track,audio); }
 
 static void wave(const char* path)
 {
@@ -82,9 +91,10 @@ int main(void)
     wave("Sound/step0.wav");
     AUDIO_Initialize();
     assert(AUDIO_HasSfx(73) && !AUDIO_HasSfx(74));
+    assert(!AUDIO_UpdateAmbience(71)); /* Missing WAV keeps the native speaker path. */
     int beforeSpeedTracks=speedTracks;
     AUDIO_SetSoundSpeed(0.5f);
-    assert(speedTracks==beforeSpeedTracks+2); /* Synth and recordings; never music. */
+    assert(speedTracks==beforeSpeedTracks+5); /* Synth, recordings/tail, and two ambience tracks; never music. */
     AUDIO_SetSoundSpeed(1);
     assert(!AUDIO_PlaySpeakerFootstep()); /* Keep recordings on the override path. */
     AUDIO_PlayBgm(2); assert(assigned==1);
@@ -178,6 +188,55 @@ int main(void)
     assert(SDL_RemovePath("SelectedMusic"));remove("DATA.CFG");
     remove("Alongside/Music/06 - Greyson's Tale.mp3");
     remove("Alongside/Sound/step1.wav");
+    assert(SDL_CreateDirectory("Sound"));
+    const char *water=getenv("IMPERA_TEST_WATERFALL"), *fountain=getenv("IMPERA_TEST_FOUNTAIN");
+    if(water && fountain) {
+        size_t bytes;void *file=SDL_LoadFile(water,&bytes);assert(file);
+        assert(SDL_SaveFile("Sound/watrfall.wav",file,bytes));SDL_free(file);
+        file=SDL_LoadFile(fountain,&bytes);assert(file);
+        assert(SDL_SaveFile("Sound/fountain.wav",file,bytes));SDL_free(file);
+    } else {
+        wave("Sound/watrfall.wav");wave("Sound/fountain.wav");
+        /* Also exercise decoding/resampling of a 44.1 kHz stereo override. */
+        FILE *stereo=fopen("Sound/fountain.wav","r+b");assert(stereo);
+        const unsigned char format[]={2,0,0x44,0xac,0,0,0x10,0xb1,2,0,4,0};
+        assert(!fseek(stereo,22,SEEK_SET));assert(fwrite(format,1,sizeof(format),stereo)==sizeof(format));
+        assert(!fclose(stereo));
+    }
+    AUDIO_Initialize();
+    assert(AUDIO_UpdateAmbience(71));
+    MIX_Track *ambient=lastAssigned;MIX_Audio *loop=lastAudio;
+    int beforePlays=plays,beforeAssigned=assigned;
+    SDL_Delay(30);
+    for(int i=0;i<50;i++)assert(AUDIO_UpdateAmbience(71));
+    assert(plays==beforePlays && assigned==beforeAssigned); /* Repeated updates never restart. */
+    assert(MIX_TrackPlaying(ambient));
+    AUDIO_PlaySfx(71); /* The same recording is a one-shot outside ambient context. */
+    assert(lastAssigned!=ambient && lastAudio!=loop && MIX_TrackPlaying(ambient));
+    AUDIO_SetSoundVolume(0.37f);AUDIO_SetSoundSpeed(0.75f);
+    assert(fabsf(MIX_GetTrackGain(ambient)-0.2f*0.37f)<0.0001f);
+    assert(MIX_GetTrackFrequencyRatio(ambient)==0.75f);
+    assert(AUDIO_UpdateAmbience(72));
+    assert(lastAssigned!=ambient && MIX_TrackPlaying(lastAssigned));
+    assert(MIX_TrackPlaying(ambient)); /* Old source remains during the crossfade. */
+    SDL_Delay(120);assert(!MIX_TrackPlaying(ambient));
+    ambient=lastAssigned;
+    beforeAssigned=assigned;
+    AUDIO_ReloadMusic();assert(MIX_TrackPlaying(ambient) && assigned==beforeAssigned);
+    FILE_ReloadMods(); /* New mod revision must invalidate both raw and looped audio. */
+    assert(AUDIO_UpdateAmbience(72) && assigned>beforeAssigned);
+    ambient=lastAssigned;
+    AUDIO_SetSoundEnabled(0);SDL_Delay(120);assert(!MIX_TrackPlaying(ambient));
+    AUDIO_SetSoundEnabled(1);assert(AUDIO_UpdateAmbience(72));
+    AUDIO_UpdateAmbience(0);SDL_Delay(120);assert(!MIX_TrackPlaying(lastAssigned));
+    AUDIO_SetSoundVolume(1);AUDIO_SetSoundSpeed(1);AUDIO_Cleanup();
+    remove("Sound/watrfall.wav");remove("Sound/fountain.wav");assert(SDL_RemovePath("Sound"));
+    /* A 50 ms overlap joins adjacent head samples at the seam, in both channels. */
+    float seam[400];
+    for(int i=0;i<200;i++){seam[i*2]=i/200.0f;seam[i*2+1]=-seam[i*2];}
+    assert(AUDIO_CrossfadeLoop(seam,200,2,1000)==150);
+    assert(fabsf(seam[298]-seam[0])<0.006f && fabsf(seam[299]-seam[1])<0.006f);
+    for(int i=0;i<300;i++)assert(fabsf(seam[i])<=1);
     SDL_Quit();
     puts("External music, WAV overrides, and speaker fallback passed");
     return 0;

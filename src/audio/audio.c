@@ -248,3 +248,15 @@ int AUDIO_PlaySpeakerFootstep(void) {
     return 0;
 #endif
 }
+
+int AUDIO_UpdateAmbience(int id) {
+#if defined(TARGET_SDL)
+    extern int AUDIO_SDL_UpdateAmbience(int);
+    unsigned mapped=id?AUDIO_MOD_Assignment(4,id,0,id):0;
+    if(!s_soundEnabled || !D_a9ce)mapped=0;
+    int handled=AUDIO_SDL_UpdateAmbience((int)mapped);
+    return !mapped || handled;
+#else
+    (void)id;return 0;
+#endif
+}

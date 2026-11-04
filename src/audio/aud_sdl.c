@@ -8,6 +8,9 @@
 #include "aud_ops.h"
 #include "sfx_map.h"
 #include "pcspeaker.h"
+#include "ambient_loop.h"
+#include <limits.h>
+#include <math.h>
 #include "audio_catalog.h"
 #include "mod_audio.h"
 #include "mod/runtime.h"
@@ -24,6 +27,12 @@ static MIX_Mixer* s_mixer;
 static MIX_Track* s_bgmTrack;
 static MIX_Track* s_sfxTrack;
 static MIX_Track* s_synthTrack;
+static MIX_Track* s_sfxTail;
+static float s_tailGain=1.0f;
+static MIX_Track* s_ambient[2];
+static float s_ambientGain[2];
+static int s_ambientId,s_ambientSlot;
+static MIX_Audio* s_ambientLoops[4096];
 static SDL_AudioStream* s_synthStream;
 static float s_speakerGain=1.0f, s_recordingGain=1.0f, s_activeSpeakerGain=1.0f;
 static PCSPK_State s_speakerState;
@@ -45,6 +54,15 @@ static int s_queuedBgmId;
 static void AUDIO_SDL_LoadBgmTable(void);
 static void AUDIO_SDL_LoadSfxTable(void);
 static void PlaySpeaker(int kind,int a,int b,int c,int d,int e);
+static void stopAmbience(int milliseconds) {
+    s_ambientId=0;
+    for(int i=0;i<2;i++)if(s_ambient[i])MIX_StopTrack(s_ambient[i],MIX_MSToFrames(s_mixerSpec.freq,milliseconds));
+}
+static void clearAmbientLoops(void) {
+    stopAmbience(0);
+    for(int i=0;i<2;i++)if(s_ambient[i])MIX_SetTrackAudio(s_ambient[i],NULL);
+    for(int i=0;i<4096;i++){MIX_DestroyAudio(s_ambientLoops[i]);s_ambientLoops[i]=NULL;}
+}
 static bool ResolveAudioPath(const char* name,char* resolved,size_t capacity)
 {
     if(FILE_NameEqual(name,"Music") && *SETUP_MusicDirectory())
@@ -64,7 +82,9 @@ static MIX_Audio* AUDIO_SDL_LoadAudio(const char* fileName, bool predecode)
         SDL_SetError("Cannot resolve audio file '%s': %s", fileName, strerror(errno));
         return NULL;
     }
-    return MIX_LoadAudio(s_mixer, resolved, predecode);
+    MIX_Audio *audio=MIX_LoadAudio(s_mixer, resolved, predecode);
+    if(audio)SDL_SetStringProperty(MIX_GetAudioProperties(audio),"impera.source",resolved);
+    return audio;
 }
 static void AUDIO_SDL_PlayBgmSub(int id);
 static void SDLCALL AUDIO_SDL_OnBgmStopped(void* userdata, MIX_Track* track);
@@ -83,10 +103,14 @@ void AUDIO_SDL_ApplyVolumes(void) {
         (s_currentBgmId>0 && s_currentBgmId<4096?s_bgmSettings[s_currentBgmId].gain/100.0f:1.0f));
     if(s_sfxTrack)MIX_SetTrackGain(s_sfxTrack,0.2f*AUDIO_SoundVolume()*s_recordingGain);
     if(s_synthTrack)MIX_SetTrackGain(s_synthTrack,0.2f*AUDIO_SoundVolume()*s_activeSpeakerGain);
+    if(s_sfxTail)MIX_SetTrackGain(s_sfxTail,0.2f*AUDIO_SoundVolume()*s_tailGain);
+    for(int i=0;i<2;i++)if(s_ambient[i])MIX_SetTrackGain(s_ambient[i],0.2f*AUDIO_SoundVolume()*s_ambientGain[i]);
 }
 void AUDIO_SDL_SetSoundSpeed(float speed) {
     if(s_sfxTrack)MIX_SetTrackFrequencyRatio(s_sfxTrack,speed);
     if(s_synthTrack)MIX_SetTrackFrequencyRatio(s_synthTrack,speed);
+    if(s_sfxTail)MIX_SetTrackFrequencyRatio(s_sfxTail,speed);
+    for(int i=0;i<2;i++)if(s_ambient[i])MIX_SetTrackFrequencyRatio(s_ambient[i],speed);
 }
 
 static void AUDIO_SDL_Init(void)
@@ -103,6 +127,9 @@ static void AUDIO_SDL_Init(void)
     s_bgmTrack = MIX_CreateTrack(s_mixer);
     s_sfxTrack = MIX_CreateTrack(s_mixer);
     s_synthTrack = MIX_CreateTrack(s_mixer);
+    s_sfxTail=MIX_CreateTrack(s_mixer);s_tailGain=1;
+    s_ambientId=s_ambientSlot=0;
+    for(int i=0;i<2;i++){s_ambient[i]=MIX_CreateTrack(s_mixer);s_ambientGain[i]=1;}
     AUDIO_SDL_SetSoundSpeed(AUDIO_SoundSpeed());
     SDL_AudioSpec spec = { SDL_AUDIO_F32, 1, 48000 };
     s_synthStream = SDL_CreateAudioStream(&spec, &spec);
@@ -131,6 +158,9 @@ static void AUDIO_SDL_Cleanup(void)
     MIX_DestroyTrack(s_bgmTrack);
     MIX_DestroyTrack(s_sfxTrack);
     MIX_DestroyTrack(s_synthTrack);
+    MIX_DestroyTrack(s_sfxTail);s_sfxTail=NULL;
+    clearAmbientLoops();
+    for(int i=0;i<2;i++){MIX_DestroyTrack(s_ambient[i]);s_ambient[i]=NULL;}
     SDL_DestroyAudioStream(s_synthStream);
     for (int i=0;i<4096;i++) { MIX_DestroyAudio(s_bgm[i]); s_bgm[i]=NULL; }
     for (int i=0;i<4096;i++) { MIX_DestroyAudio(s_sfx[i]); s_sfx[i]=NULL; }
@@ -207,6 +237,8 @@ void AUDIO_SDL_ReloadMusic(void)
     s_currentBgmId=s_queuedBgmId=0;
     for(int i=0;i<4096;i++) { MIX_DestroyAudio(s_bgm[i]);s_bgm[i]=NULL; }
     if(reloadEffects) {
+        clearAmbientLoops();
+        MIX_StopTrack(s_sfxTail,0);MIX_SetTrackAudio(s_sfxTail,NULL);
         MIX_SetTrackAudio(s_sfxTrack,NULL);MIX_StopTrack(s_sfxTrack,0);
         SDL_ClearAudioStream(s_synthStream);MIX_StopTrack(s_synthTrack,0);
         for(int i=0;i<4096;i++) {MIX_DestroyAudio(s_sfx[i]);s_sfx[i]=NULL;}
@@ -244,6 +276,58 @@ bool AUDIO_SDL_HasSfx(int id)
     return id>=0 && id<4096 && s_sfx[id]!=NULL;
 }
 
+/* Build only the contextual loop; keep the original clip for one-shot use.
+ * Decode/cache once, never during the mix callback or on repeated map updates. */
+static MIX_Audio *ambientLoop(int id) {
+    if(s_ambientLoops[id])return s_ambientLoops[id];
+    SDL_AudioSpec source,spec={SDL_AUDIO_F32,2,48000};
+    Sint64 duration=MIX_GetAudioDuration(s_sfx[id]);
+    if(!MIX_GetAudioFormat(s_sfx[id],&source) || source.freq<=0 || duration<=0)return NULL;
+    double estimated=ceil((double)duration*spec.freq/source.freq)+1;
+    if(estimated>INT_MAX/(2*sizeof(float)))return NULL;
+    int capacity=(int)estimated*2*(int)sizeof(float);
+    const ModAudioClip *clip=AUDIO_MOD_Clip(1,id);
+    MIX_AudioDecoder *decoder=NULL;
+    if(clip && clip->size) {
+        SDL_IOStream *io=SDL_IOFromConstMem(clip->data,clip->size);
+        if(io)decoder=MIX_CreateAudioDecoder_IO(io,true,0);
+    } else {
+        const char *path=SDL_GetStringProperty(MIX_GetAudioProperties(s_sfx[id]),"impera.source","");
+        if(*path)decoder=MIX_CreateAudioDecoder(path,0);
+    }
+    if(!decoder)return NULL;
+    float *pcm=SDL_malloc(capacity);int used=0,got=0;
+    if(pcm)while(used<capacity && (got=MIX_DecodeAudio(decoder,(char*)pcm+used,capacity-used,&spec))>0)used+=got;
+    MIX_DestroyAudioDecoder(decoder);
+    if(!pcm || got<0 || used>=capacity || used%(2*sizeof(float))) {SDL_free(pcm);return NULL;}
+    size_t frames=AUDIO_CrossfadeLoop(pcm,used/(2*sizeof(float)),2,spec.freq);
+    if(frames)s_ambientLoops[id]=MIX_LoadRawAudio(s_mixer,pcm,frames*2*sizeof(float),&spec);
+    SDL_free(pcm);return s_ambientLoops[id];
+}
+int AUDIO_SDL_UpdateAmbience(int id) {
+    if(!s_mixer)return 0;
+    if(id<1 || id>=4096 || !AUDIO_SDL_HasSfx(id)) {
+        if(s_ambientId)stopAmbience(50);
+        return id==0;
+    }
+    if(s_ambientId==id && MIX_TrackPlaying(s_ambient[s_ambientSlot]))return 1;
+    MIX_Audio *loop=ambientLoop(id);
+    if(!loop) {if(s_ambientId)stopAmbience(50);return 0;}
+    int next=1-s_ambientSlot;
+    MIX_StopTrack(s_ambient[next],0);
+    if(s_ambientId)MIX_StopTrack(s_ambient[s_ambientSlot],MIX_MSToFrames(s_mixerSpec.freq,50));
+    const ModAudioClip *clip=AUDIO_MOD_Clip(1,id);
+    s_ambientGain[next]=clip?clip->gain/100.0f:1;
+    MIX_SetTrackGain(s_ambient[next],0.2f*AUDIO_SoundVolume()*s_ambientGain[next]);
+    SDL_PropertiesID options=SDL_CreateProperties();
+    SDL_SetNumberProperty(options,MIX_PROP_PLAY_LOOPS_NUMBER,-1);
+    SDL_SetNumberProperty(options,MIX_PROP_PLAY_FADE_IN_MILLISECONDS_NUMBER,50);
+    bool ok=MIX_SetTrackAudio(s_ambient[next],loop) && MIX_PlayTrack(s_ambient[next],options);
+    SDL_DestroyProperties(options);
+    s_ambientSlot=next;s_ambientId=ok?id:0;
+    if(!ok)PrintError();return ok;
+}
+
 static void AUDIO_SDL_PlaySfx(int id)
 {
     debug("AUDIO_SDL_PlaySfx(%d)", id);
@@ -256,10 +340,23 @@ static void AUDIO_SDL_PlaySfx(int id)
         s_speakerGain=1.0f;return;
     }
 
+    if(MIX_TrackPlaying(s_sfxTrack)) {
+        MIX_StopTrack(s_sfxTail,0);
+        MIX_Track *old=s_sfxTrack;s_sfxTrack=s_sfxTail;s_sfxTail=old;
+        s_tailGain=s_recordingGain;
+        MIX_StopTrack(s_sfxTail,MIX_MSToFrames(s_mixerSpec.freq,2));
+    }
     const ModAudioClip *clip=AUDIO_MOD_Clip(1,id);
     s_recordingGain=clip?clip->gain/100.0f:1.0f;
     MIX_SetTrackGain(s_sfxTrack,0.2f*AUDIO_SoundVolume()*s_recordingGain);
-    if (!MIX_SetTrackAudio(s_sfxTrack, s_sfx[id]) || !MIX_PlayTrack(s_sfxTrack, 0)) PrintError();
+    SDL_AudioSpec spec;Sint64 length=MIX_GetAudioDuration(s_sfx[id]);
+    Sint64 fade=0;
+    if(MIX_GetAudioFormat(s_sfx[id],&spec) && spec.freq>0 && length>0)
+        fade=SDL_min(2,(length*1000/spec.freq)/8);
+    SDL_PropertiesID options=SDL_CreateProperties();
+    SDL_SetNumberProperty(options,MIX_PROP_PLAY_FADE_IN_MILLISECONDS_NUMBER,fade);
+    if (!MIX_SetTrackAudio(s_sfxTrack, s_sfx[id]) || !MIX_PlayTrack(s_sfxTrack, options)) PrintError();
+    SDL_DestroyProperties(options);
 }
 
 static void AUDIO_SDL_PlayTitle1Sfx(void)
@@ -275,6 +372,8 @@ static void AUDIO_SDL_PlayTitle2Sfx(void)
 static void AUDIO_SDL_StopSfx(void)
 {
     s_rawFrequency=0;
+    stopAmbience(10);
+    if(s_sfxTail)MIX_StopTrack(s_sfxTail,MIX_MSToFrames(s_mixerSpec.freq,10));
     uint16_t noise=s_speakerState.noise;PCSPK_Init(&s_speakerState,noise);
     if (!s_mixer) return;
     SDL_ClearAudioStream(s_synthStream);

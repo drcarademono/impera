@@ -139,6 +139,7 @@ void ULTIMA_4102_AudioPlayAmbientSfx(void)
 		}
 	}
 
+    int recordedWater=AUDIO_UpdateAmbience(local_e==2?71:local_e==3?72:0);
 	switch (local_e)
 	{
     case 1:
@@ -162,12 +163,12 @@ void ULTIMA_4102_AudioPlayAmbientSfx(void)
 
     case 2:
 		// waterfall
-        ULTIMA_223c_AudioWhiteNoise(0x14, 0x3c, 10000);
+        if(!recordedWater)ULTIMA_223c_AudioWhiteNoise(0x14, 0x3c, 10000);
         break;
 
     case 3:
 		// fountain
-        ULTIMA_223c_AudioWhiteNoise(10, 0x1e, 25000);
+        if(!recordedWater)ULTIMA_223c_AudioWhiteNoise(10, 0x1e, 25000);
         break;
 
     case 4:
