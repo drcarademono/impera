@@ -1,3 +1,4 @@
+#include "audio/mod_audio.h"
 #include "mod/runtime.h"
 #include "engine_settings.h"
 #include "graphics/crt.h"
@@ -23,13 +24,42 @@
 #include <math.h>
 
 static const char* keys[]={"video_mode","tileset","crt_filter","transparent","dithered_darkness",
-    "music","sound","enhanced_look","mouse","smooth","diagonal","movement_speed","animation_speed"};
+    "music","sound","sound_speed","enhanced_look","mouse","smooth","diagonal","movement_speed","animation_speed","music_volume","sound_volume","footsteps"};
 static const char* labels[]={"Video Mode","Tileset","CRT Filter","Transparent Sprites","Dithered Darkness",
-    "Music","Sound Effects","Enhanced Look","Mouse Control","Smooth Movement","Diagonal Movement","Movement Speed","Animation Speed"};
-static bool isSpeed(int row) { return row==ENGINE_MOVEMENT_SPEED || row==ENGINE_ANIMATION_SPEED; }
+    "Music","Sound Effects","Sound Effect Speed","Enhanced Look","Mouse Control","Smooth Movement","Diagonal Movement","Movement Speed","Animation Speed","Music Volume","Sound Volume","Footstep Sounds"};
+static bool isSpeed(int row) { return row==ENGINE_SOUND_SPEED || row==ENGINE_MOVEMENT_SPEED || row==ENGINE_ANIMATION_SPEED; }
+static const float ticks[]={0.5f,0.75f,1.0f};
+static bool isVolume(int row) { return row==ENGINE_MUSIC_VOLUME || row==ENGINE_SOUND_VOLUME; }
+static bool isSlider(int row) { return isSpeed(row) || isVolume(row); }
+enum { TAB_GRAPHICS, TAB_SOUND, TAB_GAMEPLAY, TAB_MODS, TAB_COUNT };
+static const int graphicsRows[]={ENGINE_FULLSCREEN,ENGINE_TILESET,ENGINE_CRT,ENGINE_TRANSPARENT,ENGINE_DITHERED_DARKNESS,ENGINE_ANIMATION_SPEED};
+static const int soundRows[]={ENGINE_MUSIC,ENGINE_SOUND,ENGINE_FOOTSTEPS,ENGINE_MUSIC_VOLUME,ENGINE_SOUND_VOLUME,ENGINE_SOUND_SPEED};
+static const int gameplayRows[]={ENGINE_ENHANCED_LOOK,ENGINE_MOUSE,ENGINE_SMOOTH,ENGINE_DIAGONAL,ENGINE_MOVEMENT_SPEED};
+static const int *tabRows[]={graphicsRows,soundRows,gameplayRows};
+static const int tabCounts[]={6,6,5};
+static const int tabX[]={16,96,152,240},tabWidth[]={72,48,80,48};
+static const char *tabNames[]={"Graphics","Sound","Gameplay","Mods"};
+static int s_optionsTab;
+static bool visibleRow(int row) {
+    if(row==ENGINE_SETTING_COUNT)return true;
+    if(s_optionsTab==TAB_MODS)return false;
+    for(int i=0;i<tabCounts[s_optionsTab];i++)if(tabRows[s_optionsTab][i]==row)return true;
+    return false;
+}
+static int nextRow(int row,int direction) {
+    int count=tabCounts[s_optionsTab],index=count;
+    for(int i=0;i<count;i++)if(tabRows[s_optionsTab][i]==row)index=i;
+    index=(index+direction+count+1)%(count+1);
+    return index==count?ENGINE_SETTING_COUNT:tabRows[s_optionsTab][index];
+}
+static int firstRow(void) { return s_optionsTab==TAB_MODS?ENGINE_SETTING_COUNT:tabRows[s_optionsTab][0]; }
+static float sliderValue(int row,float x) {
+    if(isVolume(row))return SDL_clamp((x-184)/64,0.0f,1.0f);
+    return ticks[SDL_clamp((int)SDL_roundf((x-184)/32),0,2)];
+}
 static const char* optionStatus;
 static bool s_enhancedLook;
-static const float ticks[]={0.5f,0.75f,1.0f};
+
 float ENGINE_Get(int row)
 {
     switch(row) {
@@ -44,6 +74,10 @@ float ENGINE_Get(int row)
     case ENGINE_CRT:return CRT_Enabled();
     case ENGINE_MUSIC:return AUDIO_MusicEnabled();
     case ENGINE_SOUND:return AUDIO_SoundEnabled();
+    case ENGINE_SOUND_SPEED:return AUDIO_SoundSpeed();
+    case ENGINE_MUSIC_VOLUME:return AUDIO_MusicVolume();
+    case ENGINE_SOUND_VOLUME:return AUDIO_SoundVolume();
+    case ENGINE_FOOTSTEPS:return AUDIO_FootstepsEnabled();
     case ENGINE_MOVEMENT_SPEED:return GRAP_SDL_MovementSpeed();
     case ENGINE_ANIMATION_SPEED:return ANIMATION_Speed();
     default:return 0;
@@ -55,7 +89,8 @@ void ENGINE_Set(int row,float value)
     if(row==ENGINE_FULLSCREEN && value!=0 && value!=1 && value!=2) return;
     if(row==ENGINE_TILESET && value==TILESET_ZHELKAS) value=TILESET_DOS;
     if(row==ENGINE_TILESET && (value<0 || value>=TILESET_COUNT || value!=(int)value)) return;
-    if(row!=ENGINE_FULLSCREEN && row!=ENGINE_TILESET && !isSpeed(row) && value!=0 && value!=1) return;
+    if(row!=ENGINE_FULLSCREEN && row!=ENGINE_TILESET && !isSlider(row) && value!=0 && value!=1) return;
+    if(isVolume(row) && (value<0 || value>1)) return;
     if(isSpeed(row) && (value<0.1f || value>10)) return;
     debug("Engine option %s=%.6g",keys[row],(double)value);
     switch(row) {
@@ -70,6 +105,10 @@ void ENGINE_Set(int row,float value)
     case ENGINE_CRT:CRT_SetEnabled(value!=0);break;
     case ENGINE_MUSIC:AUDIO_SetMusicEnabled(value!=0);break;
     case ENGINE_SOUND:AUDIO_SetSoundEnabled(value!=0);break;
+    case ENGINE_SOUND_SPEED:AUDIO_SetSoundSpeed(value);break;
+    case ENGINE_MUSIC_VOLUME:AUDIO_SetMusicVolume(value);break;
+    case ENGINE_SOUND_VOLUME:AUDIO_SetSoundVolume(value);break;
+    case ENGINE_FOOTSTEPS:AUDIO_SetFootstepsEnabled(value!=0);break;
     case ENGINE_MOVEMENT_SPEED:GRAP_SDL_SetMovementSpeed(value);break;
     case ENGINE_ANIMATION_SPEED:ANIMATION_SetSpeed(value);break;
     }
@@ -134,10 +173,13 @@ void ENGINE_UIFrame(void)
 }
 static int rowY(int row)
 {
-    return row == ENGINE_SETTING_COUNT ? 180 : 42 + row * 10;
+    if(row==ENGINE_SETTING_COUNT)return 180;
+    if(s_optionsTab!=TAB_MODS)
+        for(int i=0;i<tabCounts[s_optionsTab];i++)if(tabRows[s_optionsTab][i]==row)return 44+i*14;
+    return -100;
 }
 static bool s_gameplay;
-static int s_optionsTab, s_modSelected, s_modTop, s_modScroll;
+static int s_modSelected, s_modTop, s_modScroll;
 static bool s_modDetails;
 static int s_modDetailLines;
 static unsigned s_modImageRevision;
@@ -233,7 +275,7 @@ static void modImage(const ModInfo *info) {
         s_modImageRevision = MOD_Revision();
         s_modImageDetails = s_modDetails;
         if (info && info->imageSize)
-            GRAP_SDL_UIThumbnailPNG(0, info->image, info->imageSize, 16, 60, 44, 24);
+            GRAP_SDL_UIThumbnailPNG(0, info->image, info->imageSize, 16, 60, 112, 70);
     }
     if (!info || !info->imageSize) {
         int y=60;
@@ -262,15 +304,14 @@ static void drawMods(void) {
                      *info->error?"Cannot load mod:\n":"",
                      *info->error?info->error:*info->description?info->description:"No description provided.");
         const char *description = details;
-        int lines = s_modDetailLines = descriptionLines(description, 28, 0, 0, 72, 60);
+        int lines = s_modDetailLines = descriptionLines(description, 20, 0, 0, 136, 60);
         s_modScroll = SDL_clamp(s_modScroll, 0, SDL_max(0, lines - 13));
-        descriptionLines(description, 28, s_modScroll, 13, 72, 60);
+        descriptionLines(description, 20, s_modScroll, 13, 136, 60);
         if(lines>13) {
             ENGINE_UIRect(300,60,4,104,8);
             ENGINE_UIRect(300,modTextThumbTop(),4,modTextThumbHeight(),15);
         }
         modButton(16,178,64,"Back");
-        ENGINE_UIText(120,180,"Space: On/Off",7);
     } else {
         if (s_modSelected < s_modTop) s_modTop = s_modSelected;
         int rows=modListRows();
@@ -294,7 +335,6 @@ static void drawMods(void) {
         clearModImage();
         char range[40]; SDL_snprintf(range,sizeof(range),"%d-%d of %u",s_modTop+1,SDL_min((int)count,s_modTop+rows),count);
         ENGINE_UIText(16,158,range,7);
-        ENGINE_UIText(16, 170, "Space: On/Off  Enter: Details", 7);
         ENGINE_UIText(16, 180, "Return", 15);
     }
     const char *status = optionStatus ? optionStatus : MOD_ChangesPending() ? "Restart Impera to apply changes" : *info->error ? "Mod could not load: see details" : NULL;
@@ -386,34 +426,35 @@ static void openChoice(int row) {
 }
 void ENGINE_DrawSettings(int selected)
 {
-    if (!s_optionsTab) clearModImage();
+    if (s_optionsTab!=TAB_MODS) clearModImage();
     TILESET_Copy(g_linearEgaBuffer0, NULL, 320*200);
     memset(g_linearEgaBuffer0,0,320*200);
     ENGINE_UIFrame();
     ENGINE_UIText(104,12,"Engine Options",15);
-    if (!s_optionsTab) ENGINE_UIRect(20, 25, 64, 10, 15);
-    else ENGINE_UIRect(100, 25, 48, 10, 15);
-    ENGINE_UIText(24,26,"Options",s_optionsTab ? 7 : 0);
-    ENGINE_UIText(104,26,"Mods",s_optionsTab ? 0 : 7);
-    if (s_optionsTab) { drawMods(); GRAP_BUF_MarkDirty(); GRAP_BUF_Present(); return; }
+    for(int tab=0;tab<TAB_COUNT;tab++) {
+        if(tab==s_optionsTab)ENGINE_UIRect(tabX[tab],25,tabWidth[tab],10,15);
+        ENGINE_UIText(tabX[tab]+4,26,tabNames[tab],tab==s_optionsTab?0:7);
+    }
+    if (s_optionsTab==TAB_MODS) { drawMods(); GRAP_BUF_MarkDirty(); GRAP_BUF_Present(); return; }
     for(int row=0;row<=ENGINE_SETTING_COUNT;row++) {
+        if(!visibleRow(row))continue;
         int y=rowY(row);
         bool highlighted=row==selected && s_videoChoice<0;
         byte foreground=highlighted?0:15;
-        if(highlighted) ENGINE_UIRect(16,y-1,288,10,15);
+        if(highlighted) ENGINE_UIRect(16,y-1,288,12,15);
         ENGINE_UIText(24,y,row==ENGINE_SETTING_COUNT?(s_gameplay?"Return to Game":"Return to Menu"):labels[row],foreground);
         if(row==ENGINE_SETTING_COUNT) continue;
         float value=ENGINE_Get(row);
         if(row==ENGINE_FULLSCREEN || row==ENGINE_TILESET) {
             const char* label=row==ENGINE_TILESET?TILESET_Label(TILESET_Selected()):videoLabel(videoChoice());
             ENGINE_UIText(choiceTextX(label),y,label,foreground);
-        } else if(!isSpeed(row)) {
+        } else if(!isSlider(row)) {
             checkbox(232,y+1,value != 0);
             ENGINE_UIText(248,y,value?"On":"Off",highlighted?0:(value?10:7));
         } else {
             ENGINE_UIRect(184,y+4,64,1,highlighted?0:7);
             for(int i=0;i<3;i++) ENGINE_UIRect(184+i*32,y+1,1,7,foreground);
-            int knob=184+(int)SDL_roundf(SDL_clamp((value-0.5f)*128,0,64));
+            int knob=184+(int)SDL_roundf(isVolume(row)?value*64:SDL_clamp((value-0.5f)*128,0,64));
             ENGINE_UIRect(knob-2,y+1,5,7,highlighted?0:14);
             char number[12];SDL_snprintf(number,sizeof(number),"%.2f",(double)value);
             ENGINE_UIText(264,y,number,highlighted?0:14);
@@ -439,12 +480,13 @@ void ENGINE_DrawSettings(int selected)
 static void adjust(int row,int direction)
 {
     float value=ENGINE_Get(row);
-    if(row==ENGINE_MUSIC && !value && !*SETUP_MusicDirectory()) {
+    if(row==ENGINE_MUSIC && !value && !*SETUP_MusicDirectory() && !AUDIO_MOD_HasMusic()) {
         if(FOLDER_SelectMusic(SETUP_MusicDirectory(),SETUP_SetMusicDirectory)) {
             AUDIO_ReloadMusic();ENGINE_Set(ENGINE_MUSIC,1);
             optionStatus="Music folder saved";
         } else optionStatus="Music selection cancelled";
-    } else if(!isSpeed(row)) ENGINE_Set(row,!value);
+    } else if(isVolume(row)) ENGINE_Set(row,SDL_clamp(value+direction*0.05f,0.0f,1.0f));
+    else if(!isSpeed(row)) ENGINE_Set(row,!value);
     else {
         float next=value;
         if(direction>0) { for(int i=0;i<3;i++) if(ticks[i]>value+0.001f) { next=ticks[i];break; } }
@@ -482,18 +524,21 @@ void ENGINE_ShowOptions(bool gameplay)
                (event.type==SDL_EVENT_KEY_DOWN && event.key.key==SDLK_E &&
                 (event.key.mod & SDL_KMOD_CTRL))) { if(changed) ENGINE_Save();exit(0); }
             if(event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_TAB) {
-                s_optionsTab = !s_optionsTab; s_videoChoice = -1; drag = -1; modGrab=-1; s_modDetails = false;
+                s_optionsTab = (s_optionsTab + ((event.key.mod & SDL_KMOD_SHIFT)?TAB_COUNT-1:1))%TAB_COUNT; selected=firstRow(); s_videoChoice = -1; drag = -1; modGrab=-1; s_modDetails = false;
                 redraw = true; continue;
             }
             if(event.type == SDL_EVENT_MOUSE_BUTTON_DOWN && event.button.button == SDL_BUTTON_LEFT) {
                 float x, y;
-                if(GRAP_SDL_MouseUIPoint(event.button.x, event.button.y, &x, &y) && y >= 24 && y < 37 && x >= 20 && x < 152) {
-                    s_optionsTab = x >= 96; s_videoChoice = -1; drag = -1; modGrab=-1; s_modDetails = false;
-                    redraw = true; continue;
+                if(GRAP_SDL_MouseUIPoint(event.button.x, event.button.y, &x, &y) && y >= 24 && y < 37) {
+                    bool hit=false;
+                    for(int tab=0;tab<TAB_COUNT;tab++)if(x>=tabX[tab] && x<tabX[tab]+tabWidth[tab]) {
+                        s_optionsTab=tab;selected=firstRow();s_videoChoice=-1;drag=-1;modGrab=-1;s_modDetails=false;hit=true;break;
+                    }
+                    if(hit) {redraw=true;continue;}
                 }
             }
             if(event.type==SDL_EVENT_MOUSE_BUTTON_UP || event.type==SDL_EVENT_WINDOW_FOCUS_LOST) modGrab=-1;
-            if(s_optionsTab) {
+            if(s_optionsTab==TAB_MODS) {
                 int count = (int)MOD_AvailableCount();
                 if(event.type == SDL_EVENT_KEY_DOWN) {
                     switch(event.key.key) {
@@ -588,10 +633,10 @@ void ENGINE_ShowOptions(bool gameplay)
             if(event.type==SDL_EVENT_KEY_DOWN) {
                 switch(event.key.key) {
                 case SDLK_ESCAPE:done=true;break;
-                case SDLK_UP:selected=(selected+ENGINE_SETTING_COUNT)%(ENGINE_SETTING_COUNT+1);break;
-                case SDLK_DOWN:selected=(selected+1)%(ENGINE_SETTING_COUNT+1);break;
+                case SDLK_UP:selected=nextRow(selected,-1);break;
+                case SDLK_DOWN:selected=nextRow(selected,1);break;
                 case SDLK_LEFT:case SDLK_RIGHT:case SDLK_RETURN:case SDLK_SPACE:
-                    if(event.key.repeat && !isSpeed(selected)) break;
+                    if(event.key.repeat && !isSlider(selected)) break;
                     if(selected==ENGINE_SETTING_COUNT) { done=true;break; }
                     if(selected==ENGINE_FULLSCREEN || selected==ENGINE_TILESET) openChoice(selected);
                     else { adjust(selected,event.key.key==SDLK_LEFT?-1:1);changed=true; }
@@ -601,13 +646,12 @@ void ENGINE_ShowOptions(bool gameplay)
             if(event.type==SDL_EVENT_MOUSE_BUTTON_DOWN && event.button.button==SDL_BUTTON_LEFT) {
                 float x,y;
                 if(GRAP_SDL_MouseUIPoint(event.button.x,event.button.y,&x,&y) && x>=16 && x<304)
-                    for(int row=0;row<=ENGINE_SETTING_COUNT;row++) if(y>=rowY(row)-1 && y<rowY(row)+9) {
+                    for(int row=0;row<=ENGINE_SETTING_COUNT;row++) if(visibleRow(row) && y>=rowY(row)-1 && y<rowY(row)+11) {
                         selected=row;
                         if(row==ENGINE_FULLSCREEN || row==ENGINE_TILESET) openChoice(row);
                         else if(row==ENGINE_SETTING_COUNT) done=true;
-                        else if(isSpeed(row) && x>=176 && x<=256) {
-                            int tick=SDL_clamp((int)SDL_roundf((x-184)/32),0,2);
-                            ENGINE_Set(row,ticks[tick]);changed=true;
+                        else if(isSlider(row) && x>=176 && x<=256) {
+                            ENGINE_Set(row,sliderValue(row,x));changed=true;
                             drag=row;
                         } else { adjust(row,1);changed=true; }
                     }
@@ -618,13 +662,12 @@ void ENGINE_ShowOptions(bool gameplay)
                 float x,y;
                 if(GRAP_SDL_MouseUIPoint(event.motion.x,event.motion.y,&x,&y) && x>=16 && x<304)
                     for(int row=0;row<=ENGINE_SETTING_COUNT;row++)
-                        if(y>=rowY(row)-1 && y<rowY(row)+9) selected=row;
+                        if(visibleRow(row) && y>=rowY(row)-1 && y<rowY(row)+11) selected=row;
             }
             if(event.type==SDL_EVENT_MOUSE_MOTION && drag>=0) {
                 float x,y;
                 if(GRAP_SDL_MouseUIPoint(event.motion.x,event.motion.y,&x,&y)) {
-                    int tick=SDL_clamp((int)SDL_roundf((x-184)/32),0,2);
-                    ENGINE_Set(drag,ticks[tick]);changed=true;
+                    ENGINE_Set(drag,sliderValue(drag,x));changed=true;
                 }
             }
             if(event.type==SDL_EVENT_KEY_DOWN || event.type==SDL_EVENT_MOUSE_BUTTON_DOWN ||

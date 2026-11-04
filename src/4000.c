@@ -197,6 +197,13 @@ void ULTIMA_4102_AudioPlayAmbientSfx(void)
 
 void ULTIMA_433e_AudioFootstep(void)
 {
+#if defined(TARGET_SDL)
+    if(AUDIO_PlaySpeakerFootstep()) {
+        /* Preserve movement pacing separately from the queued sound gap. */
+        if(!GRAP_SDL_SmoothMovementEnabled())ULTIMA_20c8_SomeDelay(1,0x14);
+        return;
+    }
+#endif
 	ULTIMA_223c_AudioWhiteNoise(1, 0x19, 1000);
 #if defined(TARGET_SDL)
     /* Smooth animation already paces movement; an extra footstep wait would

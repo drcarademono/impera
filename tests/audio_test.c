@@ -11,8 +11,22 @@
 #include "audio/pcspeaker.h"
 #include "vars.h"
 #include "key/key.h"
+#include "4000.h"
+#include "graphics/grap_sdl.h"
 
-static int queued, assigned;
+static int queued, assigned, sleepCalls, sleepMs;
+static size_t queuedFrames;
+static int speedTracks;
+static MIX_Track *effectTracks[2], *musicTrack;
+bool __real_MIX_SetTrackFrequencyRatio(MIX_Track*,float);
+bool __wrap_MIX_SetTrackFrequencyRatio(MIX_Track* track,float ratio) {
+    assert(ratio==AUDIO_SoundSpeed());
+    if(speedTracks<2)effectTracks[speedTracks]=track;
+    speedTracks++;
+    return __real_MIX_SetTrackFrequencyRatio(track,ratio);
+}
+void __real_TIME_SleepMs(int);
+void __wrap_TIME_SleepMs(int ms) {sleepCalls++;sleepMs+=ms;__real_TIME_SleepMs(ms);}
 const char* __wrap_SDL_GetBasePath(void) { return "Alongside/"; }
 bool __real_SDL_PutAudioStreamData(SDL_AudioStream*,const void*,int);
 bool __wrap_SDL_PutAudioStreamData(SDL_AudioStream* stream,const void* data,int len)
@@ -29,13 +43,14 @@ bool __wrap_SDL_PutAudioStreamData(SDL_AudioStream* stream,const void* data,int 
         assert(isfinite(pcm[i]) && fabsf(pcm[i])<=1);
         audible |= fabsf(pcm[i])>0.01f;
     }
-    assert(audible);
+    assert(audible || len<8*(int)sizeof(float)); /* A short raw span may contain only filter startup. */
+    queuedFrames+=len/sizeof(float);
     queued++;
     return __real_SDL_PutAudioStreamData(stream,data,len);
 }
 bool __real_MIX_SetTrackAudio(MIX_Track*,MIX_Audio*);
 bool __wrap_MIX_SetTrackAudio(MIX_Track* track,MIX_Audio* audio)
-{ if(audio) assigned++; return __real_MIX_SetTrackAudio(track,audio); }
+{ if(audio) {if(!assigned)musicTrack=track;assigned++;} return __real_MIX_SetTrackAudio(track,audio); }
 
 static void wave(const char* path)
 {
@@ -54,10 +69,10 @@ int main(void)
     size_t frames;
     uint16_t state=0;
     float* tone=PCSPK_Render(PCSPK_TONE,1000,100,0,0,0,&state,&frames);
-    assert(tone && frames==240); /* 100 delay units * 50 us, frequency in Hz */
+    assert(tone && frames>=4200 && frames<=4250); /* Slower-machine calibrated 88 ms, frequency in Hz */
     int transitions=0;
     for(size_t i=1;i<frames;i++) if ((tone[i]>0)!=(tone[i-1]>0)) transitions++;
-    assert(transitions==9);
+    assert(transitions>=160 && transitions<=190); /* Band-limited square wave with AC coupling. */
     SDL_free(tone);
     assert(!PCSPK_Render(PCSPK_TONE,0,0,0,0,0,&state,&frames) && frames==0);
     D_a9ce=1;
@@ -67,12 +82,26 @@ int main(void)
     wave("Sound/step0.wav");
     AUDIO_Initialize();
     assert(AUDIO_HasSfx(73) && !AUDIO_HasSfx(74));
-    AUDIO_PlayBgm(2); assert(assigned==1); /* descriptive numbered music filename */
+    int beforeSpeedTracks=speedTracks;
+    AUDIO_SetSoundSpeed(0.5f);
+    assert(speedTracks==beforeSpeedTracks+2); /* Synth and recordings; never music. */
+    AUDIO_SetSoundSpeed(1);
+    assert(!AUDIO_PlaySpeakerFootstep()); /* Keep recordings on the override path. */
+    AUDIO_PlayBgm(2); assert(assigned==1);
+    AUDIO_SetMusicVolume(0.37f);AUDIO_SetSoundVolume(0.23f);
+    assert(fabsf(MIX_GetTrackGain(musicTrack)-0.3f*0.37f)<0.0001f);
+    for(int i=0;i<2;i++)assert(fabsf(MIX_GetTrackGain(effectTracks[i])-0.2f*0.23f)<0.0001f);
+    AUDIO_SetSoundVolume(0);
+    for(int i=0;i<2;i++)assert(MIX_GetTrackGain(effectTracks[i])==0);
+    assert(MIX_GetTrackGain(musicTrack)>0);
+    AUDIO_SetMusicVolume(1);AUDIO_SetSoundVolume(1); /* descriptive numbered music filename */
     AUDIO_SetMusicEnabled(0);AUDIO_PlayBgm(2);assert(assigned==1);
     AUDIO_SetMusicEnabled(1);assert(assigned==2); /* resume requested music */
     AUDIO_DispatchWhiteNoise(1,25,1000);
     assert(assigned==3 && queued==0); /* WAV takes precedence */
+    D_5420=0xabcd;
     AUDIO_DispatchWhiteNoise(1,25,1500);
+    assert(D_5420==0xabcd); /* Speaker noise must never advance gameplay randomness. */
     assert(queued==1); /* individual missing WAV synthesizes */
     AUDIO_DispatchWhiteNoise(2,20,3000); assert(queued==2); /* unmapped effects also synthesize */
     AUDIO_DispatchPulse(1193,1,100,20000,-4); assert(queued==3);
@@ -96,9 +125,38 @@ int main(void)
     D_a9ce=0;
     AUDIO_DispatchTone(1000,100); assert(queued==5);
     D_a9ce=1;
+    int beforeRaw=queued;AUDIO_SpeakerOn(1200);
+    int speakerDelay=AUDIO_SpeakerDelay(20);assert(speakerDelay>=17 && speakerDelay<=19);
+    AUDIO_SpeakerOff();assert(queued>beforeRaw);
     AUDIO_StopSfx(); AUDIO_StopBgm(); AUDIO_Cleanup();
     remove("Music/02 - Britannic Lands.mp3"); remove("Sound/step0.wav");
     assert(SDL_RemovePath("Music")); assert(SDL_RemovePath("Sound"));
+    AUDIO_Initialize();
+    size_t beforeFrames=queuedFrames;int beforeSleeps=sleepCalls;
+    assert(AUDIO_FootstepsEnabled());
+    AUDIO_SetFootstepsEnabled(0);
+    assert(AUDIO_PlaySpeakerFootstep() && queuedFrames==beforeFrames);
+    AUDIO_SetFootstepsEnabled(1);
+    assert(AUDIO_PlaySpeakerFootstep());
+    size_t stepFrames=queuedFrames-beforeFrames;
+    assert(stepFrames>=1030 && stepFrames<=1070); /* ~22 ms, including the calibrated gap. */
+    assert(sleepCalls==beforeSleeps); /* The audio gap must not pause the game thread. */
+    /* Muting footsteps must preserve non-smooth movement pacing. */
+    bool previousSmooth=GRAP_SDL_SmoothMovementEnabled();
+    AUDIO_SetFootstepsEnabled(0);GRAP_SDL_SetSmoothMovement(false);
+    size_t mutedFrames=queuedFrames;int mutedMs=sleepMs;
+    ULTIMA_433e_AudioFootstep();
+    assert(queuedFrames==mutedFrames && sleepMs>mutedMs);
+    GRAP_SDL_SetSmoothMovement(true);mutedMs=sleepMs;
+    ULTIMA_433e_AudioFootstep();
+    assert(queuedFrames==mutedFrames && sleepMs==mutedMs);
+    GRAP_SDL_SetSmoothMovement(previousSmooth);AUDIO_SetFootstepsEnabled(1);
+    AUDIO_SetSoundSpeed(0.5f);
+    int beforeMs=sleepMs;
+    AUDIO_DispatchTone(1000,200);
+    assert(sleepMs-beforeMs>=350 && sleepMs-beforeMs<=354); /* Twice the normal 176 ms. */
+    AUDIO_SetSoundSpeed(1);
+    AUDIO_Cleanup();
     assert(SDL_CreateDirectory("Alongside/Music"));
     assert(SDL_CreateDirectory("Alongside/Sound"));
     wave("Alongside/Music/06 - Greyson's Tale.mp3");

@@ -32,15 +32,29 @@ void AUDIO_SetSoundEnabled(int enabled);
 extern void AUDIO_Cleanup(void);
 
 extern void AUDIO_PlayBgm(int id);
+void AUDIO_PlayEventMusic(unsigned event,int fallback);
 extern void AUDIO_QueueBgm(int id);
 extern void AUDIO_StopBgm(void);
 
 extern void AUDIO_PlaySfx(int id);
 int AUDIO_HasSfx(int id);
+/* Queue the native two-click footstep, including its delay; false for overrides. */
+int AUDIO_PlaySpeakerFootstep(void);
+float AUDIO_MusicVolume(void);
+float AUDIO_SoundVolume(void);
+void AUDIO_SetMusicVolume(float volume);
+void AUDIO_SetSoundVolume(float volume);
+int AUDIO_FootstepsEnabled(void);
+void AUDIO_SetFootstepsEnabled(int enabled);
+float AUDIO_SoundSpeed(void);
+void AUDIO_SetSoundSpeed(float speed);
 extern void AUDIO_PlayTitle1Sfx(void);
 extern void AUDIO_PlayTitle2Sfx(void);
 extern void AUDIO_StopSfx(void);
 extern int AUDIO_GetSfxType(void);
+void AUDIO_SpeakerOn(unsigned frequency);
+void AUDIO_SpeakerOff(void);
+int AUDIO_SpeakerDelay(unsigned units);
 extern void AUDIO_PlaySynthPulse(int freq, int delay, int dur, int pulseWidth, int pulseInc);
 extern void AUDIO_PlaySynthNoise(int rate, int dur, int limit);
 extern void AUDIO_PlaySynthTone(int freq, int dur);

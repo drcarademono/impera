@@ -1,6 +1,8 @@
 #include "common/common.h"
 
 #include "audio.h"
+#include "mod_audio.h"
+#include "audio_catalog.h"
 #include "vars.h"
 
 #include "aud_ops.h"
@@ -18,6 +20,35 @@ static AudioMusicDriverOps* s_musicOps;
 static AudioSfxDriverOps* s_sfxOps;
 static bool s_musicEnabled=true, s_soundEnabled=true;
 static int s_requestedBgm, s_requestedQueue;
+static float s_soundSpeed=1.0f, s_musicVolume=1.0f, s_soundVolume=1.0f;
+static bool s_footstepsEnabled=true;
+float AUDIO_MusicVolume(void) { return s_musicVolume; }
+float AUDIO_SoundVolume(void) { return s_soundVolume; }
+int AUDIO_FootstepsEnabled(void) { return s_footstepsEnabled; }
+void AUDIO_SetFootstepsEnabled(int enabled) { s_footstepsEnabled=enabled!=0; }
+static void applyVolumes(void) {
+#if defined(TARGET_SDL)
+    extern void AUDIO_SDL_ApplyVolumes(void);
+    AUDIO_SDL_ApplyVolumes();
+#endif
+}
+void AUDIO_SetMusicVolume(float volume) {
+    if(!(volume>=0 && volume<=1))return;
+    s_musicVolume=volume;applyVolumes();
+}
+void AUDIO_SetSoundVolume(float volume) {
+    if(!(volume>=0 && volume<=1))return;
+    s_soundVolume=volume;applyVolumes();
+}
+float AUDIO_SoundSpeed(void) { return s_soundSpeed; }
+void AUDIO_SetSoundSpeed(float speed) {
+    if(!(speed>=0.1f && speed<=10.0f))return;
+    s_soundSpeed=speed;
+#if defined(TARGET_SDL)
+    extern void AUDIO_SDL_SetSoundSpeed(float);
+    AUDIO_SDL_SetSoundSpeed(speed);
+#endif
+}
 int AUDIO_MusicEnabled(void) { return s_musicEnabled; }
 int AUDIO_SoundEnabled(void) { return s_soundEnabled; }
 void AUDIO_SetMusicEnabled(int enabled)
@@ -77,14 +108,17 @@ void AUDIO_PlaySfx(int id)
     if (!s_sfxOps || !s_soundEnabled)
         return;
 
-    s_sfxOps->PlaySfx(id);
+    id=AUDIO_MOD_Assignment(4,id,0,id);
+    if(id) s_sfxOps->PlaySfx(id);
 }
 
 int AUDIO_HasSfx(int id)
 {
 #if defined(TARGET_SDL)
     extern bool AUDIO_SDL_HasSfx(int id);
-    return AUDIO_SDL_HasSfx(id);
+    unsigned mapped=AUDIO_MOD_Assignment(4,id,0,id);
+    const ModAudioClip *clip=AUDIO_MOD_Clip(1,mapped);
+    return !mapped || ((mapped!=id || clip) && mapped<=115 && audioCatalog[mapped-1].count) || AUDIO_SDL_HasSfx(mapped);
 #else
     return s_sfxOps != NULL;
 #endif
@@ -95,7 +129,7 @@ void AUDIO_PlayTitle1Sfx(void)
     if (!s_sfxOps || !s_soundEnabled)
         return;
 
-    s_sfxOps->PlayTitle1Sfx();
+    AUDIO_PlaySfx(114);
 }
 
 void AUDIO_PlayTitle2Sfx(void)
@@ -103,7 +137,7 @@ void AUDIO_PlayTitle2Sfx(void)
     if (!s_sfxOps || !s_soundEnabled)
         return;
 
-    s_sfxOps->PlayTitle2Sfx();
+    AUDIO_PlaySfx(115);
 }
 
 void AUDIO_StopSfx(void)
@@ -156,6 +190,8 @@ void AUDIO_PlaySynthSweepTone(int param_1, int param_2, int param_3, int param_4
 
 void AUDIO_PlayBgm(int id)
 {
+    id=AUDIO_MOD_Assignment(3,id,0,id);
+    if(!id) {AUDIO_StopBgm();return;}
     s_requestedBgm=id; s_requestedQueue=0;
     if (!s_musicOps || !s_musicEnabled)
         return;
@@ -165,6 +201,7 @@ void AUDIO_PlayBgm(int id)
 
 void AUDIO_QueueBgm(int id)
 {
+    id=AUDIO_MOD_Assignment(3,id,0,id);
     s_requestedQueue=id;
     if (!s_musicOps || !s_musicEnabled)
         return;
@@ -179,4 +216,35 @@ void AUDIO_StopBgm(void)
         return;
 
     s_musicOps->StopBgm();
+}
+
+void AUDIO_PlayEventMusic(unsigned event,int fallback) {AUDIO_PlayBgm(AUDIO_MOD_Assignment(2,event,0,fallback));}
+
+void AUDIO_SpeakerOn(unsigned frequency) {
+#if defined(TARGET_SDL)
+    extern void AUDIO_SDL_SpeakerOn(unsigned);
+    if(s_soundEnabled) AUDIO_SDL_SpeakerOn(frequency);
+#endif
+}
+void AUDIO_SpeakerOff(void) {
+#if defined(TARGET_SDL)
+    extern void AUDIO_SDL_SpeakerOff(void);AUDIO_SDL_SpeakerOff();
+#endif
+}
+int AUDIO_SpeakerDelay(unsigned units) {
+#if defined(TARGET_SDL)
+    extern int AUDIO_SDL_SpeakerDelay(unsigned);return AUDIO_SDL_SpeakerDelay(units);
+#else
+    return -1;
+#endif
+}
+
+int AUDIO_PlaySpeakerFootstep(void) {
+#if defined(TARGET_SDL)
+    extern int AUDIO_SDL_PlaySpeakerFootstep(void);
+    if(!s_soundEnabled || !D_a9ce || !s_footstepsEnabled)return 1;
+    return AUDIO_SDL_PlaySpeakerFootstep();
+#else
+    return 0;
+#endif
 }

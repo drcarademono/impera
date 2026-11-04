@@ -1,3 +1,4 @@
+#include "audio/audio.h"
 #include "mod/party.h"
 #include "common/common.h"
 #include "text/text_input.h"
@@ -70,6 +71,10 @@ int ULTIMA_2092_RandomRange(int param_1, int param_2) // inclusive_min, inclusiv
 // some busy-wait delay?
 void ULTIMA_20c8_SomeDelay(int param_1, int param_2)
 {
+#if defined(TARGET_SDL)
+    int speakerDelay=AUDIO_SpeakerDelay((unsigned)param_2);
+    if(speakerDelay>=0) {TIME_SleepMs(speakerDelay);return;}
+#endif
     // FMT: empty
 #if defined(ENABLE_SPEED_FIX)
     if (param_2 == 0x14)
@@ -177,6 +182,9 @@ void ULTIMA_22c0_AudioTone(uint freq, uint dur)
 // FMT: dummy
 void ULTIMA_22e2_PcspkOn(uint freq)
 {
+#if defined(TARGET_SDL)
+    AUDIO_SpeakerOn(freq);
+#endif
     if (D_a9ce != 0)
     {
         // start tone
@@ -188,6 +196,9 @@ void ULTIMA_22e2_PcspkOn(uint freq)
 // FMT: dummy
 void ULTIMA_230e_PcspkOff(void)
 {
+#if defined(TARGET_SDL)
+    AUDIO_SpeakerOff();
+#endif
     // speaker off
     // NOTE / REF: https://fragglet.github.io/dos-help-files/alang.hlp/x_at_L848b.html
 }

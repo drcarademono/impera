@@ -184,10 +184,15 @@ over a `Music` folder alongside the game files.
 
 Choose **Engine Options** below **Return to the View** in the main menu
 (or press `O`). Press `Ctrl+O` during gameplay to open Engine Options
-and return to your game with `Esc`. Video Mode, Mouse Control, Smooth Movement, Diagonal Movement,
-Transparent Sprites, Music, and Sound Effects can be switched on or off.
-Changes apply immediately. Movement Speed and Animation Speed have sliders
+and return to your game with `Esc`. Settings are grouped into **Graphics**,
+**Sound**, **Gameplay**, and **Mods** tabs. Click a tab or use Tab/Shift+Tab to
+switch. Graphics includes display, tileset, transparency, darkness, and animation
+settings; Gameplay includes Enhanced Look, mouse controls, and movement settings.
+Changes apply immediately. Sound Effect Speed, Movement Speed, and Animation Speed have sliders
 with ticks at 0.5, 0.75, and 1; use Left/Right or click and drag the slider.
+Music Volume and Sound Volume have continuous sliders from 0 (silent) to 1 (full
+volume). Volume changes apply immediately, including to audio already playing.
+Footstep Sounds can be disabled separately and are enabled by default.
 Up/Down selects a setting, Enter toggles it, and Escape returns to the menu or your game.
 The screen uses the original game font and integer-scaled pixels.
 
@@ -208,6 +213,10 @@ even when Mouse Control is off, so it can be turned back on.
 | Dithered Darkness | Fade visibility edges with an Ultima 6-style ordered pixel pattern. |
 | Music | Toggle playback. Switching on opens the folder browser only if no music folder is configured. |
 | Sound Effects | Enable or mute WAV overrides and synthesized effects. |
+| Footstep Sounds | Enable or mute footsteps independently of other effects; enabled by default. |
+| Music Volume | Continuous 0–1 master music volume, combined with mod track gain. |
+| Sound Volume | Continuous 0–1 volume for recorded and synthesized effects. |
+| Sound Effect Speed | Adjust synthesized and recorded effect playback speed (0.5, 0.75, or 1). Slower playback also lowers pitch; music is unchanged. |
 | Mouse Control | Enable map movement and contextual actions; options menus remain clickable when off. |
 | Smooth Movement | Animate camera scrolling and visible actor steps. |
 | Diagonal Movement | Enable eight-way movement, neighboring actions, and combat. |
@@ -471,14 +480,14 @@ thresholds. Sweeps retain DOS signed 16-bit arithmetic and integer division.
 `sfx_map.h` remains the authoritative effect parameter table. Title effects
 without parameter tuples require their WAV recordings.
 
-SDL converts each calibrated delay unit to **50 microseconds**, consistently
-across all effects: tone duration is `dur` units, noise holds each frequency
-for `rate` units until elapsed reaches `dur`, PWM performs `dur` iterations
-of `delay` units, and sweeps hold each step for `tickStep` units. This is an
-explicit timing conversion, not an emulation of DOS CPU calibration via
-`D_5356`/`D_5426`; it does not alter the sound algorithms. PCM is sampled at
-48 kHz without frequency/duty clamps or click envelopes. Legacy `SFX` files
-also remain supported.
+Speaker timing uses the audited DOSBox simple/386_slow/5000-cycle reference:
+tone/sweep use the full calibrated delay, noise uses calibration >> 4, and PWM
+uses calibration / 24 plus its loop/I/O overhead. The renderer preserves the
+independent DOS noise seed, mode-3 counter updates, gate behavior, and fractional
+sample timing across calls. Eight-times oversampling and low-pass decimation
+avoid aliasing the gated carrier. See [the speaker audit](docs/pc-speaker-audit.md)
+for evidence, limitations, and a harness that runs the original DOS routines.
+Legacy `SFX` recordings remain supported.
 Audio is read directly from the optional selected music folder or the usual
 external audio directories; players can also place it in `build/runtime`.
 No audio assets are needed for synthesized effects. Do not set SDL's dummy video/audio drivers when playing on your desktop.
@@ -694,10 +703,10 @@ and Grayscale when transparent sprites are enabled. No mod
 is required. White mask pixels preserve black ink; ordinary black mask pixels
 retain normal cutouts. Workshop starts those mask editors with the same defaults.
 
-Engine Options has Options and Mods tabs (Tab switches between them). The Mods
+Engine Options has Graphics, Sound, Gameplay, and Mods tabs. The Mods
 list uses the same checkboxes as other engine options. Space toggles a mod; Enter
 opens its screenshot and scrollable description. Click a checkbox to toggle it,
-or click the screenshot for details. Main-menu changes apply immediately; changes
+or click its > button for details. Main-menu changes apply immediately; changes
 made during gameplay are saved for the next launch. Mod files are kept intact.
 
 Enhanced Look in Engine Options uses an NPC’s dialogue description until their
@@ -714,8 +723,8 @@ A scrollbar and range indicator show additional mods; hover or use arrows to sel
 and use Home/End or Page Up/Down to navigate longer lists. Clicking
 a mod’s checkbox or name toggles it; click > or press Enter for
 details with the complete name and scrollable description. Typographic quotes and dashes use their DOS-font equivalents.
-Screenshots use the same small 44 × 24 thumbnail size and smooth,
-display-resolution rendering as save previews. The retired DOS Enhanced option is no longer listed; old saved choices
+Mod details screenshots fit a 112 × 70 logical-pixel area beside the description,
+with preserved aspect ratio and smooth display-resolution rendering. The retired DOS Enhanced option is no longer listed; old saved choices
 fall back to DOS. Graphics → Tilesets has Import/Export tileset PNG controls at
 the top for complete sheets, including all 512 tiles in a 512 × 256 DOS PNG.
 
@@ -730,3 +739,24 @@ companion. Names retain Ultima V’s eight-character ASCII limit.
 These settings export as `PARTY.OVR` in package version 29. Additional companion
 records and the party limit survive save/load; original saves remain readable. Seven-
 and eight-member parties use a taller status panel and safe combat formation placement.
+
+Workshop’s **Sound and Music** workspace has searchable **Music** and **Sound effects**
+browsers. Preview, pause, stop, and preview volume do not change the player’s engine
+settings. Import WAV or Ogg Vorbis files to package replacement or new audio with a mod;
+original external recordings and PC speaker effects remain the fallback. Locate an
+external Music/Sound folder with the recordings-folder button if it is outside the
+game folder. Music has volume, looping, numeric loop points, and draggable waveform
+markers. Assign tracks to world/location/dungeon maps, individual combat maps, shared
+music slots, or menu/cutscene/gameplay events. Sound events can use original or new
+custom effects. Restore original removes an override; deletion removes assignments
+to a deleted custom asset. All changes support project persistence and undo/redo.
+
+**Export WAV…** exports one sound effect; **Export all sound effects…** writes separate,
+deterministically named stereo 48 kHz PCM WAVs for every available original, replaced,
+and custom effect. Synthesized effects use the engine’s original PC speaker renderer,
+including complete paired tones and shrine/mirror sequences. Title/subtitle reveal
+slots have no synthesized fallback; bulk export reports them when no recording exists.
+Export uses the asset audio, independent of editor preview volume. Music exports retain
+the source recording’s format. Audio definitions use `AUDIO.OVR` and mod package version
+30, with a 64 MiB audio-resource limit and a 128 MiB total package limit. Imported audio
+is limited to ten minutes per asset; music recordings remain compressed when possible.

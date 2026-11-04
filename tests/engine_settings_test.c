@@ -45,8 +45,8 @@ static Uint32 mouseBurst(void *data, SDL_TimerID timer, Uint32 interval) {
     int n,w,h; SDL_Window **windows=SDL_GetWindows(&n); assert(n==1);
     assert(SDL_GetWindowSize(windows[0],&w,&h)); SDL_free(windows);
     /* A high-rate mouse may queue hundreds of motions before a click/key.
-       Include both tabs so a slow present per event cannot hide in either. */
-    for (int tab=0;tab<2;tab++) {
+       Include all four tabs so a slow present per event cannot hide in either. */
+    for (int tab=0;tab<4;tab++) {
         for (int i=0;i<1024;i++) {
             SDL_Event e={0}; e.type=SDL_EVENT_MOUSE_MOTION;
             e.motion.x=w/2.0f; e.motion.y=h*(0.3f+(i%2)*0.3f);
@@ -87,7 +87,7 @@ static Uint32 listCaseInput(void *data,SDL_TimerID timer,Uint32 interval) {
     (void)data;(void)timer;
     int tail=SDL_max(0,listCaseCount-8);
     switch(listCaseStep++) {
-    case 0:key(SDLK_TAB);key(SDLK_HOME);break;
+    case 0:clickUI(260,28);key(SDLK_HOME);break;
     case 1:
         if(!listCaseCount) {expectUIText(16,64,"No mods in the Mods folder",7,0);expectUIText(16,180,"Return",15,0);key(SDLK_ESCAPE);return 0;}
         expectRange(0);
@@ -103,11 +103,11 @@ static Uint32 listCaseInput(void *data,SDL_TimerID timer,Uint32 interval) {
         expectUIText(280,45+(listCaseCount-1-tail)*14,">",15,0);clickUI(284,48+(listCaseCount-1-tail)*14);break;
     case 4: {
         char title[40];SDL_snprintf(title,sizeof(title),"Test mod %02d",listCaseCount-1);
-        expectUIText(72,60,title,15,0);
+        expectUIText(136,60,title,15,0);
         assert(g_linearEgaBuffer0[165*320+21]==0);
         expectUIText(24,180,"Back",15,0);clickUI(302,162);break;
     }
-    case 5:expectUIText(72,156,"End of description.",15,0);clickUI(48,184);break;
+    case 5:expectUIText(136,156,"End of description.",15,0);clickUI(48,184);break;
     case 6:expectRange(tail);hoverUI(200,48);break;
     case 7:
         assert(MOD_Available(tail)->enabled==(tail!=listCaseCount-1));
@@ -174,7 +174,20 @@ static Uint32 selectAmiga(void* data, SDL_TimerID timer, Uint32 interval) {
 static int modStep, expectedModEnabled;
 static Uint32 modInput(void* data, SDL_TimerID timer, Uint32 interval) {
     (void)data; (void)timer;
-    if (!modStep++) { key(SDLK_TAB); return interval; }
+    if (!modStep++) { clickUI(260,28); return interval; }
+    if(modStep==3) {
+        SDL_Surface *detail=GRAP_SDL_CaptureFrame();assert(detail);
+        Uint8 r,g,b,a;
+        assert(SDL_ReadSurfacePixel(detail,detail->w*100/320,detail->h*100/200,&r,&g,&b,&a));
+        assert(r>180 && g<60 && b<80); /* Large screenshot extends well beyond the old thumbnail. */
+        assert(SDL_ReadSurfacePixel(detail,detail->w*100/320,detail->h*132/200,&r,&g,&b,&a));
+        assert(r==0 && g==0 && b==0); /* It stays above the enable controls. */
+        assert(g_linearEgaBuffer0[100*320+100]==0); /* Smooth overlay, not pixel UI. */
+        const char *path=getenv("IMPERA_MOD_DETAILS_SCREENSHOT");
+        if(path)assert(SDL_SavePNG(detail,path));
+        SDL_DestroySurface(detail);
+        key(SDLK_ESCAPE);clickUI(200,48);key(SDLK_ESCAPE);return 0;
+    }
     /* Same seven-pixel checkbox as the ordinary engine options. */
     assert(g_linearEgaBuffer0[45*320+21] == (expectedModEnabled ? 10 : 0));
     /* List redraws must not leave the details screenshot overlay behind. */
@@ -191,15 +204,14 @@ static Uint32 modInput(void* data, SDL_TimerID timer, Uint32 interval) {
     assert(r==0 && g==0 && b==0);
     /* The preview is a display-resolution overlay, not baked into the pixel UI. */
     assert(g_linearEgaBuffer0[128*320+36] == 0);
-    /* Match the small save-slot thumbnail footprint (44 by 24 logical pixels). */
+    /* Mod list has no persistent screenshot overlay. */
     assert(SDL_ReadSurfacePixel(shot,shot->w*68/320,shot->h*128/200,&r,&g,&b,&a));
     assert(r==0 && g==0 && b==0);
     const char *screenshot=getenv("IMPERA_MODS_SCREENSHOT");
     if(screenshot) assert(SDL_SavePNG(shot,screenshot));
     SDL_DestroySurface(shot);
-    clickUI(200,48); /* Clicking the mod name must toggle it. */
-    key(SDLK_ESCAPE);
-    return 0;
+    clickUI(284,48); /* Open details using its mouse button. */
+    return interval;
 }
 static void packageNumber(FILE *f, unsigned value) {
     unsigned char b[4] = {value, value >> 8, value >> 16, value >> 24};
@@ -324,7 +336,7 @@ static void refreshTitle(void) {
 }
 static Uint32 optionLabelClick(void *data, SDL_TimerID timer, Uint32 interval) {
     (void)data; (void)timer; (void)interval;
-    clickUI(80,42+ENGINE_ENHANCED_LOOK*10+3); key(SDLK_ESCAPE); return 0;
+    clickUI(180,28);clickUI(80,47); key(SDLK_ESCAPE); return 0;
 }
 static int musicPickerMode,musicInputStep;
 static Uint32 musicInput(void* data,SDL_TimerID timer,Uint32 interval)
@@ -332,7 +344,7 @@ static Uint32 musicInput(void* data,SDL_TimerID timer,Uint32 interval)
     (void)data;(void)timer;
     int step=musicInputStep++;
     if(!step) {
-        for(int i=0;i<ENGINE_MUSIC;i++) key(SDLK_DOWN);
+        clickUI(110,28);
         key(SDLK_RETURN);return interval;
     }
     if(step==1 && musicPickerMode>=4) { key(SDLK_ESCAPE);return 0; }
@@ -348,7 +360,7 @@ static Uint32 musicInput(void* data,SDL_TimerID timer,Uint32 interval)
 static Uint32 closeGameplayOptions(void* userdata, SDL_TimerID timer, Uint32 interval)
 {
     (void)userdata;(void)timer;(void)interval;
-    for(int i=0;i<ENGINE_MUSIC;i++) key(SDLK_DOWN);
+    clickUI(110,28);
     key(SDLK_RETURN); /* Toggle music to prove the shortcut opened the screen. */
     key(SDLK_ESCAPE);
     return 0;
@@ -425,7 +437,7 @@ int main(int argc, char** argv)
     }
     assert(SDL_AddTimer(80,mouseBurst,NULL));
     Uint64 burstStart=SDL_GetTicks(); ENGINE_ShowOptions(false);
-    printf("Options/Mods input burst: %llu ms\n", (unsigned long long)(SDL_GetTicks()-burstStart));
+    printf("Engine Options tab input burst: %llu ms\n", (unsigned long long)(SDL_GetTicks()-burstStart));
     ENGINE_Set(ENGINE_CRT,1);
     assert(SDL_AddTimer(80,mouseBurst,NULL)); ENGINE_ShowOptions(false);
     ENGINE_Set(ENGINE_CRT,0);
@@ -441,18 +453,23 @@ int main(int argc, char** argv)
     assert(TILESET_Selected() == TILESET_AMIGA);
     assert(TILESET_Select(TILESET_DOS));
     ENGINE_Set(ENGINE_MOVEMENT_SPEED,0.5f);ENGINE_Set(ENGINE_ANIMATION_SPEED,0.75f);
+    assert(ENGINE_Get(ENGINE_SOUND_SPEED)==1);
+    ENGINE_Set(ENGINE_SOUND_SPEED,0.5f);
     assert(!ENGINE_Get(ENGINE_ENHANCED_LOOK));
     ENGINE_Set(ENGINE_ENHANCED_LOOK,1);
     ENGINE_Set(ENGINE_MOUSE,1);assert(ENGINE_Get(ENGINE_MOUSE)==1);
     ENGINE_Set(ENGINE_MOUSE,0);
     ENGINE_Set(ENGINE_DITHERED_DARKNESS,1);
     assert(ENGINE_Get(ENGINE_CRT)==0);ENGINE_Set(ENGINE_CRT,1);
-    assert(ENGINE_Save());ENGINE_Set(ENGINE_CRT,0);ENGINE_Set(ENGINE_DITHERED_DARKNESS,0);ENGINE_Set(ENGINE_MOVEMENT_SPEED,1);ENGINE_Load();
+    assert(ENGINE_Save());ENGINE_Set(ENGINE_SOUND_SPEED,1);ENGINE_Set(ENGINE_CRT,0);ENGINE_Set(ENGINE_DITHERED_DARKNESS,0);ENGINE_Set(ENGINE_MOVEMENT_SPEED,1);ENGINE_Load();
     assert(ENGINE_Get(ENGINE_ENHANCED_LOOK)==1);
     assert(ENGINE_Get(ENGINE_DITHERED_DARKNESS)==1);
     assert(ENGINE_Get(ENGINE_CRT)==1);ENGINE_Set(ENGINE_CRT,0);
     ENGINE_Set(ENGINE_DITHERED_DARKNESS,0);
     assert(ENGINE_Get(ENGINE_MOVEMENT_SPEED)==0.5f);
+    assert(ENGINE_Get(ENGINE_SOUND_SPEED)==0.5f);
+    ENGINE_Set(ENGINE_SOUND_SPEED,0);assert(ENGINE_Get(ENGINE_SOUND_SPEED)==0.5f);
+    ENGINE_Set(ENGINE_SOUND_SPEED,1);
     f=fopen("ENGINE.CFG","w");assert(f);fputs("movement_speed nan\nanimation_speed 99\nfullscreen 3\n",f);fclose(f);
     ENGINE_Load();assert(ENGINE_Get(ENGINE_MOVEMENT_SPEED)==0.5f && ENGINE_Get(ENGINE_ANIMATION_SPEED)==0.75f);
     ENGINE_Set(ENGINE_MOVEMENT_SPEED,1);ENGINE_Set(ENGINE_ANIMATION_SPEED,1);
@@ -475,7 +492,7 @@ int main(int argc, char** argv)
     }
     EVT_SetImmediateExit(previousExit);D_58a4=0;
     GRAP_SDL_SetVideoMode(0);ENGINE_Set(ENGINE_DITHERED_DARKNESS,0);
-    GRAP_SDL_SetPixelUI(true);ENGINE_DrawSettings(ENGINE_MOVEMENT_SPEED);
+    GRAP_SDL_SetPixelUI(true);ENGINE_DrawSettings(ENGINE_ANIMATION_SPEED);
     for(int y=0;y<8;y++) for(int x=0;x<8;x++)
         assert(g_linearEgaBuffer0[(12+y)*320+104+x]==((font['E'*8+y]&(0x80>>x))?15:0));
     /* Both ends of the settings content have four pixels of inset. */
@@ -487,9 +504,9 @@ int main(int argc, char** argv)
     assert(g_linearEgaBuffer0[0*320+8]==1);
     assert(g_linearEgaBuffer0[7*320+7]==15);
     assert(g_linearEgaBuffer0[80*320+0]==1);
-    assert(g_linearEgaBuffer0[151*320+16]==15);
+    assert(g_linearEgaBuffer0[113*320+16]==15);
     for(int y=0;y<8;y++) for(int x=0;x<8;x++)
-        assert(g_linearEgaBuffer0[(152+y)*320+24+x]==((font['M'*8+y]&(0x80>>x))?0:15));
+        assert(g_linearEgaBuffer0[(114+y)*320+24+x]==((font['A'*8+y]&(0x80>>x))?0:15));
     int count;SDL_Window** windows=SDL_GetWindows(&count);assert(count==1);
     SDL_Renderer* renderer=SDL_GetRenderer(windows[0]);SDL_free(windows);
     SDL_Surface* shot=SDL_RenderReadPixels(renderer,NULL);assert(shot);
@@ -500,14 +517,14 @@ int main(int argc, char** argv)
     D_5893_map_id=13;D_58a4=1;
     ENGINE_Set(ENGINE_SMOOTH,1);
     GRAP_SDL_MapDrawn();
-    ENGINE_DrawSettings(ENGINE_MOVEMENT_SPEED);
+    ENGINE_DrawSettings(ENGINE_ANIMATION_SPEED);
     SDL_Surface* gameplayShot=SDL_RenderReadPixels(renderer,NULL);assert(gameplayShot);
     assert(gameplayShot->w==shot->w && gameplayShot->h==shot->h);
     SDL_Surface* reference=SDL_ConvertSurface(shot,SDL_PIXELFORMAT_ARGB8888);
     SDL_Surface* actual=SDL_ConvertSurface(gameplayShot,SDL_PIXELFORMAT_ARGB8888);
     assert(reference && actual);
     /* Smooth toggle was changed, so redraw the reference with the same values. */
-    D_5893_map_id=0x40;D_58a4=0;ENGINE_DrawSettings(ENGINE_MOVEMENT_SPEED);
+    D_5893_map_id=0x40;D_58a4=0;ENGINE_DrawSettings(ENGINE_ANIMATION_SPEED);
     SDL_DestroySurface(shot);shot=SDL_RenderReadPixels(renderer,NULL);assert(shot);
     SDL_DestroySurface(reference);reference=SDL_ConvertSurface(shot,SDL_PIXELFORMAT_ARGB8888);assert(reference);
     for(int y=0;y<actual->h;y++)
@@ -520,25 +537,40 @@ int main(int argc, char** argv)
     MOUSE_SetPointerMode(true);assert(MOUSE_CursorDirection(100,200)==0);
     MOUSE_SetPointerMode(false);
     D_5893_map_id=0x40;D_58a4=0;
-    GRAP_SDL_SetPixelUI(false);
+    GRAP_SDL_SetPixelUI(true); /* Queue mouse coordinates for the options layout. */
     memset(g_linearEgaBuffer0,3,320*200);
-    for(int i=0;i<ENGINE_MUSIC;i++) key(SDLK_DOWN);
-    key(SDLK_RETURN); /* music off */
-    key(SDLK_DOWN);key(SDLK_RETURN); /* effects off */
-    for(int i=ENGINE_SOUND;i<ENGINE_MOVEMENT_SPEED;i++) key(SDLK_DOWN);
+    clickUI(110,28); /* Sound tab, music initially selected. */
+    key(SDLK_RETURN);key(SDLK_DOWN);key(SDLK_RETURN); /* music and effects off */
+    key(SDLK_DOWN);key(SDLK_RETURN); /* footsteps off */
+    key(SDLK_DOWN);key(SDLK_LEFT); /* music volume 0.95 */
+    key(SDLK_DOWN);key(SDLK_LEFT); /* sound volume 0.95 */
+    key(SDLK_DOWN);key(SDLK_LEFT); /* sound speed 0.75 */
+    clickUI(180,28); /* Gameplay */
+    for(int i=0;i<4;i++)key(SDLK_DOWN);
     key(SDLK_LEFT); /* movement 0.75 */
-    key(SDLK_DOWN);key(SDLK_LEFT); /* animation 0.75 */
+    clickUI(44,28); /* Graphics */
+    for(int i=0;i<5;i++)key(SDLK_DOWN);
+    key(SDLK_LEFT); /* animation 0.75 */
+    clickUI(180,28); /* Drag movement slider to normal. */
     SDL_Event e={0};e.type=SDL_EVENT_MOUSE_BUTTON_DOWN;e.button.button=SDL_BUTTON_LEFT;
-    e.button.x=184*4;e.button.y=80+152*4;assert(SDL_PushEvent(&e));
-    e.type=SDL_EVENT_MOUSE_MOTION;e.motion.x=248*4;e.motion.y=80+152*4;assert(SDL_PushEvent(&e));
+    e.button.x=184*4;e.button.y=80+102*4;assert(SDL_PushEvent(&e));
+    e.type=SDL_EVENT_MOUSE_MOTION;e.motion.x=248*4;e.motion.y=80+102*4;assert(SDL_PushEvent(&e));
     e.type=SDL_EVENT_MOUSE_BUTTON_UP;assert(SDL_PushEvent(&e));
+    clickUI(110,28); /* Continuous volume drag must not snap to speed ticks. */
+    clickUI(208,86); /* music volume = 0.375 */
     key(SDLK_ESCAPE);
     ENGINE_ShowOptions(false);
     assert(ENGINE_Get(ENGINE_MUSIC)==0 && ENGINE_Get(ENGINE_SOUND)==0);
+    assert(ENGINE_Get(ENGINE_SOUND_SPEED)==0.75f);
+    assert(ENGINE_Get(ENGINE_MUSIC_VOLUME)==0.375f);
+    assert(SDL_fabsf(ENGINE_Get(ENGINE_SOUND_VOLUME)-0.95f)<0.001f);
+    assert(!ENGINE_Get(ENGINE_FOOTSTEPS));
     assert(ENGINE_Get(ENGINE_MOVEMENT_SPEED)==1 && ENGINE_Get(ENGINE_ANIMATION_SPEED)==0.75f);
     for(int i=0;i<320*200;i++) assert(g_linearEgaBuffer0[i]==3); /* restores title art */
+    ENGINE_Set(ENGINE_MUSIC_VOLUME,1);ENGINE_Set(ENGINE_SOUND_VOLUME,1);ENGINE_Set(ENGINE_FOOTSTEPS,1);
     ENGINE_Set(ENGINE_ANIMATION_SPEED,1);ENGINE_Load();
     assert(ENGINE_Get(ENGINE_ANIMATION_SPEED)==0.75f);
+    assert(ENGINE_Get(ENGINE_MUSIC_VOLUME)==0.375f && !ENGINE_Get(ENGINE_FOOTSTEPS));
     /* Hovering either return row selects it: Enter closes without toggling fullscreen. */
     for(int gameplay=0;gameplay<2;gameplay++) {
         bool fullscreen=GRAP_SDL_Fullscreen();

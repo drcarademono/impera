@@ -1,3 +1,5 @@
+#include "audio/aud_mus.h"
+#include "audio/mod_audio.h"
 #include "mod/party.h"
 #include "common/common.h"
 #include "funcs.h"
@@ -416,6 +418,8 @@ static void BLCKTHRN_054a(int param_1, int param_2)
 
 void BLCKTHRN_060e_Capture(void)
 {
+    unsigned prisonMusic=AUDIO_MOD_Assignment(2,11,0,~0u);
+    if(prisonMusic!=~0u) AUDIO_PlayBgm(prisonMusic);
     int local_8;
     int local_e;
     int local_c;
@@ -545,6 +549,7 @@ void BLCKTHRN_060e_Capture(void)
     D_5897_map_y = 7;
     D_57ac = 0;
     D_5893_map_id = 0x12;
+    if(prisonMusic!=~0u) AUDIO_PlayBgmPerMap();
 }
 
 // CHECKED

@@ -94,6 +94,17 @@ def package(build, platform, version, output):
     shutil.copy2(ROOT / 'workshop/README.md', stage / 'README.md')
     licenses = stage / 'Licenses'
     licenses.mkdir(exist_ok=True)
+    # Workshop previews use the same statically linked SDL codecs as the engine.
+    dependencies = build.parent / '_deps'
+    for source_name, label in (('sdl3-src/LICENSE.txt', 'SDL3.txt'),
+                               ('sdl3_mixer-src/LICENSE.txt', 'SDL3_mixer.txt')):
+        source_license = dependencies / source_name
+        if source_license.is_file():
+            shutil.copy2(source_license, licenses / label)
+    vorbis_header = dependencies / 'sdl3_mixer-src/src/stb_vorbis/stb_vorbis.h'
+    if vorbis_header.is_file():
+        vorbis = vorbis_header.read_text()
+        (licenses / 'stb_vorbis.txt').write_text(vorbis[vorbis.index('This software is available under 2 licenses'):])
     # Qt is dynamically linked; include LGPL/GPL notices and source instructions.
     qt_root = Path(os.environ['QT_ROOT_DIR'])
     qt_licenses = ROOT / 'packaging/qt-licenses'

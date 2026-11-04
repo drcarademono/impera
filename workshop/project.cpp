@@ -1,3 +1,4 @@
+#include "mod/audio_resource.h"
 #include "mod/party.h"
 #include "dungeon_names.h"
 #include "mod/location_names.h"
@@ -49,7 +50,7 @@ void Project::openGame(const QString &directory) {
     require(dir.exists(), "Game folder does not exist");
     for (const auto &name : dir.entryList(QDir::Files, QDir::Name)) {
         QString upper = name.toUpper();
-        if (upper == "PARTY.OVR" || upper == "TYPES.OVR" || upper == "TYPEMAP.OVR" || upper == "CUTSCENE.OVR" ||
+        if (upper == "AUDIO.OVR" || upper == "PARTY.OVR" || upper == "TYPES.OVR" || upper == "TYPEMAP.OVR" || upper == "CUTSCENE.OVR" ||
             upper == "MAPS.OVR" || MAPS_LocationResource(upper.toLatin1().constData()) ||
             upper == "LOCATIONS.OVR" || upper == "TEXT.OVR" || upper == "RULES.TBL" ||
             upper == "MODINFO.DAT" || upper == "INTERFACE.OVR" || upper == "GATES.OVR" || upper == "CONTENTS.OVR")
@@ -80,6 +81,7 @@ void Project::openGame(const QString &directory) {
                 readLimited(":/tilesets/" + QString::fromUtf8(sheet.filename), MOD_MAX_RESOURCE);
         next.resources.insert(QString::fromLatin1(sheet.resource), {bytes, bytes});
     }
+    next.resources.insert("AUDIO.OVR", {{}, {}});
     next.resources.insert("PARTY.OVR", {{}, {}});
     next.resources.insert("TYPES.OVR", {{}, {}});
     next.resources.insert("TYPEMAP.OVR", {{}, {}});
@@ -192,6 +194,8 @@ QStringList Project::changed() const {
     return list;
 }
 void Project::validate() const {
+    const auto audio=resources.value("AUDIO.OVR").edited;
+    require(audio.isEmpty()||MA_Validate(audio.constData(),audio.size()),"Invalid audio definitions");
     if(!resources.value("PARTY.OVR").edited.isEmpty()) {
         const auto &party=data("PARTY.OVR");
         require(PARTY_Validate(party.constData(),party.size()),"Invalid party definitions");
@@ -212,7 +216,7 @@ void Project::validate() const {
     }
     for (const auto &name : changed()) {
         const auto &b = data(name);
-        require(!b.isEmpty() && b.size() <= MOD_MAX_RESOURCE, "Invalid resource size: " + name);
+        require(!b.isEmpty() && b.size() <= (name=="AUDIO.OVR"?MOD_MAX_AUDIO:MOD_MAX_RESOURCE), "Invalid resource size: " + name);
         Workshop::validateResource(*this, name);
     }
 }
@@ -327,6 +331,7 @@ QByteArray Project::package() const {
         portableConditions |= contents.refill > 2;
     const bool masks = usesMasks(*this);
     QByteArray out(
+        list.contains("AUDIO.OVR") ? "IMOD0030" :
         list.contains("PARTY.OVR") ? "IMOD0029"
         : list.contains("MODINFO.DAT") ? (data("MODINFO.DAT").startsWith("IMETA002") ? "IMOD0028" : "IMOD0027")
         : list.contains("INTERFACE.OVR") ? "IMOD0026"
@@ -366,7 +371,7 @@ QByteArray Project::package() const {
     size_t totalOutput = 0;
     for (auto name : list) {
         totalOutput += resources[name].edited.size();
-        require(totalOutput <= MOD_MAX_PACKAGE, "Decoded package exceeds 32 MiB");
+        require(totalOutput <= MOD_MAX_PACKAGE, "Decoded package exceeds 128 MiB");
         const auto &r = resources[name];
         const QByteArray base =
             MOD_TilesetSheet(name.toLatin1().constData()) ? QByteArray() : r.original;
@@ -395,7 +400,7 @@ QByteArray Project::package() const {
         append32(out, count);
         out += spans;
     }
-    require(out.size() <= MOD_MAX_PACKAGE, "Package exceeds 32 MiB");
+    require(out.size() <= MOD_MAX_PACKAGE, "Package exceeds 128 MiB");
     return out;
 }
 static int readBase(void *context, const char *name, unsigned char **data, size_t *size) {
@@ -514,6 +519,7 @@ void Project::save(const QString &path) {
         requirements["packageVersion"] = data("MODINFO.DAT").startsWith("IMETA002") ? 28 : 27;
     }
     if(changed().contains("PARTY.OVR")) {requirements["partyDefinitions"]=1;requirements["packageVersion"]=29;}
+    if(changed().contains("AUDIO.OVR")) {requirements["audioDefinitions"]=1;requirements["packageVersion"]=30;}
     if (!requirements.isEmpty())
         root["requires"] = requirements;
     QJsonObject annotations;
@@ -527,7 +533,7 @@ void Project::save(const QString &path) {
     projectPath = path;
 }
 void Project::load(const QString &path) {
-    auto bytes = readLimited(path, 64 * 1024 * 1024);
+    auto bytes = readLimited(path, 192 * 1024 * 1024);
     QJsonParseError error;
     auto doc = QJsonDocument::fromJson(bytes, &error);
     require(error.error == QJsonParseError::NoError && doc.isObject(),
@@ -575,7 +581,7 @@ void Project::load(const QString &path) {
                 "Original files changed since project creation: " + name);
         auto decoded = QByteArray::fromBase64Encoding(edit["bytes"].toString().toLatin1(),
                                                       QByteArray::AbortOnBase64DecodingErrors);
-        require(bool(decoded) && decoded.decoded.size() <= MOD_MAX_RESOURCE,
+        require(bool(decoded) && decoded.decoded.size() <= (name=="AUDIO.OVR"?MOD_MAX_AUDIO:MOD_MAX_RESOURCE),
                 "Invalid project resource bytes");
         r.edited = decoded.decoded;
         require(!edit.contains("included") || edit["included"].isBool(), "Invalid inclusion flag");
@@ -617,7 +623,7 @@ QVector<ModDiagnostic> validateMod(const Project &project, const QString &modsDi
                        "No modified resources; there is no package to export or test."});
     for (const auto &name : changes) {
         try {
-            if (name == "PARTY.OVR" || name == "TYPES.OVR" || name == "TYPEMAP.OVR" || name == "CUTSCENE.OVR" ||
+            if (name == "AUDIO.OVR" || name == "PARTY.OVR" || name == "TYPES.OVR" || name == "TYPEMAP.OVR" || name == "CUTSCENE.OVR" ||
                 name == "MAPS.OVR" || MAPS_LocationResource(name.toLatin1().constData()) ||
                 name == "LOCATIONS.OVR" || name == "TEXT.OVR" || name == "RULES.TBL" ||
                 name == "MODINFO.DAT" || name == "INTERFACE.OVR" || name == "GATES.OVR" || name == "CONTENTS.OVR") {
@@ -964,7 +970,7 @@ QString prepareModTest(const Project &project, const QString &sessionsDirectory)
                 "Cannot make test file writable");
     }
     for (const auto &name : project.resources.keys()) {
-        if (name == "PARTY.OVR" || name == "TYPES.OVR" || name == "TYPEMAP.OVR" || name == "CUTSCENE.OVR" ||
+        if (name == "AUDIO.OVR" || name == "PARTY.OVR" || name == "TYPES.OVR" || name == "TYPEMAP.OVR" || name == "CUTSCENE.OVR" ||
             name == "MAPS.OVR" || MAPS_LocationResource(name.toLatin1().constData()) ||
             name == "LOCATIONS.OVR" || name == "TEXT.OVR" || name == "RULES.TBL" ||
             name == "MODINFO.DAT" || name == "INTERFACE.OVR" || name == "GATES.OVR" || name == "CONTENTS.OVR" || MOD_TilesetSheet(name.toLatin1().constData()))

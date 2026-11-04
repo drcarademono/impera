@@ -764,3 +764,9 @@ Import tileset PNG and Export tileset PNG buttons operate on the complete sheet
 and retain every slot in its original order. Transparent pixels in artwork
 sheets are composited onto black; DOS imports use the EGA palette, while full
 alternate sheets preserve their imported palette within engine format limits.
+
+Sound and Music provides original-effect preview and individual/bulk WAV export,
+WAV/Ogg import, new audio assets, per-asset volume, music loops and assignments.
+Audio preview uses SDL3 and SDL3_mixer (also required for standalone builds).
+Use the recordings-folder button to locate external original music/effects;
+use Import to include audio in the mod. Preview volume is an editor preference.
