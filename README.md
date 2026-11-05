@@ -245,8 +245,15 @@ Black in the split sprite sheet is transparent apart from the generated outline;
 ordinary sprites still honor their existing protection masks.
 Other tilesets, identical cells, and custom sprite artwork retain their existing
 rendering. The 2D view always keeps its original artwork.
-Tiles 190 (table) and 220 (moongate) render upright in 3D with inferred ground
-underneath, using the normal sprite protection masks.
+Moongates render upright with inferred ground underneath. Sign bases (224),
+connecting pieces (225/226), stacked poles (227), and faces (236–247, 249) assemble
+into one tall billboard anchored at the pole, with one continuous outline.
+Displaced upper pieces show grass without changing the map data. Until a dedicated
+227 sprite is supplied, its pole uses the existing 224 artwork.
+Bookshelves (92/93) form fixed shallow bookcases. Table sections (148–150,
+154–156, 190) join into low tables with horizontal tops and legs, reusing the
+original artwork. Furniture retains its map orientation instead of swivelling
+with the camera. Normal protection masks still apply to non-split artwork.
 The camera sits 13/16 of a tile above the floor. Location floors render together
 at their actual heights, including walls, floors, ceilings, NPCs, and containers.
 Upper-floor background tiles represent open air. Decorative rugs and placed

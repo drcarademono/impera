@@ -395,14 +395,17 @@ static void testHeightAndCarpets(SDL_Surface *image, byte *tiles) {
                 tiles[tile * 128 + y * 8 + x / 2] |= x & 1 ? 5 : 0x50;
         D_6608_map.town[14][16] = tile;
         WORLD3D_Render(image, palette);
-        assert((at(image, 176, 200) & 255) > 80 && (at(image, 176, 200) & 0xff0000));
         if (tile == 190) {
+            assert((at(image, 176, 240) & 255) > 80 && (at(image, 176, 240) & 0xff0000));
             assert(TILESET_ProtectedBlack(tile, 2, 5));
-            assert(at(image, 130, 200) == palette[0]);
-        } else
+            assert(at(image, 117, 239) ==
+                   palette[0]); /* The fixed table face retains normal masks. */
+            assert((at(image, 205, 240) & 0xff00) && !(at(image, 205, 240) & 0xff0000));
+        } else {
+            assert((at(image, 176, 200) & 255) > 80 && (at(image, 176, 200) & 0xff0000));
             assert((at(image, 130, 200) & 0xff00) && !(at(image, 130, 200) & 0xff0000));
-        assert((at(image, 220, 200) & 0xff00) && !(at(image, 220, 200) & 0xff0000));
-        assert(at(image, 155, 200) == palette[0]); /* Only the narrow outline stays black. */
+            assert(at(image, 155, 200) == palette[0]);
+        }
     }
     memset(tiles + 0xaa * 128, 0x55, 128);
     memset(tiles + (256 + 0x1b) * 128, 0x55, 128);
@@ -632,6 +635,96 @@ static void testSplitSheets(SDL_Surface *image) {
     assert(!TILESET_3DSplit(tile)); /* Missing pair keeps the original renderer. */
     memset(D_6608_map.town, 0x44, 32 * 32);
 }
+static void setTestPixel(byte *tiles, unsigned tile, int x, int y, unsigned color) {
+    byte *p = tiles + tile * 128 + y * 8 + x / 2;
+    if (x & 1)
+        *p = (*p & 0xf0) | color;
+    else
+        *p = (*p & 15) | (color << 4);
+}
+static int colorCountAbove(SDL_Surface *image, unsigned red, unsigned blue) {
+    int count = 0;
+    for (int y = 22; y < 176; y++)
+        for (int x = 22; x < 330; x++) {
+            Uint32 c = at(image, x, y);
+            if (((c >> 16) & 255) > red && (c & 255) > blue && !(c & 0xff00))
+                count++;
+        }
+    return count;
+}
+static void testSignsAndFurniture(SDL_Surface *image, byte *tiles) {
+    memset(tiles + 5 * 128, 0x33,
+           128); /* Cyan grass distinguishes substituted cells from the floor. */
+    memset(tiles + 64 * 128, 0x66, 128);
+    for (unsigned tile = 224; tile <= 226; tile++) {
+        memset(tiles + tile * 128, 0, 128);
+        for (int y = 0; y < 16; y++)
+            setTestPixel(tiles, tile, 8, y, 7);
+    }
+    for (int x = 5; x <= 11; x++)
+        setTestPixel(tiles, 224, x, 15, 7);
+    for (int x = 8; x < 16; x++)
+        setTestPixel(tiles, 225, x, 4, 7);
+    for (int x = 0; x <= 8; x++)
+        setTestPixel(tiles, 226, x, 4, 7);
+    memset(tiles + 227 * 128, 0x22, 128); /* Pole fallback while the new art is not yet provided. */
+    memset(tiles + 240 * 128, 0x55, 128);
+    memset(tiles + 236 * 128, 0x55, 128);
+    for (int side = -1; side <= 1; side++) {
+        memset(D_6608_map.town, 0x44, 1024);
+        D_6608_map.town[13][16] = 224;
+        D_6608_map.town[12][16] = side < 0 ? 226 : side > 0 ? 225 : 240;
+        if (side)
+            D_6608_map.town[12][16 + side] = 240;
+        byte unchanged[1024];
+        memcpy(unchanged, D_6608_map.town, 1024);
+        WORLD3D_Render(image, palette);
+        int x = side < 0 ? 85 : side > 0 ? 268 : 176;
+        assert((at(image, x, 110) & 255) > 60 && (at(image, x, 110) & 0xff0000));
+        int dx, dy;
+        assert(WORLD3D_Pick(x / 352.0f, 110 / 352.0f, &dx, &dy) && dx == 0 && dy == -3);
+        assert(!memcmp(unchanged, D_6608_map.town, 1024));
+        if (side > 0) {
+            Uint32 grass = at(image, 245, 232);
+            assert((grass & 255) > 60 && (grass & 0xff00) && !(grass & 0xff0000));
+        }
+    }
+    memset(D_6608_map.town, 0x44, 1024);
+    D_6608_map.town[13][16] = D_6608_map.town[12][16] = D_6608_map.town[11][16] = 227;
+    D_6608_map.town[11][17] = 236;
+    WORLD3D_Render(image, palette);
+    assert(colorCountAbove(image, 50, 50) >
+           50); /* One tall 227 pole carries its flag above the base. */
+    assert(SDL_SaveBMP(image, "world3d-tall-sign.bmp"));
+    memset(D_6608_map.town, 0x44, 1024);
+    memset(tiles + 92 * 128, 0x11, 128);
+    memset(tiles + 93 * 128, 0x55, 128);
+    D_6608_map.town[13][15] = 92;
+    D_6608_map.town[13][16] = 93;
+    WORLD3D_Render(image, palette);
+    assert((at(image, 80, 190) & 255) > 60 && !(at(image, 80, 190) & 0xff0000));
+    assert((at(image, 176, 190) & 255) > 60 && (at(image, 176, 190) & 0xff0000));
+    assert(SDL_SaveBMP(image, "world3d-bookcase-front.bmp"));
+    D_5896_map_x = 13;
+    D_5897_map_y = 13;
+    WORLD3D_Move(U5_KEY_RIGHT);
+    WORLD3D_Render(image, palette);
+    assert((at(image, 176, 180) & 0xff0000) &&
+           !(at(image, 176, 180) & 255)); /* Wooden end, not a swivelling book face. */
+    assert(SDL_SaveBMP(image, "world3d-bookcase-end.bmp"));
+    WORLD3D_Move(U5_KEY_LEFT);
+    D_5896_map_x = D_5897_map_y = 16;
+    memset(D_6608_map.town, 0x44, 1024);
+    const unsigned row[] = {148, 149, 190, 156, 150};
+    for (unsigned i = 0; i < 5; i++) {
+        memset(tiles + row[i] * 128, 0x55, 128);
+        D_6608_map.town[13][13 + i] = row[i];
+    }
+    WORLD3D_Render(image, palette);
+    assert((at(image, 176, 210) & 255) > 60 && (at(image, 176, 210) & 0xff0000));
+    assert(SDL_SaveBMP(image, "world3d-table-run.bmp"));
+    memset(D_6608_map.town, 0x44, 1024);
+}
 int main(void) {
     assert(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO));
     syntheticMaskBegin();
@@ -797,6 +890,7 @@ int main(void) {
     testStackedFloors(image, tiles);
     testNativeFloors(image);
     testSplitSheets(image);
+    testSignsAndFurniture(image, tiles);
     assert(ENGINE_Save());
     ENGINE_Set(ENGINE_WORLD_3D, 0);
     ENGINE_Load();
@@ -855,6 +949,26 @@ int main(void) {
         for (int i = 0; i < 50; i++)
             WORLD3D_Render(image, palette);
         printf("3D render average: %.2f ms\n", (SDL_GetTicksNS() - start) / 50000000.0);
+        /* Original-art review scene for the new composed/fixed objects. */
+        memset(D_6608_map.town, 5, 1024);
+        memset(D_5c5a, 0, sizeof(D_5c5a));
+        D_5896_map_x = D_5897_map_y = 16;
+        D_6608_map.town[12][16] = 224;
+        D_6608_map.town[11][16] = 225;
+        D_6608_map.town[11][17] = 240;
+        D_6608_map.town[12][13] = 92;
+        D_6608_map.town[12][14] = 93;
+        D_6608_map.town[13][18] = 148;
+        D_6608_map.town[13][19] = 190;
+        D_6608_map.town[13][20] = 150;
+        WORLD3D_Render(image, palette);
+        assert(SDL_SaveBMP(image, "world3d-objects-original.bmp"));
+        memset(D_6608_map.town, 5, 1024);
+        const unsigned tableReview[] = {148, 149, 190, 156, 150};
+        for (unsigned i = 0; i < 5; i++)
+            D_6608_map.town[13][14 + i] = tableReview[i];
+        WORLD3D_Render(image, palette);
+        assert(SDL_SaveBMP(image, "world3d-table-original.bmp"));
         const char *castle = SDL_getenv("IMPERA_3D_CASTLE");
         if (castle) {
             FILE_SetDataDirectory(castle);
