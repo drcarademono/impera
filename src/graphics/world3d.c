@@ -36,6 +36,7 @@ typedef struct {
     unsigned tile;
     int mode;
     unsigned w, h, pad;
+    int inkTop, inkBottom;
     int next;
     Uint32 pixels[68 * 68];
     Uint32 *largePixels;
@@ -55,7 +56,7 @@ typedef struct {
     float x, y;
     int texture, dx, dy, level;
     bool flat, topOnly;
-    float offset;
+    float offset, lift;
 } Sprite;
 static Sprite *sprites;
 static int spriteCount, spriteCapacity;
@@ -67,6 +68,7 @@ static size_t wallQueueSize;
 typedef struct {
     float x, y, z, ux, uy, uz, vx, vy, vz, crop;
     int texture, underneath, dx, dy, level;
+    bool ground;
 } ObjectQuad;
 static ObjectQuad *objectQuads;
 static int objectQuadCount, objectQuadCapacity;
@@ -293,6 +295,26 @@ static bool reservePixels(int width, int height) {
     pixelCapacity = count;
     return true;
 }
+static void textureInk(Texture *t, int y, Uint32 color) {
+    if (!(color >> 24))
+        return;
+    int row = y - (int)t->pad;
+    t->inkTop = SDL_min(t->inkTop, row);
+    t->inkBottom = SDL_max(t->inkBottom, row + 1);
+}
+static unsigned placementTile(unsigned tile) {
+    unsigned id = TYPES_ArtworkType(tile);
+    TypeDef d;
+    return id >= 512 && TYPES_Get(id, &d) && !d.kind ? d.base : id;
+}
+static float spriteLift(unsigned tile, const Texture *t) {
+    unsigned id = placementTile(tile);
+    if (id == 176 || id == 177)
+        return 0;
+    if (id == 200 || id == 279)
+        return STORY_HEIGHT - ((float)t->h - t->inkTop) / 32;
+    return -((float)t->h - t->inkBottom) / 32;
+}
 /* Furniture/moongates made upright in 3D need cutouts even when their 2D
  * drawing path deliberately keeps an opaque rectangular backdrop. */
 static Uint32 uprightPixel(unsigned tile, int x, int y, int sx, int sy) {
@@ -339,12 +361,15 @@ static int texture(unsigned tile, int mode) {
         GRAP_BUF_SetTransparentSprites(true);
     /* Preserve the shared one-logical-pixel outline outside every artwork edge. */
     t->pad = sprite && outline ? 2 : 0;
+    t->inkTop = t->h;
+    t->inkBottom = 0;
     for (unsigned y = 0; y < t->h + 2 * t->pad; y++)
         for (unsigned x = 0; x < t->w + 2 * t->pad; x++) {
             int px = (int)(x / 2) - (int)(t->pad / 2);
             int py = (int)(y / 2) - (int)(t->pad / 2);
             if (split) {
                 Uint32 color = TILESET_3DPixel(tile, px, py, sprite);
+                textureInk(t, y, color);
                 if (sprite && outline && !(color >> 24) && TILESET_SpriteOutline()) {
                     for (int dy = -1; dy <= 1; dy++)
                         for (int dx = -1; dx <= 1; dx++)
@@ -356,6 +381,7 @@ static int texture(unsigned tile, int mode) {
             }
             if (mode == 3 || mode == 5) {
                 Uint32 color = uprightPixel(tile, px, py, x & 1, y & 1);
+                textureInk(t, y, color);
                 if (outline && !(color >> 24) && TILESET_SpriteOutline()) {
                     for (int dy = -1; dy <= 1; dy++)
                         for (int dx = -1; dx <= 1; dx++)
@@ -371,7 +397,13 @@ static int texture(unsigned tile, int mode) {
                 : sprite ? TILESET_LastSpriteColor(c, x & 1, y & 1, colors,
                                                    GRAP_BUF_SpriteIsTransparent(tile))
                          : TILESET_LastColor(c, x & 1, y & 1, colors);
+            if (!sprite || c > 0)
+                textureInk(t, y, t->pixels[y * 68 + x]);
         }
+    if (t->inkBottom <= t->inkTop) {
+        t->inkTop = 0;
+        t->inkBottom = t->h;
+    }
     GRAP_BUF_SetTransparentSprites(transparency);
     t->next = textureBuckets[bucket];
     textureBuckets[bucket] = textureCount;
@@ -609,8 +641,12 @@ static unsigned floorFor(int dx, int dy, int level, const TypeDef *d) {
     }
     return best < 0 ? (D_5893_map_id ? 0x44 : 5) : candidates[best];
 }
+static void objectQuad(float, float, float, float, float, float, float, float, float, int, float,
+                       int, int, int, int);
 static void addSprite(unsigned tile, float x, float y, int dx, int dy, int level, bool flat,
                       bool topOnly) {
+    unsigned placement = placementTile(tile);
+    flat |= placement == 286 || placement == 287 || (placement >= 296 && placement <= 299);
     if (dx == 0 && dy == 0 && level == currentLevel() && !flat)
         return;
     if (spriteCount == spriteCapacity) {
@@ -622,8 +658,27 @@ static void addSprite(unsigned tile, float x, float y, int dx, int dy, int level
         spriteCapacity = capacity;
     }
     int index = texture(tile, tile == 190 || tile == 220 ? 3 : 1);
-    if (index >= 0)
-        sprites[spriteCount++] = (Sprite){x, y, index, dx, dy, level, flat, topOnly};
+    if (index >= 0) {
+        sprites[spriteCount++] =
+            (Sprite){x,     y,    index,   dx, dy,
+                     level, flat, topOnly, 0,  flat ? 0 : spriteLift(tile, &textures[index])};
+        if (placement == 200 || placement == 279) {
+            objectQuad(x - .5f, y - .5f, STORY_HEIGHT * (level + 1), 1, 0, 0, 0, 1, 0,
+                       texture(art(72, 72), 0), 1, -1, dx, dy, level);
+        } else if (placement == 201 || placement == 280) {
+            TypeDef d, ground;
+            unsigned id = typeAt(dx, dy, level), floor = 5;
+            if (TYPES_Get(id, &d))
+                floor = floorFor(dx, dy, level, &d);
+            if (!TYPES_Get(floor, &ground))
+                TYPES_Get(5, &ground);
+            int previous = objectQuadCount;
+            objectQuad(x - .5f, y - .5f, STORY_HEIGHT * level + .001f, 1, 0, 0, 0, 1, 0,
+                       texture(art(floor, ground.base), 0), 1, -1, dx, dy, level);
+            if (objectQuadCount > previous)
+                objectQuads[objectQuadCount - 1].ground = true;
+        }
+    }
 }
 static size_t hashCell(int x, int y, int level) {
     return (unsigned)x * 2654435761u ^ (unsigned)y * 2246822519u ^ (unsigned)level * 3266489917u;
@@ -885,12 +940,17 @@ static int signTexture(const SignLayout *s) {
         SDL_free(pieces);
         return -1;
     }
+    int inkTop = rows * 32, inkBottom = 0;
     bool transparency = GRAP_BUF_TransparentSprites();
     GRAP_BUF_SetTransparentSprites(true);
     for (int y = 0; y < height; y++)
         for (int x = 0; x < width; x++) {
             int px = x / 2 - 1, py = y / 2 - 1;
             Uint32 color = signPiecePixel(pieces, columns, rows, px, py);
+            if (color >> 24) {
+                inkTop = SDL_min(inkTop, y - 2);
+                inkBottom = SDL_max(inkBottom, y - 1);
+            }
             if (!(color >> 24) && TILESET_SpriteOutline())
                 for (int dy = -1; dy <= 1; dy++)
                     for (int dx = -1; dx <= 1; dx++)
@@ -911,8 +971,14 @@ static int signTexture(const SignLayout *s) {
         textureCapacity = cap;
     }
     int index = textureCount++;
-    textures[index] = (Texture){
-        .mode = 4, .w = columns * 32, .h = rows * 32, .pad = 2, .next = -1, .largePixels = pixels};
+    textures[index] = (Texture){.mode = 4,
+                                .w = columns * 32,
+                                .h = rows * 32,
+                                .pad = 2,
+                                .inkTop = inkBottom > inkTop ? inkTop : 0,
+                                .inkBottom = inkBottom > inkTop ? inkBottom : rows * 32,
+                                .next = -1,
+                                .largePixels = pixels};
     return index;
 }
 static void addSign(const SignLayout *s) {
@@ -943,6 +1009,7 @@ static void addSign(const SignLayout *s) {
         return;
     }
     sprites[spriteCount - 1].texture = index;
+    sprites[spriteCount - 1].lift = spriteLift(224, &textures[index]);
     sprites[spriteCount - 1].offset = s->side * .5f;
 }
 static bool bookshelf(unsigned tile) { return tile == 92 || tile == 93; }
@@ -1404,9 +1471,12 @@ static void drawObjectQuads(SDL_Surface *out, float ox, float oy, float eye, flo
                 Uint32 color = sample(q->texture, u, v * q->crop);
                 if (!(color >> 24) && q->underneath >= 0)
                     color = sample(q->underneath, u, v);
-                if (color >> 24)
+                if (color >> 24) {
                     pixel(out, x, y, shade(color, z, fabsf(nx) > fabsf(ny)), z, q->dx, q->dy,
                           q->level);
+                    if (q->ground)
+                        floorDepth[y * viewW + x] = 1;
+                }
             }
     }
 }
@@ -1619,7 +1689,8 @@ void WORLD3D_RenderRegion(SDL_Surface *out, const Uint32 *palette, int left, int
         float w = focalX * ((t->w + 2 * t->pad) / 32.0f) / z,
               h = focalY * ((t->h + 2 * t->pad) / 32.0f) / z,
               l = viewW * 0.5f + focalX * across / z - w * 0.5f,
-              bottom = viewH * 0.5f + focalY * (eye - STORY_HEIGHT * s->level + t->pad / 32.0f) / z,
+              bottom = viewH * 0.5f +
+                       focalY * (eye - STORY_HEIGHT * s->level - s->lift + t->pad / 32.0f) / z,
               topY = bottom - h;
         for (int y = SDL_max(0, (int)ceilf(topY - 0.5f));
              y < SDL_min(viewH, (int)ceilf(bottom - 0.5f)); y++)
@@ -1629,7 +1700,8 @@ void WORLD3D_RenderRegion(SDL_Surface *out, const Uint32 *palette, int left, int
                 if (color >> 24) {
                     /* The outline below the feet overlays ground, just as in 2D.
                      * Walls and other sprites retain their normal depth priority. */
-                    if (t->pad && y + 0.5f >= bottom - focalY * t->pad / 32.0f / z &&
+                    if (t->pad &&
+                        y + 0.5f >= bottom - focalY * (t->h + t->pad - t->inkBottom) / 32.0f / z &&
                         floorDepth[y * viewW + x])
                         depth[y * viewW + x] = INFINITY;
                     pixel(out, x, y, shade(color, z, false), z, s->dx, s->dy, s->level);

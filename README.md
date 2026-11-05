@@ -254,6 +254,10 @@ Bookshelves (92/93) form fixed shallow bookcases. Table sections (148–150,
 154–156, 190) join into low tables with horizontal tops and legs, reusing the
 original artwork. Furniture retains its map orientation instead of swivelling
 with the camera. Normal protection masks still apply to non-split artwork.
+Upright sprites align the bottom of their visible artwork to the ground, excluding
+the generated outline; 176/177 retain their original height. Ladders 200/279 align
+to a tile-72 ceiling cap, while 201/280 sit on inferred ground. Bodies 286/287 and
+all skiff frames 296–299 lie flat like carpets.
 The camera sits 13/16 of a tile above the floor. Location floors render together
 at their actual heights, including walls, floors, ceilings, NPCs, and containers.
 Upper-floor background tiles represent open air. Decorative rugs and placed

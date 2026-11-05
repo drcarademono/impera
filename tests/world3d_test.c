@@ -608,8 +608,14 @@ static void testSplitSheets(SDL_Surface *image) {
     unsigned tile = 43;
     SDL_Rect cell = {(tile % 32) * 16, (tile / 32) * 16, 16, 16};
     assert(SDL_FillSurfaceRect(sprites, &cell, SDL_MapSurfaceRGBA(sprites, 0, 0, 0, 255)));
-    SDL_Rect stem = {cell.x + 6, cell.y + 4, 4, 12};
+    SDL_Rect stem = {cell.x + 6, cell.y + 4, 4, 8};
     assert(SDL_FillSurfaceRect(sprites, &stem, SDL_MapSurfaceRGBA(sprites, 170, 0, 170, 255)));
+    for (unsigned tile = 176; tile <= 177; tile++) {
+        SDL_Rect box = {tile % 32 * 16, tile / 32 * 16, 16, 16};
+        assert(SDL_FillSurfaceRect(sprites, &box, SDL_MapSurfaceRGBA(sprites, 0, 0, 0, 255)));
+        SDL_Rect flame = {box.x + 6, box.y + 4, 4, 8};
+        assert(SDL_FillSurfaceRect(sprites, &flame, SDL_MapSurfaceRGBA(sprites, 170, 0, 170, 255)));
+    }
     assert(SDL_SavePNG(ground, groundPath) && SDL_SavePNG(sprites, spritePath));
     TILESET_Refresh();
     assert(TILESET_3DSplit(tile) && !TILESET_3DSplit(tile + 1));
@@ -620,8 +626,16 @@ static void testSplitSheets(SDL_Surface *image) {
     memset(D_6608_map.town, 0x44, 32 * 32);
     D_6608_map.town[14][16] = tile;
     WORLD3D_Render(image, palette);
-    assert((at(image, 176, 200) & 255) > 80 && (at(image, 176, 200) & 0xff0000));
+    assert((at(image, 176, 280) & 255) > 80 &&
+           (at(image, 176, 280) & 0xff0000)); /* Cleared bottom rows no longer make it float. */
     assert((at(image, 176, 300) & 0xff00) && !(at(image, 176, 300) & 0xff0000));
+    for (unsigned tile = 176; tile <= 177; tile++) {
+        D_6608_map.town[14][16] = tile;
+        WORLD3D_Render(image, palette);
+        assert((at(image, 176, 235) & 255) > 80 && (at(image, 176, 235) & 0xff0000));
+        assert(
+            !(at(image, 176, 280) & 0xff0000)); /* Hanging fixtures retain their original height. */
+    }
     /* Later artwork edits need no C tile list: a new differing cell is detected on reload. */
     SDL_Rect added = {44 % 32 * 16, 44 / 32 * 16, 16, 16};
     assert(SDL_FillSurfaceRect(sprites, &added, SDL_MapSurfaceRGBA(sprites, 170, 0, 0, 255)));
@@ -723,6 +737,53 @@ static void testSignsAndFurniture(SDL_Surface *image, byte *tiles) {
     WORLD3D_Render(image, palette);
     assert((at(image, 176, 210) & 255) > 60 && (at(image, 176, 210) & 0xff0000));
     assert(SDL_SaveBMP(image, "world3d-table-run.bmp"));
+    memset(D_6608_map.town, 0x44, 1024);
+}
+static void testLaddersAndFlatSprites(SDL_Surface *image, byte *tiles) {
+    const unsigned ladders[] = {200, 201, 279, 280};
+    for (unsigned i = 0; i < 4; i++) {
+        unsigned tile = ladders[i];
+        memset(tiles + tile * 128, 0, 128);
+        for (int y = 4; y < 12; y++)
+            for (int x = 7; x <= 8; x++)
+                setTestPixel(tiles, tile, x, y, 3);
+        memset(D_6608_map.town, 0x44, 1024);
+        memset(D_5c5a, 0, sizeof(D_5c5a));
+        if (tile < 256)
+            D_6608_map.town[14][16] = tile;
+        else
+            D_5c5a[1] = (ActorFmt){tile - 256, tile - 256, 16, 14, 0, 0, 0, 0};
+        WORLD3D_Render(image, palette);
+        if (tile == 200 || tile == 279) {
+            Uint32 ladder = at(image, 176, 50), ceiling = at(image, 176, 0);
+            assert((ladder & 255) > 60 && (ladder & 0xff00) && !(ladder & 0xff0000));
+            assert((ceiling & 255) > 60 && (ceiling & 0xff0000) && !(ceiling & 0xff00));
+        } else {
+            Uint32 ladder = at(image, 176, 280), ground = at(image, 176, 310);
+            assert((ladder & 255) > 60 && (ladder & 0xff00) && !(ladder & 0xff0000));
+            assert((ground & 0xff00) && !(ground & 255) && !(ground & 0xff0000));
+        }
+    }
+    const unsigned flatTiles[] = {286, 287, 296, 297, 298, 299};
+    for (unsigned i = 0; i < 6; i++) {
+        unsigned tile = flatTiles[i];
+        memset(tiles + tile * 128, 0x55, 128);
+        memset(D_6608_map.town, 0x44, 1024);
+        memset(D_5c5a, 0, sizeof(D_5c5a));
+        D_5c5a[1] = (ActorFmt){tile - 256, tile - 256, 16, 14, 0, 0, 0, 0};
+        WORLD3D_Render(image, palette);
+        int count = 0;
+        for (int y = 0; y < 352; y++)
+            for (int x = 30; x < 320; x++) {
+                Uint32 c = at(image, x, y);
+                if ((c & 255) > 60 && (c & 0xff0000) && !(c & 0xff00)) {
+                    count++;
+                    assert(y >= 176);
+                }
+            }
+        assert(count > 0 && at(image, 176, 150) == palette[9]);
+    }
+    memset(D_5c5a, 0, sizeof(D_5c5a));
     memset(D_6608_map.town, 0x44, 1024);
 }
 int main(void) {
@@ -852,7 +913,9 @@ int main(void) {
     SDL_DestroySurface(fullscreen);
     GRAP_SDL_SetVideoMode(GRAP_VIDEO_WINDOWED);
 
-    /* Camera turns and steps interpolate, while teleports and disabling smoothness snap. */
+    /* Leave time for instrumented renders and concurrent build load before
+     * testing intermediate camera poses. The assertions use relative intervals. */
+    GRAP_SDL_SetMovementSpeed(.25f);
     GRAP_SDL_SetSmoothMovement(true);
     WORLD3D_Render(image, palette);
     float px, py, angle;
@@ -882,6 +945,7 @@ int main(void) {
     assert(px == 0.5f && !WORLD3D_Animating());
     WORLD3D_Move(U5_KEY_LEFT);
     D_5896_map_x = 16;
+    GRAP_SDL_SetMovementSpeed(1.0f);
     testSkies(image);
     testEdgeOutline(image, tiles);
     testActorMotion(image);
@@ -891,6 +955,7 @@ int main(void) {
     testNativeFloors(image);
     testSplitSheets(image);
     testSignsAndFurniture(image, tiles);
+    testLaddersAndFlatSprites(image, tiles);
     assert(ENGINE_Save());
     ENGINE_Set(ENGINE_WORLD_3D, 0);
     ENGINE_Load();
