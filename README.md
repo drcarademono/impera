@@ -241,8 +241,12 @@ For DOS, `Ultima_5_Tiles_DOS3d_Ground.png` and
 `Ultima_5_Tiles_DOS3d_Sprites.png` split composite artwork into a flat ground tile
 and an upright sprite. Only differing 16×16 cells are split; the comparison is
 automatic, including later artwork edits. The sheets are embedded in the game.
+Black in the split sprite sheet is transparent apart from the generated outline;
+ordinary sprites still honor their existing protection masks.
 Other tilesets, identical cells, and custom sprite artwork retain their existing
 rendering. The 2D view always keeps its original artwork.
+Tiles 190 (table) and 220 (moongate) render upright in 3D with inferred ground
+underneath, using the normal sprite protection masks.
 The camera sits 13/16 of a tile above the floor. Location floors render together
 at their actual heights, including walls, floors, ceilings, NPCs, and containers.
 Upper-floor background tiles represent open air. Decorative rugs and placed

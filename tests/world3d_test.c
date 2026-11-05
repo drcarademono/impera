@@ -384,6 +384,26 @@ static void testHeightAndCarpets(SDL_Surface *image, byte *tiles) {
     WORLD3D_Render(image, palette);
     assert(at(image, 176, 60) == palette[9]); /* Arch cutouts show the sky. */
     D_6608_map.town[11][16] = 0x44;
+    /* These tiles are vertical only in 3D. Their black backgrounds are cut out,
+     * including table 190 whose ordinary 2D sprite path is intentionally opaque. */
+    const unsigned uprightTiles[] = {190, 220};
+    for (unsigned i = 0; i < 2; i++) {
+        unsigned tile = uprightTiles[i];
+        memset(tiles + tile * 128, 0, 128);
+        for (int y = 4; y < 16; y++)
+            for (int x = 6; x < 10; x++)
+                tiles[tile * 128 + y * 8 + x / 2] |= x & 1 ? 5 : 0x50;
+        D_6608_map.town[14][16] = tile;
+        WORLD3D_Render(image, palette);
+        assert((at(image, 176, 200) & 255) > 80 && (at(image, 176, 200) & 0xff0000));
+        if (tile == 190) {
+            assert(TILESET_ProtectedBlack(tile, 2, 5));
+            assert(at(image, 130, 200) == palette[0]);
+        } else
+            assert((at(image, 130, 200) & 0xff00) && !(at(image, 130, 200) & 0xff0000));
+        assert((at(image, 220, 200) & 0xff00) && !(at(image, 220, 200) & 0xff0000));
+        assert(at(image, 155, 200) == palette[0]); /* Only the narrow outline stays black. */
+    }
     memset(tiles + 0xaa * 128, 0x55, 128);
     memset(tiles + (256 + 0x1b) * 128, 0x55, 128);
     for (int mode = 0; mode < 2; mode++) {
@@ -615,6 +635,14 @@ static void testSplitSheets(SDL_Surface *image) {
 int main(void) {
     assert(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO));
     syntheticMaskBegin();
+    /* A protected black pixel in a non-split tile must survive in 3D too. */
+    SDL_Surface *protectedMask = SDL_LoadPNG("synthetic-tileset/Ultima_5_Mask_DOS.png");
+    assert(protectedMask);
+    SDL_Rect protectedCell = {190 % 32 * 16 + 2, 190 / 32 * 16 + 5, 1, 1};
+    assert(SDL_FillSurfaceRect(protectedMask, &protectedCell,
+                               SDL_MapSurfaceRGBA(protectedMask, 255, 255, 255, 255)));
+    assert(SDL_SavePNG(protectedMask, "synthetic-tileset/Ultima_5_Mask_DOS.png"));
+    SDL_DestroySurface(protectedMask);
     GRAP_Initialize();
     EVT_SetImmediateExit(0);
     byte *tiles = calloc(512, 128);

@@ -372,7 +372,9 @@ Uint32 TILESET_3DPixel(unsigned tile, int x, int y, bool sprite) {
     if (tile >= 512 || x < 0 || y < 0 || x >= 16 || y >= 16)
         return 0;
     Uint32 color = splitArt[sprite ? 1 : 0][tile][y * 16 + x];
-    if (sprite && !(color & 0xffffff) && !TILESET_ProtectedBlack(tile, x, y))
+    /* The split sheet has its own cleared background. The 2D mask protects
+     * pixels in the original composite artwork and must not restore them here. */
+    if (sprite && !(color & 0xffffff))
         return 0;
     return color;
 }

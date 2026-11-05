@@ -270,9 +270,20 @@ static bool reservePixels(int width, int height) {
     pixelCapacity = count;
     return true;
 }
-/* mode 0: ordinary opaque tile; 1: upright sprite; 2: split-sheet ground. */
+/* Furniture/moongates made upright in 3D need cutouts even when their 2D
+ * drawing path deliberately keeps an opaque rectangular backdrop. */
+static Uint32 uprightPixel(unsigned tile, int x, int y, int sx, int sy) {
+    if (x < 0 || y < 0 || x >= 16 || y >= 16)
+        return 0;
+    int c = GRAP_BUF_TilePixel(tile, x, y);
+    /* Keep normal native protection masks here; only split sheets bypass them. */
+    if (!c && !TILESET_ProtectedBlack(tile, x, y))
+        return 0;
+    return TILESET_LastSpriteColor(c, sx, sy, colors, true);
+}
+/* 0: opaque tile; 1: normal sprite; 2: split ground; 3: forced upright terrain. */
 static int texture(unsigned tile, int mode) {
-    bool sprite = mode == 1;
+    bool sprite = mode == 1 || mode == 3;
     bool split = TILESET_3DSplit(tile) && (sprite || mode == 2);
     unsigned bucket = (tile * 2654435761u + (unsigned)mode) & (BUCKETS - 1);
     for (int i = textureBuckets[bucket]; i >= 0; i = textures[i].next)
@@ -309,6 +320,17 @@ static int texture(unsigned tile, int mode) {
                     for (int dy = -1; dy <= 1; dy++)
                         for (int dx = -1; dx <= 1; dx++)
                             if (TILESET_3DPixel(tile, px + dx, py + dy, true) >> 24)
+                                color = 0xff000000;
+                }
+                t->pixels[y * 68 + x] = color;
+                continue;
+            }
+            if (mode == 3) {
+                Uint32 color = uprightPixel(tile, px, py, x & 1, y & 1);
+                if (!(color >> 24) && TILESET_SpriteOutline()) {
+                    for (int dy = -1; dy <= 1; dy++)
+                        for (int dx = -1; dx <= 1; dx++)
+                            if (uprightPixel(tile, px + dx, py + dy, x & 1, y & 1) >> 24)
                                 color = 0xff000000;
                 }
                 t->pixels[y * 68 + x] = color;
@@ -531,6 +553,9 @@ static unsigned typeAt(int dx, int dy, int level) { return typeAtLevel(dx, dy, l
 static unsigned art(unsigned id, byte base) {
     return TYPES_ArtSlot(id) ? TYPES_ActorArt(id, D_b11e[base]) : D_b11e[base];
 }
+static bool uprightTerrain(const TypeDef *d) {
+    return (d->render & TYPES_SPRITE) || d->base == 190 || d->base == 220;
+}
 static unsigned floorFor(int dx, int dy, int level, const TypeDef *d) {
     if (TYPES_Defined(d->id) && d->ground != TYPES_INFER_GROUND)
         return d->ground;
@@ -541,7 +566,7 @@ static unsigned floorFor(int dx, int dy, int level, const TypeDef *d) {
         candidates[i] = typeAt(dx + nx[i], dy + ny[i], level);
     for (int i = 0; i < 4; i++) {
         TypeDef n;
-        if (!TYPES_Get(candidates[i], &n) || (n.render & (TYPES_SPRITE | TYPES_MASONRY)))
+        if (!TYPES_Get(candidates[i], &n) || uprightTerrain(&n) || (n.render & TYPES_MASONRY))
             continue;
         int count = 0;
         for (int j = 0; j < 4; j++)
@@ -565,7 +590,7 @@ static void addSprite(unsigned tile, float x, float y, int dx, int dy, int level
         sprites = next;
         spriteCapacity = capacity;
     }
-    int index = texture(tile, true);
+    int index = texture(tile, tile == 190 || tile == 220 ? 3 : 1);
     if (index >= 0)
         sprites[spriteCount++] = (Sprite){x, y, index, dx, dy, level, flat, topOnly};
 }
@@ -764,16 +789,16 @@ static Cell *cellAt(int dx, int dy, int level) {
             texture(c->arch ? art(c->grated ? 134 : 135, c->grated ? 134 : 135) : tile, false);
         unsigned upper = c->arch ? 135 : c->wall ? upperWallMaterial(dx, dy, level, &d) : 77;
         c->upperSurface = texture(art(upper, upper), false);
-        unsigned ground = (c->wall || (d.render & TYPES_SPRITE)) ? floorFor(dx, dy, level, &d) : id;
+        unsigned ground = (c->wall || uprightTerrain(&d)) ? floorFor(dx, dy, level, &d) : id;
         TypeDef floor;
         if (TYPES_Get(ground, &floor))
             c->ground = texture(art(ground, floor.base), false);
         if (split)
             c->ground = texture(tile, 2);
-        if (!c->wall && ((d.render & TYPES_SPRITE) || split))
+        if (!c->wall && (uprightTerrain(&d) || split))
             addSprite(tile, dx + 0.5f, dy + 0.5f, dx, dy, level, d.base == 0xaa || d.base == 0x86,
                       c->opening && d.base == 0x86);
-        if (c->opening && !(d.render & TYPES_SPRITE) && !c->wall)
+        if (c->opening && !uprightTerrain(&d) && !c->wall)
             addSprite(tile, dx + 0.5f, dy + 0.5f, dx, dy, level, true, true);
     }
     int wx, wy;

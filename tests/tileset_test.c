@@ -771,7 +771,7 @@ static void verifyEmbeddedSplitSheets(const char *directory) {
     SDL_Surface *ground=SDL_LoadPNG(path);assert(ground);
     SDL_snprintf(path,sizeof(path),"%s/Ultima_5_Tiles_DOS3d_Sprites.png",directory);
     SDL_Surface *sprites=SDL_LoadPNG(path);assert(sprites);
-    unsigned changed=0;
+    unsigned changed=0,clearedProtected=0;
     for(unsigned tile=0;tile<512;tile++) {
         bool different=false;
         for(unsigned y=0;y<16;y++) for(unsigned x=0;x<16;x++) {
@@ -789,12 +789,15 @@ static void verifyEmbeddedSplitSheets(const char *directory) {
             assert(TILESET_3DPixel(tile,x,y,false)==((Uint32)a<<24|(Uint32)r<<16|(Uint32)g<<8|b));
             assert(SDL_ReadSurfacePixel(sprites,tile%32*16+x,tile/32*16+y,&r,&g,&b,&a));
             Uint32 expected=(Uint32)a<<24|(Uint32)r<<16|(Uint32)g<<8|b;
-            if(!r && !g && !b && !TILESET_ProtectedBlack(tile,x,y)) expected=0;
+            if(!r && !g && !b) {
+                clearedProtected+=TILESET_ProtectedBlack(tile,x,y);
+                expected=0;
+            }
             assert(TILESET_3DPixel(tile,x,y,true)==expected);
         }
         assert(TILESET_Pixel(tile,0,0)==-1); /* Decomposition never changes the 2D DOS bank. */
     }
-    assert(changed>0);
+    assert(changed>0 && clearedProtected>0); /* Old 2D masks must not restore cleared sprite pixels. */
     SDL_DestroySurface(ground);SDL_DestroySurface(sprites);
 }
 static void baselineMasksAndRetiredTileset(byte *bank) {
