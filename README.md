@@ -221,9 +221,13 @@ shows camera facing.
 This prototype has flat terrain, one-tile-high textured masonry cubes, and
 camera-facing sprites using existing artwork, animation, custom sprite sizes,
 and protected-black masks. Original movement, collision, map contents, and sight
-rules remain authoritative. Fullscreen native-aspect mode retains its expanded widescreen viewport. Smooth
-Movement also animates camera steps and turns. There is no fixed tile-distance
-cutoff: geometry is projected to the horizon at the viewport’s pixel resolution,
+rules remain authoritative. Fullscreen native-aspect mode retains its expanded
+widescreen viewport. Smooth Movement animates camera steps and turns as well as
+NPC and monster travel, including custom multi-tile actors. Teleports, spawning,
+and floor changes appear immediately. Surface skies use only the original
+16-color palette with ordered dithering, following the game's 05:00–06:00 dawn
+and 19:00–20:00 dusk. Underground areas remain dark above. There is no fixed
+tile-distance cutoff: geometry is projected to the horizon at the viewport’s pixel resolution,
 subject to map boundaries, lighting, and occlusion. Terrain elevation and
 projected map effects/dithered visibility transitions are future work.
 

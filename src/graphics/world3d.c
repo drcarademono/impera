@@ -57,12 +57,30 @@ static struct {
     double fromX, fromY, fromAngle, targetX, targetY, targetAngle, xNow, yNow, angleNow;
 } camera;
 static unsigned duration;
+/* Actor slots retain their own unwrapped paths, independent of camera travel. */
+typedef struct {
+    bool valid, moving, sighted;
+    unsigned kind;
+    int x, y, level;
+    Uint64 started;
+    unsigned duration;
+    double fromX, fromY, targetX, targetY, xNow, yNow;
+} ActorMotion;
+static ActorMotion *actors;
+static int actorCapacity, trackedActorCount;
+static bool actorsValid, actorsMoving;
+static unsigned actorsMap;
+static int actorsLevel;
+static void resetMotion(void) {
+    camera.valid = camera.moving = false;
+    actorsValid = actorsMoving = false;
+}
 
 bool WORLD3D_Enabled(void) { return enabled; }
 void WORLD3D_SetEnabled(bool value) {
     enabled = value;
     pickValid = false;
-    camera.valid = camera.moving = false;
+    resetMotion();
     GRAP_BUF_MarkDirty();
 }
 bool WORLD3D_Active(void) {
@@ -72,12 +90,12 @@ bool WORLD3D_Active(void) {
 void WORLD3D_SceneView(void) {
     sceneView = true;
     pickValid = false;
-    camera.valid = camera.moving = false;
+    resetMotion();
 }
 void WORLD3D_MapDrawn(void) {
     sceneView = false;
     if (!D_58a4 || D_5893_map_id >= 128 || !MAPS_Outside(D_5893_map_id))
-        camera.valid = camera.moving = false;
+        resetMotion();
 }
 int WORLD3D_Facing(void) { return facing; }
 int WORLD3D_Direction(int key) {
@@ -151,7 +169,7 @@ static void updateCamera(void) {
     sampleCamera(now);
 }
 bool WORLD3D_Animating(void) {
-    return WORLD3D_Active() && camera.valid && GRAP_SDL_SmoothMovementEnabled() && camera.moving;
+    return WORLD3D_Active() && GRAP_SDL_SmoothMovementEnabled() && (camera.moving || actorsMoving);
 }
 void WORLD3D_CameraPose(float *x, float *y, float *angle) {
     *x = 0.5f + (float)(camera.xNow - camera.targetX);
@@ -165,6 +183,9 @@ void WORLD3D_Cleanup(void) {
     SDL_free(textures);
     SDL_free(sprites);
     SDL_free(cells);
+    SDL_free(actors);
+    actors = NULL;
+    actorCapacity = trackedActorCount = 0;
     depth = NULL;
     pickX = pickY = NULL;
     textures = NULL;
@@ -173,7 +194,7 @@ void WORLD3D_Cleanup(void) {
     pixelCapacity = cellCapacity = cellCount = 0;
     textureCapacity = spriteCapacity = 0;
     pickValid = false;
-    camera.valid = camera.moving = false;
+    resetMotion();
 }
 static bool reservePixels(int width, int height) {
     size_t count = (size_t)width * height;
@@ -371,6 +392,106 @@ static Cell *cell(int dx, int dy) {
         addSprite(256 + loot, dx + 0.5f, dy + 0.5f, dx, dy);
     return c;
 }
+static void sampleActor(ActorMotion *a, Uint64 now) {
+    double t = a->moving ? SDL_min(1.0, (double)(now - a->started) / a->duration) : 1;
+    a->xNow = a->fromX + (a->targetX - a->fromX) * t;
+    a->yNow = a->fromY + (a->targetY - a->fromY) * t;
+    if (t >= 1)
+        a->moving = false;
+}
+bool WORLD3D_ActorPose(unsigned actor, float *x, float *y) {
+    if (!actorsValid || actor >= (unsigned)actorCapacity || !actors[actor].valid)
+        return false;
+    *x = (float)actors[actor].xNow;
+    *y = (float)actors[actor].yNow;
+    return true;
+}
+static bool reserveActors(int count) {
+    if (count <= actorCapacity)
+        return true;
+    ActorMotion *next = SDL_realloc(actors, (size_t)count * sizeof(*actors));
+    if (!next)
+        return false;
+    memset(next + actorCapacity, 0, (count - actorCapacity) * sizeof(*actors));
+    actors = next;
+    actorCapacity = count;
+    return true;
+}
+static void prepareActors(void) {
+    Uint64 now = SDL_GetTicks();
+    int count = MAP_ACTOR_COUNT;
+    bool tracked = reserveActors(count);
+    bool same =
+        tracked && actorsValid && actorsMap == D_5893_map_id && actorsLevel == D_5895_map_level;
+    actorsMoving = false;
+    for (int i = 1; i < count; i++) {
+        ActorFmt *a = &D_5c5a[i];
+        ActorMotion *motion = tracked ? &actors[i] : NULL;
+        if (!a->_0_tile || !a->_1_animTile || a->_4_z != D_5895_map_level) {
+            if (motion)
+                motion->valid = motion->moving = false;
+            continue;
+        }
+        int dx = a->_2_x - D_5896_map_x, dy = a->_3_y - D_5897_map_y;
+        if (!D_5893_map_id) {
+            dx = MAPS_Wrap(dx + MAP_WIDTH / 2, MAP_WIDTH) - MAP_WIDTH / 2;
+            dy = MAPS_Wrap(dy + MAP_HEIGHT / 2, MAP_HEIGHT) - MAP_HEIGHT / 2;
+        }
+        bool sighted = WIDE_Visible(dx, dy);
+        float offsetX = 0, offsetY = 0;
+        if (motion) {
+            unsigned kind = ACTORS_Instance(i);
+            if (!kind)
+                kind = 256u + a->_0_tile;
+            int ax = a->_2_x - motion->x, ay = a->_3_y - motion->y;
+            if (!D_5893_map_id) {
+                ax = MAPS_Wrap(ax + MAP_WIDTH / 2, MAP_WIDTH) - MAP_WIDTH / 2;
+                ay = MAPS_Wrap(ay + MAP_HEIGHT / 2, MAP_HEIGHT) - MAP_HEIGHT / 2;
+            }
+            if (!same || !motion->valid || !GRAP_SDL_SmoothMovementEnabled() ||
+                kind != motion->kind || motion->level != a->_4_z || !sighted || !motion->sighted ||
+                abs(ax) > 1 || abs(ay) > 1) {
+                motion->targetX = motion->fromX = a->_2_x;
+                motion->targetY = motion->fromY = a->_3_y;
+                motion->moving = false;
+            } else {
+                sampleActor(motion, now);
+                if (ax || ay) {
+                    motion->fromX = motion->xNow;
+                    motion->fromY = motion->yNow;
+                    motion->targetX += ax;
+                    motion->targetY += ay;
+                    motion->started = now;
+                    motion->duration = SDL_max(16, GRAP_SDL_MovementInterval());
+                    motion->moving = true;
+                }
+            }
+            motion->valid = true;
+            motion->kind = kind;
+            motion->level = a->_4_z;
+            motion->x = a->_2_x;
+            motion->y = a->_3_y;
+            motion->sighted = sighted;
+            sampleActor(motion, now);
+            actorsMoving |= motion->moving;
+            offsetX = (float)(motion->xNow - motion->targetX);
+            offsetY = (float)(motion->yNow - motion->targetY);
+        }
+        if (!sighted)
+            continue;
+        unsigned tile = ACTORS_Sprite(i, 256 + a->_1_animTile), w = 1, h = 1;
+        if (TYPES_ArtSlot(tile))
+            TYPES_ArtSize(tile, D_5893_map_id == 0, &w, &h);
+        addSprite(tile, dx + offsetX + w * 0.5f, dy + offsetY + h * 0.5f, dx, dy);
+    }
+    /* Removed slots must not leave a tween alive or be reused as an old actor. */
+    if (tracked && count < trackedActorCount)
+        memset(actors + count, 0, (trackedActorCount - count) * sizeof(*actors));
+    trackedActorCount = tracked ? count : 0;
+    actorsValid = tracked;
+    actorsMap = D_5893_map_id;
+    actorsLevel = D_5895_map_level;
+}
 static void prepare(void) {
     textureCount = spriteCount = 0;
     cellCount = 0;
@@ -380,21 +501,61 @@ static void prepare(void) {
             memset(cells, 0, cellCapacity * sizeof(*cells));
         generation = 1;
     }
-    for (int i = 1; i < MAP_ACTOR_COUNT; i++) {
-        ActorFmt *a = &D_5c5a[i];
-        if (!a->_0_tile || !a->_1_animTile || a->_4_z != D_5895_map_level)
-            continue;
-        int dx = a->_2_x - D_5896_map_x, dy = a->_3_y - D_5897_map_y;
-        if (!D_5893_map_id) {
-            dx = MAPS_Wrap(dx + MAP_WIDTH / 2, MAP_WIDTH) - MAP_WIDTH / 2;
-            dy = MAPS_Wrap(dy + MAP_HEIGHT / 2, MAP_HEIGHT) - MAP_HEIGHT / 2;
-        }
-        if (!WIDE_Visible(dx, dy))
-            continue;
-        unsigned tile = ACTORS_Sprite(i, 256 + a->_1_animTile), w = 1, h = 1;
-        if (TYPES_ArtSlot(tile))
-            TYPES_ArtSize(tile, D_5893_map_id == 0, &w, &h);
-        addSprite(tile, dx + w * 0.5f, dy + h * 0.5f, dx, dy);
+    prepareActors();
+}
+
+/* Sky colors are palette indices throughout: no RGB interpolation or shading.
+ * The original light cycle has dawn at 05:00-06:00 and dusk at 19:00-20:00. */
+typedef struct {
+    int minute;
+    byte zenith, middle, horizon;
+} SkyKey;
+static const SkyKey skyKeys[] = {{0, 0, 0, 1},     {300, 0, 0, 1},   {315, 0, 1, 5},
+                                 {330, 1, 5, 12},  {345, 1, 9, 14},  {360, 1, 9, 11},
+                                 {1140, 1, 9, 11}, {1155, 1, 5, 14}, {1170, 1, 5, 12},
+                                 {1185, 0, 1, 5},  {1200, 0, 0, 1},  {1440, 0, 0, 1}};
+static const byte bayer[8][8] = {{0, 48, 12, 60, 3, 51, 15, 63}, {32, 16, 44, 28, 35, 19, 47, 31},
+                                 {8, 56, 4, 52, 11, 59, 7, 55},  {40, 24, 36, 20, 43, 27, 39, 23},
+                                 {2, 50, 14, 62, 1, 49, 13, 61}, {34, 18, 46, 30, 33, 17, 45, 29},
+                                 {10, 58, 6, 54, 9, 57, 5, 53},  {42, 26, 38, 22, 41, 25, 37, 21}};
+typedef struct {
+    const SkyKey *a, *b;
+    float blend;
+    bool surface;
+} Sky;
+static Sky currentSky(void) {
+    int minute = (D_587f % 24) * 60 + SDL_min(D_5881, 59);
+    unsigned i = 0;
+    while (minute >= skyKeys[i + 1].minute)
+        i++;
+    Sky sky = {&skyKeys[i], &skyKeys[i + 1],
+               (minute - skyKeys[i].minute) / (float)(skyKeys[i + 1].minute - skyKeys[i].minute),
+               D_5895_map_level <= 127 && D_5893_map_id != 0x19};
+    if (sky.a->zenith == sky.b->zenith && sky.a->middle == sky.b->middle &&
+        sky.a->horizon == sky.b->horizon)
+        sky.blend = 0;
+    return sky;
+}
+static void skyRow(const Sky *sky, int y, Uint32 row[8]) {
+    if (!sky->surface || y >= viewH / 2) {
+        for (int x = 0; x < 8; x++)
+            row[x] = colors[0];
+        return;
+    }
+    float vertical = (float)y / SDL_max(1, viewH / 2 - 1);
+    bool upper = vertical < 0.65f;
+    float blend = upper ? vertical / 0.65f : (vertical - 0.65f) / 0.35f;
+    byte indices[4] = {
+        upper ? sky->a->zenith : sky->a->middle, upper ? sky->a->middle : sky->a->horizon,
+        upper ? sky->b->zenith : sky->b->middle, upper ? sky->b->middle : sky->b->horizon};
+    float weights[3] = {(1 - sky->blend) * (1 - blend), (1 - sky->blend) * blend,
+                        sky->blend * (1 - blend)};
+    for (int x = 0; x < 8; x++) {
+        float threshold = (bayer[(y / 2) & 7][x] + 0.5f) / 64;
+        int color = 0;
+        while (color < 3 && threshold >= weights[color])
+            threshold -= weights[color++];
+        row[x] = colors[indices[color]];
     }
 }
 static void pixel(SDL_Surface *out, int x, int y, Uint32 color, float z, int dx, int dy) {
@@ -428,13 +589,18 @@ void WORLD3D_RenderRegion(SDL_Surface *out, const Uint32 *palette, int left, int
           oy = 0.5f + (float)(camera.yNow - camera.targetY);
     float fx = (float)sin(camera.angleNow), fy = -(float)cos(camera.angleNow), rx = -fy, ry = fx,
           focalY = viewH * 0.78f, focalX = focalY * aspect;
-    for (int y = 0; y < viewH; y++)
+    Sky sky = currentSky();
+    for (int y = 0; y < viewH; y++) {
+        Uint32 background[8];
+        skyRow(&sky, y, background);
         for (int x = 0; x < viewW; x++) {
             size_t i = (size_t)y * viewW + x;
             depth[i] = INFINITY;
             pickX[i] = pickY[i] = 0;
-            ((Uint32 *)((byte *)out->pixels + (y + top) * out->pitch))[x + left] = 0xff000000;
+            ((Uint32 *)((byte *)out->pixels + (y + top) * out->pitch))[x + left] =
+                background[(x / 2) & 7];
         }
+    }
     /* Pixel-centre sampling reaches the horizon without a fixed distance cutoff. */
     for (int y = viewH / 2; y < viewH; y++) {
         float denominator = y + 0.5f - viewH * 0.5f;
@@ -483,12 +649,19 @@ void WORLD3D_RenderRegion(SDL_Surface *out, const Uint32 *palette, int left, int
                 break;
             if (!c->visible || c->opaque || c->wall) {
                 if (!c->visible || !c->wall) {
-                    for (int y = 0; y < viewH; y++) {
+                    for (int y = c->visible ? 0 : viewH / 2; y < viewH; y++) {
                         int i = y * viewW + x;
                         if (c->visible && pickX[i] == cx && pickY[i] == cy)
                             continue;
-                        if (z < depth[i])
-                            pixel(out, x, y, 0xff000000, z, cx, cy);
+                        if (z < depth[i]) {
+                            Uint32 background = y < viewH / 2
+                                                    ? ((Uint32 *)((byte *)out->pixels +
+                                                                  (y + top) * out->pitch))[x + left]
+                                                    : colors[0];
+                            /* Leave the occluder's own billboard in front of its backdrop. */
+                            float curtain = c->visible ? SDL_min(tx, ty) : z;
+                            pixel(out, x, y, background, curtain, cx, cy);
+                        }
                     }
                     break;
                 }
@@ -543,9 +716,9 @@ void WORLD3D_RenderRegion(SDL_Surface *out, const Uint32 *palette, int left, int
     pickFacing = facing;
 }
 bool WORLD3D_Pick(float u, float v, int *dx, int *dy) {
-    if (!pickValid || WORLD3D_Animating() || pickMap != D_5893_map_id ||
-        pickLevel != D_5895_map_level || pickWorldX != D_5896_map_x || pickWorldY != D_5897_map_y ||
-        pickFacing != facing || !isfinite(u) || !isfinite(v) || u < 0 || v < 0 || u >= 1 || v >= 1)
+    if (!pickValid || camera.moving || pickMap != D_5893_map_id || pickLevel != D_5895_map_level ||
+        pickWorldX != D_5896_map_x || pickWorldY != D_5897_map_y || pickFacing != facing ||
+        !isfinite(u) || !isfinite(v) || u < 0 || v < 0 || u >= 1 || v >= 1)
         return false;
     int i = (int)(v * viewH) * viewW + (int)(u * viewW);
     if (!isfinite(depth[i]))

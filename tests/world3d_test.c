@@ -7,9 +7,11 @@
 #include "graphics/grap_buf.h"
 #include "graphics/grap_sdl.h"
 #include "graphics/tileset.h"
-#include "graphics/world3d.h"
 #include "graphics/widescreen.h"
+#include "graphics/world3d.h"
 #include "key/key.h"
+#include "mod/actors.h"
+#include "mod/types.h"
 #include <SDL3/SDL.h>
 #include <assert.h>
 #include <stdio.h>
@@ -27,6 +29,251 @@ static Uint32 palette[16] = {0xff000000, 0xff0000aa, 0xff00aa00, 0xff00aaaa, 0xf
                              0xffff5555, 0xffff55ff, 0xffffff55, 0xffffffff};
 static Uint32 at(SDL_Surface *s, int x, int y) {
     return ((Uint32 *)((byte *)s->pixels + (y + 16) * s->pitch))[x + 16];
+}
+static uint64_t skyHash(SDL_Surface *image) {
+    uint64_t hash = 1469598103934665603ull;
+    for (int y = 0; y < 176; y++)
+        for (int x = 32; x < 352; x++) {
+            Uint32 color = at(image, x, y);
+            bool allowed = false;
+            for (int i = 0; i < 16; i++)
+                allowed |= color == palette[i];
+            assert(allowed); /* Every sky pixel is an exact original palette entry. */
+            hash = (hash ^ color) * 1099511628211ull;
+        }
+    return hash;
+}
+static void testSkies(SDL_Surface *image) {
+    memset(D_6608_map.town, 0x44, 32 * 32);
+    memset(D_5c5a, 0, sizeof(D_5c5a));
+    D_587f = 12;
+    D_5881 = 0;
+    WORLD3D_Render(image, palette);
+    uint64_t day = skyHash(image);
+    assert(at(image, 64, 0) == palette[1]);
+    assert(at(image, 64, 174) == palette[11] || at(image, 64, 174) == palette[9]);
+    assert(SDL_SaveBMP(image, "world3d-day.bmp"));
+    D_587f = 0;
+    WORLD3D_Render(image, palette);
+    uint64_t night = skyHash(image);
+    assert(day != night && at(image, 64, 0) == palette[0]);
+    assert(SDL_SaveBMP(image, "world3d-night.bmp"));
+    D_587f = 5;
+    D_5881 = 30;
+    WORLD3D_Render(image, palette);
+    uint64_t dawn = skyHash(image);
+    assert(dawn != night && dawn != day);
+    assert(SDL_SaveBMP(image, "world3d-dawn.bmp"));
+    D_5881 = 31;
+    WORLD3D_Render(image, palette);
+    assert(dawn != skyHash(image)); /* Minute changes blend using palette dithering. */
+    D_587f = 19;
+    D_5881 = 30;
+    WORLD3D_Render(image, palette);
+    assert(skyHash(image) == dawn);
+    assert(SDL_SaveBMP(image, "world3d-dusk.bmp"));
+    D_587f = 23;
+    D_5881 = 59;
+    WORLD3D_Render(image, palette);
+    assert(skyHash(image) == night); /* No discontinuity at midnight. */
+    D_587f = 12;
+    D_5881 = 0;
+    D_58a5 = 2;
+    WORLD3D_Render(image, palette);
+    assert(skyHash(image) == day); /* A short visibility radius must not erase the sky. */
+    int dx, dy;
+    assert(!WORLD3D_Pick(0.2f, 0.1f, &dx, &dy)); /* Sky is not selectable terrain. */
+    D_5895_map_level = 255;
+    WORLD3D_Render(image, palette);
+    for (int y = 0; y < 176; y++)
+        for (int x = 32; x < 352; x++)
+            assert(at(image, x, y) == palette[0]);
+    D_5895_map_level = 0;
+    D_5893_map_id = 0x19; /* Dungeon-like local map stays dark above, too. */
+    WORLD3D_Render(image, palette);
+    assert(at(image, 64, 100) == palette[0]);
+    D_5893_map_id = 13;
+    D_58a5 = 50;
+}
+static float blueCenter(SDL_Surface *image) {
+    float sum = 0;
+    int count = 0;
+    for (int x = 0; x < 352; x++) {
+        Uint32 c = at(image, x, 220);
+        if ((c & 255) > 80 && !(c & 0x00ffff00)) {
+            sum += x;
+            count++;
+        }
+    }
+    assert(count > 0);
+    return sum / count;
+}
+static void testActorMotion(SDL_Surface *image) {
+    /* Leave room for several instrumented renders within one movement interval. */
+    GRAP_SDL_SetMovementSpeed(0.25f);
+    GRAP_SDL_SetSmoothMovement(true);
+    memset(D_6608_map.town, 0x44, 32 * 32);
+    D_5c5a[1] = (ActorFmt){0x90, 0x90, 15, 14, 0, 0, 0, 0};
+    WORLD3D_Render(image, palette);
+    float x, y;
+    assert(WORLD3D_ActorPose(1, &x, &y) && x == 15 && y == 14);
+    float start = blueCenter(image);
+    D_5c5a[1]._2_x = 16;
+    WORLD3D_Render(image, palette);
+    assert(WORLD3D_Animating() && WORLD3D_ActorPose(1, &x, &y) && x == 15);
+    assert(blueCenter(image) == start); /* The raster, as well as tracking state, interpolates. */
+    SDL_Delay(GRAP_SDL_MovementInterval() / 2);
+    WORLD3D_Render(image, palette);
+    assert(WORLD3D_ActorPose(1, &x, &y) && x > 15 && x < 16);
+    float middle = blueCenter(image);
+    assert(middle > start);
+    D_5c5a[1]._1_animTile = 0x91; /* Native animation changes do not restart movement. */
+    WORLD3D_Render(image, palette);
+    assert(WORLD3D_ActorPose(1, &x, &y) && x > 15 && x < 16);
+    D_5c5a[1]._1_animTile = 0x90;
+    SDL_Delay(GRAP_SDL_MovementInterval() + 10);
+    GRAP_BUF_FlushPendingPresent(); /* NPC-only motion drives event-loop redraws. */
+    assert(!WORLD3D_Animating() && WORLD3D_ActorPose(1, &x, &y) && x == 16);
+    WORLD3D_Render(image, palette);
+    assert(blueCenter(image) > middle);
+    D_5c5a[1]._2_x = 15;
+    WORLD3D_Render(image, palette);
+    SDL_Delay(GRAP_SDL_MovementInterval() / 3);
+    WORLD3D_Render(image, palette);
+    assert(WORLD3D_ActorPose(1, &x, &y));
+    float before = x;
+    D_5c5a[1]._2_x = 14; /* Retarget from the displayed pose; never queue stale steps. */
+    WORLD3D_Render(image, palette);
+    assert(WORLD3D_ActorPose(1, &x, &y) && x <= before && x > 15);
+    D_5c5a[1]._2_x = 10; /* Teleport. */
+    WORLD3D_Render(image, palette);
+    assert(WORLD3D_ActorPose(1, &x, &y) && x == 10 && !WORLD3D_Animating());
+    D_5c5a[1]._2_x = 11;
+    WORLD3D_Render(image, palette);
+    GRAP_SDL_SetSmoothMovement(false);
+    WORLD3D_Render(image, palette);
+    assert(WORLD3D_ActorPose(1, &x, &y) && x == 11 && !WORLD3D_Animating());
+    GRAP_SDL_SetSmoothMovement(true);
+    D_5c5a[1]._0_tile = 0;
+    WORLD3D_Render(image, palette);
+    assert(!WORLD3D_ActorPose(1, &x, &y) && !WORLD3D_Animating());
+    D_5c5a[1] = (ActorFmt){0x40, 0x40, 15, 14, 0, 0, 0, 0};
+    WORLD3D_Render(image, palette);
+    assert(WORLD3D_ActorPose(1, &x, &y) && x == 15); /* New monster in a reused slot snaps. */
+    D_5c5a[1]._2_x = 16;
+    D_5896_map_x = 17; /* Simultaneous camera and monster travel. */
+    WORLD3D_Render(image, palette);
+    assert(WORLD3D_Animating() && WORLD3D_ActorPose(1, &x, &y) && x == 15);
+    D_5895_map_level = 1;
+    D_5c5a[1]._4_z = 1;
+    WORLD3D_Render(image, palette);
+    assert(WORLD3D_ActorPose(1, &x, &y) && x == 16 && !WORLD3D_Animating());
+    D_5895_map_level = 0;
+    D_5896_map_x = 16;
+    memset(D_5c5a, 0, sizeof(D_5c5a));
+    GRAP_SDL_SetSmoothMovement(false);
+    GRAP_SDL_SetMovementSpeed(1.0f);
+}
+static void testCustomActorMotion(SDL_Surface *image) {
+    GRAP_SDL_SetMovementSpeed(0.25f);
+    const unsigned recordSize = 256 + 4 + 32 * 32 * 4 + 4 + 16 * 16 * 4,
+                   length = 32 + 2 * recordSize;
+    byte *defs = calloc(1, length);
+    assert(defs);
+    memcpy(defs, "ITYPES01", 8);
+    defs[8] = 1;
+    TYPES_Put32(defs + 24, 2);
+    for (unsigned i = 0; i < 2; i++) {
+        TypeDef d;
+        TYPES_Vanilla(i + 1, 0x90, &d);
+        d.id = 40000 + i;
+        d.kind = i + 1;
+        d.width = d.height = 2;
+        d.frames = 2;
+        d.render = TYPES_SPRITE;
+        byte *record = defs + 32 + i * recordSize;
+        TYPES_Encode(record, &d);
+        TYPES_Put32(record, recordSize);
+        record[257] = 16;
+        record[258] = 150;
+        for (int p = 0; p < 1024; p++) {
+            record[260 + p * 4 + 2] = 255;
+            record[260 + p * 4 + 3] = 255;
+        }
+        byte *world = record + 260 + 32 * 32 * 4;
+        world[0] = 6;
+        world[1] = 16;
+        world[2] = 150;
+        for (int p = 0; p < 256; p++) {
+            world[4 + p * 4 + 2] = 255;
+            world[4 + p * 4 + 3] = 255;
+        }
+    }
+    assert(TYPES_Validate(defs, length));
+    TYPES_Mount(defs, length, NULL, 0);
+    D_imperaNpcCount = 34; /* Also cover actors beyond the original 32 slots. */
+    for (unsigned i = 0; i < 2; i++) {
+        unsigned actor = 32 + i;
+        D_5f5e[actor]._0 = 1;
+        D_5f5e[actor]._c = actor;
+        TypeCell key = {3, 13, 0, actor, 0, 40000 + i, 0};
+        assert(TYPES_Set(key, 40000 + i));
+        D_5c5a[actor] = (ActorFmt){0x90, 0x90, 14 + i * 3, 13, 0, 0, 0, 0};
+        unsigned w, h;
+        assert(ACTORS_Instance(actor) == 40000 + i);
+        ACTORS_Size(actor, &w, &h);
+        assert(w == 2 && h == 2);
+    }
+    GRAP_SDL_SetSmoothMovement(true);
+    WORLD3D_Render(image, palette);
+    D_5c5a[32]._2_x++;
+    D_5c5a[33]._2_x--;
+    WORLD3D_Render(image, palette);
+    float x, y;
+    assert(WORLD3D_ActorPose(32, &x, &y) && x == 14);
+    assert(WORLD3D_ActorPose(33, &x, &y) && x == 17 && WORLD3D_Animating());
+    SDL_Delay(GRAP_SDL_MovementInterval() / 2);
+    WORLD3D_Render(image, palette);
+    assert(WORLD3D_ActorPose(32, &x, &y) && x > 14 && x < 15);
+    assert(WORLD3D_ActorPose(33, &x, &y) && x > 16 && x < 17);
+    SDL_Delay(GRAP_SDL_MovementInterval() + 10);
+    WORLD3D_Render(image, palette);
+    assert(WORLD3D_ActorPose(32, &x, &y) && x == 15);
+    assert(WORLD3D_ActorPose(33, &x, &y) && x == 16 && !WORLD3D_Animating());
+    D_5c5a[32]._2_x++;
+    WORLD3D_Render(image, palette);
+    assert(WORLD3D_Animating());
+    D_imperaNpcCount = 32;
+    WORLD3D_Render(image, palette);
+    assert(!WORLD3D_ActorPose(32, &x, &y) && !WORLD3D_Animating());
+    memset(D_5c5a, 0, sizeof(D_5c5a));
+    memset(D_5f5e, 0, sizeof(D_5f5e));
+    TYPES_Mount(NULL, 0, NULL, 0);
+    free(defs);
+    /* World seam steps must remain one tile long instead of crossing the map. */
+    D_5893_map_id = 0;
+    D_5896_map_x = 254;
+    D_5897_map_y = 10;
+    D_589b = 248;
+    D_589c = 0;
+    memset(&D_6608_map, 0x44, sizeof(D_6608_map));
+    D_5c5a[1] = (ActorFmt){0x90, 0x90, 255, 8, 0, 0, 0, 0};
+    WORLD3D_RenderRegion(image, palette, 16, 16, 32, 32, 1);
+    D_5c5a[1]._2_x = 0;
+    WORLD3D_RenderRegion(image, palette, 16, 16, 32, 32, 1);
+    assert(WORLD3D_ActorPose(1, &x, &y) && x == 255 && WORLD3D_Animating());
+    SDL_Delay(GRAP_SDL_MovementInterval() / 2);
+    WORLD3D_RenderRegion(image, palette, 16, 16, 32, 32, 1);
+    assert(WORLD3D_ActorPose(1, &x, &y) && x > 255 && x < 256);
+    SDL_Delay(GRAP_SDL_MovementInterval() + 10);
+    WORLD3D_RenderRegion(image, palette, 16, 16, 32, 32, 1);
+    assert(WORLD3D_ActorPose(1, &x, &y) && x == 256 && !WORLD3D_Animating());
+    D_5893_map_id = 13;
+    D_5896_map_x = D_5897_map_y = 16;
+    D_589b = D_589c = 0;
+    memset(D_5c5a, 0, sizeof(D_5c5a));
+    GRAP_SDL_SetSmoothMovement(false);
+    GRAP_SDL_SetMovementSpeed(1.0f);
 }
 int main(void) {
     assert(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO));
@@ -175,6 +422,9 @@ int main(void) {
     assert(px == 0.5f && !WORLD3D_Animating());
     WORLD3D_Move(U5_KEY_LEFT);
     D_5896_map_x = 16;
+    testSkies(image);
+    testActorMotion(image);
+    testCustomActorMotion(image);
     assert(ENGINE_Save());
     ENGINE_Set(ENGINE_WORLD_3D, 0);
     ENGINE_Load();

@@ -15,6 +15,7 @@ void WORLD3D_RenderRegion(SDL_Surface *surface, const Uint32 *palette, int x, in
                           int height, float pixelAspect);
 bool WORLD3D_Animating(void);
 void WORLD3D_CameraPose(float *x, float *y, float *angle);
+bool WORLD3D_ActorPose(unsigned actor, float *x, float *y);
 void WORLD3D_Cleanup(void);
 bool WORLD3D_Pick(float u, float v, int *dx, int *dy);
 #endif
