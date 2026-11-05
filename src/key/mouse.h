@@ -29,6 +29,7 @@ void MOUSE_SetEnabled(bool enabled);
 bool MOUSE_Enabled(void);
 void MOUSE_SetCommandInput(bool enabled);
 void MOUSE_BeginDirectionInput(bool talk);
+bool MOUSE_DirectionInputActive(void);
 void MOUSE_EndDirectionInput(void);
 void MOUSE_Button(float x, float y, int button, bool down, int clicks);
 void MOUSE_Cancel(void);

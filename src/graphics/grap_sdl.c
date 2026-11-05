@@ -11,6 +11,7 @@
 #include "wd.h"
 #include "grap_sdl.h"
 #include "widescreen.h"
+#include "world3d.h"
 #include "sprite_order.h"
 #include "tileset.h"
 #include "text/text_window.h"
@@ -283,7 +284,7 @@ unsigned int GRAP_SDL_MovementInterval(void)
     if (s_smoothMovement) return 7 * (unsigned int)SDL_roundf(16.0f / s_movementSpeed);
     return (unsigned int)SDL_roundf(160.0f / s_movementSpeed);
 }
-void GRAP_SDL_MapDrawn(void) { s_mapDrawn = true; }
+void GRAP_SDL_MapDrawn(void) { s_mapDrawn = true;WORLD3D_MapDrawn(); }
 
 
 void GRAP_SDL_CursorSize(int* width, int* height)
@@ -362,6 +363,10 @@ static bool MouseMapPoint(float x, float y, int* dx, int* dy, float* rx, float* 
         if (gx < 0 || gy < 0 || gx >= frameWidth || gy >= frameHeight) return false;
     } else if (gx < mapX || gy < mapY || gx >= mapX + columns * 16 || gy >= mapY + rows * 16)
         return false;
+    if(!frame && WORLD3D_Active()) {
+        if(!WORLD3D_Pick((gx-8)/176,(gy-8)/176,dx,dy))return false;
+        *rx=*dx;*ry=*dy;return true;
+    }
     *dx = (int)((gx - mapX) / 16) - columns / 2;
     *dy = (int)((gy - mapY) / 16) - rows / 2;
     *rx = (gx - mapX - columns / 2 * 16 - 8) / 16;
@@ -1002,6 +1007,8 @@ void GRAP_SDL_FlushFrame(void)
     if (!D_58a4 || (!MAPS_Outside(D_5893_map_id) && D_5893_map_id < 128))
         s_previousValid = false;
     LinearToRGB();
+    bool firstPerson=WORLD3D_Active();
+    if(firstPerson)WORLD3D_Render(s_sdlSurface,s_egaPalette);
 
     SDL_UpdateTexture(s_sdlTexture, NULL, s_sdlSurface->pixels, s_sdlSurface->pitch);
 
@@ -1040,7 +1047,7 @@ void GRAP_SDL_FlushFrame(void)
             SDL_SetTextureScaleMode(s_wideTexture, SDL_SCALEMODE_NEAREST);
             debug("Expanded layout: %dx%d tiles, pixel scale=%d\n", layout.columns, layout.rows, layout.scale);
         }
-        if (s_videoMode==GRAP_VIDEO_FULLSCREEN && !EVT_ImmediateExitEnabled() && !s_pixelUI && WIDE_Compose(s_widePixels, layout))
+        if (s_videoMode==GRAP_VIDEO_FULLSCREEN && !EVT_ImmediateExitEnabled() && !s_pixelUI && !firstPerson && WIDE_Compose(s_widePixels, layout))
         {
             s_expandedFrame = true;
             /* UI/effect updates can flush between a movement/light change and
@@ -1091,9 +1098,11 @@ void GRAP_SDL_FlushFrame(void)
                 imageDst.h*=192.0f/200;
             }
             SDL_RenderTexture(s_sdlRenderer, s_sdlTexture, &srcRect, &imageDst);
+            if(!firstPerson) {
             PrepareDarkness(11,11,completedMap);
             SmoothFrame(g_linearEgaBuffer0,320,200,8,8,11,11,s_sdlTexture,2,dst);
             DrawDarkness(dst,320,200,8,8,11,11);
+            }
         }
     }
     else {
@@ -1101,9 +1110,11 @@ void GRAP_SDL_FlushFrame(void)
         int w,h;
         if (SDL_GetRenderOutputSize(s_sdlRenderer,&w,&h)) {
             SDL_FRect dst = {0,0,w,h};
+            if(!firstPerson) {
             PrepareDarkness(11,11,completedMap);
             SmoothFrame(g_linearEgaBuffer0,320,200,8,8,11,11,s_sdlTexture,2,dst);
             DrawDarkness(dst,320,200,8,8,11,11);
+            }
         }
     }
     if(s_pixelUI) {

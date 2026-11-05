@@ -15,6 +15,7 @@
 #include "text/text_window.h"
 #if defined(TARGET_SDL)
 #include "grap_sdl.h"
+#include "world3d.h"
 #include "event/event.h"
 #endif
 
@@ -619,6 +620,7 @@ void GRAP_BUF_DrawScene(int key, const byte *ground, int stride, int columns, in
     if (!ground || columns < 1 || rows < 1 || count < 0 || count > 32 || stride < columns ||
         (count && !sprites))
         return;
+    WORLD3D_SceneView();
     left = SDL_max(0, left);
     right = SDL_min(columns - 1, right);
     int clipLeft = SDL_max(0, originX + left * 16),

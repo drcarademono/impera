@@ -202,6 +202,30 @@ display command line speed values outside their tick range without changing
 them until adjusted. Mouse input remains available on the settings screen
 even when Mouse Control is off, so it can be turned back on.
 
+### Experimental first-person view
+
+On the `experiment/world-local-3d` branch, enable **Graphics → 3D World / Locations**
+to use a first-person view on Britannia, the Underworld, and local maps. The option
+is off by default and saves in `ENGINE.CFG`. Combat remains top-down and existing
+dungeons keep their own renderer. Menus and scripted scene compositions retain
+their original presentation.
+
+Use **Up/Down** to step forward/backward and **Left/Right** to turn 90 degrees.
+**Alt+Left/Right** or **Home/Page Up** strafe. Turning does not move the Avatar or
+advance a game turn. Normal commands remain available; directional prompts accept
+view-relative arrows. With Mouse Control enabled, hold the right button over the
+view to move or turn. Left-click actions pick the projected ground, walls, and
+sprites instead of treating the view as a top-down grid. A small N/E/S/W indicator
+shows camera facing.
+
+This prototype has flat terrain, one-tile-high textured masonry cubes, and
+camera-facing sprites using existing artwork, animation, custom sprite sizes,
+and protected-black masks. Original movement, collision, map contents, and sight
+rules remain authoritative. The initial view uses the native map viewport with
+an eight-tile render limit and stepped camera motion. Terrain elevation,
+widescreen expansion, smooth camera travel, and projected map effects/dithered
+visibility transitions are future work.
+
 ### Available settings
 
 | Setting | Effect |
@@ -222,6 +246,7 @@ even when Mouse Control is off, so it can be turned back on.
 | Diagonal Movement | Enable eight-way movement, neighboring actions, and combat. |
 | Movement Speed | Adjust held movement and smooth tile transitions. |
 | Animation Speed | Adjust all animated sprites independently of movement and turns. |
+| 3D World / Locations | Experimental first-person view for world/local maps; combat stays top-down. |
 
 Selected rows use a white highlight with black text; checkbox colors remain
 visible to show their state. Mouse hover selects rows, including **Return to
