@@ -227,8 +227,11 @@ NPC and monster travel, including custom multi-tile actors. Teleports, spawning,
 and floor changes appear immediately. Surface skies use only the original
 16-color palette: solid blue by day and pitch black with fixed stars at night.
 Ordered dithering is limited to the game's 05:00–06:00 dawn and 19:00–20:00 dusk.
-Sprite outlines extend past all artwork edges. Underground areas remain dark
-above. There is no fixed tile-distance cutoff: geometry is projected to the
+The camera sits 13/16 of a tile above the floor. Location floors render together
+at their actual heights, including walls, floors, ceilings, NPCs, and containers.
+Upper-floor background tiles represent open air. Decorative rugs and placed
+magic carpets lie flat on the ground. Sprite outlines extend past all artwork
+edges. Underground areas remain dark above. There is no fixed tile-distance cutoff: geometry is projected to the
 horizon at the viewport’s pixel resolution,
 subject to map boundaries, lighting, and occlusion. Terrain elevation and
 projected map effects/dithered visibility transitions are future work.

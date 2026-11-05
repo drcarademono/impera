@@ -1,11 +1,15 @@
 #include "world3d.h"
+#include "common/file.h"
 #include "event/event.h"
+#include "funcs.h"
 #include "grap_buf.h"
 #include "grap_sdl.h"
 #include "macros.h"
 #include "mod/actors.h"
 #include "mod/contents_game.h"
+#include "mod/runtime.h"
 #include "mod/types_game.h"
+#include "tiles.h"
 #include "tileset.h"
 #include "vars.h"
 #include "widescreen.h"
@@ -14,6 +18,7 @@
 
 #define HALF_PI 1.57079632679489661923
 #define BUCKETS 1024
+#define EYE_HEIGHT (13.0f / 16.0f)
 static bool enabled, sceneView, pickValid;
 static int facing;
 static const int compass[] = {U5_KEY_UP, U5_KEY_RIGHT, U5_KEY_DOWN, U5_KEY_LEFT};
@@ -22,7 +27,7 @@ static int pickLevel, pickWorldX, pickWorldY, pickFacing;
 static int viewX, viewY, viewW, viewH;
 static float *depth;
 static byte *floorDepth;
-static int *pickX, *pickY;
+static int *pickX, *pickY, *pickFloor;
 static size_t pixelCapacity;
 typedef struct {
     unsigned tile;
@@ -35,8 +40,8 @@ static Texture *textures;
 static int textureCount, textureCapacity, textureBuckets[BUCKETS];
 typedef struct {
     unsigned stamp;
-    int x, y;
-    bool visible, wall, opaque;
+    int x, y, level;
+    bool visible, wall, opaque, empty;
     int surface, ground;
 } Cell;
 static Cell *cells;
@@ -44,7 +49,8 @@ static size_t cellCapacity, cellCount;
 static unsigned generation;
 typedef struct {
     float x, y;
-    int texture, dx, dy;
+    int texture, dx, dy, level;
+    bool flat;
 } Sprite;
 static Sprite *sprites;
 static int spriteCount, spriteCapacity;
@@ -70,6 +76,7 @@ typedef struct {
 static ActorMotion *actors;
 static int actorCapacity, trackedActorCount;
 static bool actorsValid, actorsMoving;
+static bool nativeValid;
 static unsigned actorsMap;
 static int actorsLevel;
 static void resetMotion(void) {
@@ -182,6 +189,7 @@ void WORLD3D_Cleanup(void) {
     SDL_free(floorDepth);
     SDL_free(pickX);
     SDL_free(pickY);
+    SDL_free(pickFloor);
     SDL_free(textures);
     SDL_free(sprites);
     SDL_free(cells);
@@ -190,7 +198,7 @@ void WORLD3D_Cleanup(void) {
     actorCapacity = trackedActorCount = 0;
     depth = NULL;
     floorDepth = NULL;
-    pickX = pickY = NULL;
+    pickX = pickY = pickFloor = NULL;
     textures = NULL;
     sprites = NULL;
     cells = NULL;
@@ -198,6 +206,7 @@ void WORLD3D_Cleanup(void) {
     textureCapacity = spriteCapacity = 0;
     pickValid = false;
     resetMotion();
+    nativeValid = false;
 }
 static bool reservePixels(int width, int height) {
     size_t count = (size_t)width * height;
@@ -207,22 +216,26 @@ static bool reservePixels(int width, int height) {
         return false;
     float *z = SDL_malloc(count * sizeof(float));
     byte *floor = SDL_malloc(count);
-    int *x = SDL_malloc(count * sizeof(int)), *y = SDL_malloc(count * sizeof(int));
-    if (!z || !x || !y || !floor) {
+    int *x = SDL_malloc(count * sizeof(int)), *y = SDL_malloc(count * sizeof(int)),
+        *levels = SDL_malloc(count * sizeof(int));
+    if (!z || !x || !y || !floor || !levels) {
         SDL_free(z);
         SDL_free(floor);
         SDL_free(x);
         SDL_free(y);
+        SDL_free(levels);
         return false;
     }
     SDL_free(depth);
     SDL_free(floorDepth);
     SDL_free(pickX);
     SDL_free(pickY);
+    SDL_free(pickFloor);
     depth = z;
     floorDepth = floor;
     pickX = x;
     pickY = y;
+    pickFloor = levels;
     pixelCapacity = count;
     return true;
 }
@@ -291,22 +304,105 @@ static void mapPoint(int dx, int dy, int *x, int *y) {
         *y = MAPS_Wrap(*y, MAP_HEIGHT);
     }
 }
-static unsigned typeAt(int dx, int dy) {
+/* Only inactive native pages are cached. Active terrain, extended map records,
+ * and sparse type state are read live; drawing never swaps the engine's floor. */
+typedef struct {
+    int level, w, h;
+    byte background;
+    const byte *record, *native;
+} Floor;
+static Floor floors[5];
+static int floorCount;
+static byte nativeFloors[5][1024];
+static bool nativeAvailable[5];
+static unsigned nativeMap, nativeRevision;
+static int nativeLevel;
+static int currentLevel(void) { return (int8_t)D_5895_map_level; }
+static Floor *findFloor(int level) {
+    for (int i = 0; i < floorCount; i++)
+        if (floors[i].level == level)
+            return &floors[i];
+    return NULL;
+}
+static void prepareFloors(void) {
+    floorCount = 0;
+    unsigned map = D_5893_map_id, revision = MOD_Revision();
+    if (!map) {
+        floors[floorCount++] = (Floor){currentLevel(), MAP_WIDTH, MAP_HEIGHT, 0, NULL, NULL};
+        return;
+    }
+    if (!nativeValid || nativeMap != map || nativeRevision != revision ||
+        nativeLevel != currentLevel()) {
+        memset(nativeAvailable, 0, sizeof(nativeAvailable));
+        nativeValid = true;
+        nativeMap = map;
+        nativeRevision = revision;
+        nativeLevel = currentLevel();
+        if (map <= 32) {
+            static const int8_t low[32] = {0,  0,  0, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                           -1, -1, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1};
+            static const int8_t high[32] = {1, 1, 1, 0, 1, 1, 1, 1, 2, 2, 2, 2, 0, 0, 0, 0,
+                                            3, 3, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 2, 2, 1};
+            FILE *file = NULL;
+            for (int level = low[map - 1]; level <= high[map - 1]; level++) {
+                if (level == currentLevel() || MAPS_Record(1, map, level))
+                    continue;
+                if (!file)
+                    file = FILE_Open(D_2652[(map - 1) / 8], "rb");
+                if (!file)
+                    break;
+                if (!fseek(file, (D_1e1a[map - 1] + level) * 1024, SEEK_SET) &&
+                    fread(nativeFloors[level + 1], 1, 1024, file) == 1024)
+                    nativeAvailable[level + 1] = true;
+            }
+            if (file)
+                fclose(file);
+        }
+    }
+    for (int level = -1; level <= 3; level++) {
+        const byte *r = MAPS_Record(1, map, level);
+        bool active = level == currentLevel();
+        if (!r && !active && !nativeAvailable[level + 1])
+            continue;
+        const byte *n = nativeAvailable[level + 1] ? nativeFloors[level + 1] : NULL;
+        floors[floorCount++] = (Floor){level,
+                                       r        ? MAPS_Word(r + 10)
+                                       : active ? MAP_WIDTH
+                                                : 32,
+                                       r        ? MAPS_Word(r + 12)
+                                       : active ? MAP_HEIGHT
+                                                : 32,
+                                       r        ? r[9]
+                                       : active ? D_6a07
+                                                : n[1023],
+                                       r,
+                                       n};
+    }
+}
+static unsigned typeAtLevel(int dx, int dy, int level) {
     int x, y;
     mapPoint(dx, dy, &x, &y);
-    return TYPES_GAME_At(x, y);
+    if (level == currentLevel())
+        return TYPES_GAME_At(x, y);
+    Floor *f = findFloor(level);
+    if (!f || x < 0 || y < 0 || x >= f->w || y >= f->h)
+        return 255;
+    unsigned base = f->record ? f->record[MAPS_RECORD + y * f->w + x] : f->native[y * 32 + x];
+    TypeCell key = {0, D_5893_map_id, level, x, y, 0, 0};
+    return TYPES_At(key, base);
 }
+static unsigned typeAt(int dx, int dy, int level) { return typeAtLevel(dx, dy, level); }
 static unsigned art(unsigned id, byte base) {
     return TYPES_ArtSlot(id) ? TYPES_ActorArt(id, D_b11e[base]) : D_b11e[base];
 }
-static unsigned floorFor(int dx, int dy, const TypeDef *d) {
+static unsigned floorFor(int dx, int dy, int level, const TypeDef *d) {
     if (TYPES_Defined(d->id) && d->ground != TYPES_INFER_GROUND)
         return d->ground;
     unsigned candidates[4];
     int best = -1, votes = 0;
     const int nx[] = {0, 0, 1, -1}, ny[] = {1, -1, 0, 0};
     for (int i = 0; i < 4; i++)
-        candidates[i] = typeAt(dx + nx[i], dy + ny[i]);
+        candidates[i] = typeAt(dx + nx[i], dy + ny[i], level);
     for (int i = 0; i < 4; i++) {
         TypeDef n;
         if (!TYPES_Get(candidates[i], &n) || (n.render & (TYPES_SPRITE | TYPES_MASONRY)))
@@ -321,8 +417,8 @@ static unsigned floorFor(int dx, int dy, const TypeDef *d) {
     }
     return best < 0 ? (D_5893_map_id ? 0x44 : 5) : candidates[best];
 }
-static void addSprite(unsigned tile, float x, float y, int dx, int dy) {
-    if (dx == 0 && dy == 0)
+static void addSprite(unsigned tile, float x, float y, int dx, int dy, int level, bool flat) {
+    if (dx == 0 && dy == 0 && level == currentLevel() && !flat)
         return;
     if (spriteCount == spriteCapacity) {
         int capacity = spriteCapacity ? spriteCapacity * 2 : 32;
@@ -334,10 +430,10 @@ static void addSprite(unsigned tile, float x, float y, int dx, int dy) {
     }
     int index = texture(tile, true);
     if (index >= 0)
-        sprites[spriteCount++] = (Sprite){x, y, index, dx, dy};
+        sprites[spriteCount++] = (Sprite){x, y, index, dx, dy, level, flat};
 }
-static size_t hashCell(int x, int y) {
-    return (unsigned)x * 2654435761u ^ (unsigned)y * 2246822519u;
+static size_t hashCell(int x, int y, int level) {
+    return (unsigned)x * 2654435761u ^ (unsigned)y * 2246822519u ^ (unsigned)level * 3266489917u;
 }
 static bool growCells(void) {
     size_t capacity = cellCapacity ? cellCapacity * 2 : 4096;
@@ -346,7 +442,7 @@ static bool growCells(void) {
         return false;
     for (size_t i = 0; i < cellCapacity; i++)
         if (cells[i].stamp == generation) {
-            size_t p = hashCell(cells[i].x, cells[i].y) & (capacity - 1);
+            size_t p = hashCell(cells[i].x, cells[i].y, cells[i].level) & (capacity - 1);
             while (next[p].stamp == generation)
                 p = (p + 1) & (capacity - 1);
             next[p] = cells[i];
@@ -356,13 +452,13 @@ static bool growCells(void) {
     cellCapacity = capacity;
     return true;
 }
-static Cell *cell(int dx, int dy) {
+static Cell *cellAt(int dx, int dy, int level) {
     if (!cellCapacity || (cellCount + 1) * 2 >= cellCapacity)
         if (!growCells())
             return NULL;
-    size_t p = hashCell(dx, dy) & (cellCapacity - 1);
+    size_t p = hashCell(dx, dy, level) & (cellCapacity - 1);
     while (cells[p].stamp == generation) {
-        if (cells[p].x == dx && cells[p].y == dy)
+        if (cells[p].x == dx && cells[p].y == dy && cells[p].level == level)
             return &cells[p];
         p = (p + 1) & (cellCapacity - 1);
     }
@@ -371,6 +467,7 @@ static Cell *cell(int dx, int dy) {
     c->stamp = generation;
     c->x = dx;
     c->y = dy;
+    c->level = level;
     c->surface = c->ground = -1;
     cellCount++;
     double distance = (double)dx * dx + (double)dy * dy;
@@ -379,27 +476,32 @@ static Cell *cell(int dx, int dy) {
         c->visible = dx == 0 && dy == 0;
     if (!c->visible)
         return c;
-    unsigned id = typeAt(dx, dy);
+    unsigned id = typeAt(dx, dy, level);
     TypeDef d;
     if (!TYPES_Get(id, &d) || d.base == 255) {
         c->visible = false;
         return c;
     }
+    Floor *f = findFloor(level);
+    c->empty = D_5893_map_id && level > 0 && f && id == f->background;
+    if (c->empty)
+        return c;
     c->wall = !!(d.render & TYPES_MASONRY);
     c->opaque = d.sight == 1 || (d.sight == 2 && distance == 1);
     unsigned tile = art(id, d.base);
     c->surface = texture(tile, false);
-    unsigned ground = (c->wall || (d.render & TYPES_SPRITE)) ? floorFor(dx, dy, &d) : id;
+    unsigned ground = (c->wall || (d.render & TYPES_SPRITE)) ? floorFor(dx, dy, level, &d) : id;
     TypeDef floor;
     if (TYPES_Get(ground, &floor))
         c->ground = texture(art(ground, floor.base), false);
     if (!c->wall && (d.render & TYPES_SPRITE))
-        addSprite(tile, dx + 0.5f, dy + 0.5f, dx, dy);
+        addSprite(tile, dx + 0.5f, dy + 0.5f, dx, dy, level, d.base == 0xaa);
     int wx, wy;
     mapPoint(dx, dy, &wx, &wy);
-    int loot = CONTENTS_GAME_Shape(wx, wy);
+    int loot = level == currentLevel() ? CONTENTS_GAME_Shape(wx, wy)
+                                       : CONTENTS_GAME_LocationShape(D_5893_map_id, level, wx, wy);
     if (loot)
-        addSprite(256 + loot, dx + 0.5f, dy + 0.5f, dx, dy);
+        addSprite(256 + loot, dx + 0.5f, dy + 0.5f, dx, dy, level, false);
     return c;
 }
 static void sampleActor(ActorMotion *a, Uint64 now) {
@@ -427,6 +529,30 @@ static bool reserveActors(int count) {
     actorCapacity = count;
     return true;
 }
+static unsigned spriteOnFloor(unsigned actor, int level) {
+    if (level == currentLevel())
+        return ACTORS_Sprite(actor, 256 + D_5c5a[actor]._1_animTile);
+    ActorFmt *a = &D_5c5a[actor];
+    if (a->_0_tile >= 64 && a->_1_animTile < 32)
+        return 256 + a->_1_animTile;
+    int dx = a->_2_x - D_5896_map_x, dy = a->_3_y - D_5897_map_y;
+    TypeDef d;
+    unsigned center = typeAtLevel(dx, dy, level), north = typeAtLevel(dx, dy - 1, level),
+             south = typeAtLevel(dx, dy + 1, level);
+    if (TYPES_Get(center, &d))
+        center = d.base;
+    if (TYPES_Get(north, &d))
+        north = d.base;
+    if (TYPES_Get(south, &d))
+        south = d.base;
+    bool reflection;
+    int pose = ULTIMA_ResolveActorTile(a->_1_animTile, center, north, south, &reflection);
+    if (pose < 0)
+        return 0;
+    unsigned type = ACTORS_Instance(actor);
+    return type && ((pose & 252) == (a->_1_animTile & 252)) ? TYPES_ActorArt(type, 256 + pose)
+                                                            : 256 + pose;
+}
 static void prepareActors(void) {
     Uint64 now = SDL_GetTicks();
     int count = MAP_ACTOR_COUNT;
@@ -437,7 +563,7 @@ static void prepareActors(void) {
     for (int i = 1; i < count; i++) {
         ActorFmt *a = &D_5c5a[i];
         ActorMotion *motion = tracked ? &actors[i] : NULL;
-        if (!a->_0_tile || !a->_1_animTile || a->_4_z != D_5895_map_level) {
+        if (!a->_0_tile || !a->_1_animTile || !findFloor((int8_t)a->_4_z)) {
             if (motion)
                 motion->valid = motion->moving = false;
             continue;
@@ -447,7 +573,8 @@ static void prepareActors(void) {
             dx = MAPS_Wrap(dx + MAP_WIDTH / 2, MAP_WIDTH) - MAP_WIDTH / 2;
             dy = MAPS_Wrap(dy + MAP_HEIGHT / 2, MAP_HEIGHT) - MAP_HEIGHT / 2;
         }
-        bool sighted = WIDE_Visible(dx, dy);
+        bool sighted = a->_4_z == D_5895_map_level ? WIDE_Visible(dx, dy)
+                                                   : (D_58a5 >= 50 || dx * dx + dy * dy <= D_58a5);
         float offsetX = 0, offsetY = 0;
         if (motion) {
             unsigned kind = ACTORS_Instance(i);
@@ -489,10 +616,14 @@ static void prepareActors(void) {
         }
         if (!sighted)
             continue;
-        unsigned tile = ACTORS_Sprite(i, 256 + a->_1_animTile), w = 1, h = 1;
+        unsigned tile = spriteOnFloor(i, (int8_t)a->_4_z), w = 1, h = 1;
+        if (!tile)
+            continue;
         if (TYPES_ArtSlot(tile))
             TYPES_ArtSize(tile, D_5893_map_id == 0, &w, &h);
-        addSprite(tile, dx + offsetX + w * 0.5f, dy + offsetY + h * 0.5f, dx, dy);
+        addSprite(tile, dx + offsetX + w * 0.5f, dy + offsetY + h * 0.5f, dx, dy, (int8_t)a->_4_z,
+                  a->_0_tile == TILE_ACTOR_CARPET || a->_0_tile == TILE_ACTOR_FLYING_CARPET ||
+                      a->_0_tile == TILE_ACTOR_FLYING_CARPET + 1);
     }
     /* Removed slots must not leave a tween alive or be reused as an old actor. */
     if (tracked && count < trackedActorCount)
@@ -511,6 +642,7 @@ static void prepare(void) {
             memset(cells, 0, cellCapacity * sizeof(*cells));
         generation = 1;
     }
+    prepareFloors();
     prepareActors();
 }
 
@@ -612,7 +744,8 @@ static void drawStars(SDL_Surface *out, const Sky *sky, float focalX, float foca
             }
     }
 }
-static void pixel(SDL_Surface *out, int x, int y, Uint32 color, float z, int dx, int dy) {
+static void pixel(SDL_Surface *out, int x, int y, Uint32 color, float z, int dx, int dy,
+                  int level) {
     int i = y * viewW + x;
     if (z >= depth[i])
         return;
@@ -620,6 +753,7 @@ static void pixel(SDL_Surface *out, int x, int y, Uint32 color, float z, int dx,
     floorDepth[i] = 0;
     pickX[i] = dx;
     pickY[i] = dy;
+    pickFloor[i] = level;
     ((Uint32 *)((byte *)out->pixels + (y + viewY) * out->pitch))[x + viewX] = color;
 }
 void WORLD3D_Render(SDL_Surface *out, const Uint32 *palette) {
@@ -653,78 +787,116 @@ void WORLD3D_RenderRegion(SDL_Surface *out, const Uint32 *palette, int left, int
             depth[i] = INFINITY;
             floorDepth[i] = 0;
             pickX[i] = pickY[i] = 0;
+            pickFloor[i] = currentLevel();
             ((Uint32 *)((byte *)out->pixels + (y + top) * out->pitch))[x + left] =
                 background[(x / 2) & 7];
         }
     }
     drawStars(out, &sky, focalX, focalY);
-    /* Pixel-centre sampling reaches the horizon without a fixed distance cutoff. */
-    for (int y = viewH / 2; y < viewH; y++) {
-        float denominator = y + 0.5f - viewH * 0.5f;
-        if (denominator <= 0)
-            continue;
-        float z = 0.5f * focalY / denominator;
-        for (int x = 0; x < viewW; x++) {
-            float offset = (x + 0.5f - viewW * 0.5f) / focalX, wx = ox + z * (fx + rx * offset),
-                  wy = oy + z * (fy + ry * offset);
-            int cx = (int)floorf(wx), cy = (int)floorf(wy);
-            Cell *c = cell(cx, cy);
-            if (!c || !c->visible || c->wall)
-                continue;
-            pixel(out, x, y, shade(sample(c->ground, wx - floorf(wx), wy - floorf(wy)), z, false),
-                  z, cx, cy);
-            floorDepth[y * viewW + x] = 1;
-        }
-    }
-    /* Beyond focalY distance a unit wall is smaller than the horizon's pixel gap.
-     * Trace all geometry that can cover a sample, not an arbitrary tile radius. */
-    for (int x = 0; x < viewW; x++) {
-        float offset = (x + 0.5f - viewW * 0.5f) / focalX, dx = fx + rx * offset,
-              dy = fy + ry * offset;
-        float sx = fabsf(dx) < 1e-8f ? INFINITY : fabsf(1 / dx),
-              sy = fabsf(dy) < 1e-8f ? INFINITY : fabsf(1 / dy);
-        int cx = (int)floorf(ox), cy = (int)floorf(oy), stepX = dx < 0 ? -1 : 1,
-            stepY = dy < 0 ? -1 : 1;
-        float tx = isfinite(sx) ? (dx < 0 ? ox - cx : cx + 1 - ox) * sx : INFINITY,
-              ty = isfinite(sy) ? (dy < 0 ? oy - cy : cy + 1 - oy) * sy : INFINITY, z = 0;
-        bool side = false;
-        while (z <= focalY) {
-            if (tx < ty) {
-                z = tx;
-                tx += sx;
-                cx += stepX;
-                side = false;
-            } else {
-                z = ty;
-                ty += sy;
-                cy += stepY;
-                side = true;
+    float eye = currentLevel() + EYE_HEIGHT;
+    /* Horizontal floors, ceilings and cube caps share the same depth buffer.
+     * Upper-floor background is open air, not a sheet spanning the whole town. */
+    int activeFloor = 0;
+    for (int f = 0; f < floorCount; f++)
+        if (floors[f].level == currentLevel())
+            activeFloor = f;
+    for (int step = 0; step < floorCount; step++)
+        for (int cap = 0; cap < 2; cap++) {
+            int f = (activeFloor + step) % floorCount;
+            int level = floors[f].level;
+            float vertical = eye - (level + cap);
+            for (int y = 0; y < viewH; y++) {
+                float denominator = y + 0.5f - viewH * 0.5f;
+                if (fabsf(denominator) < 1e-6f)
+                    continue;
+                float z = vertical * focalY / denominator;
+                if (z < 0.05f)
+                    continue;
+                for (int x = 0; x < viewW; x++) {
+                    if (z >= depth[y * viewW + x])
+                        continue;
+                    float offset = (x + 0.5f - viewW * 0.5f) / focalX;
+                    float wx = ox + z * (fx + rx * offset), wy = oy + z * (fy + ry * offset);
+                    int cx = (int)floorf(wx), cy = (int)floorf(wy);
+                    if (D_5893_map_id &&
+                        (D_5896_map_x + cx < 0 || D_5897_map_y + cy < 0 ||
+                         D_5896_map_x + cx >= floors[f].w || D_5897_map_y + cy >= floors[f].h))
+                        continue;
+                    Cell *c = cellAt(cx, cy, level);
+                    if (!c || !c->visible || c->empty || (cap && !c->wall))
+                        continue;
+                    int ground = c->wall ? c->surface : c->ground;
+                    pixel(out, x, y,
+                          shade(sample(ground, wx - floorf(wx), wy - floorf(wy)), z, false), z, cx,
+                          cy, level);
+                    if (!c->wall)
+                        floorDepth[y * viewW + x] = 1;
+                }
             }
-            if (z > focalY)
-                break;
-            Cell *c = cell(cx, cy);
-            if (!c)
-                break;
-            if (!c->visible || c->opaque || c->wall) {
-                if (!c->visible || !c->wall) {
-                    for (int y = c->visible ? 0 : viewH / 2; y < viewH; y++) {
-                        int i = y * viewW + x;
-                        if (c->visible && pickX[i] == cx && pickY[i] == cy)
-                            continue;
-                        if (z < depth[i]) {
-                            Uint32 background = y < viewH / 2
-                                                    ? ((Uint32 *)((byte *)out->pixels +
-                                                                  (y + top) * out->pitch))[x + left]
-                                                    : colors[0];
-                            /* Leave the occluder's own billboard in front of its backdrop. */
-                            float curtain = c->visible ? SDL_min(tx, ty) : z;
-                            pixel(out, x, y, background, curtain, cx, cy);
+        }
+    for (int f = 0; f < floorCount; f++)
+        for (int x = 0; x < viewW; x++) {
+            int level = floors[f].level;
+            float offset = (x + 0.5f - viewW * 0.5f) / focalX, dx = fx + rx * offset,
+                  dy = fy + ry * offset;
+            float sx = fabsf(dx) < 1e-8f ? INFINITY : fabsf(1 / dx),
+                  sy = fabsf(dy) < 1e-8f ? INFINITY : fabsf(1 / dy);
+            int cx = (int)floorf(ox), cy = (int)floorf(oy), stepX = dx < 0 ? -1 : 1,
+                stepY = dy < 0 ? -1 : 1;
+            float tx = isfinite(sx) ? (dx < 0 ? ox - cx : cx + 1 - ox) * sx : INFINITY;
+            float ty = isfinite(sy) ? (dy < 0 ? oy - cy : cy + 1 - oy) * sy : INFINITY, z = 0;
+            /* Stop only beyond the viewport's last possible vertical sample. */
+            float limit = focalY * 2 * SDL_max(fabsf(eye - level), fabsf(eye - level - 1));
+            bool side = false;
+            while (z <= limit) {
+                if (tx < ty) {
+                    z = tx;
+                    tx += sx;
+                    cx += stepX;
+                    side = false;
+                } else {
+                    z = ty;
+                    ty += sy;
+                    cy += stepY;
+                    side = true;
+                }
+                if (z > limit)
+                    break;
+                Cell *c = cellAt(cx, cy, level);
+                if (!c)
+                    break;
+                float front = SDL_max(z, 0.001f);
+                if (!c->visible || c->empty || (!c->wall && c->opaque)) {
+                    if (level == currentLevel() && !c->empty) {
+                        int curtainTop =
+                            c->visible
+                                ? SDL_clamp((int)ceilf(viewH * 0.5f +
+                                                       focalY * (eye - level - 1) / front - 0.5f),
+                                            0, viewH)
+                                : viewH / 2;
+                        for (int y = curtainTop; y < viewH; y++) {
+                            int i = y * viewW + x;
+                            if (c->visible && pickFloor[i] == level && pickX[i] == cx &&
+                                pickY[i] == cy)
+                                continue;
+                            if (z < depth[i]) {
+                                Uint32 background =
+                                    y < viewH / 2 ? ((Uint32 *)((byte *)out->pixels +
+                                                                (y + top) * out->pitch))[x + left]
+                                                  : colors[0];
+                                pixel(out, x, y, background, c->visible ? SDL_min(tx, ty) : z, cx,
+                                      cy, level);
+                            }
                         }
                     }
-                    break;
+                    if (!c->visible || (!c->empty && c->opaque))
+                        break;
+                    continue;
                 }
-                float topY = viewH * 0.5f - focalY * 0.5f / z,
-                      bottom = viewH * 0.5f + focalY * 0.5f / z;
+                if (!c->wall)
+                    continue;
+                float topY = viewH * 0.5f + focalY * (eye - level - 1) / front;
+                float bottom = viewH * 0.5f + focalY * (eye - level) / front;
                 float hit = side ? ox + dx * z : oy + dy * z, u = hit - floorf(hit);
                 if ((side && dy > 0) || (!side && dx < 0))
                     u = 1 - u;
@@ -733,21 +905,48 @@ void WORLD3D_RenderRegion(SDL_Surface *out, const Uint32 *palette, int left, int
                     pixel(
                         out, x, y,
                         shade(sample(c->surface, u, (y + 0.5f - topY) / (bottom - topY)), z, side),
-                        z, cx, cy);
-                break;
+                        z, cx, cy, level);
+                /* A wall at eye level occludes its entire remaining slice. Walls on
+                 * other floors can reveal farther walls above or below them. */
+                if (eye >= level && eye <= level + 1)
+                    break;
             }
         }
-    }
     for (int i = 0; i < spriteCount; i++) {
         Sprite *s = &sprites[i];
         Texture *t = &textures[s->texture];
+        if (s->flat) {
+            float w = (t->w + 2 * t->pad) / 32.0f, h = (t->h + 2 * t->pad) / 32.0f;
+            float left = s->x - w * 0.5f, top = s->y - h * 0.5f;
+            for (int y = 0; y < viewH; y++) {
+                float denom = y + 0.5f - viewH * 0.5f;
+                if (fabsf(denom) < 1e-6f)
+                    continue;
+                float z = (eye - s->level - 0.002f) * focalY / denom;
+                if (z < 0.05f)
+                    continue;
+                for (int x = 0; x < viewW; x++) {
+                    if (z >= depth[y * viewW + x])
+                        continue;
+                    float offset = (x + 0.5f - viewW * 0.5f) / focalX;
+                    float wx = ox + z * (fx + rx * offset), wy = oy + z * (fy + ry * offset);
+                    if (wx < left || wx >= left + w || wy < top || wy >= top + h)
+                        continue;
+                    Uint32 color = sample(s->texture, (wx - left) / w, (wy - top) / h);
+                    if (color >> 24)
+                        pixel(out, x, y, shade(color, z, false), z, s->dx, s->dy, s->level);
+                }
+            }
+            continue;
+        }
         float dx = s->x - ox, dy = s->y - oy, z = dx * fx + dy * fy, across = dx * rx + dy * ry;
         if (z < 0.05f)
             continue;
         float w = focalX * ((t->w + 2 * t->pad) / 32.0f) / z,
               h = focalY * ((t->h + 2 * t->pad) / 32.0f) / z,
               l = viewW * 0.5f + focalX * across / z - w * 0.5f,
-              bottom = viewH * 0.5f + focalY * (0.5f + t->pad / 32.0f) / z, topY = bottom - h;
+              bottom = viewH * 0.5f + focalY * (eye - s->level + t->pad / 32.0f) / z,
+              topY = bottom - h;
         for (int y = SDL_max(0, (int)ceilf(topY - 0.5f));
              y < SDL_min(viewH, (int)ceilf(bottom - 0.5f)); y++)
             for (int x = SDL_max(0, (int)ceilf(l - 0.5f));
@@ -759,7 +958,7 @@ void WORLD3D_RenderRegion(SDL_Surface *out, const Uint32 *palette, int left, int
                     if (t->pad && y + 0.5f >= bottom - focalY * t->pad / 32.0f / z &&
                         floorDepth[y * viewW + x])
                         depth[y * viewW + x] = INFINITY;
-                    pixel(out, x, y, shade(color, z, false), z, s->dx, s->dy);
+                    pixel(out, x, y, shade(color, z, false), z, s->dx, s->dy, s->level);
                 }
             }
     }
@@ -790,6 +989,8 @@ bool WORLD3D_Pick(float u, float v, int *dx, int *dy) {
         return false;
     *dx = pickX[i];
     *dy = pickY[i];
-    Cell *c = cell(*dx, *dy);
+    if (pickFloor[i] != currentLevel())
+        return false;
+    Cell *c = cellAt(*dx, *dy, currentLevel());
     return c && c->visible;
 }

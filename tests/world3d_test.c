@@ -83,7 +83,7 @@ static void testSkies(SDL_Surface *image) {
     assert(SDL_SaveBMP(image, "world3d-night.bmp"));
     D_6608_map.town[15][16] = 0x4f;
     WORLD3D_Render(image, palette);
-    for (int y = 0; y < 176; y++)
+    for (int y = 75; y < 176; y++)
         for (int x = 32; x < 352; x++)
             assert(at(image, x, y) != palette[7] && at(image, x, y) != palette[15]);
     D_6608_map.town[15][16] = 0x44;
@@ -143,12 +143,12 @@ static void testEdgeOutline(SDL_Surface *image, byte *tiles) {
     memset(tiles + 400 * 128, 0x11, 128); /* Artwork touches all four edges and corners. */
     D_5c5a[1] = (ActorFmt){0x90, 0x90, 16, 14, 0, 0, 0, 0};
     WORLD3D_Render(image, palette);
-    const int points[][2] = {{103, 176}, {249, 176}, {176, 103}, {176, 249},
-                             {103, 103}, {249, 103}, {103, 249}, {249, 249}};
+    const int points[][2] = {{103, 220}, {249, 220}, {176, 145}, {176, 292},
+                             {103, 145}, {249, 145}, {103, 292}, {249, 292}};
     for (unsigned i = 0; i < sizeof(points) / sizeof(points[0]); i++) {
         assert(at(image, points[i][0], points[i][1]) == palette[0]);
     }
-    assert((at(image, 108, 176) & 255) >
+    assert((at(image, 108, 220) & 255) >
            80); /* No artwork shrinking to make room for the outline. */
     assert(at(image, 95, 95) == palette[9]); /* Padding must not become a black rectangle. */
     memcpy(tiles + 400 * 128, original, 128);
@@ -277,8 +277,8 @@ static void testCustomActorMotion(SDL_Surface *image) {
         D_5c5a[32 + i] = (ActorFmt){0x90, 0x90, 16, 13, 0, 0, 0, 0};
         WORLD3D_Render(image, palette);
         assert(at(image, 118, 100) == palette[0] && at(image, 344, 100) == palette[0]);
-        assert(at(image, 200, 7) == palette[0] && at(image, 200, 235) == palette[0]);
-        assert(at(image, 118, 7) == palette[0] && (at(image, 125, 100) & 255) > 80);
+        assert(at(image, 200, 42) == palette[0] && at(image, 200, 269) == palette[0]);
+        assert(at(image, 118, 42) == palette[0] && (at(image, 125, 100) & 255) > 80);
     }
     D_5c5a[32] = saved[0];
     D_5c5a[33] = saved[1];
@@ -333,6 +333,132 @@ static void testCustomActorMotion(SDL_Surface *image) {
     memset(D_5c5a, 0, sizeof(D_5c5a));
     GRAP_SDL_SetSmoothMovement(false);
     GRAP_SDL_SetMovementSpeed(1.0f);
+}
+static void testHeightAndCarpets(SDL_Surface *image, byte *tiles) {
+    memset(D_6608_map.town, 0x44, 32 * 32);
+    D_6608_map.town[14][16] = 0x4f;
+    WORLD3D_Render(image, palette);
+    assert(at(image, 176, 140) == palette[9]);
+    assert(((at(image, 176, 143) >> 16) & 255) > 100 && !(at(image, 176, 143) & 255));
+    assert(((at(image, 176, 327) >> 8) & 255) > 100); /* 13/16 eye height, not a midpoint camera. */
+    memset(tiles + 0xaa * 128, 0x55, 128);
+    memset(tiles + (256 + 0x1b) * 128, 0x55, 128);
+    for (int mode = 0; mode < 2; mode++) {
+        D_6608_map.town[14][16] = mode ? 0x44 : 0xaa;
+        if (mode)
+            D_5c5a[1] = (ActorFmt){0x1b, 0x1b, 16, 14, 0, 0, 0, 0};
+        WORLD3D_Render(image, palette);
+        int carpet = 0;
+        for (int y = 0; y < 352; y++)
+            for (int x = 32; x < 352; x++) {
+                Uint32 color = at(image, x, y);
+                if ((color & 255) > 50 && ((color >> 16) & 255) > 50 && !(color & 0xff00)) {
+                    assert(y > 176);
+                    carpet++;
+                }
+            }
+        assert(carpet > 0); /* Both decorative and transport carpets lie on the ground. */
+        assert(at(image, 176, 150) == palette[9]);
+        memset(D_5c5a, 0, sizeof(D_5c5a));
+    }
+    memset(D_6608_map.town, 0x44, 32 * 32);
+}
+static void testStackedFloors(SDL_Surface *image, byte *tiles) {
+    const unsigned recordSize = MAPS_RECORD + 32 * 32, size = MAPS_HEADER + 4 * recordSize;
+    byte *catalog = calloc(1, size);
+    assert(catalog);
+    memcpy(catalog, "IMAPS001", 8);
+    TYPES_Put32(catalog + 8, 4);
+    for (int i = 0; i < 4; i++) {
+        byte *r = catalog + MAPS_HEADER + i * recordSize;
+        TYPES_Put32(r, recordSize);
+        r[4] = 1;
+        r[5] = 42;
+        r[6] = i;
+        r[8] = i - 1;
+        r[9] = 5;
+        r[10] = r[12] = 32;
+        r[14] = (i == 1) ? 0 : 254;
+        strcpy((char *)r + 24, "Stacked test");
+        strcpy((char *)r + 88, "LOC042.DAT");
+        memset(r + MAPS_RECORD, i <= 1 ? 0x44 : 5, 32 * 32);
+        if (i)
+            r[MAPS_RECORD + 11 * 32 + 16] = i == 1 ? 0x4f : i == 2 ? 0x50 : 0x51;
+    }
+    memset(tiles + 0x50 * 128, 0x77, 128);
+    memset(tiles + 0x51 * 128, 0x66, 128);
+    assert(MAPS_Mount(catalog, size));
+    D_5893_map_id = 42;
+    D_5895_map_level = 0;
+    WORLD3D_Render(image, palette);
+    Uint32 ground = at(image, 176, 200), upper = at(image, 176, 130), tower = at(image, 176, 70);
+    assert(((ground >> 16) & 255) > 80 && !(ground & 255));
+    assert((upper & 255) > 80 && (upper & 255) == ((upper >> 16) & 255));
+    assert(((tower >> 16) & 255) > 80 && !(tower & 255));
+    assert(at(image, 300, 40) == palette[9]); /* Background upstairs remains open sky. */
+    assert(D_5893_map_id == 42 && D_5895_map_level == 0);
+    int dx, dy;
+    assert(!WORLD3D_Pick(0.5f, 130.0f / 352, &dx, &dy)); /* Don't send actions to another floor. */
+    *MAPS_ActiveCell(42, 1, 16, 15) = 0x44;
+    WORLD3D_Render(image, palette);
+    assert(((at(image, 176, 120) >> 8) & 255) > 100 && !(at(image, 176, 120) & 255)); /* Ceiling. */
+    *MAPS_ActiveCell(42, 1, 16, 15) = 5;
+    *MAPS_ActiveCell(42, 1, 16, 12) = 0x44;
+    D_5c5a[1] = (ActorFmt){0x90, 0x90, 16, 12, 1, 0, 0, 0};
+    WORLD3D_Render(image, palette);
+    assert((at(image, 176, 130) & 255) > 80 && !((at(image, 176, 130) >> 16) & 255));
+    float ax, ay;
+    assert(WORLD3D_ActorPose(1, &ax, &ay)); /* An NPC on another floor is included. */
+    memset(D_5c5a, 0, sizeof(D_5c5a));
+    *MAPS_ActiveCell(42, 1, 16, 16) = 0x44;
+    D_5895_map_level = 1;
+    WORLD3D_Render(image, palette);
+    upper = at(image, 176, 200);
+    assert((upper & 255) > 80 && (upper & 255) == ((upper >> 16) & 255));
+    assert(D_5895_map_level == 1);
+    assert(SDL_SaveBMP(image, "world3d-stacked-floors.bmp"));
+    D_5893_map_id = 13;
+    D_5895_map_level = 0;
+    assert(MAPS_Mount(NULL, 0));
+    free(catalog);
+    WORLD3D_Render(image, palette);
+}
+static void testNativeFloors(SDL_Surface *image) {
+    assert(SDL_CreateDirectory("world3d-native-fixture"));
+    FILE *file = fopen("world3d-native-fixture/CASTLE.DAT", "wb");
+    assert(file);
+    byte page[1024];
+    for (int i = 0; i < 5; i++) {
+        memset(page, 5, sizeof(page));
+        if (i == 2)
+            page[11 * 32 + 16] = 0x50;
+        if (i == 3)
+            page[11 * 32 + 16] = 0x51;
+        assert(fwrite(page, 1, sizeof(page), file) == sizeof(page));
+    }
+    fclose(file);
+    FILE_SetDataDirectory("world3d-native-fixture");
+    D_5893_map_id = 17;
+    memset(D_6608_map.town, 0x44, 32 * 32);
+    D_6608_map.town[11][16] = 0x4f;
+    WORLD3D_Render(image, palette);
+    assert(((at(image, 176, 200) >> 16) & 255) > 80 && !(at(image, 176, 200) & 255));
+    assert((at(image, 176, 130) & 255) > 80);
+    assert(((at(image, 176, 70) >> 16) & 255) > 80 && !(at(image, 176, 70) & 255));
+    D_6608_map.town[11][16] = 0x44;
+    WORLD3D_Render(image, palette);
+    assert(!(at(image, 176, 200) & 0xff0000)); /* Current floor reads live terrain, not the file. */
+    assert((at(image, 176, 130) & 255) > 80);
+    if (SDL_getenv("IMPERA_3D_ART")) {
+        Uint64 start = SDL_GetTicksNS();
+        for (int i = 0; i < 20; i++)
+            WORLD3D_Render(image, palette);
+        printf("Five-floor render average: %.2f ms\n", (SDL_GetTicksNS() - start) / 20000000.0);
+    }
+    FILE_SetDataDirectory("");
+    remove("world3d-native-fixture/CASTLE.DAT");
+    D_5893_map_id = 13;
+    WORLD3D_Render(image, palette);
 }
 int main(void) {
     assert(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO));
@@ -396,7 +522,7 @@ int main(void) {
     GRAP_BUF_SetTransparentSprites(true);
     int dx, dy;
     assert(WORLD3D_Pick(0.5f, 0.5f, &dx, &dy) && dx == 0 && dy == -1);
-    assert(((at(image, 176, 350) >> 8) & 255) > 100); /* Flat floor below the actor. */
+    assert(((at(image, 10, 350) >> 8) & 255) > 100); /* Flat floor below the actor. */
     D_5c5a[1]._3_y = 13;
     WORLD3D_Render(image, palette);
     assert(((at(image, 176, 176) >> 16) & 255) > 100); /* Wall occludes rear actor. */
@@ -410,7 +536,7 @@ int main(void) {
     FILE_ReloadMods();
     assert(TILESET_Select(TILESET_DOS));
     WORLD3D_Render(image, palette);
-    assert((at(image, 100, 176) & 0xffffff) == 0); /* Protected black stays opaque. */
+    assert((at(image, 100, 262) & 0xffffff) == 0); /* Protected black stays opaque. */
     KEY_SDL_ClearInput();
     KEY_SDL_SetGameplayInput(1);
     SDL_KeyboardEvent key = {0};
@@ -485,6 +611,9 @@ int main(void) {
     testEdgeOutline(image, tiles);
     testActorMotion(image);
     testCustomActorMotion(image);
+    testHeightAndCarpets(image, tiles);
+    testStackedFloors(image, tiles);
+    testNativeFloors(image);
     assert(ENGINE_Save());
     ENGINE_Set(ENGINE_WORLD_3D, 0);
     ENGINE_Load();
@@ -543,6 +672,27 @@ int main(void) {
         for (int i = 0; i < 50; i++)
             WORLD3D_Render(image, palette);
         printf("3D render average: %.2f ms\n", (SDL_GetTicksNS() - start) / 50000000.0);
+        const char *castle = SDL_getenv("IMPERA_3D_CASTLE");
+        if (castle) {
+            FILE_SetDataDirectory(castle);
+            FILE *f = FILE_Open("CASTLE.DAT", "rb");
+            assert(f && !fseek(f, 1024, SEEK_SET));
+            assert(fread(D_6608_map.raw, 1, 1024, f) == 1024);
+            fclose(f);
+            D_5893_map_id = 17;
+            D_5895_map_level = 0;
+            D_5896_map_x = 16;
+            D_5897_map_y = 28;
+            memset(D_5c5a, 0, sizeof(D_5c5a));
+            WORLD3D_Render(image, palette);
+            assert(SDL_SaveBMP(image, "world3d-castle.bmp"));
+            start = SDL_GetTicksNS();
+            for (int i = 0; i < 20; i++)
+                WORLD3D_Render(image, palette);
+            printf("Original castle render average: %.2f ms\n",
+                   (SDL_GetTicksNS() - start) / 20000000.0);
+            FILE_SetDataDirectory("");
+        }
     }
     SDL_DestroySurface(image);
     GRAP_BUF_UnloadTileset();
