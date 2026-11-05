@@ -661,3 +661,32 @@ Payload order is description, author, screenshot. Authors are single-line UTF-8
 without NUL/control characters, limited to 256 bytes. Existing metadata and
 packages still load with an empty author. The version 2 payload requires package
 28; descriptions without an author can continue to use version 1/package 27.
+
+### 3D location floor coverage (package version 31)
+
+`FLOORS3D.OVR` describes which cells contribute geometry at each location floor's
+height in the experimental 3D view. It changes presentation only: terrain,
+collision, schedules and the 2D view retain their original behavior. Coverage is
+independent of tile identity, so identical flooring can exist on several stories,
+and lower roofs copied into higher 2D views need not become repeated geometry.
+NPCs and placed objects retain their own floor assignments.
+
+The 16-byte header contains `I3DFLR01`, a little-endian u32 record count, and a
+zero u32. Each sorted record contains length:u32, map:u16, floor:i8, zero:u8,
+width:u16, height:u16, zero:u32, followed by two bits per cell in row-major order
+(least significant pair first). Values are 0 for backdrop, 1 for geometry, and 3
+for geometry with a horizontal floor/ceiling opening; value 2 is invalid. Unused
+padding bits must be zero. Maps are location IDs, floors are −1 through 3, and
+dimensions are 1–256. Records are unique and sorted by map then signed floor.
+The resource requires an empty base and package version 31.
+
+Reviewed native upper-floor and basement footprints live in
+`data/world3d-floor-coverage.json`; `scripts/generate-floor-coverage.py` produces
+the shared packed defaults without requiring original game assets. Explicit
+project coverage takes precedence. New locations start with terrain-based
+suggestions; these are starting points and cannot resolve every ambiguous copied
+view. Workshop's **3D Floor Area…** tool offers Include, Exclude and Opening
+brushes, local undo/redo, defaults and a fresh terrain suggestion. Resizing
+preserves overlapping coverage and adds excluded cells upstairs. Location map JSON
+includes each floor's unpacked coverage as base64 `coverage3d`, so transferring a
+map preserves its geometry even under a different location ID.

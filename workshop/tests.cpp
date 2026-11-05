@@ -575,8 +575,8 @@ int main(int argc, char **argv) {
             check(linkedDungeon && nativePortal,
                   "World JSON did not transfer its linked destinations");
             auto packed = target.package();
-            check(packed.left(8) == "IMOD0023",
-                  "Portable entrances do not require the updated engine");
+            check(packed.left(8) == "IMOD0031",
+                  "Portable floor coverage does not require the updated engine");
             auto legacy = packed;
             legacy.replace(0, 8, "IMOD0022");
             rejects([&] { target.importPackage(legacy); });
@@ -698,7 +698,7 @@ int main(int argc, char **argv) {
                  auto image = map.terrainImage(0, {}, true);
                  check(image.size() == QSize(80, 48) && image.constScanLine(47)[79] == 68,
                        "Rectangular map export used square dimensions");
-                 check(p.package().startsWith("IMOD0018"), "Extended maps need package version 18");
+                 check(p.package().startsWith("IMOD0031"), "Resized floor coverage needs package version 31");
                  auto encoded = p.data("MAPS.OVR");
                  for (int n = 0; n < encoded.size(); ++n)
                      check(!MAPS_Validate(encoded.constData(), n),

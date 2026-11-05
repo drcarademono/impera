@@ -11,6 +11,7 @@
 #include "graphics/world3d.h"
 #include "key/key.h"
 #include "mod/actors.h"
+#include "mod/floor_coverage.h"
 #include "mod/types.h"
 #include <SDL3/SDL.h>
 #include <assert.h>
@@ -423,6 +424,13 @@ static void testStackedFloors(SDL_Surface *image, byte *tiles) {
     free(catalog);
     WORLD3D_Render(image, palette);
 }
+static void writeCoverage(const byte *coverage, size_t size) {
+    assert(FLOOR3D_Validate(coverage, size));
+    FILE *file = fopen("world3d-native-fixture/FLOORS3D.OVR", "wb");
+    assert(file && fwrite(coverage, 1, size, file) == size);
+    fclose(file);
+    WORLD3D_Cleanup();
+}
 static void testNativeFloors(SDL_Surface *image) {
     assert(SDL_CreateDirectory("world3d-native-fixture"));
     FILE *file = fopen("world3d-native-fixture/CASTLE.DAT", "wb");
@@ -437,6 +445,28 @@ static void testNativeFloors(SDL_Surface *image) {
         assert(fwrite(page, 1, sizeof(page), file) == sizeof(page));
     }
     fclose(file);
+    byte coverage[16 + 5 * (16 + 256)] = {0};
+    memcpy(coverage, "I3DFLR01", 8);
+    TYPES_Put32(coverage + 8, 5);
+    for (int i = 0; i < 5; i++) {
+        byte *r = coverage + 16 + i * 272;
+        TYPES_Put32(r, 272);
+        r[4] = 17;
+        r[6] = i - 1;
+        r[8] = r[10] = 32;
+        if (i == 1)
+            memset(r + 16, 0x55, 256);
+        else if (i == 2 || i == 3) {
+            unsigned cell = 11 * 32 + 16;
+            r[16 + cell / 4] = 1 << (2 * (cell % 4));
+        }
+    }
+    assert(FLOOR3D_Validate(coverage, sizeof(coverage)));
+    file = fopen("world3d-native-fixture/FLOORS3D.OVR", "wb");
+    assert(file);
+    assert(fwrite(coverage, 1, sizeof(coverage), file) == sizeof(coverage));
+    fclose(file);
+    WORLD3D_Cleanup();
     FILE_SetDataDirectory("world3d-native-fixture");
     D_5893_map_id = 17;
     memset(D_6608_map.town, 0x44, 32 * 32);
@@ -449,6 +479,34 @@ static void testNativeFloors(SDL_Surface *image) {
     WORLD3D_Render(image, palette);
     assert(!(at(image, 176, 200) & 0xff0000)); /* Current floor reads live terrain, not the file. */
     assert((at(image, 176, 130) & 255) > 80);
+    /* Excluded masonry really is backdrop, even when the terrain is a wall. */
+    byte *upperCoverage = coverage + 16 + 2 * 272;
+    memset(upperCoverage + 16, 0, 256);
+    writeCoverage(coverage, sizeof(coverage));
+    WORLD3D_Render(image, palette);
+    assert(at(image, 176, 130) == palette[9]);
+    D_5c5a[1] = (ActorFmt){0x90, 0x90, 16, 11, 1, 0, 0, 0};
+    WORLD3D_Render(image, palette);
+    float ax, ay;
+    assert(WORLD3D_ActorPose(1, &ax, &ay)); /* Actors do not inherit the terrain mask. */
+    memset(D_5c5a, 0, sizeof(D_5c5a));
+    /* A covered floor blocks the view upwards; its Opening flag exposes the sky. */
+    file = fopen("world3d-native-fixture/CASTLE.DAT", "r+b");
+    assert(file);
+    assert(!fseek(file, 2 * 1024 + 15 * 32 + 16, SEEK_SET));
+    assert(fputc(0x44, file) != EOF);
+    fclose(file);
+    memset(coverage + 16 + 3 * 272 + 16, 0, 256);
+    unsigned ceilingCell = 15 * 32 + 16;
+    upperCoverage[16 + ceilingCell / 4] = 1 << (2 * (ceilingCell % 4));
+    writeCoverage(coverage, sizeof(coverage));
+    WORLD3D_Render(image, palette);
+    Uint32 ceiling = at(image, 176, 120);
+    assert(((ceiling >> 8) & 255) > 100 && !(ceiling & 255));
+    upperCoverage[16 + ceilingCell / 4] = 3 << (2 * (ceilingCell % 4));
+    writeCoverage(coverage, sizeof(coverage));
+    WORLD3D_Render(image, palette);
+    assert(at(image, 176, 120) == palette[9]);
     if (SDL_getenv("IMPERA_3D_ART")) {
         Uint64 start = SDL_GetTicksNS();
         for (int i = 0; i < 20; i++)
@@ -457,6 +515,8 @@ static void testNativeFloors(SDL_Surface *image) {
     }
     FILE_SetDataDirectory("");
     remove("world3d-native-fixture/CASTLE.DAT");
+    remove("world3d-native-fixture/FLOORS3D.OVR");
+    WORLD3D_Cleanup();
     D_5893_map_id = 13;
     WORLD3D_Render(image, palette);
 }

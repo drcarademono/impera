@@ -7,6 +7,8 @@
 #include "macros.h"
 #include "mod/actors.h"
 #include "mod/contents_game.h"
+#include "mod/floor_coverage.h"
+#include "mod/package.h"
 #include "mod/runtime.h"
 #include "mod/types_game.h"
 #include "tiles.h"
@@ -41,7 +43,7 @@ static int textureCount, textureCapacity, textureBuckets[BUCKETS];
 typedef struct {
     unsigned stamp;
     int x, y, level;
-    bool visible, wall, opaque, empty;
+    bool visible, wall, opaque, empty, opening;
     int surface, ground;
 } Cell;
 static Cell *cells;
@@ -50,7 +52,7 @@ static unsigned generation;
 typedef struct {
     float x, y;
     int texture, dx, dy, level;
-    bool flat;
+    bool flat, topOnly;
 } Sprite;
 static Sprite *sprites;
 static int spriteCount, spriteCapacity;
@@ -77,6 +79,10 @@ static ActorMotion *actors;
 static int actorCapacity, trackedActorCount;
 static bool actorsValid, actorsMoving;
 static bool nativeValid;
+static byte *coverageResource, *suggestedCoverage[5];
+static size_t coverageSize;
+static unsigned coverageRevision = ~0u, suggestedHash[5], suggestedMap[5];
+static int suggestedWidth[5], suggestedHeight[5];
 static unsigned actorsMap;
 static int actorsLevel;
 static void resetMotion(void) {
@@ -193,6 +199,15 @@ void WORLD3D_Cleanup(void) {
     SDL_free(textures);
     SDL_free(sprites);
     SDL_free(cells);
+    SDL_free(coverageResource);
+    coverageResource = NULL;
+    coverageSize = 0;
+    coverageRevision = ~0u;
+    for (int i = 0; i < 5; i++) {
+        SDL_free(suggestedCoverage[i]);
+        suggestedCoverage[i] = NULL;
+        suggestedWidth[i] = 0;
+    }
     SDL_free(actors);
     actors = NULL;
     actorCapacity = trackedActorCount = 0;
@@ -309,7 +324,9 @@ static void mapPoint(int dx, int dy, int *x, int *y) {
 typedef struct {
     int level, w, h;
     byte background;
-    const byte *record, *native;
+    const byte *record, *native, *coverage;
+    const Floor3DDefault *profile;
+    const byte *suggestion;
 } Floor;
 static Floor floors[5];
 static int floorCount;
@@ -323,6 +340,95 @@ static Floor *findFloor(int level) {
         if (floors[i].level == level)
             return &floors[i];
     return NULL;
+}
+static const byte *floorTerrain(Floor *f) {
+    return f->record ? f->record + MAPS_RECORD : f->level == currentLevel() ? D_6608 : f->native;
+}
+static void prepareCoverage(void) {
+    if (coverageRevision != MOD_Revision()) {
+        SDL_free(coverageResource);
+        coverageResource = NULL;
+        coverageSize = 0;
+        FILE *file = FILE_Open("FLOORS3D.OVR", "rb");
+        if (file) {
+            if (!fseek(file, 0, SEEK_END)) {
+                long size = ftell(file);
+                rewind(file);
+                if (size >= 16 && size <= MAPS_MAX_BYTES) {
+                    byte *next = SDL_malloc((size_t)size);
+                    if (next && fread(next, 1, (size_t)size, file) == (size_t)size &&
+                        FLOOR3D_Validate(next, size)) {
+                        coverageResource = next;
+                        coverageSize = size;
+                    } else
+                        SDL_free(next);
+                }
+            }
+            fclose(file);
+        }
+        coverageRevision = MOD_Revision();
+    }
+    for (int i = 0; i < floorCount; i++) {
+        Floor *f = &floors[i];
+        f->coverage = FLOOR3D_Find(coverageResource, coverageSize, D_5893_map_id, f->level);
+        f->profile = NULL;
+        f->suggestion = NULL;
+        if (f->coverage)
+            continue;
+        for (unsigned j = 0; j < sizeof(floor3dDefaults) / sizeof(floor3dDefaults[0]); j++)
+            if (floor3dDefaults[j].map == D_5893_map_id && floor3dDefaults[j].level == f->level) {
+                f->profile = &floor3dDefaults[j];
+                break;
+            }
+        if (f->profile || !D_5893_map_id)
+            continue;
+        const byte *terrain = floorTerrain(f);
+        if (!terrain)
+            continue;
+        Floor *lower = findFloor(f->level - 1);
+        const byte *below =
+            lower && lower->w == f->w && lower->h == f->h ? floorTerrain(lower) : NULL;
+        unsigned hash = MOD_Crc32(terrain, (size_t)f->w * f->h);
+        if (below)
+            hash = hash * 16777619u ^ MOD_Crc32(below, (size_t)f->w * f->h);
+        int slot = f->level + 1;
+        if (!suggestedCoverage[slot] || suggestedWidth[slot] != f->w ||
+            suggestedHeight[slot] != f->h || suggestedMap[slot] != D_5893_map_id ||
+            suggestedHash[slot] != hash) {
+            byte *next = SDL_malloc((size_t)f->w * f->h);
+            if (next && FLOOR3D_Suggest(terrain, below, f->w, f->h, f->level, next)) {
+                SDL_free(suggestedCoverage[slot]);
+                suggestedCoverage[slot] = next;
+                suggestedWidth[slot] = f->w;
+                suggestedHeight[slot] = f->h;
+                suggestedMap[slot] = D_5893_map_id;
+                suggestedHash[slot] = hash;
+            } else {
+                SDL_free(next);
+                continue;
+            }
+        }
+        f->suggestion = suggestedCoverage[slot];
+    }
+}
+static unsigned coverageAt(Floor *f, int dx, int dy) {
+    int x, y;
+    mapPoint(dx, dy, &x, &y);
+    if (!f)
+        return 0;
+    if (!D_5893_map_id)
+        return 1;
+    if (f->coverage)
+        return FLOOR3D_Cell(f->coverage, x, y);
+    if (x < 0 || y < 0 || x >= f->w || y >= f->h)
+        return 0;
+    if (f->profile) {
+        if (x >= 32 || y >= 32)
+            return f->level <= 0 ? 1 : 0;
+        unsigned n = y * 32 + x;
+        return (f->profile->cells[n / 4] >> ((n % 4) * 2)) & 3;
+    }
+    return f->suggestion ? f->suggestion[y * f->w + x] : 1;
 }
 static void prepareFloors(void) {
     floorCount = 0;
@@ -417,7 +523,8 @@ static unsigned floorFor(int dx, int dy, int level, const TypeDef *d) {
     }
     return best < 0 ? (D_5893_map_id ? 0x44 : 5) : candidates[best];
 }
-static void addSprite(unsigned tile, float x, float y, int dx, int dy, int level, bool flat) {
+static void addSprite(unsigned tile, float x, float y, int dx, int dy, int level, bool flat,
+                      bool topOnly) {
     if (dx == 0 && dy == 0 && level == currentLevel() && !flat)
         return;
     if (spriteCount == spriteCapacity) {
@@ -430,7 +537,7 @@ static void addSprite(unsigned tile, float x, float y, int dx, int dy, int level
     }
     int index = texture(tile, true);
     if (index >= 0)
-        sprites[spriteCount++] = (Sprite){x, y, index, dx, dy, level, flat};
+        sprites[spriteCount++] = (Sprite){x, y, index, dx, dy, level, flat, topOnly};
 }
 static size_t hashCell(int x, int y, int level) {
     return (unsigned)x * 2654435761u ^ (unsigned)y * 2246822519u ^ (unsigned)level * 3266489917u;
@@ -483,25 +590,30 @@ static Cell *cellAt(int dx, int dy, int level) {
         return c;
     }
     Floor *f = findFloor(level);
-    c->empty = D_5893_map_id && level > 0 && f && id == f->background;
-    if (c->empty)
-        return c;
-    c->wall = !!(d.render & TYPES_MASONRY);
-    c->opaque = d.sight == 1 || (d.sight == 2 && distance == 1);
-    unsigned tile = art(id, d.base);
-    c->surface = texture(tile, false);
-    unsigned ground = (c->wall || (d.render & TYPES_SPRITE)) ? floorFor(dx, dy, level, &d) : id;
-    TypeDef floor;
-    if (TYPES_Get(ground, &floor))
-        c->ground = texture(art(ground, floor.base), false);
-    if (!c->wall && (d.render & TYPES_SPRITE))
-        addSprite(tile, dx + 0.5f, dy + 0.5f, dx, dy, level, d.base == 0xaa);
+    unsigned coverage = coverageAt(f, dx, dy);
+    c->empty = !(coverage & FLOOR3D_GEOMETRY);
+    c->opening = !!(coverage & FLOOR3D_OPENING);
+    if (!c->empty) {
+        c->wall = !!(d.render & TYPES_MASONRY);
+        c->opaque = d.sight == 1 || (d.sight == 2 && distance == 1);
+        unsigned tile = art(id, d.base);
+        c->surface = texture(tile, false);
+        unsigned ground = (c->wall || (d.render & TYPES_SPRITE)) ? floorFor(dx, dy, level, &d) : id;
+        TypeDef floor;
+        if (TYPES_Get(ground, &floor))
+            c->ground = texture(art(ground, floor.base), false);
+        if (!c->wall && (d.render & TYPES_SPRITE))
+            addSprite(tile, dx + 0.5f, dy + 0.5f, dx, dy, level, d.base == 0xaa || d.base == 0x86,
+                      c->opening && d.base == 0x86);
+        if (c->opening && !(d.render & TYPES_SPRITE) && !c->wall)
+            addSprite(tile, dx + 0.5f, dy + 0.5f, dx, dy, level, true, true);
+    }
     int wx, wy;
     mapPoint(dx, dy, &wx, &wy);
     int loot = level == currentLevel() ? CONTENTS_GAME_Shape(wx, wy)
                                        : CONTENTS_GAME_LocationShape(D_5893_map_id, level, wx, wy);
     if (loot)
-        addSprite(256 + loot, dx + 0.5f, dy + 0.5f, dx, dy, level, false);
+        addSprite(256 + loot, dx + 0.5f, dy + 0.5f, dx, dy, level, false, false);
     return c;
 }
 static void sampleActor(ActorMotion *a, Uint64 now) {
@@ -623,7 +735,8 @@ static void prepareActors(void) {
             TYPES_ArtSize(tile, D_5893_map_id == 0, &w, &h);
         addSprite(tile, dx + offsetX + w * 0.5f, dy + offsetY + h * 0.5f, dx, dy, (int8_t)a->_4_z,
                   a->_0_tile == TILE_ACTOR_CARPET || a->_0_tile == TILE_ACTOR_FLYING_CARPET ||
-                      a->_0_tile == TILE_ACTOR_FLYING_CARPET + 1);
+                      a->_0_tile == TILE_ACTOR_FLYING_CARPET + 1,
+                  false);
     }
     /* Removed slots must not leave a tween alive or be reused as an old actor. */
     if (tracked && count < trackedActorCount)
@@ -643,6 +756,7 @@ static void prepare(void) {
         generation = 1;
     }
     prepareFloors();
+    prepareCoverage();
     prepareActors();
 }
 
@@ -823,7 +937,8 @@ void WORLD3D_RenderRegion(SDL_Surface *out, const Uint32 *palette, int left, int
                          D_5896_map_x + cx >= floors[f].w || D_5897_map_y + cy >= floors[f].h))
                         continue;
                     Cell *c = cellAt(cx, cy, level);
-                    if (!c || !c->visible || c->empty || (cap && !c->wall))
+                    if (!c || !c->visible || c->empty || (cap && !c->wall) ||
+                        (!cap && !c->wall && c->opening))
                         continue;
                     int ground = c->wall ? c->surface : c->ground;
                     pixel(out, x, y,
@@ -915,6 +1030,8 @@ void WORLD3D_RenderRegion(SDL_Surface *out, const Uint32 *palette, int left, int
     for (int i = 0; i < spriteCount; i++) {
         Sprite *s = &sprites[i];
         Texture *t = &textures[s->texture];
+        if (s->topOnly && eye <= s->level)
+            continue;
         if (s->flat) {
             float w = (t->w + 2 * t->pad) / 32.0f, h = (t->h + 2 * t->pad) / 32.0f;
             float left = s->x - w * 0.5f, top = s->y - h * 0.5f;

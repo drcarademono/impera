@@ -227,6 +227,12 @@ NPC and monster travel, including custom multi-tile actors. Teleports, spawning,
 and floor changes appear immediately. Surface skies use only the original
 16-color palette: solid blue by day and pitch black with fixed stars at night.
 Ordered dithering is limited to the game's 05:00–06:00 dawn and 19:00–20:00 dusk.
+In Workshop, **3D Floor Area…** edits which parts of a location floor exist at
+its height: Include, Exclude, or Opening. Native upper floors and basements have
+explicit footprints; these avoid repeating scenery from lower levels while
+retaining real rooms with matching terrain. Coverage travels with map JSON and
+is preserved when resizing.
+
 The camera sits 13/16 of a tile above the floor. Location floors render together
 at their actual heights, including walls, floors, ceilings, NPCs, and containers.
 Upper-floor background tiles represent open air. Decorative rugs and placed
