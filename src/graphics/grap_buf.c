@@ -367,6 +367,9 @@ extern u32 TIME_CurrentFrame(void);
 
 void GRAP_BUF_FlushPendingPresent(void)
 {
+#ifdef TARGET_SDL
+    if (WORLD3D_Animating()) s_dirty = true;
+#endif
     if (!s_dirty)
         return;
 

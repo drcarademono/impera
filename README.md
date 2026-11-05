@@ -221,10 +221,11 @@ shows camera facing.
 This prototype has flat terrain, one-tile-high textured masonry cubes, and
 camera-facing sprites using existing artwork, animation, custom sprite sizes,
 and protected-black masks. Original movement, collision, map contents, and sight
-rules remain authoritative. The initial view uses the native map viewport with
-an eight-tile render limit and stepped camera motion. Terrain elevation,
-widescreen expansion, smooth camera travel, and projected map effects/dithered
-visibility transitions are future work.
+rules remain authoritative. Fullscreen native-aspect mode retains its expanded widescreen viewport. Smooth
+Movement also animates camera steps and turns. There is no fixed tile-distance
+cutoff: geometry is projected to the horizon at the viewport’s pixel resolution,
+subject to map boundaries, lighting, and occlusion. Terrain elevation and
+projected map effects/dithered visibility transitions are future work.
 
 ### Available settings
 

@@ -12,55 +12,72 @@
 #include <math.h>
 #include <string.h>
 
-#define SIDE 352
-#define RADIUS 8
-#define GRID (RADIUS * 2 + 1)
-#define MAX_TEXTURES 256
-#define MAX_SPRITES 1024
-static bool pickValid;
-static bool enabled, sceneView;
-void WORLD3D_SceneView(void) {
-    sceneView = true;
-    pickValid = false;
-}
-void WORLD3D_MapDrawn(void) { sceneView = false; }
+#define HALF_PI 1.57079632679489661923
+#define BUCKETS 1024
+static bool enabled, sceneView, pickValid;
 static int facing;
-static const int vx[] = {0, 1, 0, -1}, vy[] = {-1, 0, 1, 0};
 static const int compass[] = {U5_KEY_UP, U5_KEY_RIGHT, U5_KEY_DOWN, U5_KEY_LEFT};
-static float depth[SIDE * SIDE];
-static signed char pickX[SIDE * SIDE], pickY[SIDE * SIDE];
 static unsigned pickMap;
 static int pickLevel, pickWorldX, pickWorldY, pickFacing;
+static int viewX, viewY, viewW, viewH;
+static float *depth;
+static int *pickX, *pickY;
+static size_t pixelCapacity;
 typedef struct {
     unsigned tile;
     bool sprite;
     unsigned w, h;
+    int next;
     Uint32 pixels[64 * 64];
 } Texture;
-static Texture textures[MAX_TEXTURES];
-static int textureCount;
+static Texture *textures;
+static int textureCount, textureCapacity, textureBuckets[BUCKETS];
 typedef struct {
-    bool visible, wall;
+    unsigned stamp;
+    int x, y;
+    bool visible, wall, opaque;
     int surface, ground;
 } Cell;
-static Cell cells[GRID][GRID];
+static Cell *cells;
+static size_t cellCapacity, cellCount;
+static unsigned generation;
 typedef struct {
     float x, y;
     int texture, dx, dy;
 } Sprite;
-static Sprite sprites[MAX_SPRITES];
-static int spriteCount;
+static Sprite *sprites;
+static int spriteCount, spriteCapacity;
 static const Uint32 *colors;
+/* Unwrapped world coordinates keep seam crossings adjacent on wrapped maps. */
+static struct {
+    bool valid, moving;
+    unsigned map;
+    int level, x, y, heading;
+    Uint64 started;
+    double fromX, fromY, fromAngle, targetX, targetY, targetAngle, xNow, yNow, angleNow;
+} camera;
+static unsigned duration;
 
 bool WORLD3D_Enabled(void) { return enabled; }
 void WORLD3D_SetEnabled(bool value) {
     enabled = value;
     pickValid = false;
+    camera.valid = camera.moving = false;
     GRAP_BUF_MarkDirty();
 }
 bool WORLD3D_Active(void) {
     return enabled && !sceneView && D_58a4 && D_5893_map_id < 128 && MAPS_Outside(D_5893_map_id) &&
            !GRAP_SDL_PixelUI() && !EVT_ImmediateExitEnabled() && GRAP_BUF_HasTileset();
+}
+void WORLD3D_SceneView(void) {
+    sceneView = true;
+    pickValid = false;
+    camera.valid = camera.moving = false;
+}
+void WORLD3D_MapDrawn(void) {
+    sceneView = false;
+    if (!D_58a4 || D_5893_map_id >= 128 || !MAPS_Outside(D_5893_map_id))
+        camera.valid = camera.moving = false;
 }
 int WORLD3D_Facing(void) { return facing; }
 int WORLD3D_Direction(int key) {
@@ -87,20 +104,121 @@ int WORLD3D_Move(int key) {
         return 0;
     return WORLD3D_Direction(key);
 }
+static void sampleCamera(Uint64 now) {
+    double t = camera.moving ? SDL_min(1.0, (double)(now - camera.started) / duration) : 1;
+    camera.xNow = camera.fromX + (camera.targetX - camera.fromX) * t;
+    camera.yNow = camera.fromY + (camera.targetY - camera.fromY) * t;
+    camera.angleNow = camera.fromAngle + (camera.targetAngle - camera.fromAngle) * t;
+    if (t >= 1)
+        camera.moving = false;
+}
+static void updateCamera(void) {
+    Uint64 now = SDL_GetTicks();
+    int dx = D_5896_map_x - camera.x, dy = D_5897_map_y - camera.y;
+    if (!D_5893_map_id) {
+        dx = MAPS_Wrap(dx + MAP_WIDTH / 2, MAP_WIDTH) - MAP_WIDTH / 2;
+        dy = MAPS_Wrap(dy + MAP_HEIGHT / 2, MAP_HEIGHT) - MAP_HEIGHT / 2;
+    }
+    bool same = camera.valid && camera.map == D_5893_map_id && camera.level == D_5895_map_level;
+    if (!same || !GRAP_SDL_SmoothMovementEnabled() || abs(dx) > 1 || abs(dy) > 1) {
+        camera.targetX = camera.fromX = D_5896_map_x + 0.5;
+        camera.targetY = camera.fromY = D_5897_map_y + 0.5;
+        camera.targetAngle = camera.fromAngle = facing * HALF_PI;
+        camera.moving = false;
+    } else {
+        sampleCamera(now);
+        if (dx || dy || camera.heading != facing) {
+            camera.fromX = camera.xNow;
+            camera.fromY = camera.yNow;
+            camera.fromAngle = camera.angleNow;
+            camera.targetX += dx;
+            camera.targetY += dy;
+            int turn = (facing - camera.heading + 4) & 3;
+            if (turn == 3)
+                turn = -1;
+            camera.targetAngle += turn * HALF_PI;
+            duration = SDL_max(16, GRAP_SDL_MovementInterval());
+            camera.started = now;
+            camera.moving = true;
+        }
+    }
+    camera.valid = true;
+    camera.map = D_5893_map_id;
+    camera.level = D_5895_map_level;
+    camera.x = D_5896_map_x;
+    camera.y = D_5897_map_y;
+    camera.heading = facing;
+    sampleCamera(now);
+}
+bool WORLD3D_Animating(void) {
+    return WORLD3D_Active() && camera.valid && GRAP_SDL_SmoothMovementEnabled() && camera.moving;
+}
+void WORLD3D_CameraPose(float *x, float *y, float *angle) {
+    *x = 0.5f + (float)(camera.xNow - camera.targetX);
+    *y = 0.5f + (float)(camera.yNow - camera.targetY);
+    *angle = (float)camera.angleNow;
+}
+void WORLD3D_Cleanup(void) {
+    SDL_free(depth);
+    SDL_free(pickX);
+    SDL_free(pickY);
+    SDL_free(textures);
+    SDL_free(sprites);
+    SDL_free(cells);
+    depth = NULL;
+    pickX = pickY = NULL;
+    textures = NULL;
+    sprites = NULL;
+    cells = NULL;
+    pixelCapacity = cellCapacity = cellCount = 0;
+    textureCapacity = spriteCapacity = 0;
+    pickValid = false;
+    camera.valid = camera.moving = false;
+}
+static bool reservePixels(int width, int height) {
+    size_t count = (size_t)width * height;
+    if (count <= pixelCapacity)
+        return true;
+    if (count > SIZE_MAX / sizeof(float) || count > SIZE_MAX / sizeof(int))
+        return false;
+    float *z = SDL_malloc(count * sizeof(float));
+    int *x = SDL_malloc(count * sizeof(int)), *y = SDL_malloc(count * sizeof(int));
+    if (!z || !x || !y) {
+        SDL_free(z);
+        SDL_free(x);
+        SDL_free(y);
+        return false;
+    }
+    SDL_free(depth);
+    SDL_free(pickX);
+    SDL_free(pickY);
+    depth = z;
+    pickX = x;
+    pickY = y;
+    pixelCapacity = count;
+    return true;
+}
 static int texture(unsigned tile, bool sprite) {
-    for (int i = 0; i < textureCount; i++)
+    unsigned bucket = (tile * 2654435761u + (unsigned)sprite) & (BUCKETS - 1);
+    for (int i = textureBuckets[bucket]; i >= 0; i = textures[i].next)
         if (textures[i].tile == tile && textures[i].sprite == sprite)
             return i;
-    if (textureCount == MAX_TEXTURES)
-        return -1;
+    if (textureCount == textureCapacity) {
+        int capacity = textureCapacity ? textureCapacity * 2 : 32;
+        Texture *next = SDL_realloc(textures, (size_t)capacity * sizeof(*textures));
+        if (!next)
+            return -1;
+        textures = next;
+        textureCapacity = capacity;
+    }
     Texture *t = &textures[textureCount];
     t->tile = tile;
     t->sprite = sprite;
     t->w = t->h = 1;
     if (sprite && TYPES_ArtSlot(tile))
         TYPES_ArtSize(tile, D_5893_map_id == 0, &t->w, &t->h);
-    t->w = SDL_min(t->w, 2) * 32;
-    t->h = SDL_min(t->h, 2) * 32;
+    t->w = SDL_clamp(t->w, 1, 2) * 32;
+    t->h = SDL_clamp(t->h, 1, 2) * 32;
     bool transparency = GRAP_BUF_TransparentSprites();
     if (sprite)
         GRAP_BUF_SetTransparentSprites(true);
@@ -115,6 +233,8 @@ static int texture(unsigned tile, bool sprite) {
                          : TILESET_LastColor(c, x & 1, y & 1, colors);
         }
     GRAP_BUF_SetTransparentSprites(transparency);
+    t->next = textureBuckets[bucket];
+    textureBuckets[bucket] = textureCount;
     return textureCount++;
 }
 static Uint32 sample(int id, float u, float v) {
@@ -126,19 +246,11 @@ static Uint32 sample(int id, float u, float v) {
     return t->pixels[y * 64 + x];
 }
 static Uint32 shade(Uint32 color, float distance, bool side) {
-    float light = 1.0f / (1.0f + distance * 0.09f);
+    float light = 1 / (1 + distance * 0.09f);
     if (side)
         light *= 0.78f;
     return 0xff000000 | ((unsigned)(((color >> 16) & 255) * light) << 16) |
            ((unsigned)(((color >> 8) & 255) * light) << 8) | (unsigned)((color & 255) * light);
-}
-static Cell *cell(int x, int y) {
-    if (abs(x) > RADIUS || abs(y) > RADIUS)
-        return NULL;
-    return &cells[y + RADIUS][x + RADIUS];
-}
-static unsigned art(unsigned id, byte base) {
-    return TYPES_ArtSlot(id) ? TYPES_ActorArt(id, D_b11e[base]) : D_b11e[base];
 }
 static void mapPoint(int dx, int dy, int *x, int *y) {
     *x = D_5896_map_x + dx;
@@ -152,6 +264,9 @@ static unsigned typeAt(int dx, int dy) {
     int x, y;
     mapPoint(dx, dy, &x, &y);
     return TYPES_GAME_At(x, y);
+}
+static unsigned art(unsigned id, byte base) {
+    return TYPES_ArtSlot(id) ? TYPES_ActorArt(id, D_b11e[base]) : D_b11e[base];
 }
 static unsigned floorFor(int dx, int dy, const TypeDef *d) {
     if (TYPES_Defined(d->id) && d->ground != TYPES_INFER_GROUND)
@@ -176,44 +291,95 @@ static unsigned floorFor(int dx, int dy, const TypeDef *d) {
     return best < 0 ? (D_5893_map_id ? 0x44 : 5) : candidates[best];
 }
 static void addSprite(unsigned tile, float x, float y, int dx, int dy) {
-    if (spriteCount == MAX_SPRITES || (dx == 0 && dy == 0) || !WIDE_Visible(dx, dy))
+    if (dx == 0 && dy == 0)
         return;
+    if (spriteCount == spriteCapacity) {
+        int capacity = spriteCapacity ? spriteCapacity * 2 : 32;
+        Sprite *next = SDL_realloc(sprites, (size_t)capacity * sizeof(*sprites));
+        if (!next)
+            return;
+        sprites = next;
+        spriteCapacity = capacity;
+    }
     int index = texture(tile, true);
-    if (index < 0)
-        return;
-    sprites[spriteCount++] = (Sprite){x, y, index, dx, dy};
+    if (index >= 0)
+        sprites[spriteCount++] = (Sprite){x, y, index, dx, dy};
+}
+static size_t hashCell(int x, int y) {
+    return (unsigned)x * 2654435761u ^ (unsigned)y * 2246822519u;
+}
+static bool growCells(void) {
+    size_t capacity = cellCapacity ? cellCapacity * 2 : 4096;
+    Cell *next = SDL_calloc(capacity, sizeof(*next));
+    if (!next)
+        return false;
+    for (size_t i = 0; i < cellCapacity; i++)
+        if (cells[i].stamp == generation) {
+            size_t p = hashCell(cells[i].x, cells[i].y) & (capacity - 1);
+            while (next[p].stamp == generation)
+                p = (p + 1) & (capacity - 1);
+            next[p] = cells[i];
+        }
+    SDL_free(cells);
+    cells = next;
+    cellCapacity = capacity;
+    return true;
+}
+static Cell *cell(int dx, int dy) {
+    if (!cellCapacity || (cellCount + 1) * 2 >= cellCapacity)
+        if (!growCells())
+            return NULL;
+    size_t p = hashCell(dx, dy) & (cellCapacity - 1);
+    while (cells[p].stamp == generation) {
+        if (cells[p].x == dx && cells[p].y == dy)
+            return &cells[p];
+        p = (p + 1) & (cellCapacity - 1);
+    }
+    Cell *c = &cells[p];
+    memset(c, 0, sizeof(*c));
+    c->stamp = generation;
+    c->x = dx;
+    c->y = dy;
+    c->surface = c->ground = -1;
+    cellCount++;
+    double distance = (double)dx * dx + (double)dy * dy;
+    c->visible = D_58a5 >= 50 || distance <= D_58a5;
+    if (!D_58a5)
+        c->visible = dx == 0 && dy == 0;
+    if (!c->visible)
+        return c;
+    unsigned id = typeAt(dx, dy);
+    TypeDef d;
+    if (!TYPES_Get(id, &d) || d.base == 255) {
+        c->visible = false;
+        return c;
+    }
+    c->wall = !!(d.render & TYPES_MASONRY);
+    c->opaque = d.sight == 1 || (d.sight == 2 && distance == 1);
+    unsigned tile = art(id, d.base);
+    c->surface = texture(tile, false);
+    unsigned ground = (c->wall || (d.render & TYPES_SPRITE)) ? floorFor(dx, dy, &d) : id;
+    TypeDef floor;
+    if (TYPES_Get(ground, &floor))
+        c->ground = texture(art(ground, floor.base), false);
+    if (!c->wall && (d.render & TYPES_SPRITE))
+        addSprite(tile, dx + 0.5f, dy + 0.5f, dx, dy);
+    int wx, wy;
+    mapPoint(dx, dy, &wx, &wy);
+    int loot = CONTENTS_GAME_Shape(wx, wy);
+    if (loot)
+        addSprite(256 + loot, dx + 0.5f, dy + 0.5f, dx, dy);
+    return c;
 }
 static void prepare(void) {
     textureCount = spriteCount = 0;
-    for (int y = -RADIUS; y <= RADIUS; y++)
-        for (int x = -RADIUS; x <= RADIUS; x++) {
-            Cell *c = cell(x, y);
-            memset(c, 0, sizeof(*c));
-            c->surface = c->ground = -1;
-            c->visible = WIDE_Visible(x, y);
-            if (!c->visible)
-                continue;
-            unsigned id = typeAt(x, y);
-            TypeDef d;
-            if (!TYPES_Get(id, &d) || d.base == 255) {
-                c->visible = false;
-                continue;
-            }
-            c->wall = !!(d.render & TYPES_MASONRY);
-            unsigned tile = art(id, d.base);
-            c->surface = texture(tile, false);
-            unsigned ground = (c->wall || (d.render & TYPES_SPRITE)) ? floorFor(x, y, &d) : id;
-            TypeDef floor;
-            if (TYPES_Get(ground, &floor))
-                c->ground = texture(art(ground, floor.base), false);
-            if (!c->wall && (d.render & TYPES_SPRITE))
-                addSprite(tile, x + 0.5f, y + 0.5f, x, y);
-            int wx, wy;
-            mapPoint(x, y, &wx, &wy);
-            int loot = CONTENTS_GAME_Shape(wx, wy);
-            if (loot)
-                addSprite(256 + loot, x + 0.5f, y + 0.5f, x, y);
-        }
+    cellCount = 0;
+    memset(textureBuckets, 255, sizeof(textureBuckets));
+    if (++generation == 0) {
+        if (cells)
+            memset(cells, 0, cellCapacity * sizeof(*cells));
+        generation = 1;
+    }
     for (int i = 1; i < MAP_ACTOR_COUNT; i++) {
         ActorFmt *a = &D_5c5a[i];
         if (!a->_0_tile || !a->_1_animTile || a->_4_z != D_5895_map_level)
@@ -223,7 +389,7 @@ static void prepare(void) {
             dx = MAPS_Wrap(dx + MAP_WIDTH / 2, MAP_WIDTH) - MAP_WIDTH / 2;
             dy = MAPS_Wrap(dy + MAP_HEIGHT / 2, MAP_HEIGHT) - MAP_HEIGHT / 2;
         }
-        if (abs(dx) > RADIUS || abs(dy) > RADIUS)
+        if (!WIDE_Visible(dx, dy))
             continue;
         unsigned tile = ACTORS_Sprite(i, 256 + a->_1_animTile), w = 1, h = 1;
         if (TYPES_ArtSlot(tile))
@@ -232,36 +398,52 @@ static void prepare(void) {
     }
 }
 static void pixel(SDL_Surface *out, int x, int y, Uint32 color, float z, int dx, int dy) {
-    int index = y * SIDE + x;
-    if (z >= depth[index])
+    int i = y * viewW + x;
+    if (z >= depth[i])
         return;
-    depth[index] = z;
-    pickX[index] = dx;
-    pickY[index] = dy;
-    ((Uint32 *)((byte *)out->pixels + (y + 16) * out->pitch))[x + 16] = color;
+    depth[i] = z;
+    pickX[i] = dx;
+    pickY[i] = dy;
+    ((Uint32 *)((byte *)out->pixels + (y + viewY) * out->pitch))[x + viewX] = color;
 }
 void WORLD3D_Render(SDL_Surface *out, const Uint32 *palette) {
-    if (!WORLD3D_Active() || out->w < 384 || out->h < 384) {
+    WORLD3D_RenderRegion(out, palette, 16, 16, 352, 352, 1);
+}
+void WORLD3D_RenderRegion(SDL_Surface *out, const Uint32 *palette, int left, int top, int width,
+                          int height, float aspect) {
+    if (!WORLD3D_Active() || width < 1 || height < 1 || left < 0 || top < 0 ||
+        left > out->w - width || top > out->h - height || !isfinite(aspect) || aspect <= 0 ||
+        !reservePixels(width, height)) {
         pickValid = false;
         return;
     }
     colors = palette;
+    viewX = left;
+    viewY = top;
+    viewW = width;
+    viewH = height;
+    updateCamera();
     prepare();
-    float fx = vx[facing], fy = vy[facing], rx = -fy, ry = fx, focal = SIDE * 0.78f;
-    for (int y = 0; y < SIDE; y++)
-        for (int x = 0; x < SIDE; x++) {
-            depth[y * SIDE + x] = 1000;
-            pickX[y * SIDE + x] = pickY[y * SIDE + x] = 0;
-            ((Uint32 *)((byte *)out->pixels + (y + 16) * out->pitch))[x + 16] = 0xff000000;
+    float ox = 0.5f + (float)(camera.xNow - camera.targetX),
+          oy = 0.5f + (float)(camera.yNow - camera.targetY);
+    float fx = (float)sin(camera.angleNow), fy = -(float)cos(camera.angleNow), rx = -fy, ry = fx,
+          focalY = viewH * 0.78f, focalX = focalY * aspect;
+    for (int y = 0; y < viewH; y++)
+        for (int x = 0; x < viewW; x++) {
+            size_t i = (size_t)y * viewW + x;
+            depth[i] = INFINITY;
+            pickX[i] = pickY[i] = 0;
+            ((Uint32 *)((byte *)out->pixels + (y + top) * out->pitch))[x + left] = 0xff000000;
         }
-    /* Flat ground is perspective-correct; no elevation or camera bob. */
-    for (int y = SIDE / 2 + 1; y < SIDE; y++) {
-        float z = 0.5f * focal / (y - SIDE / 2.0f);
-        if (z > RADIUS)
+    /* Pixel-centre sampling reaches the horizon without a fixed distance cutoff. */
+    for (int y = viewH / 2; y < viewH; y++) {
+        float denominator = y + 0.5f - viewH * 0.5f;
+        if (denominator <= 0)
             continue;
-        for (int x = 0; x < SIDE; x++) {
-            float offset = (x - SIDE / 2.0f) / focal;
-            float wx = 0.5f + z * (fx + rx * offset), wy = 0.5f + z * (fy + ry * offset);
+        float z = 0.5f * focalY / denominator;
+        for (int x = 0; x < viewW; x++) {
+            float offset = (x + 0.5f - viewW * 0.5f) / focalX, wx = ox + z * (fx + rx * offset),
+                  wy = oy + z * (fy + ry * offset);
             int cx = (int)floorf(wx), cy = (int)floorf(wy);
             Cell *c = cell(cx, cy);
             if (!c || !c->visible || c->wall)
@@ -270,15 +452,19 @@ void WORLD3D_Render(SDL_Surface *out, const Uint32 *palette) {
                   z, cx, cy);
         }
     }
-    /* DDA finds the first cube or unseen cell along each screen column. */
-    for (int x = 0; x < SIDE; x++) {
-        float offset = (x - SIDE / 2.0f) / focal, dx = fx + rx * offset, dy = fy + ry * offset;
-        float sx = fabsf(dx) < 0.00001f ? 1e9f : fabsf(1 / dx),
-              sy = fabsf(dy) < 0.00001f ? 1e9f : fabsf(1 / dy);
-        float tx = sx * 0.5f, ty = sy * 0.5f, z = 0;
-        int cx = 0, cy = 0, stepX = dx < 0 ? -1 : 1, stepY = dy < 0 ? -1 : 1;
+    /* Beyond focalY distance a unit wall is smaller than the horizon's pixel gap.
+     * Trace all geometry that can cover a sample, not an arbitrary tile radius. */
+    for (int x = 0; x < viewW; x++) {
+        float offset = (x + 0.5f - viewW * 0.5f) / focalX, dx = fx + rx * offset,
+              dy = fy + ry * offset;
+        float sx = fabsf(dx) < 1e-8f ? INFINITY : fabsf(1 / dx),
+              sy = fabsf(dy) < 1e-8f ? INFINITY : fabsf(1 / dy);
+        int cx = (int)floorf(ox), cy = (int)floorf(oy), stepX = dx < 0 ? -1 : 1,
+            stepY = dy < 0 ? -1 : 1;
+        float tx = isfinite(sx) ? (dx < 0 ? ox - cx : cx + 1 - ox) * sx : INFINITY,
+              ty = isfinite(sy) ? (dy < 0 ? oy - cy : cy + 1 - oy) * sy : INFINITY, z = 0;
         bool side = false;
-        for (int n = 0; n < 2 * RADIUS + 2; n++) {
+        while (z <= focalY) {
             if (tx < ty) {
                 z = tx;
                 tx += sx;
@@ -290,54 +476,63 @@ void WORLD3D_Render(SDL_Surface *out, const Uint32 *palette) {
                 cy += stepY;
                 side = true;
             }
-            Cell *c = cell(cx, cy);
-            if (!c || z > RADIUS)
+            if (z > focalY)
                 break;
-            if (!c->visible || c->wall) {
-                if (!c->visible) { /* Darkness occludes geometry and sprites behind it. */
-                    for (int y = 0; y < SIDE; y++)
-                        if (z < depth[y * SIDE + x])
+            Cell *c = cell(cx, cy);
+            if (!c)
+                break;
+            if (!c->visible || c->opaque || c->wall) {
+                if (!c->visible || !c->wall) {
+                    for (int y = 0; y < viewH; y++) {
+                        int i = y * viewW + x;
+                        if (c->visible && pickX[i] == cx && pickY[i] == cy)
+                            continue;
+                        if (z < depth[i])
                             pixel(out, x, y, 0xff000000, z, cx, cy);
+                    }
                     break;
                 }
-                int top = (int)(SIDE / 2 - focal * 0.5f / z),
-                    bottom = (int)(SIDE / 2 + focal * 0.5f / z);
-                float hit = side ? 0.5f + dx * z : 0.5f + dy * z, u = hit - floorf(hit);
+                float topY = viewH * 0.5f - focalY * 0.5f / z,
+                      bottom = viewH * 0.5f + focalY * 0.5f / z;
+                float hit = side ? ox + dx * z : oy + dy * z, u = hit - floorf(hit);
                 if ((side && dy > 0) || (!side && dx < 0))
                     u = 1 - u;
-                for (int y = SDL_max(0, top); y < SDL_min(SIDE, bottom); y++)
-                    pixel(out, x, y,
-                          shade(sample(c->surface, u, (y - top) / (float)(bottom - top)), z, side),
-                          z, cx, cy);
+                for (int y = SDL_max(0, (int)ceilf(topY - 0.5f));
+                     y < SDL_min(viewH, (int)ceilf(bottom - 0.5f)); y++)
+                    pixel(
+                        out, x, y,
+                        shade(sample(c->surface, u, (y + 0.5f - topY) / (bottom - topY)), z, side),
+                        z, cx, cy);
                 break;
             }
         }
     }
-    /* Billboards use per-pixel depth, alpha, and the existing protected-black masks. */
     for (int i = 0; i < spriteCount; i++) {
         Sprite *s = &sprites[i];
         Texture *t = &textures[s->texture];
-        float dx = s->x - 0.5f, dy = s->y - 0.5f, z = dx * fx + dy * fy, across = dx * rx + dy * ry;
-        if (z < 0.15f || z > RADIUS)
+        float dx = s->x - ox, dy = s->y - oy, z = dx * fx + dy * fy, across = dx * rx + dy * ry;
+        if (z < 0.05f)
             continue;
-        float width = focal * (t->w / 32.0f) / z, height = focal * (t->h / 32.0f) / z;
-        float left = SIDE / 2 + focal * across / z - width / 2,
-              bottom = SIDE / 2 + focal * 0.5f / z, top = bottom - height;
-        for (int y = SDL_max(0, (int)top); y < SDL_min(SIDE, (int)bottom); y++)
-            for (int x = SDL_max(0, (int)left); x < SDL_min(SIDE, (int)(left + width)); x++) {
-                Uint32 color = sample(s->texture, (x - left) / width, (y - top) / height);
+        float w = focalX * (t->w / 32.0f) / z, h = focalY * (t->h / 32.0f) / z,
+              l = viewW * 0.5f + focalX * across / z - w * 0.5f,
+              bottom = viewH * 0.5f + focalY * 0.5f / z, topY = bottom - h;
+        for (int y = SDL_max(0, (int)ceilf(topY - 0.5f));
+             y < SDL_min(viewH, (int)ceilf(bottom - 0.5f)); y++)
+            for (int x = SDL_max(0, (int)ceilf(l - 0.5f));
+                 x < SDL_min(viewW, (int)ceilf(l + w - 0.5f)); x++) {
+                Uint32 color = sample(s->texture, (x + 0.5f - l) / w, (y + 0.5f - topY) / h);
                 if (color >> 24)
                     pixel(out, x, y, shade(color, z, false), z, s->dx, s->dy);
             }
     }
     const byte *font = D_539c[0] ? D_539c[0] : D_5398_currentCharset;
     if (font)
-        for (int y = 0; y < 20; y++)
-            for (int x = 0; x < 20; x++) {
+        for (int y = 0; y < SDL_min(20, viewH - 4); y++)
+            for (int x = 0; x < SDL_min(20, viewW - 4); x++) {
                 bool ink = x >= 2 && x < 18 && y >= 2 && y < 18 &&
                            (font[(unsigned char)"NESW"[facing] * 8 + (y - 2) / 2] &
                             (0x80 >> ((x - 2) / 2)));
-                ((Uint32 *)((byte *)out->pixels + (y + 20) * out->pitch))[x + 20] =
+                ((Uint32 *)((byte *)out->pixels + (y + top + 4) * out->pitch))[x + left + 4] =
                     ink ? 0xffffffff : 0xff000000;
             }
     pickValid = true;
@@ -348,15 +543,15 @@ void WORLD3D_Render(SDL_Surface *out, const Uint32 *palette) {
     pickFacing = facing;
 }
 bool WORLD3D_Pick(float u, float v, int *dx, int *dy) {
-    if (!pickValid || pickMap != D_5893_map_id || pickLevel != D_5895_map_level ||
-        pickWorldX != D_5896_map_x || pickWorldY != D_5897_map_y || pickFacing != facing || u < 0 ||
-        v < 0 || u >= 1 || v >= 1)
+    if (!pickValid || WORLD3D_Animating() || pickMap != D_5893_map_id ||
+        pickLevel != D_5895_map_level || pickWorldX != D_5896_map_x || pickWorldY != D_5897_map_y ||
+        pickFacing != facing || !isfinite(u) || !isfinite(v) || u < 0 || v < 0 || u >= 1 || v >= 1)
         return false;
-    int index = (int)(v * SIDE) * SIDE + (int)(u * SIDE);
-    if (depth[index] >= 1000)
+    int i = (int)(v * viewH) * viewW + (int)(u * viewW);
+    if (!isfinite(depth[i]))
         return false;
-    *dx = pickX[index];
-    *dy = pickY[index];
+    *dx = pickX[i];
+    *dy = pickY[i];
     Cell *c = cell(*dx, *dy);
     return c && c->visible;
 }

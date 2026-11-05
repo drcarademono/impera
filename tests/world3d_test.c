@@ -8,6 +8,7 @@
 #include "graphics/grap_sdl.h"
 #include "graphics/tileset.h"
 #include "graphics/world3d.h"
+#include "graphics/widescreen.h"
 #include "key/key.h"
 #include <SDL3/SDL.h>
 #include <assert.h>
@@ -118,6 +119,62 @@ int main(void) {
     WORLD3D_Move(U5_KEY_LEFT);
     KEY_SDL_SetGameplayInput(0);
     assert(((Uint32 *)image->pixels)[0] == 0xff123456); /* No writes to UI outside map. */
+    /* Arbitrary rectangular viewport, including geometry beyond eight tiles. */
+    memset(D_5c5a, 0, sizeof(D_5c5a));
+    memset(D_6608_map.town, 0x44, 32 * 32);
+    D_6608_map.town[4][16] = 0x4f;
+    SDL_Surface *wide = SDL_CreateSurface(1000, 500, SDL_PIXELFORMAT_ARGB8888);
+    assert(wide);
+    SDL_FillSurfaceRect(wide, NULL, 0xff123456);
+    WORLD3D_RenderRegion(wide, palette, 16, 16, 800, 400, 1.2f);
+    assert(WORLD3D_Pick(0.5f, 0.5f, &dx, &dy) && dx == 0 && dy == -12);
+    assert(((Uint32 *)wide->pixels)[0] == 0xff123456);
+    assert((((Uint32 *)((byte *)wide->pixels + 415 * wide->pitch))[815] >> 8 & 255) > 0);
+    D_58a5 = 4;
+    WORLD3D_RenderRegion(wide, palette, 16, 16, 800, 400, 1.2f);
+    assert(!WORLD3D_Pick(0.5f, 0.5f, &dx, &dy));
+    D_58a5 = 50;
+    SDL_DestroySurface(wide);
+    GRAP_SDL_SetVideoMode(GRAP_VIDEO_FULLSCREEN);
+    SDL_Surface *fullscreen = GRAP_SDL_CaptureFrame();
+    assert(fullscreen);
+    WideLayout layout = WIDE_Layout(fullscreen->w, fullscreen->h);
+    assert(layout.columns >= 11 && layout.rows >= 11);
+    assert(WORLD3D_Pick(0.5f, 0.5f, &dx, &dy) && dx == 0 && dy == -12);
+    assert(SDL_SaveBMP(fullscreen, "world3d-fullscreen.bmp"));
+    SDL_DestroySurface(fullscreen);
+    GRAP_SDL_SetVideoMode(GRAP_VIDEO_WINDOWED);
+
+    /* Camera turns and steps interpolate, while teleports and disabling smoothness snap. */
+    GRAP_SDL_SetSmoothMovement(true);
+    WORLD3D_Render(image, palette);
+    float px, py, angle;
+    WORLD3D_Move(U5_KEY_RIGHT);
+    WORLD3D_Render(image, palette);
+    WORLD3D_CameraPose(&px, &py, &angle);
+    float startAngle = angle;
+    assert(WORLD3D_Animating());
+    SDL_Delay(GRAP_SDL_MovementInterval() / 2);
+    WORLD3D_Render(image, palette);
+    WORLD3D_CameraPose(&px, &py, &angle);
+    assert(angle > startAngle && angle < 1.5708f);
+    SDL_Delay(GRAP_SDL_MovementInterval() + 10);
+    GRAP_BUF_FlushPendingPresent();
+    assert(!WORLD3D_Animating());
+    D_5896_map_x++;
+    WORLD3D_Render(image, palette);
+    WORLD3D_CameraPose(&px, &py, &angle);
+    assert(px < 0 && WORLD3D_Animating());
+    SDL_Delay(GRAP_SDL_MovementInterval() / 2);
+    WORLD3D_Render(image, palette);
+    WORLD3D_CameraPose(&px, &py, &angle);
+    assert(px > -0.5f && px < 0.5f);
+    GRAP_SDL_SetSmoothMovement(false);
+    WORLD3D_Render(image, palette);
+    WORLD3D_CameraPose(&px, &py, &angle);
+    assert(px == 0.5f && !WORLD3D_Animating());
+    WORLD3D_Move(U5_KEY_LEFT);
+    D_5896_map_x = 16;
     assert(ENGINE_Save());
     ENGINE_Set(ENGINE_WORLD_3D, 0);
     ENGINE_Load();
