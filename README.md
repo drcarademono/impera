@@ -233,9 +233,16 @@ explicit footprints; these avoid repeating scenery from lower levels while
 retaining real rooms with matching terrain. Coverage travels with map JSON and
 is preserved when resizing.
 
-Upper masonry uses plain wall tiles 77 or 79. Arches sit in the upper cube, with
+Upper masonry uses plain wall tiles 77 or 79, inferred from connected surrounding
+masonry so doors and windows match their walls. Arches sit in the upper cube, with
 an open passage by day and a grate at night. Ceilings use tile 72. Outdoor fixtures
 137, 160, 162, 164, 189, 202, 203, and 224–227 appear only at ground level.
+For DOS, `Ultima_5_Tiles_DOS3d_Ground.png` and
+`Ultima_5_Tiles_DOS3d_Sprites.png` split composite artwork into a flat ground tile
+and an upright sprite. Only differing 16×16 cells are split; the comparison is
+automatic, including later artwork edits. The sheets are embedded in the game.
+Other tilesets, identical cells, and custom sprite artwork retain their existing
+rendering. The 2D view always keeps its original artwork.
 The camera sits 13/16 of a tile above the floor. Location floors render together
 at their actual heights, including walls, floors, ceilings, NPCs, and containers.
 Upper-floor background tiles represent open air. Decorative rugs and placed

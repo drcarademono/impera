@@ -34,7 +34,7 @@ static int *pickX, *pickY, *pickFloor;
 static size_t pixelCapacity;
 typedef struct {
     unsigned tile;
-    bool sprite;
+    int mode;
     unsigned w, h, pad;
     int next;
     Uint32 pixels[68 * 68];
@@ -57,6 +57,11 @@ typedef struct {
 } Sprite;
 static Sprite *sprites;
 static int spriteCount, spriteCapacity;
+static byte *wallMaterials[5];
+static size_t wallMaterialSizes[5];
+static unsigned wallMaterialStamps[5];
+static unsigned *wallQueue, *wallSources;
+static size_t wallQueueSize;
 static const Uint32 *colors;
 /* Unwrapped world coordinates keep seam crossings adjacent on wrapped maps. */
 static struct {
@@ -192,6 +197,16 @@ void WORLD3D_CameraPose(float *x, float *y, float *angle) {
     *angle = (float)camera.angleNow;
 }
 void WORLD3D_Cleanup(void) {
+    for (int i = 0; i < 5; i++) {
+        SDL_free(wallMaterials[i]);
+        wallMaterials[i] = NULL;
+        wallMaterialSizes[i] = 0;
+        wallMaterialStamps[i] = 0;
+    }
+    SDL_free(wallQueue);
+    SDL_free(wallSources);
+    wallQueue = wallSources = NULL;
+    wallQueueSize = 0;
     SDL_free(depth);
     SDL_free(floorDepth);
     SDL_free(pickX);
@@ -255,10 +270,13 @@ static bool reservePixels(int width, int height) {
     pixelCapacity = count;
     return true;
 }
-static int texture(unsigned tile, bool sprite) {
-    unsigned bucket = (tile * 2654435761u + (unsigned)sprite) & (BUCKETS - 1);
+/* mode 0: ordinary opaque tile; 1: upright sprite; 2: split-sheet ground. */
+static int texture(unsigned tile, int mode) {
+    bool sprite = mode == 1;
+    bool split = TILESET_3DSplit(tile) && (sprite || mode == 2);
+    unsigned bucket = (tile * 2654435761u + (unsigned)mode) & (BUCKETS - 1);
     for (int i = textureBuckets[bucket]; i >= 0; i = textures[i].next)
-        if (textures[i].tile == tile && textures[i].sprite == sprite)
+        if (textures[i].tile == tile && textures[i].mode == mode)
             return i;
     if (textureCount == textureCapacity) {
         int capacity = textureCapacity ? textureCapacity * 2 : 32;
@@ -270,7 +288,7 @@ static int texture(unsigned tile, bool sprite) {
     }
     Texture *t = &textures[textureCount];
     t->tile = tile;
-    t->sprite = sprite;
+    t->mode = mode;
     t->w = t->h = 1;
     if (sprite && TYPES_ArtSlot(tile))
         TYPES_ArtSize(tile, D_5893_map_id == 0, &t->w, &t->h);
@@ -285,6 +303,17 @@ static int texture(unsigned tile, bool sprite) {
         for (unsigned x = 0; x < t->w + 2 * t->pad; x++) {
             int px = (int)(x / 2) - (int)(t->pad / 2);
             int py = (int)(y / 2) - (int)(t->pad / 2);
+            if (split) {
+                Uint32 color = TILESET_3DPixel(tile, px, py, sprite);
+                if (sprite && !(color >> 24) && TILESET_SpriteOutline()) {
+                    for (int dy = -1; dy <= 1; dy++)
+                        for (int dx = -1; dx <= 1; dx++)
+                            if (TILESET_3DPixel(tile, px + dx, py + dy, true) >> 24)
+                                color = 0xff000000;
+                }
+                t->pixels[y * 68 + x] = color;
+                continue;
+            }
             int c = sprite ? GRAP_BUF_SpritePixel(tile, px, py) : GRAP_BUF_TilePixel(tile, px, py);
             t->pixels[y * 68 + x] =
                 c < 0    ? 0
@@ -560,6 +589,117 @@ static bool growCells(void) {
     cellCapacity = capacity;
     return true;
 }
+/* Resolve decorated walls with a multi-source flood along the actual masonry.
+ * Plain 77/79 tiles seed the material; doors, windows and arches carry it through
+ * a connected wall. Results are shared by the whole component for this frame. */
+static int compareWallIndex(const void *a, const void *b) {
+    unsigned x = *(const unsigned *)a, y = *(const unsigned *)b;
+    return (x > y) - (x < y);
+}
+static unsigned upperWallMaterial(int dx, int dy, int level, const TypeDef *definition) {
+    if (definition->base == 77 || definition->base == 78 || definition->base == 79)
+        return definition->base == 78 ? 79 : definition->base;
+    Floor *f = findFloor(level);
+    if (!f || level < -1 || level > 3)
+        return 77;
+    unsigned slot = level + 1, count = (unsigned)f->w * f->h;
+    int wx, wy;
+    mapPoint(dx, dy, &wx, &wy);
+    if (wx < 0 || wy < 0 || wx >= f->w || wy >= f->h)
+        return 77;
+    if (wallMaterialSizes[slot] < count) {
+        byte *next = SDL_realloc(wallMaterials[slot], count);
+        if (!next)
+            return 77;
+        wallMaterials[slot] = next;
+        wallMaterialSizes[slot] = count;
+        wallMaterialStamps[slot] = 0;
+    }
+    if (wallMaterialStamps[slot] != generation) {
+        memset(wallMaterials[slot], 0, count);
+        wallMaterialStamps[slot] = generation;
+    }
+    byte *materials = wallMaterials[slot];
+    unsigned start = wy * f->w + wx;
+    if (materials[start] >= 77)
+        return materials[start];
+    if (wallQueueSize < count) {
+        unsigned *queue = SDL_malloc(count * sizeof(unsigned)),
+                 *sources = SDL_malloc(count * sizeof(unsigned));
+        if (!queue || !sources) {
+            SDL_free(queue);
+            SDL_free(sources);
+            return 77;
+        }
+        SDL_free(wallQueue);
+        SDL_free(wallSources);
+        wallQueue = queue;
+        wallSources = sources;
+        wallQueueSize = count;
+    }
+    unsigned head = 0, tail = 1, seeds = 0;
+    wallQueue[0] = start;
+    materials[start] = 2;
+    while (head < tail) {
+        unsigned index = wallQueue[head++];
+        int x = index % f->w, y = index / f->w;
+        TypeDef d;
+        unsigned id = typeAtLevel(x - D_5896_map_x, y - D_5897_map_y, level);
+        if (TYPES_Get(id, &d) && (d.base == 77 || d.base == 78 || d.base == 79)) {
+            materials[index] = d.base == 78 ? 79 : d.base;
+            wallSources[seeds++] = index;
+        }
+        for (int dir = 0; dir < 4; dir++) {
+            int nx = x + (dir == 0) - (dir == 1), ny = y + (dir == 2) - (dir == 3);
+            if (!D_5893_map_id) {
+                nx = MAPS_Wrap(nx, f->w);
+                ny = MAPS_Wrap(ny, f->h);
+            }
+            if (nx < 0 || ny < 0 || nx >= f->w || ny >= f->h)
+                continue;
+            unsigned n = ny * f->w + nx;
+            if (materials[n])
+                continue;
+            TypeDef neighbor;
+            unsigned type = typeAtLevel(nx - D_5896_map_x, ny - D_5897_map_y, level);
+            bool wall = TYPES_Get(type, &neighbor) &&
+                        ((neighbor.render & TYPES_MASONRY) || neighbor.base == 134 ||
+                         neighbor.base == 135) &&
+                        !TILESET_3DSplit(art(type, neighbor.base)) &&
+                        (coverageAt(f, nx - D_5896_map_x, ny - D_5897_map_y) & FLOOR3D_GEOMETRY);
+            materials[n] = wall ? 2 : 1;
+            if (wall)
+                wallQueue[tail++] = n;
+        }
+    }
+    if (!seeds) {
+        for (unsigned i = 0; i < tail; i++)
+            materials[wallQueue[i]] = 77;
+    } else {
+        qsort(wallSources, seeds, sizeof(unsigned), compareWallIndex);
+        head = 0;
+        unsigned end = seeds;
+        while (head < end) {
+            unsigned n = wallSources[head++];
+            int x = n % f->w, y = n / f->w;
+            for (int dir = 0; dir < 4; dir++) {
+                int nx = x + (dir == 0) - (dir == 1), ny = y + (dir == 2) - (dir == 3);
+                if (!D_5893_map_id) {
+                    nx = MAPS_Wrap(nx, f->w);
+                    ny = MAPS_Wrap(ny, f->h);
+                }
+                if (nx < 0 || ny < 0 || nx >= f->w || ny >= f->h)
+                    continue;
+                unsigned next = ny * f->w + nx;
+                if (materials[next] == 2) {
+                    materials[next] = materials[n];
+                    wallSources[end++] = next;
+                }
+            }
+        }
+    }
+    return materials[start] >= 77 ? materials[start] : 77;
+}
 /* These outdoor fixtures are copied into upper 2D views, never extra stories. */
 static bool groundOnly(unsigned tile) {
     switch (tile) {
@@ -616,18 +756,21 @@ static Cell *cellAt(int dx, int dy, int level) {
     if (!c->empty) {
         c->arch = d.base == 135 || d.base == 134;
         c->grated = c->arch && (d.base == 134 || D_587f < 5 || D_587f >= 20);
-        c->wall = c->arch || !!(d.render & TYPES_MASONRY);
-        c->opaque = d.sight == 1 || (d.sight == 2 && distance == 1);
         unsigned tile = art(id, d.base);
+        bool split = TILESET_3DSplit(tile);
+        c->wall = !split && (c->arch || !!(d.render & TYPES_MASONRY));
+        c->opaque = d.sight == 1 || (d.sight == 2 && distance == 1);
         c->surface =
             texture(c->arch ? art(c->grated ? 134 : 135, c->grated ? 134 : 135) : tile, false);
-        unsigned upper = c->arch ? 135 : d.base == 79 || d.base == 78 ? 79 : 77;
+        unsigned upper = c->arch ? 135 : c->wall ? upperWallMaterial(dx, dy, level, &d) : 77;
         c->upperSurface = texture(art(upper, upper), false);
         unsigned ground = (c->wall || (d.render & TYPES_SPRITE)) ? floorFor(dx, dy, level, &d) : id;
         TypeDef floor;
         if (TYPES_Get(ground, &floor))
             c->ground = texture(art(ground, floor.base), false);
-        if (!c->wall && (d.render & TYPES_SPRITE))
+        if (split)
+            c->ground = texture(tile, 2);
+        if (!c->wall && ((d.render & TYPES_SPRITE) || split))
             addSprite(tile, dx + 0.5f, dy + 0.5f, dx, dy, level, d.base == 0xaa || d.base == 0x86,
                       c->opening && d.base == 0x86);
         if (c->opening && !(d.render & TYPES_SPRITE) && !c->wall)

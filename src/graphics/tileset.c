@@ -321,6 +321,61 @@ static SDL_Surface *load(const char *filename)
     }
     return NULL;
 }
+/* Keep the decomposition independent of the 2D framebuffer and other tilesets.
+ * Recompare complete cells when the selected artwork or mounted mods change. */
+static unsigned splitRevision = ~0u;
+static byte splitCells[512];
+static Uint32 splitArt[2][512][256];
+static void prepareSplit(void) {
+    if (splitRevision == revision)
+        return;
+    splitRevision = revision;
+    memset(splitCells, 0, sizeof(splitCells));
+    if (selected != TILESET_DOS)
+        return;
+    SDL_Surface *ground = load("Ultima_5_Tiles_DOS3d_Ground.png");
+    SDL_Surface *sprites = load("Ultima_5_Tiles_DOS3d_Sprites.png");
+    if (!ground || !sprites || ground->w != 512 || ground->h != 256 || sprites->w != 512 ||
+        sprites->h != 256) {
+        SDL_DestroySurface(ground);
+        SDL_DestroySurface(sprites);
+        return;
+    }
+    SDL_Surface *images[2] = {ground, sprites};
+    for (unsigned tile = 0; tile < 512; tile++) {
+        bool different = false;
+        for (unsigned y = 0; y < 16; y++)
+            for (unsigned x = 0; x < 16; x++) {
+                unsigned i = y * 16 + x;
+                for (unsigned layer = 0; layer < 2; layer++) {
+                    Uint8 r = 0, g = 0, b = 0, a = 0;
+                    if (!SDL_ReadSurfacePixel(images[layer], (tile % 32) * 16 + x,
+                                              (tile / 32) * 16 + y, &r, &g, &b, &a))
+                        a = 0;
+                    splitArt[layer][tile][i] =
+                        (Uint32)a << 24 | (Uint32)r << 16 | (Uint32)g << 8 | b;
+                }
+                different |= splitArt[0][tile][i] != splitArt[1][tile][i];
+            }
+        splitCells[tile] = different;
+    }
+    SDL_DestroySurface(ground);
+    SDL_DestroySurface(sprites);
+}
+bool TILESET_3DSplit(unsigned tile) {
+    if (selected != TILESET_DOS || tile >= 512 || TYPES_ArtSlot(tile))
+        return false;
+    prepareSplit();
+    return splitCells[tile] != 0;
+}
+Uint32 TILESET_3DPixel(unsigned tile, int x, int y, bool sprite) {
+    if (tile >= 512 || x < 0 || y < 0 || x >= 16 || y >= 16)
+        return 0;
+    Uint32 color = splitArt[sprite ? 1 : 0][tile][y * 16 + x];
+    if (sprite && !(color & 0xffffff) && !TILESET_ProtectedBlack(tile, x, y))
+        return 0;
+    return color;
+}
 static bool readProtection(int choice, int first, byte *output) {
     const ModTilesetSheet *spec = MOD_TilesetMask(choice == TILESET_ZHELKAS ? TILESET_DOS : choice, first);
     SDL_Surface *image = load(spec->filename);
@@ -471,6 +526,7 @@ static bool readSheet(SDL_Surface *image, int choice, int first, const byte *mas
 }
 void TILESET_Refresh(void)
 {
+    splitRevision = ~0u;
     sample = 0;
     for (int i = 0; i < 8; i++)
         if (layers[i].refs)

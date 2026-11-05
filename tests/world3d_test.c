@@ -352,6 +352,18 @@ static void testHeightAndCarpets(SDL_Surface *image, byte *tiles) {
         assert((at(image, 176, 60) & 255) > 100 && !(at(image, 176, 60) & 0xff0000));
         assert((at(image, 176, 200) & 255) > 100 && (at(image, 176, 200) & 0xff0000));
     }
+    /* Material propagates through decorated masonry, not through floor cells.
+     * Editing the source wall is reflected on the next frame. */
+    D_6608_map.town[14][16] = 0xb8;
+    D_6608_map.town[14][15] = 0x4b;
+    D_6608_map.town[14][14] = 0x50;
+    D_6608_map.town[14][13] = 79;
+    WORLD3D_Render(image, palette);
+    assert((at(image, 176, 60) & 0xff0000) && !(at(image, 176, 60) & 255));
+    D_6608_map.town[14][13] = 77;
+    WORLD3D_Render(image, palette);
+    assert((at(image, 176, 60) & 255) > 100 && !(at(image, 176, 60) & 0xff0000));
+    D_6608_map.town[14][13] = D_6608_map.town[14][14] = D_6608_map.town[14][15] = 0x44;
     /* Arches move up one cube, leaving a passage or a night-time grate below. */
     memset(tiles + 135 * 128, 0x11, 128);
     memset(tiles + 134 * 128, 0x22, 128);
@@ -561,6 +573,45 @@ static void testNativeFloors(SDL_Surface *image) {
     D_5893_map_id = 13;
     WORLD3D_Render(image, palette);
 }
+static void testSplitSheets(SDL_Surface *image) {
+    const char *groundPath = "synthetic-tileset/Ultima_5_Tiles_DOS3d_Ground.png";
+    const char *spritePath = "synthetic-tileset/Ultima_5_Tiles_DOS3d_Sprites.png";
+    SDL_Surface *ground = SDL_CreateSurface(512, 256, SDL_PIXELFORMAT_RGBA32);
+    SDL_Surface *sprites = SDL_CreateSurface(512, 256, SDL_PIXELFORMAT_RGBA32);
+    assert(ground && sprites);
+    assert(SDL_FillSurfaceRect(ground, NULL, SDL_MapSurfaceRGBA(ground, 0, 170, 0, 255)));
+    assert(SDL_FillSurfaceRect(sprites, NULL, SDL_MapSurfaceRGBA(sprites, 0, 170, 0, 255)));
+    /* A previously ordinary terrain cell becomes a billboard solely from the sheet difference. */
+    unsigned tile = 43;
+    SDL_Rect cell = {(tile % 32) * 16, (tile / 32) * 16, 16, 16};
+    assert(SDL_FillSurfaceRect(sprites, &cell, SDL_MapSurfaceRGBA(sprites, 0, 0, 0, 255)));
+    SDL_Rect stem = {cell.x + 6, cell.y + 4, 4, 12};
+    assert(SDL_FillSurfaceRect(sprites, &stem, SDL_MapSurfaceRGBA(sprites, 170, 0, 170, 255)));
+    assert(SDL_SavePNG(ground, groundPath) && SDL_SavePNG(sprites, spritePath));
+    TILESET_Refresh();
+    assert(TILESET_3DSplit(tile) && !TILESET_3DSplit(tile + 1));
+    assert(TILESET_3DPixel(tile, 0, 0, false) == 0xff00aa00);
+    assert(TILESET_3DPixel(tile, 0, 0, true) == 0 &&
+           TILESET_3DPixel(tile, 7, 8, true) == 0xffaa00aa);
+    assert(TILESET_Pixel(tile, 0, 0) == -1); /* 2D DOS artwork still uses the original byte bank. */
+    memset(D_6608_map.town, 0x44, 32 * 32);
+    D_6608_map.town[14][16] = tile;
+    WORLD3D_Render(image, palette);
+    assert((at(image, 176, 200) & 255) > 80 && (at(image, 176, 200) & 0xff0000));
+    assert((at(image, 176, 300) & 0xff00) && !(at(image, 176, 300) & 0xff0000));
+    /* Later artwork edits need no C tile list: a new differing cell is detected on reload. */
+    SDL_Rect added = {44 % 32 * 16, 44 / 32 * 16, 16, 16};
+    assert(SDL_FillSurfaceRect(sprites, &added, SDL_MapSurfaceRGBA(sprites, 170, 0, 0, 255)));
+    assert(SDL_SavePNG(sprites, spritePath));
+    TILESET_Refresh();
+    assert(TILESET_3DSplit(44));
+    SDL_DestroySurface(ground);
+    SDL_DestroySurface(sprites);
+    assert(SDL_RemovePath(groundPath) && SDL_RemovePath(spritePath));
+    TILESET_Refresh();
+    assert(!TILESET_3DSplit(tile)); /* Missing pair keeps the original renderer. */
+    memset(D_6608_map.town, 0x44, 32 * 32);
+}
 int main(void) {
     assert(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO));
     syntheticMaskBegin();
@@ -717,6 +768,7 @@ int main(void) {
     testHeightAndCarpets(image, tiles);
     testStackedFloors(image, tiles);
     testNativeFloors(image);
+    testSplitSheets(image);
     assert(ENGINE_Save());
     ENGINE_Set(ENGINE_WORLD_3D, 0);
     ENGINE_Load();
