@@ -218,7 +218,7 @@ view to move or turn. Left-click actions pick the projected ground, walls, and
 sprites instead of treating the view as a top-down grid. A small N/E/S/W indicator
 shows camera facing.
 
-This prototype has flat terrain, one-tile-high textured masonry cubes, and
+This prototype has flat terrain, two-cube-tall masonry stories, and
 camera-facing sprites using existing artwork, animation, custom sprite sizes,
 and protected-black masks. Original movement, collision, map contents, and sight
 rules remain authoritative. Fullscreen native-aspect mode retains its expanded
@@ -233,6 +233,9 @@ explicit footprints; these avoid repeating scenery from lower levels while
 retaining real rooms with matching terrain. Coverage travels with map JSON and
 is preserved when resizing.
 
+Upper masonry uses plain wall tiles 77 or 79. Arches sit in the upper cube, with
+an open passage by day and a grate at night. Ceilings use tile 72. Outdoor fixtures
+137, 160, 162, 164, 189, 202, 203, and 224–227 appear only at ground level.
 The camera sits 13/16 of a tile above the floor. Location floors render together
 at their actual heights, including walls, floors, ceilings, NPCs, and containers.
 Upper-floor background tiles represent open air. Decorative rugs and placed

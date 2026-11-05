@@ -20,6 +20,7 @@
 
 #define HALF_PI 1.57079632679489661923
 #define BUCKETS 1024
+#define STORY_HEIGHT 2.0f
 #define EYE_HEIGHT (13.0f / 16.0f)
 static bool enabled, sceneView, pickValid;
 static int facing;
@@ -43,8 +44,8 @@ static int textureCount, textureCapacity, textureBuckets[BUCKETS];
 typedef struct {
     unsigned stamp;
     int x, y, level;
-    bool visible, wall, opaque, empty, opening;
-    int surface, ground;
+    bool visible, wall, opaque, empty, opening, arch, grated;
+    int surface, upperSurface, ground;
 } Cell;
 static Cell *cells;
 static size_t cellCapacity, cellCount;
@@ -559,6 +560,25 @@ static bool growCells(void) {
     cellCapacity = capacity;
     return true;
 }
+/* These outdoor fixtures are copied into upper 2D views, never extra stories. */
+static bool groundOnly(unsigned tile) {
+    switch (tile) {
+    case 137:
+    case 160:
+    case 162:
+    case 164:
+    case 189:
+    case 202:
+    case 203:
+    case 224:
+    case 225:
+    case 226:
+    case 227:
+        return true;
+    default:
+        return false;
+    }
+}
 static Cell *cellAt(int dx, int dy, int level) {
     if (!cellCapacity || (cellCount + 1) * 2 >= cellCapacity)
         if (!growCells())
@@ -591,13 +611,18 @@ static Cell *cellAt(int dx, int dy, int level) {
     }
     Floor *f = findFloor(level);
     unsigned coverage = coverageAt(f, dx, dy);
-    c->empty = !(coverage & FLOOR3D_GEOMETRY);
+    c->empty = !(coverage & FLOOR3D_GEOMETRY) || (level > 0 && groundOnly(d.base));
     c->opening = !!(coverage & FLOOR3D_OPENING);
     if (!c->empty) {
-        c->wall = !!(d.render & TYPES_MASONRY);
+        c->arch = d.base == 135 || d.base == 134;
+        c->grated = c->arch && (d.base == 134 || D_587f < 5 || D_587f >= 20);
+        c->wall = c->arch || !!(d.render & TYPES_MASONRY);
         c->opaque = d.sight == 1 || (d.sight == 2 && distance == 1);
         unsigned tile = art(id, d.base);
-        c->surface = texture(tile, false);
+        c->surface =
+            texture(c->arch ? art(c->grated ? 134 : 135, c->grated ? 134 : 135) : tile, false);
+        unsigned upper = c->arch ? 135 : d.base == 79 || d.base == 78 ? 79 : 77;
+        c->upperSurface = texture(art(upper, upper), false);
         unsigned ground = (c->wall || (d.render & TYPES_SPRITE)) ? floorFor(dx, dy, level, &d) : id;
         TypeDef floor;
         if (TYPES_Get(ground, &floor))
@@ -907,7 +932,8 @@ void WORLD3D_RenderRegion(SDL_Surface *out, const Uint32 *palette, int left, int
         }
     }
     drawStars(out, &sky, focalX, focalY);
-    float eye = currentLevel() + EYE_HEIGHT;
+    float eye = STORY_HEIGHT * currentLevel() + EYE_HEIGHT;
+    int ceilingSurface = texture(art(72, 72), false);
     /* Horizontal floors, ceilings and cube caps share the same depth buffer.
      * Upper-floor background is open air, not a sheet spanning the whole town. */
     int activeFloor = 0;
@@ -918,7 +944,7 @@ void WORLD3D_RenderRegion(SDL_Surface *out, const Uint32 *palette, int left, int
         for (int cap = 0; cap < 2; cap++) {
             int f = (activeFloor + step) % floorCount;
             int level = floors[f].level;
-            float vertical = eye - (level + cap);
+            float vertical = eye - (STORY_HEIGHT * level + cap * STORY_HEIGHT);
             for (int y = 0; y < viewH; y++) {
                 float denominator = y + 0.5f - viewH * 0.5f;
                 if (fabsf(denominator) < 1e-6f)
@@ -940,7 +966,12 @@ void WORLD3D_RenderRegion(SDL_Surface *out, const Uint32 *palette, int left, int
                     if (!c || !c->visible || c->empty || (cap && !c->wall) ||
                         (!cap && !c->wall && c->opening))
                         continue;
-                    int ground = c->wall ? c->surface : c->ground;
+                    if (c->arch && cap)
+                        continue;
+                    int ground =
+                        c->wall && !c->arch ? (cap ? c->upperSurface : c->surface) : c->ground;
+                    if (vertical < 0)
+                        ground = ceilingSurface;
                     pixel(out, x, y,
                           shade(sample(ground, wx - floorf(wx), wy - floorf(wy)), z, false), z, cx,
                           cy, level);
@@ -961,7 +992,9 @@ void WORLD3D_RenderRegion(SDL_Surface *out, const Uint32 *palette, int left, int
             float tx = isfinite(sx) ? (dx < 0 ? ox - cx : cx + 1 - ox) * sx : INFINITY;
             float ty = isfinite(sy) ? (dy < 0 ? oy - cy : cy + 1 - oy) * sy : INFINITY, z = 0;
             /* Stop only beyond the viewport's last possible vertical sample. */
-            float limit = focalY * 2 * SDL_max(fabsf(eye - level), fabsf(eye - level - 1));
+            float limit = focalY * 2 *
+                          SDL_max(fabsf(eye - STORY_HEIGHT * level),
+                                  fabsf(eye - STORY_HEIGHT * level - STORY_HEIGHT));
             bool side = false;
             while (z <= limit) {
                 if (tx < ty) {
@@ -985,9 +1018,13 @@ void WORLD3D_RenderRegion(SDL_Surface *out, const Uint32 *palette, int left, int
                     if (level == currentLevel() && !c->empty) {
                         int curtainTop =
                             c->visible
-                                ? SDL_clamp((int)ceilf(viewH * 0.5f +
-                                                       focalY * (eye - level - 1) / front - 0.5f),
-                                            0, viewH)
+                                ? SDL_clamp(
+                                      (int)ceilf(viewH * 0.5f +
+                                                 focalY *
+                                                     (eye - STORY_HEIGHT * level - STORY_HEIGHT) /
+                                                     front -
+                                                 0.5f),
+                                      0, viewH)
                                 : viewH / 2;
                         for (int y = curtainTop; y < viewH; y++) {
                             int i = y * viewW + x;
@@ -1010,27 +1047,33 @@ void WORLD3D_RenderRegion(SDL_Surface *out, const Uint32 *palette, int left, int
                 }
                 if (!c->wall)
                     continue;
-                float topY = viewH * 0.5f + focalY * (eye - level - 1) / front;
-                float bottom = viewH * 0.5f + focalY * (eye - level) / front;
                 float hit = side ? ox + dx * z : oy + dy * z, u = hit - floorf(hit);
                 if ((side && dy > 0) || (!side && dx < 0))
                     u = 1 - u;
-                for (int y = SDL_max(0, (int)ceilf(topY - 0.5f));
-                     y < SDL_min(viewH, (int)ceilf(bottom - 0.5f)); y++)
-                    pixel(
-                        out, x, y,
-                        shade(sample(c->surface, u, (y + 0.5f - topY) / (bottom - topY)), z, side),
-                        z, cx, cy, level);
-                /* A wall at eye level occludes its entire remaining slice. Walls on
-                 * other floors can reveal farther walls above or below them. */
-                if (eye >= level && eye <= level + 1)
+                for (int band = 0; band < 2; band++) {
+                    if (c->arch && !band && !c->grated)
+                        continue;
+                    float base = STORY_HEIGHT * level + band;
+                    float topY = viewH * 0.5f + focalY * (eye - base - 1) / front;
+                    float bottom = viewH * 0.5f + focalY * (eye - base) / front;
+                    int surface = band ? c->upperSurface : c->surface;
+                    for (int y = SDL_max(0, (int)ceilf(topY - 0.5f));
+                         y < SDL_min(viewH, (int)ceilf(bottom - 0.5f)); y++) {
+                        Uint32 color = sample(surface, u, (y + 0.5f - topY) / (bottom - topY));
+                        if ((color >> 24) && (!c->arch || (color & 0xffffff)))
+                            pixel(out, x, y, shade(color, z, side), z, cx, cy, level);
+                    }
+                }
+                /* Arch and grate holes must reveal farther geometry. */
+                if (!c->arch && eye >= STORY_HEIGHT * level &&
+                    eye <= STORY_HEIGHT * level + STORY_HEIGHT)
                     break;
             }
         }
     for (int i = 0; i < spriteCount; i++) {
         Sprite *s = &sprites[i];
         Texture *t = &textures[s->texture];
-        if (s->topOnly && eye <= s->level)
+        if (s->topOnly && eye <= STORY_HEIGHT * s->level)
             continue;
         if (s->flat) {
             float w = (t->w + 2 * t->pad) / 32.0f, h = (t->h + 2 * t->pad) / 32.0f;
@@ -1039,7 +1082,7 @@ void WORLD3D_RenderRegion(SDL_Surface *out, const Uint32 *palette, int left, int
                 float denom = y + 0.5f - viewH * 0.5f;
                 if (fabsf(denom) < 1e-6f)
                     continue;
-                float z = (eye - s->level - 0.002f) * focalY / denom;
+                float z = (eye - STORY_HEIGHT * s->level - 0.002f) * focalY / denom;
                 if (z < 0.05f)
                     continue;
                 for (int x = 0; x < viewW; x++) {
@@ -1062,7 +1105,7 @@ void WORLD3D_RenderRegion(SDL_Surface *out, const Uint32 *palette, int left, int
         float w = focalX * ((t->w + 2 * t->pad) / 32.0f) / z,
               h = focalY * ((t->h + 2 * t->pad) / 32.0f) / z,
               l = viewW * 0.5f + focalX * across / z - w * 0.5f,
-              bottom = viewH * 0.5f + focalY * (eye - s->level + t->pad / 32.0f) / z,
+              bottom = viewH * 0.5f + focalY * (eye - STORY_HEIGHT * s->level + t->pad / 32.0f) / z,
               topY = bottom - h;
         for (int y = SDL_max(0, (int)ceilf(topY - 0.5f));
              y < SDL_min(viewH, (int)ceilf(bottom - 0.5f)); y++)

@@ -339,9 +339,39 @@ static void testHeightAndCarpets(SDL_Surface *image, byte *tiles) {
     memset(D_6608_map.town, 0x44, 32 * 32);
     D_6608_map.town[14][16] = 0x4f;
     WORLD3D_Render(image, palette);
-    assert(at(image, 176, 140) == palette[9]);
+    assert(((at(image, 176, 140) >> 16) & 255) > 100); /* Extended second cube. */
     assert(((at(image, 176, 143) >> 16) & 255) > 100 && !(at(image, 176, 143) & 255));
     assert(((at(image, 176, 327) >> 8) & 255) > 100); /* 13/16 eye height, not a midpoint camera. */
+    /* Doors and windows retain their lower artwork; extensions are plain tile 77. */
+    const unsigned decoratedWalls[] = {0xb8, 0x4b};
+    for (unsigned i = 0; i < 2; i++) {
+        unsigned tile = decoratedWalls[i];
+        memset(tiles + tile * 128, 0x55, 128);
+        D_6608_map.town[14][16] = tile;
+        WORLD3D_Render(image, palette);
+        assert((at(image, 176, 60) & 255) > 100 && !(at(image, 176, 60) & 0xff0000));
+        assert((at(image, 176, 200) & 255) > 100 && (at(image, 176, 200) & 0xff0000));
+    }
+    /* Arches move up one cube, leaving a passage or a night-time grate below. */
+    memset(tiles + 135 * 128, 0x11, 128);
+    memset(tiles + 134 * 128, 0x22, 128);
+    D_6608_map.town[14][16] = 135;
+    D_6608_map.town[11][16] = 79;
+    D_587f = 12;
+    WORLD3D_Render(image, palette);
+    assert((at(image, 176, 60) & 255) > 80 && !(at(image, 176, 60) & 0xff0000));
+    assert((at(image, 176, 200) & 0xff0000) && !(at(image, 176, 200) & 255));
+    D_587f = 22;
+    WORLD3D_Render(image, palette);
+    assert((at(image, 176, 200) & 0xff00) && !(at(image, 176, 200) & 0xff0000));
+    memset(tiles + 134 * 128, 0, 128);
+    WORLD3D_Render(image, palette);
+    assert((at(image, 176, 200) & 0xff0000) && !(at(image, 176, 200) & 255)); /* Grate gaps. */
+    memset(tiles + 135 * 128, 0, 128);
+    D_587f = 12;
+    WORLD3D_Render(image, palette);
+    assert(at(image, 176, 60) == palette[9]); /* Arch cutouts show the sky. */
+    D_6608_map.town[11][16] = 0x44;
     memset(tiles + 0xaa * 128, 0x55, 128);
     memset(tiles + (256 + 0x1b) * 128, 0x55, 128);
     for (int mode = 0; mode < 2; mode++) {
@@ -392,22 +422,33 @@ static void testStackedFloors(SDL_Surface *image, byte *tiles) {
     D_5893_map_id = 42;
     D_5895_map_level = 0;
     WORLD3D_Render(image, palette);
-    Uint32 ground = at(image, 176, 200), upper = at(image, 176, 130), tower = at(image, 176, 70);
+    Uint32 ground = at(image, 176, 200), upper = at(image, 176, 80), tower = at(image, 176, 0);
     assert(((ground >> 16) & 255) > 80 && !(ground & 255));
     assert((upper & 255) > 80 && (upper & 255) == ((upper >> 16) & 255));
-    assert(((tower >> 16) & 255) > 80 && !(tower & 255));
+    assert((tower & 255) > 80 && !(tower & 0xff0000));
     assert(at(image, 300, 40) == palette[9]); /* Background upstairs remains open sky. */
     assert(D_5893_map_id == 42 && D_5895_map_level == 0);
-    int dx, dy;
-    assert(!WORLD3D_Pick(0.5f, 130.0f / 352, &dx, &dy)); /* Don't send actions to another floor. */
-    *MAPS_ActiveCell(42, 1, 16, 15) = 0x44;
+    const unsigned groundOnlyTiles[] = {137, 160, 162, 164, 189, 202, 203, 224, 225, 226, 227};
+    for (unsigned i = 0; i < sizeof(groundOnlyTiles) / sizeof(groundOnlyTiles[0]); i++) {
+        byte *cell = MAPS_ActiveCell(42, 1, 16, 11);
+        *cell = groundOnlyTiles[i];
+        WORLD3D_Render(image, palette);
+        assert(at(image, 176, 80) == palette[9]);
+        assert(*cell == groundOnlyTiles[i]); /* Presentation never edits terrain. */
+    }
+    *MAPS_ActiveCell(42, 1, 16, 11) = 0x50;
     WORLD3D_Render(image, palette);
-    assert(((at(image, 176, 120) >> 8) & 255) > 100 && !(at(image, 176, 120) & 255)); /* Ceiling. */
-    *MAPS_ActiveCell(42, 1, 16, 15) = 5;
+    int dx, dy;
+    assert(!WORLD3D_Pick(0.5f, 80.0f / 352, &dx, &dy)); /* Don't send actions to another floor. */
+    *MAPS_ActiveCell(42, 1, 16, 13) = 0x44;
+    WORLD3D_Render(image, palette);
+    assert((at(image, 176, 60) & 255) > 100 &&
+           (at(image, 176, 60) & 0xff0000)); /* Tile 72 ceiling, not green floor. */
+    *MAPS_ActiveCell(42, 1, 16, 13) = 5;
     *MAPS_ActiveCell(42, 1, 16, 12) = 0x44;
     D_5c5a[1] = (ActorFmt){0x90, 0x90, 16, 12, 1, 0, 0, 0};
     WORLD3D_Render(image, palette);
-    assert((at(image, 176, 130) & 255) > 80 && !((at(image, 176, 130) >> 16) & 255));
+    assert((at(image, 176, 80) & 255) > 80 && !((at(image, 176, 80) >> 16) & 255));
     float ax, ay;
     assert(WORLD3D_ActorPose(1, &ax, &ay)); /* An NPC on another floor is included. */
     memset(D_5c5a, 0, sizeof(D_5c5a));
@@ -473,18 +514,18 @@ static void testNativeFloors(SDL_Surface *image) {
     D_6608_map.town[11][16] = 0x4f;
     WORLD3D_Render(image, palette);
     assert(((at(image, 176, 200) >> 16) & 255) > 80 && !(at(image, 176, 200) & 255));
-    assert((at(image, 176, 130) & 255) > 80);
-    assert(((at(image, 176, 70) >> 16) & 255) > 80 && !(at(image, 176, 70) & 255));
+    assert((at(image, 176, 80) & 255) > 80);
+    assert((at(image, 176, 0) & 255) > 80 && !(at(image, 176, 0) & 0xff0000));
     D_6608_map.town[11][16] = 0x44;
     WORLD3D_Render(image, palette);
     assert(!(at(image, 176, 200) & 0xff0000)); /* Current floor reads live terrain, not the file. */
-    assert((at(image, 176, 130) & 255) > 80);
+    assert((at(image, 176, 80) & 255) > 80);
     /* Excluded masonry really is backdrop, even when the terrain is a wall. */
     byte *upperCoverage = coverage + 16 + 2 * 272;
     memset(upperCoverage + 16, 0, 256);
     writeCoverage(coverage, sizeof(coverage));
     WORLD3D_Render(image, palette);
-    assert(at(image, 176, 130) == palette[9]);
+    assert(at(image, 176, 80) == palette[9]);
     D_5c5a[1] = (ActorFmt){0x90, 0x90, 16, 11, 1, 0, 0, 0};
     WORLD3D_Render(image, palette);
     float ax, ay;
@@ -493,20 +534,20 @@ static void testNativeFloors(SDL_Surface *image) {
     /* A covered floor blocks the view upwards; its Opening flag exposes the sky. */
     file = fopen("world3d-native-fixture/CASTLE.DAT", "r+b");
     assert(file);
-    assert(!fseek(file, 2 * 1024 + 15 * 32 + 16, SEEK_SET));
+    assert(!fseek(file, 2 * 1024 + 13 * 32 + 16, SEEK_SET));
     assert(fputc(0x44, file) != EOF);
     fclose(file);
     memset(coverage + 16 + 3 * 272 + 16, 0, 256);
-    unsigned ceilingCell = 15 * 32 + 16;
+    unsigned ceilingCell = 13 * 32 + 16;
     upperCoverage[16 + ceilingCell / 4] = 1 << (2 * (ceilingCell % 4));
     writeCoverage(coverage, sizeof(coverage));
     WORLD3D_Render(image, palette);
-    Uint32 ceiling = at(image, 176, 120);
-    assert(((ceiling >> 8) & 255) > 100 && !(ceiling & 255));
+    Uint32 ceiling = at(image, 176, 60);
+    assert((ceiling & 255) > 100 && (ceiling & 0xff0000));
     upperCoverage[16 + ceilingCell / 4] = 3 << (2 * (ceilingCell % 4));
     writeCoverage(coverage, sizeof(coverage));
     WORLD3D_Render(image, palette);
-    assert(at(image, 176, 120) == palette[9]);
+    assert(at(image, 176, 60) == palette[9]);
     if (SDL_getenv("IMPERA_3D_ART")) {
         Uint64 start = SDL_GetTicksNS();
         for (int i = 0; i < 20; i++)
@@ -529,6 +570,8 @@ int main(void) {
     assert(tiles);
     memset(tiles + 0x44 * 128, 0x22, 128);
     memset(tiles + 0x4f * 128, 0x44, 128);
+    memset(tiles + 77 * 128, 0x33, 128);
+    memset(tiles + 72 * 128, 0x55, 128);
     for (int y = 1; y < 15; y++)
         for (int x = 5; x < 11; x++)
             tiles[400 * 128 + y * 8 + x / 2] |= (x & 1) ? 1 : 16;
