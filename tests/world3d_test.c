@@ -44,6 +44,13 @@ static uint64_t skyHash(SDL_Surface *image) {
         }
     return hash;
 }
+static void assertCoolSky(SDL_Surface *image) {
+    for(int y=0;y<176;y++) for(int x=32;x<352;x++) {
+        Uint32 c=at(image,x,y);
+        assert(c==palette[0] || c==palette[1] || c==palette[9] ||
+               c==palette[7] || c==palette[15]); /* Only blue/black sky and neutral stars. */
+    }
+}
 static void testSkies(SDL_Surface *image) {
     memset(D_6608_map.town, 0x44, 32 * 32);
     memset(D_5c5a, 0, sizeof(D_5c5a));
@@ -91,15 +98,18 @@ static void testSkies(SDL_Surface *image) {
     D_587f = 5;
     D_5881 = 30;
     WORLD3D_Render(image, palette);
+    assertCoolSky(image);
     uint64_t dawn = skyHash(image);
     assert(dawn != night && dawn != day);
     assert(SDL_SaveBMP(image, "world3d-dawn.bmp"));
     D_5881 = 31;
     WORLD3D_Render(image, palette);
+    assertCoolSky(image);
     assert(dawn != skyHash(image)); /* Minute changes blend using palette dithering. */
     D_587f = 19;
     D_5881 = 30;
     WORLD3D_Render(image, palette);
+    assertCoolSky(image);
     assert(skyHash(image) == dawn);
     assert(SDL_SaveBMP(image, "world3d-dusk.bmp"));
     D_587f = 23;
