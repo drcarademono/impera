@@ -21,14 +21,15 @@ static unsigned pickMap;
 static int pickLevel, pickWorldX, pickWorldY, pickFacing;
 static int viewX, viewY, viewW, viewH;
 static float *depth;
+static byte *floorDepth;
 static int *pickX, *pickY;
 static size_t pixelCapacity;
 typedef struct {
     unsigned tile;
     bool sprite;
-    unsigned w, h;
+    unsigned w, h, pad;
     int next;
-    Uint32 pixels[64 * 64];
+    Uint32 pixels[68 * 68];
 } Texture;
 static Texture *textures;
 static int textureCount, textureCapacity, textureBuckets[BUCKETS];
@@ -178,6 +179,7 @@ void WORLD3D_CameraPose(float *x, float *y, float *angle) {
 }
 void WORLD3D_Cleanup(void) {
     SDL_free(depth);
+    SDL_free(floorDepth);
     SDL_free(pickX);
     SDL_free(pickY);
     SDL_free(textures);
@@ -187,6 +189,7 @@ void WORLD3D_Cleanup(void) {
     actors = NULL;
     actorCapacity = trackedActorCount = 0;
     depth = NULL;
+    floorDepth = NULL;
     pickX = pickY = NULL;
     textures = NULL;
     sprites = NULL;
@@ -203,17 +206,21 @@ static bool reservePixels(int width, int height) {
     if (count > SIZE_MAX / sizeof(float) || count > SIZE_MAX / sizeof(int))
         return false;
     float *z = SDL_malloc(count * sizeof(float));
+    byte *floor = SDL_malloc(count);
     int *x = SDL_malloc(count * sizeof(int)), *y = SDL_malloc(count * sizeof(int));
-    if (!z || !x || !y) {
+    if (!z || !x || !y || !floor) {
         SDL_free(z);
+        SDL_free(floor);
         SDL_free(x);
         SDL_free(y);
         return false;
     }
     SDL_free(depth);
+    SDL_free(floorDepth);
     SDL_free(pickX);
     SDL_free(pickY);
     depth = z;
+    floorDepth = floor;
     pickX = x;
     pickY = y;
     pixelCapacity = count;
@@ -243,11 +250,14 @@ static int texture(unsigned tile, bool sprite) {
     bool transparency = GRAP_BUF_TransparentSprites();
     if (sprite)
         GRAP_BUF_SetTransparentSprites(true);
-    for (unsigned y = 0; y < t->h; y++)
-        for (unsigned x = 0; x < t->w; x++) {
-            int c = sprite ? GRAP_BUF_SpritePixel(tile, x / 2, y / 2)
-                           : GRAP_BUF_TilePixel(tile, x / 2, y / 2);
-            t->pixels[y * 64 + x] =
+    /* Preserve the shared one-logical-pixel outline outside every artwork edge. */
+    t->pad = sprite ? 2 : 0;
+    for (unsigned y = 0; y < t->h + 2 * t->pad; y++)
+        for (unsigned x = 0; x < t->w + 2 * t->pad; x++) {
+            int px = (int)(x / 2) - (int)(t->pad / 2);
+            int py = (int)(y / 2) - (int)(t->pad / 2);
+            int c = sprite ? GRAP_BUF_SpritePixel(tile, px, py) : GRAP_BUF_TilePixel(tile, px, py);
+            t->pixels[y * 68 + x] =
                 c < 0    ? 0
                 : sprite ? TILESET_LastSpriteColor(c, x & 1, y & 1, colors,
                                                    GRAP_BUF_SpriteIsTransparent(tile))
@@ -262,9 +272,9 @@ static Uint32 sample(int id, float u, float v) {
     if (id < 0)
         return 0xff000000;
     Texture *t = &textures[id];
-    int x = SDL_clamp((int)(u * t->w), 0, (int)t->w - 1),
-        y = SDL_clamp((int)(v * t->h), 0, (int)t->h - 1);
-    return t->pixels[y * 64 + x];
+    int w = t->w + 2 * t->pad, h = t->h + 2 * t->pad;
+    int x = SDL_clamp((int)(u * w), 0, w - 1), y = SDL_clamp((int)(v * h), 0, h - 1);
+    return t->pixels[y * 68 + x];
 }
 static Uint32 shade(Uint32 color, float distance, bool side) {
     float light = 1 / (1 + distance * 0.09f);
@@ -510,10 +520,10 @@ typedef struct {
     int minute;
     byte zenith, middle, horizon;
 } SkyKey;
-static const SkyKey skyKeys[] = {{0, 0, 0, 1},     {300, 0, 0, 1},   {315, 0, 1, 5},
-                                 {330, 1, 5, 12},  {345, 1, 9, 14},  {360, 1, 9, 11},
-                                 {1140, 1, 9, 11}, {1155, 1, 5, 14}, {1170, 1, 5, 12},
-                                 {1185, 0, 1, 5},  {1200, 0, 0, 1},  {1440, 0, 0, 1}};
+static const SkyKey skyKeys[] = {{0, 0, 0, 0},    {300, 0, 0, 0},   {315, 0, 1, 5},
+                                 {330, 1, 5, 12}, {345, 1, 9, 14},  {360, 9, 9, 9},
+                                 {1140, 9, 9, 9}, {1155, 1, 5, 14}, {1170, 1, 5, 12},
+                                 {1185, 0, 1, 5}, {1200, 0, 0, 0},  {1440, 0, 0, 0}};
 static const byte bayer[8][8] = {{0, 48, 12, 60, 3, 51, 15, 63}, {32, 16, 44, 28, 35, 19, 47, 31},
                                  {8, 56, 4, 52, 11, 59, 7, 55},  {40, 24, 36, 20, 43, 27, 39, 23},
                                  {2, 50, 14, 62, 1, 49, 13, 61}, {34, 18, 46, 30, 33, 17, 45, 29},
@@ -558,11 +568,56 @@ static void skyRow(const Sky *sky, int y, Uint32 row[8]) {
         row[x] = colors[indices[color]];
     }
 }
+/* Stable celestial directions: turning rotates the stars; walking never makes
+ * them swim across the sky. Sparse palette dots stay small at every viewport size. */
+static uint32_t starHash(uint32_t n) {
+    n ^= n >> 16;
+    n *= 0x7feb352du;
+    n ^= n >> 15;
+    n *= 0x846ca68bu;
+    return n ^ (n >> 16);
+}
+static void drawStars(SDL_Surface *out, const Sky *sky, float focalX, float focalY) {
+    if (!sky->surface)
+        return;
+    int minute = (D_587f % 24) * 60 + SDL_min(D_5881, 59);
+    float visibility = minute < 300 || minute >= 1200 ? 1
+                       : minute < 360                 ? (360 - minute) / 60.0f
+                       : minute >= 1140               ? (minute - 1140) / 60.0f
+                                                      : 0;
+    if (visibility <= 0)
+        return;
+    for (unsigned i = 0; i < 192; i++) {
+        uint32_t a = starHash(i + 1), b = starHash(a);
+        if ((b & 65535) / 65536.0f >= visibility)
+            continue;
+        double angle = (a / 4294967296.0) * 4 * HALF_PI - camera.angleNow;
+        float z = (float)cos(angle);
+        if (z <= 0)
+            continue;
+        float elevation = 0.06f + 0.75f * ((b >> 16) / 65536.0f);
+        float projectedX = viewW * 0.5f + focalX * (float)sin(angle) / z;
+        float projectedY = viewH * 0.5f - focalY * elevation / z;
+        /* Reject offscreen directions before converting near-tangent projections to integers. */
+        if (projectedX <= -2 || projectedX >= viewW || projectedY <= -2 || projectedY >= viewH / 2)
+            continue;
+        int x = (int)floorf(projectedX), y = (int)floorf(projectedY);
+        Uint32 color = colors[(a & 3) == 0 ? 15 : 7];
+        for (int sy = 0; sy < 2; sy++)
+            for (int sx = 0; sx < 2; sx++) {
+                int px = x + sx, py = y + sy;
+                if (px >= 0 && px < viewW && py >= 0 && py < viewH / 2)
+                    ((Uint32 *)((byte *)out->pixels + (py + viewY) * out->pitch))[px + viewX] =
+                        color;
+            }
+    }
+}
 static void pixel(SDL_Surface *out, int x, int y, Uint32 color, float z, int dx, int dy) {
     int i = y * viewW + x;
     if (z >= depth[i])
         return;
     depth[i] = z;
+    floorDepth[i] = 0;
     pickX[i] = dx;
     pickY[i] = dy;
     ((Uint32 *)((byte *)out->pixels + (y + viewY) * out->pitch))[x + viewX] = color;
@@ -596,11 +651,13 @@ void WORLD3D_RenderRegion(SDL_Surface *out, const Uint32 *palette, int left, int
         for (int x = 0; x < viewW; x++) {
             size_t i = (size_t)y * viewW + x;
             depth[i] = INFINITY;
+            floorDepth[i] = 0;
             pickX[i] = pickY[i] = 0;
             ((Uint32 *)((byte *)out->pixels + (y + top) * out->pitch))[x + left] =
                 background[(x / 2) & 7];
         }
     }
+    drawStars(out, &sky, focalX, focalY);
     /* Pixel-centre sampling reaches the horizon without a fixed distance cutoff. */
     for (int y = viewH / 2; y < viewH; y++) {
         float denominator = y + 0.5f - viewH * 0.5f;
@@ -616,6 +673,7 @@ void WORLD3D_RenderRegion(SDL_Surface *out, const Uint32 *palette, int left, int
                 continue;
             pixel(out, x, y, shade(sample(c->ground, wx - floorf(wx), wy - floorf(wy)), z, false),
                   z, cx, cy);
+            floorDepth[y * viewW + x] = 1;
         }
     }
     /* Beyond focalY distance a unit wall is smaller than the horizon's pixel gap.
@@ -686,16 +744,23 @@ void WORLD3D_RenderRegion(SDL_Surface *out, const Uint32 *palette, int left, int
         float dx = s->x - ox, dy = s->y - oy, z = dx * fx + dy * fy, across = dx * rx + dy * ry;
         if (z < 0.05f)
             continue;
-        float w = focalX * (t->w / 32.0f) / z, h = focalY * (t->h / 32.0f) / z,
+        float w = focalX * ((t->w + 2 * t->pad) / 32.0f) / z,
+              h = focalY * ((t->h + 2 * t->pad) / 32.0f) / z,
               l = viewW * 0.5f + focalX * across / z - w * 0.5f,
-              bottom = viewH * 0.5f + focalY * 0.5f / z, topY = bottom - h;
+              bottom = viewH * 0.5f + focalY * (0.5f + t->pad / 32.0f) / z, topY = bottom - h;
         for (int y = SDL_max(0, (int)ceilf(topY - 0.5f));
              y < SDL_min(viewH, (int)ceilf(bottom - 0.5f)); y++)
             for (int x = SDL_max(0, (int)ceilf(l - 0.5f));
                  x < SDL_min(viewW, (int)ceilf(l + w - 0.5f)); x++) {
                 Uint32 color = sample(s->texture, (x + 0.5f - l) / w, (y + 0.5f - topY) / h);
-                if (color >> 24)
+                if (color >> 24) {
+                    /* The outline below the feet overlays ground, just as in 2D.
+                     * Walls and other sprites retain their normal depth priority. */
+                    if (t->pad && y + 0.5f >= bottom - focalY * t->pad / 32.0f / z &&
+                        floorDepth[y * viewW + x])
+                        depth[y * viewW + x] = INFINITY;
                     pixel(out, x, y, shade(color, z, false), z, s->dx, s->dy);
+                }
             }
     }
     const byte *font = D_539c[0] ? D_539c[0] : D_5398_currentCharset;

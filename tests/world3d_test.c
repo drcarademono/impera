@@ -50,14 +50,43 @@ static void testSkies(SDL_Surface *image) {
     D_5881 = 0;
     WORLD3D_Render(image, palette);
     uint64_t day = skyHash(image);
-    assert(at(image, 64, 0) == palette[1]);
-    assert(at(image, 64, 174) == palette[11] || at(image, 64, 174) == palette[9]);
+    for (int y = 0; y < 176; y++)
+        for (int x = 32; x < 352; x++)
+            assert(at(image, x, y) == palette[9]); /* Solid daytime sky, no dither pattern. */
     assert(SDL_SaveBMP(image, "world3d-day.bmp"));
     D_587f = 0;
     WORLD3D_Render(image, palette);
     uint64_t night = skyHash(image);
     assert(day != night && at(image, 64, 0) == palette[0]);
+    int stars = 0, black = 0;
+    for (int y = 0; y < 176; y++)
+        for (int x = 32; x < 352; x++) {
+            Uint32 c = at(image, x, y);
+            assert(c == palette[0] || c == palette[7] || c == palette[15]);
+            stars += c != palette[0];
+            black += c == palette[0];
+        }
+    assert(stars > 0 && black > stars * 100); /* Pitch black, with sparse stars and no blue haze. */
+    WORLD3D_Render(image, palette);
+    assert(skyHash(image) == night); /* Deterministic, with no random flickering. */
+    D_5896_map_x++;
+    WORLD3D_Render(image, palette);
+    assert(skyHash(image) == night); /* Stars are distant, not attached to the ground. */
+    D_5896_map_x--;
+    WORLD3D_Move(U5_KEY_RIGHT);
+    WORLD3D_Render(image, palette);
+    assert(skyHash(image) != night);
+    for (int i = 0; i < 3; i++)
+        WORLD3D_Move(U5_KEY_RIGHT);
+    WORLD3D_Render(image, palette);
+    assert(skyHash(image) == night);
     assert(SDL_SaveBMP(image, "world3d-night.bmp"));
+    D_6608_map.town[15][16] = 0x4f;
+    WORLD3D_Render(image, palette);
+    for (int y = 0; y < 176; y++)
+        for (int x = 32; x < 352; x++)
+            assert(at(image, x, y) != palette[7] && at(image, x, y) != palette[15]);
+    D_6608_map.town[15][16] = 0x44;
     D_587f = 5;
     D_5881 = 30;
     WORLD3D_Render(image, palette);
@@ -107,6 +136,24 @@ static float blueCenter(SDL_Surface *image) {
     }
     assert(count > 0);
     return sum / count;
+}
+static void testEdgeOutline(SDL_Surface *image, byte *tiles) {
+    byte original[128];
+    memcpy(original, tiles + 400 * 128, 128);
+    memset(tiles + 400 * 128, 0x11, 128); /* Artwork touches all four edges and corners. */
+    D_5c5a[1] = (ActorFmt){0x90, 0x90, 16, 14, 0, 0, 0, 0};
+    WORLD3D_Render(image, palette);
+    const int points[][2] = {{103, 176}, {249, 176}, {176, 103}, {176, 249},
+                             {103, 103}, {249, 103}, {103, 249}, {249, 249}};
+    for (unsigned i = 0; i < sizeof(points) / sizeof(points[0]); i++) {
+        assert(at(image, points[i][0], points[i][1]) == palette[0]);
+    }
+    assert((at(image, 108, 176) & 255) >
+           80); /* No artwork shrinking to make room for the outline. */
+    assert(at(image, 95, 95) == palette[9]); /* Padding must not become a black rectangle. */
+    memcpy(tiles + 400 * 128, original, 128);
+    memset(D_5c5a, 0, sizeof(D_5c5a));
+    WORLD3D_Render(image, palette);
 }
 static void testActorMotion(SDL_Surface *image) {
     /* Leave room for several instrumented renders within one movement interval. */
@@ -224,6 +271,18 @@ static void testCustomActorMotion(SDL_Surface *image) {
         ACTORS_Size(actor, &w, &h);
         assert(w == 2 && h == 2);
     }
+    ActorFmt saved[2] = {D_5c5a[32], D_5c5a[33]};
+    for (unsigned i = 0; i < 2; i++) {
+        D_5c5a[32]._0_tile = D_5c5a[33]._0_tile = 0;
+        D_5c5a[32 + i] = (ActorFmt){0x90, 0x90, 16, 13, 0, 0, 0, 0};
+        WORLD3D_Render(image, palette);
+        assert(at(image, 118, 100) == palette[0] && at(image, 344, 100) == palette[0]);
+        assert(at(image, 200, 7) == palette[0] && at(image, 200, 235) == palette[0]);
+        assert(at(image, 118, 7) == palette[0] && (at(image, 125, 100) & 255) > 80);
+    }
+    D_5c5a[32] = saved[0];
+    D_5c5a[33] = saved[1];
+    WORLD3D_Render(image, palette);
     GRAP_SDL_SetSmoothMovement(true);
     WORLD3D_Render(image, palette);
     D_5c5a[32]._2_x++;
@@ -423,6 +482,7 @@ int main(void) {
     WORLD3D_Move(U5_KEY_LEFT);
     D_5896_map_x = 16;
     testSkies(image);
+    testEdgeOutline(image, tiles);
     testActorMotion(image);
     testCustomActorMotion(image);
     assert(ENGINE_Save());
