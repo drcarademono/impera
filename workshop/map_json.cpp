@@ -1,5 +1,6 @@
 #include "save_dialog.h"
 #include "map_json.h"
+#include "floor_coverage_editor.h"
 #include "map_editor.h"
 #include "dungeon_editor.h"
 #include "extended_maps.h"
@@ -153,6 +154,7 @@ struct Exporter {
                                    : kind == "dungeon" ? 0xb0 : terrain.isEmpty() ? 0 : uchar(terrain.back());
             QJsonObject f{{"floor", mp.floor}, {"width", mp.side}, {"height", mp.height()},
                           {"background", background}, {"tiles", rows}};
+            if(kind=="location") f["coverage3d"]=QString::fromLatin1(floorCoverage(p,r,index).toBase64());
             if (kind != "dungeon") { artwork.insert(background); type(background); }
             if (kind == "combat") {
                 f["encounterData"] = bytes(p.data(r).mid(mp.offset, 352));
@@ -713,6 +715,10 @@ struct Importer {
         if (kind == "location") {
             auto records = readGates(p.resources.value("GATES.OVR").edited);
             int map = positionMap(r, selected);
+            // The replacement can have a different set of floors. Drop old geometry masks
+            // before importing the source masks under this location's identity.
+            for (int level = -1; level <= 3; ++level)
+                p.resources["FLOORS3D.OVR"].edited = setFloorCoverage(p, map, level, 1, 1, {});
             for (int i = records.size() - 1; i >= 0; --i)
                 if (U5::byte(records[i], 0) == unsigned(map))
                     records.removeAt(i);
@@ -870,6 +876,19 @@ struct Importer {
                         p, r, targetPage, index, number(a["slot"], 0, 15, "actor slot"),
                         type(number(a["type"], 512, 65535, "actor type"))));
                 }
+            }
+            if(kind=="location") {
+                QByteArray coverage;
+                if(f.contains("coverage3d")) {
+                    require(f["coverage3d"].isString(),"Invalid 3D floor area");
+                    auto decoded=QByteArray::fromBase64Encoding(f["coverage3d"].toString().toLatin1(),QByteArray::AbortOnBase64DecodingErrors);
+                    require(bool(decoded) && decoded.decoded.size()==w*h,"Invalid 3D floor area dimensions");
+                    coverage=decoded.decoded;
+                } else {
+                    coverage=QByteArray(w*h,0);
+                    require(FLOOR3D_Suggest(reinterpret_cast<const unsigned char*>(terrain.constData()),nullptr,w,h,m.floor,reinterpret_cast<unsigned char*>(coverage.data())),"Cannot suggest a 3D floor area");
+                }
+                p.resources["FLOORS3D.OVR"].edited=setFloorCoverage(p,m.id,m.floor,w,h,coverage);
             }
             auto target = contentsTarget(r, p.mapPages(r)[index], index);
             replaceContents(target, f["contents"], w, h);

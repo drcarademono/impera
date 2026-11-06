@@ -235,6 +235,10 @@ void AUDIO_DispatchSweepTone(int startFreq, int endFreq, int tickStep, int dur)
     }
 
     int id = AUDIO_LookupSfx(SFX_TYPE_SWEEP, startFreq, endFreq, tickStep, dur, 0);
+    if(startFreq==3200 && endFreq==3500 && tickStep==1) {
+        int variant=dur==12?106:dur==4?107:105;
+        if(AUDIO_HasSfx(variant))id=variant;
+    }
     if (id >= 0 && AUDIO_HasSfx(id))
     {
         AUDIO_PlaySfx(id);

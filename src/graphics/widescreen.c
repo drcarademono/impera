@@ -243,7 +243,7 @@ static void Copy(byte* dst, int stride, int dx, int dy, int sx, int sy, int w, i
     }
 }
 
-bool WIDE_Compose(byte* pixels, WideLayout l)
+bool WIDE_ComposeFrame(byte* pixels, WideLayout l)
 {
     if (!D_58a4 || (!MAPS_Outside(D_5893_map_id) && D_5893_map_id < 128) || l.columns < 11 ||
         l.rows < 11 || !GRAP_BUF_HasTileset())
@@ -272,6 +272,12 @@ bool WIDE_Compose(byte* pixels, WideLayout l)
     Copy(pixels, l.width, l.sidebarX - 8, l.height - 8, 184, 184, 8, 8);
     Copy(pixels, l.width, l.sidebarX / 2 - 56, l.height - 8, 40, 184, 112, 8);
 
+    return true;
+}
+
+bool WIDE_Compose(byte* pixels, WideLayout l)
+{
+    if (!WIDE_ComposeFrame(pixels, l)) return false;
     for (int i = 0; i < MAP_ACTOR_COUNT; i++)
         s_actorTiles[i] = -1;
     int cx = l.columns / 2, cy = l.rows / 2;

@@ -17,5 +17,6 @@ bool WIDE_DarknessMask(byte* mask,int columns,int rows);
 bool WIDE_Visible(int dx, int dy);
 bool WIDE_FootprintVisible(int dx, int dy, unsigned width, unsigned height);
 int WIDE_ActorTile(int actor);
+bool WIDE_ComposeFrame(byte* pixels, WideLayout layout);
 bool WIDE_Compose(byte* pixels, WideLayout layout);
 #endif

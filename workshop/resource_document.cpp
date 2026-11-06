@@ -5,6 +5,7 @@
 #include "mod/location_names.h"
 #include "mod/npcs.h"
 #include "resource_document.h"
+#include "mod/floor_coverage.h"
 #include "contents_editor.h"
 #include "gates_editor.h"
 #include "custom_tiles.h"
@@ -223,6 +224,8 @@ QMap<QString, QByteArray> ResourceDocument::replace(const Entry &e, const QByteA
     return {{resource, result}};
 }
 void validateResource(const Project &project, const QString &name) {
+    if(name=="FLOORS3D.OVR") { auto b=project.data(name); U5::require(FLOOR3D_Validate(b.constData(),b.size()),"Invalid 3D floor areas"); return; }
+
     const auto &b = project.data(name);
     const auto kind = capability(name).editor;
     if(name=="AUDIO.OVR") {require(MA_Validate(b.constData(),b.size()),"Invalid audio definitions");return;}

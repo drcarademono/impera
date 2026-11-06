@@ -6,6 +6,7 @@
 #include "cursor_assets.h"
 #include "funcs.h"
 #include "graphics/grap_sdl.h"
+#include "graphics/world3d.h"
 #include "graphics/grap_buf.h"
 #include "event/event.h"
 #include "macros.h"
@@ -162,6 +163,7 @@ int MOUSE_CursorDirection(float x, float y)
     /* Only the exact origin has no direction; every other point belongs
      * to an octant, including points within the player sprite. */
     int direction = (rx == 0 && ry == 0) ? 0 : DirectionOctant(rx, ry);
+    if(WORLD3D_Active())direction=SDL_fabsf(rx)>SDL_fabsf(ry)?(rx<0?U5_KEY_LEFT:U5_KEY_RIGHT):(ry<=0?U5_KEY_UP:U5_KEY_DOWN);
     if (direction) s_lastCursorDirection = direction;
     if (!MOVEMENT_Diagonal() && s_lastCursorDirection >= U5_KEY_HOME)
         s_lastCursorDirection = (s_lastCursorDirection == U5_KEY_HOME || s_lastCursorDirection == U5_KEY_END) ? U5_KEY_LEFT : U5_KEY_RIGHT;
@@ -488,6 +490,7 @@ static bool SamePosition(void)
            s_map == D_5893_map_id && s_level == D_5895_map_level &&
            s_x == D_5896_map_x && s_y == D_5897_map_y;
 }
+bool MOUSE_DirectionInputActive(void) {return s_directionInput;}
 void MOUSE_BeginDirectionInput(bool talk)
 {
     MOUSE_Cancel();Snapshot();s_directionInput=true;s_talkInput=talk;s_directionKey=0;
@@ -618,7 +621,7 @@ int MOUSE_PollCommand(void)
         s_moveTime = SDL_GetTicks();
         int direction = MOUSE_CursorDirection(x, y);
         debug("Mouse move: direction=%d cursor_offset=%f,%f\n", direction, rx, ry);
-        return direction;
+        return WORLD3D_Active()?WORLD3D_Move(direction):direction;
     }
     return 0;
 }

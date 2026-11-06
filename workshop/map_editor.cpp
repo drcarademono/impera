@@ -1,6 +1,7 @@
 #include "save_dialog.h"
 #include "mod/npcs.h"
 #include "map_editor.h"
+#include "floor_coverage_editor.h"
 #include "gates_editor.h"
 #include "../src/mod/gates.h"
 #include "map_resize_dialog.h"
@@ -1391,6 +1392,22 @@ MapWorkspace::MapWorkspace(
         }
     });
 
+    if(document.pages.value(currentPage()).settlement>=0 && resource!="DUNGEON.DAT") {
+        auto coverage=new QToolButton;
+        coverage->setObjectName("mapFloor3D");coverage->setText("3D Floor Area…");
+        coverage->setToolTip("Edit which parts of this floor exist at its height in the 3D view, including floors, walls and openings. The 2D map stays unchanged.");
+        row->addWidget(coverage);
+        connect(coverage,&QToolButton::clicked,this,[this] {
+            if(!flushLocationMode()) return;
+            QPointer<MapWorkspace> owner(this);
+            try {
+                auto edits=Workshop::editFloorCoverage(this,*project,resource,currentPage());
+                if(owner && !edits.isEmpty()) commitResources(edits,"Edit 3D floor area");
+            } catch(const std::exception &e) {
+                if(owner) QMessageBox::warning(this,"Cannot edit 3D floor area",e.what());
+            }
+        });
+    }
     auto transfer = new QWidget;
     transfer->setObjectName("mapTransferActions");
     transfer->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);

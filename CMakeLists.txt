@@ -31,6 +31,7 @@ set(SOURCES
     src/common/data_setup.c
     src/common/save_slots.c
     src/common/engine_settings.c
+    src/audio/ambient_loop.c
     src/audio/pcspeaker.c
 	src/town.c
 	src/mainout.c
@@ -87,6 +88,7 @@ set(SOURCES
 	src/graphics/origin.c
 	src/graphics/crt.c
 	src/graphics/grap_sdl.c
+    src/graphics/world3d.c
 	src/graphics/widescreen.c
 	src/graphics/grap.c
 	src/graphics/reveal.c
@@ -151,6 +153,12 @@ if(U5D_BUILD_TESTS)
     list(APPEND U5D_TARGETS u5d_pcspeaker_test)
     add_test(NAME pcspeaker_algorithms COMMAND u5d_pcspeaker_test)
     list(REMOVE_ITEM TEST_SOURCES src/ultima.c)
+    add_executable(u5d_world3d_test tests/world3d_test.c ${TEST_SOURCES})
+    list(APPEND U5D_TARGETS u5d_world3d_test)
+    file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/world3d-runtime")
+    add_test(NAME world3d COMMAND u5d_world3d_test)
+    set_tests_properties(world3d PROPERTIES WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/world3d-runtime"
+        ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software" TIMEOUT 20)
     add_executable(impera_tileset_test tests/tileset_test.c ${TEST_SOURCES})
     list(APPEND U5D_TARGETS impera_tileset_test)
     if(UNIX AND NOT APPLE)
@@ -420,7 +428,7 @@ if(U5D_BUILD_TESTS)
             ENVIRONMENT "SDL_AUDIO_DRIVER=dummy" TIMEOUT 15)
         add_executable(u5d_audio_test tests/audio_test.c ${TEST_SOURCES})
         list(APPEND U5D_TARGETS u5d_audio_test)
-        target_link_options(u5d_audio_test PRIVATE "-Wl,--wrap=SDL_PutAudioStreamData" "-Wl,--wrap=MIX_SetTrackAudio" "-Wl,--wrap=SDL_GetBasePath" "-Wl,--wrap=TIME_SleepMs" "-Wl,--wrap=MIX_SetTrackFrequencyRatio")
+        target_link_options(u5d_audio_test PRIVATE "-Wl,--wrap=SDL_PutAudioStreamData" "-Wl,--wrap=MIX_SetTrackAudio" "-Wl,--wrap=SDL_GetBasePath" "-Wl,--wrap=TIME_SleepMs" "-Wl,--wrap=MIX_SetTrackFrequencyRatio" "-Wl,--wrap=MIX_PlayTrack")
         file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/audio-runtime")
         add_test(NAME audio COMMAND u5d_audio_test)
         set_tests_properties(audio PROPERTIES WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/audio-runtime"

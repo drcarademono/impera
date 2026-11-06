@@ -22,8 +22,7 @@ static int pending(const ContentsDef *d, const ContentsState *s) {
             return 1;
     return 0;
 }
-int CONTENTS_GAME_Shape(int x, int y) {
-    const ContentsDef *d = here(x, y);
+static int visibleShape(const ContentsDef *d) {
     if (!d || !d->id)
         return 0;
     unsigned kind = d->kind;
@@ -33,6 +32,10 @@ int CONTENTS_GAME_Shape(int x, int y) {
     /* A placed container remains visible until opened; hidden discoveries have no sprite. */
     const ContentsState *s = CONTENTS_Peek(d);
     return d->action == 1 && s && !(s->flags & 1) ? TILE_ACTOR_CHEST : 0;
+}
+int CONTENTS_GAME_Shape(int x, int y) { return visibleShape(here(x, y)); }
+int CONTENTS_GAME_LocationShape(unsigned map, int floor, int x, int y) {
+    return visibleShape(CONTENTS_Find(0, map, floor, x, y));
 }
 int CONTENTS_GAME_DungeonTile(int tile, int x, int y) {
     const ContentsDef *d = here(x, y);

@@ -8,6 +8,7 @@
 #include "common/save_slots.h"
 #include "event/event.h"
 #include "graphics/grap_sdl.h"
+#include "graphics/world3d.h"
 
 #include <SDL3/SDL.h>
 #include <string.h>
@@ -78,6 +79,7 @@ static int ArrowIndex(SDL_Keycode key)
 }
 static u16 ArrowDirection(u16 fallback)
 {
+    if(WORLD3D_Active())return fallback;
     int y=(int)s_arrows[1]-(int)s_arrows[0];
     int x=(int)s_arrows[3]-(int)s_arrows[2];
     if(MOVEMENT_Diagonal() && x && y)
@@ -192,6 +194,10 @@ void KEY_SDL_ProcessKeyDown(SDL_KeyboardEvent ev)
     u16 key = KeyboardEventToUltimaKeycode(ev);
     int arrow=ArrowIndex(ev.key);
     if(arrow>=0) { s_arrows[arrow]=true;key=ArrowDirection(key); }
+    if(WORLD3D_Active() && s_gameplayInput && (ev.mod & SDL_KMOD_ALT)) {
+        if(ev.key==SDLK_LEFT)key=0x100|U5_KEY_HOME;
+        if(ev.key==SDLK_RIGHT)key=0x100|U5_KEY_PGUP;
+    }
     if ((key == U5_KEY_CTRL_O || key == U5_KEY_CTRL_W || key == U5_KEY_CTRL_L) && ev.repeat) return;
     bool direction = IsDirection(key);
     if ((GRAP_SDL_CustomMovementSpeed() || GRAP_SDL_SmoothMovementEnabled()) && direction) {
@@ -219,6 +225,10 @@ int KEY_PollKey(void)
         s_nextMovement = SDL_GetTicks() + GRAP_SDL_MovementInterval();
     }
 
+    if((key&0x100) && WORLD3D_Active()) {
+        if(s_gameplayInput) {int movement=WORLD3D_Move(key&255);key=movement?(0x100|movement):0;}
+        else if(MOUSE_DirectionInputActive())key=0x100|WORLD3D_Direction(key&255);
+    }
     // special keystroke
     if (key & 0x100)
     {

@@ -202,6 +202,71 @@ display command line speed values outside their tick range without changing
 them until adjusted. Mouse input remains available on the settings screen
 even when Mouse Control is off, so it can be turned back on.
 
+### Experimental first-person view
+
+On the `experiment/world-local-3d` branch, enable **Graphics → 3D World / Locations**
+to use a first-person view on Britannia, the Underworld, and local maps. The option
+is off by default and saves in `ENGINE.CFG`. Combat remains top-down and existing
+dungeons keep their own renderer. Menus and scripted scene compositions retain
+their original presentation.
+
+Use **Up/Down** to step forward/backward and **Left/Right** to turn 90 degrees.
+**Alt+Left/Right** or **Home/Page Up** strafe. Turning does not move the Avatar or
+advance a game turn. Normal commands remain available; directional prompts accept
+view-relative arrows. With Mouse Control enabled, hold the right button over the
+view to move or turn. Left-click actions pick the projected ground, walls, and
+sprites instead of treating the view as a top-down grid. A small N/E/S/W indicator
+shows camera facing.
+
+This prototype has flat terrain, two-cube-tall masonry stories, and
+camera-facing sprites using existing artwork, animation, custom sprite sizes,
+and protected-black masks. Original movement, collision, map contents, and sight
+rules remain authoritative. Fullscreen native-aspect mode retains its expanded
+widescreen viewport. Smooth Movement animates camera steps and turns as well as
+NPC and monster travel, including custom multi-tile actors. Teleports, spawning,
+and floor changes appear immediately. Surface skies use only the original
+16-color palette: solid blue by day and pitch black with fixed stars at night.
+Ordered dithering is limited to the game's 05:00–06:00 dawn and 19:00–20:00 dusk.
+In Workshop, **3D Floor Area…** edits which parts of a location floor exist at
+its height: Include, Exclude, or Opening. Native upper floors and basements have
+explicit footprints; these avoid repeating scenery from lower levels while
+retaining real rooms with matching terrain. Coverage travels with map JSON and
+is preserved when resizing.
+
+Upper masonry uses plain wall tiles 77 or 79, inferred from connected surrounding
+masonry so doors and windows match their walls. Arches sit in the upper cube, with
+an open passage by day and a grate at night. Ceilings use tile 72. Outdoor fixtures
+137, 160, 162, 164, 189, 202, 203, and 224–227 appear only at ground level.
+For DOS, `Ultima_5_Tiles_DOS3d_Ground.png` and
+`Ultima_5_Tiles_DOS3d_Sprites.png` split composite artwork into a flat ground tile
+and an upright sprite. Only differing 16×16 cells are split; the comparison is
+automatic, including later artwork edits. The sheets are embedded in the game.
+Black in the split sprite sheet is transparent apart from the generated outline;
+ordinary sprites still honor their existing protection masks.
+Other tilesets, identical cells, and custom sprite artwork retain their existing
+rendering. The 2D view always keeps its original artwork.
+Moongates render upright with inferred ground underneath. Sign bases (224),
+connecting pieces (225/226), stacked poles (227), and faces (236–247, 249) assemble
+into one tall billboard anchored at the pole, with one continuous outline.
+Displaced upper pieces show grass without changing the map data. Until a dedicated
+227 sprite is supplied, its pole uses the existing 224 artwork.
+Bookshelves (92/93) form fixed shallow bookcases. Table sections (148–150,
+154–156, 190) join into low tables with horizontal tops and legs, reusing the
+original artwork. Furniture retains its map orientation instead of swivelling
+with the camera. Normal protection masks still apply to non-split artwork.
+Upright sprites align the bottom of their visible artwork to the ground, excluding
+the generated outline; 176/177 retain their original height. Ladders 200/279 align
+to a tile-72 ceiling cap, while 201/280 sit on inferred ground. Bodies 286/287 and
+all skiff frames 296–299 lie flat like carpets.
+The camera sits 13/16 of a tile above the floor. Location floors render together
+at their actual heights, including walls, floors, ceilings, NPCs, and containers.
+Upper-floor background tiles represent open air. Decorative rugs and placed
+magic carpets lie flat on the ground. Sprite outlines extend past all artwork
+edges. Underground areas remain dark above. There is no fixed tile-distance cutoff: geometry is projected to the
+horizon at the viewport’s pixel resolution,
+subject to map boundaries, lighting, and occlusion. Terrain elevation and
+projected map effects/dithered visibility transitions are future work.
+
 ### Available settings
 
 | Setting | Effect |
@@ -222,6 +287,7 @@ even when Mouse Control is off, so it can be turned back on.
 | Diagonal Movement | Enable eight-way movement, neighboring actions, and combat. |
 | Movement Speed | Adjust held movement and smooth tile transitions. |
 | Animation Speed | Adjust all animated sprites independently of movement and turns. |
+| 3D World / Locations | Experimental first-person view for world/local maps; combat stays top-down. |
 
 Selected rows use a white highlight with black text; checkbox colors remain
 visible to show their state. Mouse hover selects rows, including **Return to
@@ -479,6 +545,18 @@ pulses gate the divisor-60 carrier using wrapping 16-bit accumulators and
 thresholds. Sweeps retain DOS signed 16-bit arithmetic and integer division.
 `sfx_map.h` remains the authoritative effect parameter table. Title effects
 without parameter tuples require their WAV recordings.
+Waterfall and fountain WAV overrides play continuously on separate ambience tracks
+while the source is nearby. Repeated map updates do not restart the clip; changing
+or leaving the source fades it out. Loop boundaries use a short tail/head crossfade.
+Clock ticks/chimes, lute and harpsichord notes, and dungeon drips have separate,
+bounded one-shot voices so foreground effects do not cut off their tails. They
+retain their original trigger rhythm instead of looping. All recorded effects
+receive short start/end ramps as well as transition fades, reducing boundary
+clicks without changing clip length. Dungeon drips select their matching WAV
+variant when available. See [the playback audit](docs/audio-playback-audit.md).
+The same recording still plays once when triggered outside the ambient context.
+Sound Volume, Sound Effect Speed, and muting apply to ambience as well.
+
 
 Speaker timing uses the audited DOSBox simple/386_slow/5000-cycle reference:
 tone/sweep use the full calibrated delay, noise uses calibration >> 4, and PWM

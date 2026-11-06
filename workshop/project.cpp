@@ -4,6 +4,7 @@
 #include "mod/location_names.h"
 #include "mod/npcs.h"
 #include "project.h"
+#include "floor_coverage_editor.h"
 #include "gates_editor.h"
 #include "../src/mod/gates.h"
 #include "extended_maps.h"
@@ -53,7 +54,7 @@ void Project::openGame(const QString &directory) {
         if (upper == "AUDIO.OVR" || upper == "PARTY.OVR" || upper == "TYPES.OVR" || upper == "TYPEMAP.OVR" || upper == "CUTSCENE.OVR" ||
             upper == "MAPS.OVR" || MAPS_LocationResource(upper.toLatin1().constData()) ||
             upper == "LOCATIONS.OVR" || upper == "TEXT.OVR" || upper == "RULES.TBL" ||
-            upper == "MODINFO.DAT" || upper == "INTERFACE.OVR" || upper == "GATES.OVR" || upper == "CONTENTS.OVR")
+            upper == "MODINFO.DAT" || upper == "INTERFACE.OVR" || upper == "FLOORS3D.OVR" || upper == "GATES.OVR" || upper == "CONTENTS.OVR")
             continue; // Companion resources are package-only.
         if (!MOD_AllowedResource(upper.toLatin1().constData()))
             continue;
@@ -92,6 +93,7 @@ void Project::openGame(const QString &directory) {
     next.resources.insert("RULES.TBL", {{}, {}});
     next.resources.insert("CONTENTS.OVR", {{}, {}});
     next.resources.insert("GATES.OVR", {{}, {}});
+    next.resources.insert("FLOORS3D.OVR", {{}, {}});
     next.resources.insert("INTERFACE.OVR", {{}, {}});
     next.resources.insert("MODINFO.DAT", {{}, {}});
     *this = next;
@@ -202,6 +204,7 @@ void Project::validate() const {
         require(U5::byte(data("INIT.GAM"),0x2b5)<=int(TYPES_U32(party.constData()+12)),"Starting party exceeds the configured maximum");
     }
     Workshop::validateExtendedMaps(*this);
+    Workshop::validateFloorCoverage(*this);
     Workshop::validateGates(*this);
     require(!title.trimmed().isEmpty() && title.toUtf8().size() <= 256 && !title.contains(QChar(0)),
             "Mod name must contain 1–256 UTF-8 bytes");
@@ -331,6 +334,7 @@ QByteArray Project::package() const {
         portableConditions |= contents.refill > 2;
     const bool masks = usesMasks(*this);
     QByteArray out(
+        list.contains("FLOORS3D.OVR") ? "IMOD0031" :
         list.contains("AUDIO.OVR") ? "IMOD0030" :
         list.contains("PARTY.OVR") ? "IMOD0029"
         : list.contains("MODINFO.DAT") ? (data("MODINFO.DAT").startsWith("IMETA002") ? "IMOD0028" : "IMOD0027")
@@ -520,6 +524,7 @@ void Project::save(const QString &path) {
     }
     if(changed().contains("PARTY.OVR")) {requirements["partyDefinitions"]=1;requirements["packageVersion"]=29;}
     if(changed().contains("AUDIO.OVR")) {requirements["audioDefinitions"]=1;requirements["packageVersion"]=30;}
+    if(changed().contains("FLOORS3D.OVR")) {requirements["floorCoverage3D"]=1;requirements["packageVersion"]=31;}
     if (!requirements.isEmpty())
         root["requires"] = requirements;
     QJsonObject annotations;
@@ -626,7 +631,7 @@ QVector<ModDiagnostic> validateMod(const Project &project, const QString &modsDi
             if (name == "AUDIO.OVR" || name == "PARTY.OVR" || name == "TYPES.OVR" || name == "TYPEMAP.OVR" || name == "CUTSCENE.OVR" ||
                 name == "MAPS.OVR" || MAPS_LocationResource(name.toLatin1().constData()) ||
                 name == "LOCATIONS.OVR" || name == "TEXT.OVR" || name == "RULES.TBL" ||
-                name == "MODINFO.DAT" || name == "INTERFACE.OVR" || name == "GATES.OVR" || name == "CONTENTS.OVR") {
+                name == "MODINFO.DAT" || name == "INTERFACE.OVR" || name == "FLOORS3D.OVR" || name == "GATES.OVR" || name == "CONTENTS.OVR") {
                 require(project.resources[name].original.isEmpty(),
                         "Companion resource must have an empty original base");
             } else if (!MOD_TilesetSheet(name.toLatin1().constData())) {
@@ -973,7 +978,7 @@ QString prepareModTest(const Project &project, const QString &sessionsDirectory)
         if (name == "AUDIO.OVR" || name == "PARTY.OVR" || name == "TYPES.OVR" || name == "TYPEMAP.OVR" || name == "CUTSCENE.OVR" ||
             name == "MAPS.OVR" || MAPS_LocationResource(name.toLatin1().constData()) ||
             name == "LOCATIONS.OVR" || name == "TEXT.OVR" || name == "RULES.TBL" ||
-            name == "MODINFO.DAT" || name == "INTERFACE.OVR" || name == "GATES.OVR" || name == "CONTENTS.OVR" || MOD_TilesetSheet(name.toLatin1().constData()))
+            name == "MODINFO.DAT" || name == "INTERFACE.OVR" || name == "FLOORS3D.OVR" || name == "GATES.OVR" || name == "CONTENTS.OVR" || MOD_TilesetSheet(name.toLatin1().constData()))
             continue; // Virtual companion exists only inside the package.
         auto bytes = readLimited(destination.filePath(name), MOD_MAX_RESOURCE);
         require(bytes == project.resources[name].original,

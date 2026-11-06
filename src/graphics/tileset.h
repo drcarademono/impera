@@ -21,6 +21,9 @@ const char *TILESET_CustomPath(void);
 bool TILESET_SetCustomPath(const char *path);
 bool TILESET_SelectCustom(const char *path);
 void TILESET_Animate(void);
+/* DOS-only 3D decomposition. Identical cells retain ordinary artwork. */
+bool TILESET_3DSplit(unsigned tile);
+Uint32 TILESET_3DPixel(unsigned tile, int x, int y, bool sprite);
 bool TILESET_SpriteOutline(void);
 bool TILESET_ProtectedBlack(int tile, int x, int y);
 int TILESET_Pixel(int tile, int x, int y); /* -1: DOS fallback */

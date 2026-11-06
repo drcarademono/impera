@@ -2,6 +2,7 @@
 #include "dungeon_editor.h"
 #include "mod/npcs.h"
 #include "extended_maps.h"
+#include "floor_coverage_editor.h"
 #include "gates_editor.h"
 #include "map_editor.h"
 #include "map_positions.h"
@@ -325,7 +326,15 @@ QMap<QString, QByteArray> resizeMap(const Project &p, const QString &resource, i
         }
     if (!replaced)
         maps.append(m);
-    return {{"MAPS.OVR", writeExtendedMaps(maps)}};
+    QMap<QString,QByteArray> result{{"MAPS.OVR",writeExtendedMaps(maps)}};
+    if(m.kind==1) {
+        auto area=floorCoverage(p,resource,page);
+        QByteArray next(width*height,old.floor==0?char(1):char(0));
+        for(int y=0;y<qMin(height,old.height());y++)
+            memcpy(next.data()+y*width,area.constData()+y*old.side,qMin(width,old.side));
+        result["FLOORS3D.OVR"]=setFloorCoverage(p,m.id,old.floor,width,height,next);
+    }
+    return result;
 }
 QMap<QString, QByteArray> addLocation(const Project &p, const QString &world, const QString &name,
                                       QPoint entrance, int width, int height, int fill,
