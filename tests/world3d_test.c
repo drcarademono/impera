@@ -51,6 +51,14 @@ static void assertCoolSky(SDL_Surface *image) {
                c==palette[7] || c==palette[15]); /* Only blue/black sky and neutral stars. */
     }
 }
+static void assertSkyGradient(SDL_Surface *image) {
+    unsigned top=0,horizon=0;
+    for(int y=16;y<48;y++) for(int x=32;x<352;x++) {
+        top+=at(image,x,y)&255;
+        horizon+=at(image,x,y+120)&255;
+    }
+    assert(horizon>top+50u*32*320); /* Dusk darkens aloft first; dawn brightens at the horizon. */
+}
 static void testSkies(SDL_Surface *image) {
     memset(D_6608_map.town, 0x44, 32 * 32);
     memset(D_5c5a, 0, sizeof(D_5c5a));
@@ -99,6 +107,7 @@ static void testSkies(SDL_Surface *image) {
     D_5881 = 30;
     WORLD3D_Render(image, palette);
     assertCoolSky(image);
+    assertSkyGradient(image);
     uint64_t dawn = skyHash(image);
     assert(dawn != night && dawn != day);
     assert(SDL_SaveBMP(image, "world3d-dawn.bmp"));
@@ -110,6 +119,7 @@ static void testSkies(SDL_Surface *image) {
     D_5881 = 30;
     WORLD3D_Render(image, palette);
     assertCoolSky(image);
+    assertSkyGradient(image);
     assert(skyHash(image) == dawn);
     assert(SDL_SaveBMP(image, "world3d-dusk.bmp"));
     D_587f = 23;

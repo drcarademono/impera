@@ -1302,10 +1302,12 @@ typedef struct {
     int minute;
     byte zenith, middle, horizon;
 } SkyKey;
-/* Dawn and dusk stay within black, dark blue and daytime blue. */
-static const SkyKey skyKeys[] = {{0, 0, 0, 0}, {300, 0, 0, 0}, {330, 1, 1, 1},
-                                 {360, 9, 9, 9}, {1140, 9, 9, 9}, {1170, 1, 1, 1},
-                                 {1200, 0, 0, 0}, {1440, 0, 0, 0}};
+/* The zenith darkens before the horizon; dawn reverses that progression.
+ * All three heights stay within black, dark blue and daytime blue. */
+static const SkyKey skyKeys[] = {{0, 0, 0, 0}, {300, 0, 0, 0}, {315, 0, 0, 1},
+                                 {330, 0, 1, 9}, {345, 1, 9, 9}, {360, 9, 9, 9},
+                                 {1140, 9, 9, 9}, {1155, 1, 9, 9}, {1170, 0, 1, 9},
+                                 {1185, 0, 0, 1}, {1200, 0, 0, 0}, {1440, 0, 0, 0}};
 static const byte bayer[8][8] = {{0, 48, 12, 60, 3, 51, 15, 63}, {32, 16, 44, 28, 35, 19, 47, 31},
                                  {8, 56, 4, 52, 11, 59, 7, 55},  {40, 24, 36, 20, 43, 27, 39, 23},
                                  {2, 50, 14, 62, 1, 49, 13, 61}, {34, 18, 46, 30, 33, 17, 45, 29},
