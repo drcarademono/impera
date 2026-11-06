@@ -10,6 +10,8 @@
 #include "text/text_window.h"
 #undef NDEBUG
 #include <assert.h>
+#include "audio/soundfont.h"
+#include "soundfont_fixture.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -463,7 +465,21 @@ int main(int argc, char** argv)
     ENGINE_Set(ENGINE_MOUSE,0);
     ENGINE_Set(ENGINE_DITHERED_DARKNESS,1);
     assert(ENGINE_Get(ENGINE_CRT)==0);ENGINE_Set(ENGINE_CRT,1);
+    soundfontFixture("settings.sf2");assert(SF_Load("settings.sf2"));
+    SF_SetPreset(0,1);SF_SetPreset(1,0);
+    GRAP_SDL_SetPixelUI(true);
+    clickUI(110,28);clickUI(180,140);clickUI(200,67); /* Harpsichord preset 0. */
+    clickUI(180,152);clickUI(200,78); /* Lute preset 1. */
+    clickUI(40,180);ENGINE_ShowOptions(false);
+    assert(SF_Preset(0)==0 && SF_Preset(1)==1);
+    ENGINE_Set(ENGINE_HARPSICHORD,1);ENGINE_Set(ENGINE_LUTE,0);ENGINE_Set(ENGINE_SOUNDFONT,0);
+    ENGINE_Set(ENGINE_HARPSICHORD,1e30f);assert(SF_Preset(0)==1);
     assert(ENGINE_Save());ENGINE_Set(ENGINE_SOUND_SPEED,1);ENGINE_Set(ENGINE_CRT,0);ENGINE_Set(ENGINE_DITHERED_DARKNESS,0);ENGINE_Set(ENGINE_MOVEMENT_SPEED,1);ENGINE_Load();
+    assert(!strcmp(SF_Path(),"settings.sf2") && !SF_Enabled());
+    assert(SF_Preset(0)==1 && SF_Preset(1)==0);
+    SF_Load("");ENGINE_Load();
+    assert(SF_Count()==2 && SF_Preset(0)==1 && SF_Preset(1)==0 && !SF_Enabled());
+    SF_Load("");remove("settings.sf2");
     assert(ENGINE_Get(ENGINE_ENHANCED_LOOK)==1);
     assert(ENGINE_Get(ENGINE_DITHERED_DARKNESS)==1);
     assert(ENGINE_Get(ENGINE_CRT)==1);ENGINE_Set(ENGINE_CRT,0);

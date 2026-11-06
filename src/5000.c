@@ -550,6 +550,7 @@ void ULTIMA_56ac_DrawMap(void)
 // Animate / Update
 void ULTIMA_5910_UpdateFrame(void)
 {
+    if(!D_58a4)AUDIO_UpdateAmbience(0);
     int local_2;
     int local_4;
 

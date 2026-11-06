@@ -1873,6 +1873,7 @@ static void INTRO_20ae_ShowWD(byte* ptr)
 /* Immediate Ctrl+E is limited to title, menu, and introductory screens. */
 void INTRO_0986_Main(void)
 {
+    AUDIO_StopSfx();
 #if defined(TARGET_SDL)
     int previous = EVT_SetImmediateExit(1);
 #endif

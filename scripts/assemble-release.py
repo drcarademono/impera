@@ -13,7 +13,7 @@ PLATFORMS = {'linux-x86_64': '.AppImage', 'macos-x86_64': '.tar.gz',
              'macos-arm64': '.tar.gz'}
 WINDOWS_FILES = {'Impera.exe', 'Run Impera.cmd', 'README.md',
                  'Licenses/SDL.txt', 'Licenses/SDL_mixer.txt',
-                 'Licenses/dr_libs.txt', 'Licenses/stb_vorbis.txt'}
+                 'Licenses/dr_libs.txt', 'Licenses/stb_vorbis.txt', 'Licenses/TinySoundFont.txt'}
 
 
 def assemble(artifacts, version, output, with_workshop=False):
@@ -71,7 +71,7 @@ def assemble_workshop(artifacts, version, output):
                 'plugins/platforms/qoffscreen.dll',
                 'bin/qt.conf', 'README.md', 'Run Workshop.cmd', 'Licenses/Qt-runtime.txt'}
     def allowed(file):
-        return (file in required or file in {'Licenses/SDL3.txt','Licenses/SDL3_mixer.txt','Licenses/stb_vorbis.txt'} or file.startswith('Licenses/Qt/') or
+        return (file in required or file in {'Licenses/SDL3.txt','Licenses/SDL3_mixer.txt','Licenses/stb_vorbis.txt', 'Licenses/TinySoundFont.txt'} or file.startswith('Licenses/Qt/') or
                 file.startswith(('bin/', 'plugins/')) and file.endswith('.dll'))
     if not required <= files or any(not allowed(f) for f in files) or any(p.is_symlink() for p in source.rglob('*')):
         raise ValueError('Unexpected or incomplete Windows Workshop package contents')

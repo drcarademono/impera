@@ -108,7 +108,14 @@ void AUDIO_PlaySfx(int id)
     if (!s_sfxOps || !s_soundEnabled)
         return;
 
+    bool accent=id==1 || (id>=20 && id<=38) || id==92 || id==93 || (id>=105 && id<=107);
     id=AUDIO_MOD_Assignment(4,id,0,id);
+#if defined(TARGET_SDL)
+    extern int AUDIO_SDL_PlayAccentSfx(int);
+    if(id && accent && AUDIO_SDL_PlayAccentSfx(id))return;
+#else
+    (void)accent;
+#endif
     if(id) s_sfxOps->PlaySfx(id);
 }
 
@@ -246,5 +253,17 @@ int AUDIO_PlaySpeakerFootstep(void) {
     return AUDIO_SDL_PlaySpeakerFootstep();
 #else
     return 0;
+#endif
+}
+
+int AUDIO_UpdateAmbience(int id) {
+#if defined(TARGET_SDL)
+    extern int AUDIO_SDL_UpdateAmbience(int);
+    unsigned mapped=id?AUDIO_MOD_Assignment(4,id,0,id):0;
+    if(!s_soundEnabled || !D_a9ce)mapped=0;
+    int handled=AUDIO_SDL_UpdateAmbience((int)mapped);
+    return !mapped || handled;
+#else
+    (void)id;return 0;
 #endif
 }

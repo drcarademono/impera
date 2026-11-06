@@ -72,6 +72,7 @@ exec "$app_dir/Impera" "$@"
     shutil.copy2(REPO / 'README.md', stage / 'README.md')
     licenses = stage / 'Licenses'
     licenses.mkdir()
+    shutil.copy2(REPO / 'packaging/TinySoundFont-LICENSE.txt', licenses / 'TinySoundFont.txt')
     dependencies = build / '_deps'
     for src, label in [('sdl3-src/LICENSE.txt', 'SDL.txt'),
                        ('sdl3_mixer-src/LICENSE.txt', 'SDL_mixer.txt'),

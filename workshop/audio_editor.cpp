@@ -473,6 +473,10 @@ QWidget *audioEditor(Project &project, int kind,
     pl->addWidget(title);
     auto source = new QLabel;
     source->setWordWrap(true);
+    source->setObjectName("audioSource");
+    source->setToolTip("Engine priority: playable mod recording, Sound/ WAV, legacy SFX/ WAV, "
+                       "optional SoundFont (lute/harpsichord), PC speaker. "
+                       "SoundFont is a player Engine Options setting; this preview uses project audio.");
     pl->addWidget(source);
     auto name = new QLineEdit;
     name->setObjectName("audioName");

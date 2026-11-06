@@ -31,7 +31,9 @@ set(SOURCES
     src/common/data_setup.c
     src/common/save_slots.c
     src/common/engine_settings.c
+    src/audio/ambient_loop.c
     src/audio/pcspeaker.c
+    src/audio/soundfont.c
 	src/town.c
 	src/mainout.c
 	src/dungeon.c
@@ -150,6 +152,11 @@ if(U5D_BUILD_TESTS)
     add_executable(u5d_pcspeaker_test tests/pcspeaker_test.c src/audio/pcspeaker.c)
     list(APPEND U5D_TARGETS u5d_pcspeaker_test)
     add_test(NAME pcspeaker_algorithms COMMAND u5d_pcspeaker_test)
+    add_executable(impera_soundfont_test tests/soundfont_test.c src/audio/soundfont.c src/audio/pcspeaker.c)
+    list(APPEND U5D_TARGETS impera_soundfont_test)
+    add_test(NAME soundfont COMMAND impera_soundfont_test)
+    file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/soundfont-runtime")
+    set_tests_properties(soundfont PROPERTIES WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/soundfont-runtime")
     list(REMOVE_ITEM TEST_SOURCES src/ultima.c)
     add_executable(impera_tileset_test tests/tileset_test.c ${TEST_SOURCES})
     list(APPEND U5D_TARGETS impera_tileset_test)
@@ -420,7 +427,7 @@ if(U5D_BUILD_TESTS)
             ENVIRONMENT "SDL_AUDIO_DRIVER=dummy" TIMEOUT 15)
         add_executable(u5d_audio_test tests/audio_test.c ${TEST_SOURCES})
         list(APPEND U5D_TARGETS u5d_audio_test)
-        target_link_options(u5d_audio_test PRIVATE "-Wl,--wrap=SDL_PutAudioStreamData" "-Wl,--wrap=MIX_SetTrackAudio" "-Wl,--wrap=SDL_GetBasePath" "-Wl,--wrap=TIME_SleepMs" "-Wl,--wrap=MIX_SetTrackFrequencyRatio")
+        target_link_options(u5d_audio_test PRIVATE "-Wl,--wrap=SDL_PutAudioStreamData" "-Wl,--wrap=MIX_SetTrackAudio" "-Wl,--wrap=SDL_GetBasePath" "-Wl,--wrap=TIME_SleepMs" "-Wl,--wrap=MIX_SetTrackFrequencyRatio" "-Wl,--wrap=MIX_PlayTrack")
         file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/audio-runtime")
         add_test(NAME audio COMMAND u5d_audio_test)
         set_tests_properties(audio PROPERTIES WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/audio-runtime"
