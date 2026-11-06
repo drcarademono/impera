@@ -94,6 +94,7 @@ def package(build, platform, version, output):
     shutil.copy2(ROOT / 'workshop/README.md', stage / 'README.md')
     licenses = stage / 'Licenses'
     licenses.mkdir(exist_ok=True)
+    shutil.copy2(ROOT / 'packaging/TinySoundFont-LICENSE.txt', licenses / 'TinySoundFont.txt')
     # Workshop previews use the same statically linked SDL codecs as the engine.
     dependencies = build.parent / '_deps'
     for source_name, label in (('sdl3-src/LICENSE.txt', 'SDL3.txt'),

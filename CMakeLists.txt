@@ -33,6 +33,7 @@ set(SOURCES
     src/common/engine_settings.c
     src/audio/ambient_loop.c
     src/audio/pcspeaker.c
+    src/audio/soundfont.c
 	src/town.c
 	src/mainout.c
 	src/dungeon.c
@@ -151,6 +152,11 @@ if(U5D_BUILD_TESTS)
     add_executable(u5d_pcspeaker_test tests/pcspeaker_test.c src/audio/pcspeaker.c)
     list(APPEND U5D_TARGETS u5d_pcspeaker_test)
     add_test(NAME pcspeaker_algorithms COMMAND u5d_pcspeaker_test)
+    add_executable(impera_soundfont_test tests/soundfont_test.c src/audio/soundfont.c src/audio/pcspeaker.c)
+    list(APPEND U5D_TARGETS impera_soundfont_test)
+    add_test(NAME soundfont COMMAND impera_soundfont_test)
+    file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/soundfont-runtime")
+    set_tests_properties(soundfont PROPERTIES WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/soundfont-runtime")
     list(REMOVE_ITEM TEST_SOURCES src/ultima.c)
     add_executable(impera_tileset_test tests/tileset_test.c ${TEST_SOURCES})
     list(APPEND U5D_TARGETS impera_tileset_test)

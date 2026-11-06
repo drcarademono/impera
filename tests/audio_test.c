@@ -11,6 +11,8 @@
 #include "audio/aud_sfx.h"
 #include "audio/pcspeaker.h"
 #include "audio/ambient_loop.h"
+#include "audio/soundfont.h"
+#include "soundfont_fixture.h"
 #include "vars.h"
 #include "key/key.h"
 #include "4000.h"
@@ -29,7 +31,7 @@ bool __wrap_MIX_PlayTrack(MIX_Track *track,SDL_PropertiesID options) {
 }
 bool __real_MIX_SetTrackFrequencyRatio(MIX_Track*,float);
 bool __wrap_MIX_SetTrackFrequencyRatio(MIX_Track* track,float ratio) {
-    assert(ratio==AUDIO_SoundSpeed());
+    assert(ratio==AUDIO_SoundSpeed() || ratio==1.0f);
     if(speedTracks<2)effectTracks[speedTracks]=track;
     speedTracks++;
     return __real_MIX_SetTrackFrequencyRatio(track,ratio);
@@ -211,6 +213,7 @@ int main(void)
     }
     const char *accents[]={"chime","lute0","drip0","drip1","drip2"};
     for(int i=0;i<5;i++){char path[80];SDL_snprintf(path,sizeof(path),"Sound/%s.wav",accents[i]);waveFrames(path,48000);}
+    soundfontFixture("test.sf2");assert(SF_Load("test.sf2"));
     AUDIO_Initialize();
     AUDIO_PlaySfx(1);MIX_Track *clock=lastAssigned;
     AUDIO_PlaySfx(71);assert(lastAssigned!=clock && MIX_TrackPlaying(clock));
@@ -220,6 +223,10 @@ int main(void)
     AUDIO_SetSoundVolume(0.4f);AUDIO_SetSoundSpeed(0.75f);
     assert(fabsf(MIX_GetTrackGain(note)-0.08f)<0.0001f && MIX_GetTrackFrequencyRatio(note)==0.75f);
     int notePlays=plays;AUDIO_PlaySfx(30);assert(plays==notePlays+1 && lastAssigned!=note); /* Retrigger actual notes. */
+    /* Loose WAV lute0 remains a recording despite an active SoundFont. */
+    AUDIO_PlaySfx(31);assert(MIX_GetTrackFrequencyRatio(lastAssigned)==1.0f);
+    SF_SetEnabled(false);assert(!AUDIO_HasSfx(31) && AUDIO_HasSfx(30));
+    SF_SetEnabled(true);assert(AUDIO_HasSfx(31));
     AUDIO_SetSoundVolume(1);AUDIO_SetSoundSpeed(1);
     AUDIO_DispatchSweepTone(3200,3500,1,12);MIX_Audio *drip=lastAudio;
     AUDIO_PlaySfx(106);assert(lastAudio==drip);
@@ -263,6 +270,7 @@ int main(void)
     assert(AUDIO_CrossfadeLoop(seam,200,2,1000)==150);
     assert(fabsf(seam[298]-seam[0])<0.006f && fabsf(seam[299]-seam[1])<0.006f);
     for(int i=0;i<300;i++)assert(fabsf(seam[i])<=1);
+    SF_Load("");remove("test.sf2");
     SDL_Quit();
     puts("External music, WAV overrides, and speaker fallback passed");
     return 0;

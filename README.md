@@ -472,7 +472,15 @@ external and is not bundled into the executable. Legacy `BGM/01.ogg` through
 
 Optional WAV sound overrides belong in `Sound`, using the filenames listed in
 `src/audio/sfx_map.h` (for example `step0.wav`, `step1.wav`, and `fountain.wav`).
-Each missing or unreadable effect falls back to the original PC-speaker tone,
+Playable mod recordings take priority over `Sound/` WAVs, then legacy `SFX/` WAVs.
+Engine Options → Sound also accepts an optional player-owned SF2 SoundFont bank,
+with separate Harpsichord and Lute preset selectors. Select a preset with the mouse
+wheel or arrow keys; click or Enter accepts it. Use SoundFont toggles this fallback
+on or off. Banks are not bundled with Impera or included in mods. SoundFont notes
+keep their pitch when Sound Effect Speed changes; only their duration changes.
+Workshop shows the project recording source and explains the runtime priority.
+
+Each remaining missing or unreadable effect falls back to the original PC-speaker tone,
 noise, pulse, or sweep algorithm. Frequencies are Hz and become integer PIT
 divisors via `1193182 / frequency`. Noise uses the original 16-bit PRNG;
 pulses gate the divisor-60 carrier using wrapping 16-bit accumulators and

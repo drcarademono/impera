@@ -8,6 +8,7 @@
 #include "aud_ops.h"
 #include "sfx_map.h"
 #include "pcspeaker.h"
+#include "soundfont.h"
 #include "ambient_loop.h"
 #include <limits.h>
 #include <math.h>
@@ -52,6 +53,9 @@ static MIX_Audio* s_bgm[4096];
 static MIX_Audio* s_sfx[4096];
 
 static unsigned s_audioRevision=~0u;
+static unsigned s_fontRevision;
+static float s_fontSpeed;
+static bool s_fontNotes[4096],s_fontAccent[3];
 static struct {unsigned gain,start,end,loop;int present;} s_bgmSettings[4096];
 static int s_currentBgmId;
 static int s_queuedBgmId;
@@ -120,7 +124,7 @@ void AUDIO_SDL_SetSoundSpeed(float speed) {
     if(s_synthTrack)MIX_SetTrackFrequencyRatio(s_synthTrack,speed);
     if(s_sfxTail)MIX_SetTrackFrequencyRatio(s_sfxTail,speed);
     for(int i=0;i<2;i++)if(s_ambient[i])MIX_SetTrackFrequencyRatio(s_ambient[i],speed);
-    for(int i=0;i<3;i++)if(s_accents[i])MIX_SetTrackFrequencyRatio(s_accents[i],speed);
+    for(int i=0;i<3;i++)if(s_accents[i])MIX_SetTrackFrequencyRatio(s_accents[i],s_fontAccent[i]?1.0f:speed);
 }
 
 static void AUDIO_SDL_Init(void)
@@ -265,6 +269,8 @@ void AUDIO_SDL_ReloadMusic(void)
 
 static void AUDIO_SDL_LoadSfxTable(void)
 {
+    memset(s_fontNotes,0,sizeof(s_fontNotes));
+    s_fontRevision=SF_Revision();s_fontSpeed=AUDIO_SoundSpeed();
     for(unsigned i=1;i<4096;i++) s_sfx[i]=LoadModAudio(1,i);
     for (int i = 0; i < SFX_RULE_COUNT; i++)
     {
@@ -287,6 +293,22 @@ static void AUDIO_SDL_LoadSfxTable(void)
 bool AUDIO_SDL_HasSfx(int id)
 {
     if(s_audioRevision!=MOD_Revision()) AUDIO_SDL_ReloadMusic();
+    if(s_fontRevision!=SF_Revision() || s_fontSpeed!=AUDIO_SoundSpeed()) {
+        for(int slot=0;slot<3;slot++) if(s_fontAccent[slot]) {
+            MIX_StopTrack(s_accents[slot],0);MIX_SetTrackAudio(s_accents[slot],NULL);
+            s_fontAccent[slot]=false;
+        }
+        for(int note=20;note<=38;note++) if(s_fontNotes[note]) {
+            MIX_DestroyAudio(s_sfx[note]);s_sfx[note]=NULL;s_fontNotes[note]=false;
+        }
+        s_fontRevision=SF_Revision();s_fontSpeed=AUDIO_SoundSpeed();
+    }
+    if(s_mixer && id>=20 && id<=38 && !s_sfx[id] && SF_Count()) {
+        size_t frames=0;float *pcm=SF_Render(id,AUDIO_SoundSpeed(),&frames);
+        SDL_AudioSpec spec={SDL_AUDIO_F32,2,48000};
+        if(pcm) s_sfx[id]=MIX_LoadRawAudio(s_mixer,pcm,frames*2*sizeof(float),&spec);
+        SDL_free(pcm);s_fontNotes[id]=s_sfx[id]!=NULL;
+    }
     return id>=0 && id<4096 && s_sfx[id]!=NULL;
 }
 
@@ -334,6 +356,8 @@ int AUDIO_SDL_PlayAccentSfx(int id) {
     if(MIX_TrackPlaying(s_accents[oldest]))
         MIX_StopTrack(s_accents[oldest],MIX_MSToFrames(s_mixerSpec.freq,2));
     const ModAudioClip *clip=AUDIO_MOD_Clip(1,id);
+    s_fontAccent[slot]=s_fontNotes[id];
+    MIX_SetTrackFrequencyRatio(s_accents[slot],s_fontNotes[id]?1.0f:AUDIO_SoundSpeed());
     s_accentGain[slot]=clip?clip->gain/100.0f:1;
     MIX_SetTrackGain(s_accents[slot],0.2f*AUDIO_SoundVolume()*s_accentGain[slot]);
     bool ok=MIX_SetTrackAudio(s_accents[slot],recording(id,false)) && MIX_PlayTrack(s_accents[slot],0);

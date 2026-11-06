@@ -14,6 +14,7 @@
 #include "graphics/widescreen.h"
 #include "key/mouse.h"
 #include "audio/audio.h"
+#include "audio/soundfont.h"
 #include "vars.h"
 #include "5000.h"
 #include "macros.h"
@@ -24,19 +25,19 @@
 #include <math.h>
 
 static const char* keys[]={"video_mode","tileset","crt_filter","transparent","dithered_darkness",
-    "music","sound","sound_speed","enhanced_look","mouse","smooth","diagonal","movement_speed","animation_speed","music_volume","sound_volume","footsteps"};
+    "music","sound","sound_speed","enhanced_look","mouse","smooth","diagonal","movement_speed","animation_speed","music_volume","sound_volume","footsteps","soundfont_enabled","harpsichord_preset","lute_preset","soundfont_file"};
 static const char* labels[]={"Video Mode","Tileset","CRT Filter","Transparent Sprites","Dithered Darkness",
-    "Music","Sound Effects","Sound Effect Speed","Enhanced Look","Mouse Control","Smooth Movement","Diagonal Movement","Movement Speed","Animation Speed","Music Volume","Sound Volume","Footstep Sounds"};
+    "Music","Sound Effects","Sound Effect Speed","Enhanced Look","Mouse Control","Smooth Movement","Diagonal Movement","Movement Speed","Animation Speed","Music Volume","Sound Volume","Footstep Sounds","Use SoundFont","Harpsichord","Lute","SoundFont Bank"};
 static bool isSpeed(int row) { return row==ENGINE_SOUND_SPEED || row==ENGINE_MOVEMENT_SPEED || row==ENGINE_ANIMATION_SPEED; }
 static const float ticks[]={0.5f,0.75f,1.0f};
 static bool isVolume(int row) { return row==ENGINE_MUSIC_VOLUME || row==ENGINE_SOUND_VOLUME; }
 static bool isSlider(int row) { return isSpeed(row) || isVolume(row); }
 enum { TAB_GRAPHICS, TAB_SOUND, TAB_GAMEPLAY, TAB_MODS, TAB_COUNT };
 static const int graphicsRows[]={ENGINE_FULLSCREEN,ENGINE_TILESET,ENGINE_CRT,ENGINE_TRANSPARENT,ENGINE_DITHERED_DARKNESS,ENGINE_ANIMATION_SPEED};
-static const int soundRows[]={ENGINE_MUSIC,ENGINE_SOUND,ENGINE_FOOTSTEPS,ENGINE_MUSIC_VOLUME,ENGINE_SOUND_VOLUME,ENGINE_SOUND_SPEED};
+static const int soundRows[]={ENGINE_MUSIC,ENGINE_SOUND,ENGINE_FOOTSTEPS,ENGINE_MUSIC_VOLUME,ENGINE_SOUND_VOLUME,ENGINE_SOUND_SPEED,ENGINE_SOUNDFONT_FILE,ENGINE_SOUNDFONT,ENGINE_HARPSICHORD,ENGINE_LUTE};
 static const int gameplayRows[]={ENGINE_ENHANCED_LOOK,ENGINE_MOUSE,ENGINE_SMOOTH,ENGINE_DIAGONAL,ENGINE_MOVEMENT_SPEED};
 static const int *tabRows[]={graphicsRows,soundRows,gameplayRows};
-static const int tabCounts[]={6,6,5};
+static const int tabCounts[]={6,10,5};
 static const int tabX[]={16,96,152,240},tabWidth[]={72,48,80,48};
 static const char *tabNames[]={"Graphics","Sound","Gameplay","Mods"};
 static int s_optionsTab;
@@ -63,6 +64,9 @@ static bool s_enhancedLook;
 float ENGINE_Get(int row)
 {
     switch(row) {
+    case ENGINE_SOUNDFONT:return SF_Enabled();
+    case ENGINE_HARPSICHORD:return SF_Preset(0);
+    case ENGINE_LUTE:return SF_Preset(1);
     case ENGINE_FULLSCREEN:return GRAP_SDL_VideoMode();
     case ENGINE_TILESET:return TILESET_Selected();
     case ENGINE_ENHANCED_LOOK:return s_enhancedLook;
@@ -86,6 +90,12 @@ float ENGINE_Get(int row)
 void ENGINE_Set(int row,float value)
 {
     if(!isfinite(value) || row<0 || row>=ENGINE_SETTING_COUNT) return;
+    if(row==ENGINE_HARPSICHORD || row==ENGINE_LUTE) {
+        if(value>=0 && value<SF_Count() && value==(int)value) SF_SetPreset(row==ENGINE_LUTE,(int)value);
+        return;
+    }
+    if(row==ENGINE_SOUNDFONT) { if(value==0 || value==1)SF_SetEnabled(value!=0);return; }
+    if(row==ENGINE_SOUNDFONT_FILE)return;
     if(row==ENGINE_FULLSCREEN && value!=0 && value!=1 && value!=2) return;
     if(row==ENGINE_TILESET && value==TILESET_ZHELKAS) value=TILESET_DOS;
     if(row==ENGINE_TILESET && (value<0 || value>=TILESET_COUNT || value!=(int)value)) return;
@@ -120,6 +130,11 @@ void ENGINE_Load(void)
     char line[FILE_PATH_SIZE+64],key[64],extra;
     float value;
     while(fgets(line,sizeof(line),f)) {
+        if(!strncmp(line,"soundfont ",10)) {
+            char *path=line+10;path[strcspn(path,"\r\n")]=0;
+            if(!SF_Load(path))debug("Cannot load SoundFont %s",path);
+            continue;
+        }
         if(!strncmp(line,"custom_tileset ",15)) {
             char* path=line+15;path[strcspn(path,"\r\n")]=0;
             TILESET_SetCustomPath(path);continue;
@@ -137,6 +152,7 @@ bool ENGINE_Save(void)
     if(!f) { DEBUG_Error("Cannot write ENGINE.CFG.tmp");return false; }
     debug("Writing engine settings");
     bool ok=fprintf(f,"custom_tileset %s\n",TILESET_CustomPath())>=0;
+    if(fprintf(f,"soundfont %s\n",SF_Path())<0)ok=false;
     for(int i=0;i<ENGINE_SETTING_COUNT;i++) if(fprintf(f,"%s %.6g\n",keys[i],(double)ENGINE_Get(i))<0) ok=false;
     if(fclose(f)!=0) ok=false;
     char path[FILE_PATH_SIZE],temporary[FILE_PATH_SIZE];
@@ -175,7 +191,7 @@ static int rowY(int row)
 {
     if(row==ENGINE_SETTING_COUNT)return 180;
     if(s_optionsTab!=TAB_MODS)
-        for(int i=0;i<tabCounts[s_optionsTab];i++)if(tabRows[s_optionsTab][i]==row)return 44+i*14;
+        for(int i=0;i<tabCounts[s_optionsTab];i++)if(tabRows[s_optionsTab][i]==row)return 44+i*(s_optionsTab==TAB_SOUND?12:14);
     return -100;
 }
 static bool s_gameplay;
@@ -365,10 +381,13 @@ static void toggleMod(void) {
 
 static int s_videoChoice=-1;
 static int s_dropdownRow=ENGINE_FULLSCREEN;
-static int choiceTop(void) { return rowY(s_dropdownRow)+12; }
+static int s_choiceTop;
+static bool presetChoice(int row) { return row==ENGINE_HARPSICHORD || row==ENGINE_LUTE; }
+static int choiceTop(void) { return presetChoice(s_dropdownRow)?64:rowY(s_dropdownRow)+12; }
 static const int tilesetChoices[] = {TILESET_DOS, TILESET_AMIGA, TILESET_APPLE, TILESET_GRAY, TILESET_SHARP, TILESET_CUSTOM};
 #define TILESET_CHOICES ((int)(sizeof(tilesetChoices)/sizeof(tilesetChoices[0])))
-static int choices(void) { return s_dropdownRow==ENGINE_TILESET?TILESET_CHOICES:3; }
+static int choices(void) { return presetChoice(s_dropdownRow)?SF_Count():s_dropdownRow==ENGINE_TILESET?TILESET_CHOICES:3; }
+static int choiceRows(void) { return SDL_min(8,choices()); }
 static const char* videoLabel(int choice)
 {
     if(choice==0) return "Windowed";
@@ -391,12 +410,12 @@ static int videoChoice(void)
     return 0;
 }
 
-static const char* choiceLabel(int choice) { return s_dropdownRow==ENGINE_TILESET?TILESET_Label(tilesetChoices[choice]):videoLabel(choice); }
+static const char* choiceLabel(int choice) { return presetChoice(s_dropdownRow)?SF_Name(choice):s_dropdownRow==ENGINE_TILESET?TILESET_Label(tilesetChoices[choice]):videoLabel(choice); }
 static int choiceWidth(void)
 {
     int width=0;
     for(int i=0;i<choices();i++) width=SDL_max(width,(int)strlen(choiceLabel(i))*8);
-    return width+16;
+    return SDL_min(width+16,288);
 }
 static int choiceLeft(void) { return 304-choiceWidth(); }
 /* Center values over the checkbox/status column; long labels meet the
@@ -415,6 +434,7 @@ static void acceptChoice(void)
 {
     int row=s_dropdownRow,choice=s_dropdownRow==ENGINE_TILESET?tilesetChoices[s_videoChoice]:s_videoChoice;
     s_videoChoice=-1;
+    if(presetChoice(row)) {ENGINE_Set(row,(float)choice);return;}
     if(row==ENGINE_TILESET && choice==TILESET_CUSTOM) {
         const char* initial=*TILESET_CustomPath()?TILESET_CustomPath():SDL_GetUserFolder(SDL_FOLDER_HOME);
         FILEPICKER_Select("Custom Tileset","Choose a 2:1 PNG tileset",NULL,".png",initial,
@@ -422,8 +442,11 @@ static void acceptChoice(void)
     } else ENGINE_Set(row,row==ENGINE_TILESET?choice:videoModes[choice]);
 }
 static void openChoice(int row) {
+    if(presetChoice(row) && !SF_Count())return;
     s_dropdownRow=row;
-    s_videoChoice=videoChoice();
+    s_choiceTop=0;
+    s_videoChoice=presetChoice(row)?SF_Preset(row==ENGINE_LUTE):videoChoice();
+    if(presetChoice(row))s_choiceTop=SDL_max(0,s_videoChoice-7);
     if(row==ENGINE_TILESET)
         for(int i=0;i<TILESET_CHOICES;i++)
             if(tilesetChoices[i]==TILESET_Selected()) { s_videoChoice=i; break; }
@@ -452,6 +475,10 @@ void ENGINE_DrawSettings(int selected)
         if(row==ENGINE_FULLSCREEN || row==ENGINE_TILESET) {
             const char* label=row==ENGINE_TILESET?TILESET_Label(TILESET_Selected()):videoLabel(videoChoice());
             ENGINE_UIText(choiceTextX(label),y,label,foreground);
+        } else if(row>ENGINE_SOUNDFONT) {
+            const char *name=row==ENGINE_SOUNDFONT_FILE?(SF_Count()?"Change...":"Choose..."):SF_Name(SF_Preset(row==ENGINE_LUTE));
+            char text[18];SDL_snprintf(text,sizeof(text),"%.17s",name);
+            ENGINE_UIText(160,y,text,foreground);
         } else if(!isSlider(row)) {
             checkbox(232,y+1,value != 0);
             ENGINE_UIText(248,y,value?"On":"Off",highlighted?0:(value?10:7));
@@ -467,22 +494,43 @@ void ENGINE_DrawSettings(int selected)
     }
     if (optionStatus) ENGINE_UIText(24, 172, optionStatus, 7);
     if(s_videoChoice>=0) {
-        int left=choiceLeft(),top=choiceTop(),width=choiceWidth(),height=choices()*11+4;
+        int left=choiceLeft(),top=choiceTop(),width=choiceWidth(),height=choiceRows()*11+4;
         /* Black surround separates the popup from partially covered settings. */
         ENGINE_UIRect(left-2,top-2,width+4,height+4,0);
         ENGINE_UIRect(left,top,width,height,15);
         ENGINE_UIRect(left+1,top+1,width-2,height-2,0);
-        for(int i=0;i<choices();i++) {
-            int y=top+3+i*11;
+        if(s_videoChoice<s_choiceTop)s_choiceTop=s_videoChoice;
+        if(s_videoChoice>=s_choiceTop+choiceRows())s_choiceTop=s_videoChoice-choiceRows()+1;
+        for(int i=s_choiceTop;i<s_choiceTop+choiceRows();i++) {
+            int y=top+3+(i-s_choiceTop)*11;
             if(i==s_videoChoice) ENGINE_UIRect(left+2,y-1,width-4,10,15);
-            const char* label=choiceLabel(i);
+            char label[35];SDL_snprintf(label,sizeof(label),"%.34s",choiceLabel(i));
             ENGINE_UIText(left+8,y,label,i==s_videoChoice?0:15);
+        }
+        if(choices()>choiceRows()) {
+            char range[40];SDL_snprintf(range,sizeof(range),"%d-%d of %d",s_choiceTop+1,s_choiceTop+choiceRows(),choices());
+            ENGINE_UIText(left,top+height+3,range,7);
         }
     }
     GRAP_BUF_MarkDirty();GRAP_BUF_Present();
 }
+static bool acceptSoundFont(const char *path,void *user) {
+    (void)user;return SF_Load(path);
+}
 static void adjust(int row,int direction)
 {
+    if(row==ENGINE_SOUNDFONT_FILE) {
+        if(direction<0) {SF_Load("");optionStatus="PC Speaker instruments";return;}
+        FILEPICKER_Select("SoundFont","Choose an SF2 instrument bank",NULL,".sf2",
+                          *SF_Path()?SF_Path():SDL_GetUserFolder(SDL_FOLDER_HOME),
+                          "Return to Engine Options","Cannot load SoundFont",acceptSoundFont,NULL);
+        return;
+    }
+    if(row==ENGINE_HARPSICHORD || row==ENGINE_LUTE) {
+        int count=SF_Count();
+        if(count)SF_SetPreset(row==ENGINE_LUTE,(SF_Preset(row==ENGINE_LUTE)+direction+count)%count);
+        return;
+    }
     float value=ENGINE_Get(row);
     if(row==ENGINE_MUSIC && !value && !*SETUP_MusicDirectory() && !AUDIO_MOD_HasMusic()) {
         if(FOLDER_SelectMusic(SETUP_MusicDirectory(),SETUP_SetMusicDirectory)) {
@@ -626,13 +674,15 @@ void ENGINE_ShowOptions(bool gameplay)
                     case SDLK_RETURN:case SDLK_SPACE:
                         acceptChoice();changed=true;break;
                     }
+                } else if(event.type==SDL_EVENT_MOUSE_WHEEL) {
+                    s_videoChoice=SDL_clamp(s_videoChoice-(int)event.wheel.y,0,choices()-1);redraw=true;
                 } else if(event.type==SDL_EVENT_MOUSE_MOTION ||
                           (event.type==SDL_EVENT_MOUSE_BUTTON_DOWN && event.button.button==SDL_BUTTON_LEFT)) {
                     float x,y;
                     float ex=event.type==SDL_EVENT_MOUSE_MOTION?event.motion.x:event.button.x;
                     float ey=event.type==SDL_EVENT_MOUSE_MOTION?event.motion.y:event.button.y;
-                    if(GRAP_SDL_MouseUIPoint(ex,ey,&x,&y) && x>=choiceLeft()+2 && x<302 && y>=choiceTop()+2 && y<choiceTop()+2+choices()*11) {
-                        s_videoChoice=SDL_clamp((int)(y-choiceTop()-2)/11,0,choices()-1);
+                    if(GRAP_SDL_MouseUIPoint(ex,ey,&x,&y) && x>=choiceLeft()+2 && x<302 && y>=choiceTop()+2 && y<choiceTop()+2+choiceRows()*11) {
+                        s_videoChoice=s_choiceTop+SDL_clamp((int)(y-choiceTop()-2)/11,0,choiceRows()-1);
                         if(event.type==SDL_EVENT_MOUSE_BUTTON_DOWN) {
                             acceptChoice();changed=true;
                         }
@@ -651,7 +701,7 @@ void ENGINE_ShowOptions(bool gameplay)
                 case SDLK_LEFT:case SDLK_RIGHT:case SDLK_RETURN:case SDLK_SPACE:
                     if(event.key.repeat && !isSlider(selected)) break;
                     if(selected==ENGINE_SETTING_COUNT) { done=true;break; }
-                    if(selected==ENGINE_FULLSCREEN || selected==ENGINE_TILESET) openChoice(selected);
+                    if(selected==ENGINE_FULLSCREEN || selected==ENGINE_TILESET || presetChoice(selected)) openChoice(selected);
                     else { adjust(selected,event.key.key==SDLK_LEFT?-1:1);changed=true; }
                     break;
                 }
@@ -661,7 +711,7 @@ void ENGINE_ShowOptions(bool gameplay)
                 if(GRAP_SDL_MouseUIPoint(event.button.x,event.button.y,&x,&y) && x>=16 && x<304)
                     for(int row=0;row<=ENGINE_SETTING_COUNT;row++) if(visibleRow(row) && y>=rowY(row)-1 && y<rowY(row)+11) {
                         selected=row;
-                        if(row==ENGINE_FULLSCREEN || row==ENGINE_TILESET) openChoice(row);
+                        if(row==ENGINE_FULLSCREEN || row==ENGINE_TILESET || presetChoice(row)) openChoice(row);
                         else if(row==ENGINE_SETTING_COUNT) done=true;
                         else if(isSlider(row) && x>=176 && x<=256) {
                             ENGINE_Set(row,sliderValue(row,x));changed=true;
