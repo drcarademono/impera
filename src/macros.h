@@ -26,6 +26,8 @@
 #define U5_KEY_UP 3
 #define U5_KEY_DOWN 4
 
+/* Internal shortcut code: distinct from ASCII Backspace (Ctrl+H). */
+#define U5_KEY_CTRL_H 0x200
 #define U5_KEY_CTRL_B 0xfc
 #define U5_KEY_CTRL_E 5
 #define U5_KEY_CTRL_K 0xb

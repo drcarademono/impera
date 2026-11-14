@@ -15,6 +15,7 @@
 #include <stdlib.h>
 #include <SDL3/SDL.h>
 #include "common/engine_settings.h"
+#include "common/help.h"
 #include "common/data_setup.h"
 #include "graphics/grap_buf.h"
 #include "graphics/tileset.h"
@@ -367,6 +368,89 @@ static Uint32 closeGameplayOptions(void* userdata, SDL_TimerID timer, Uint32 int
     key(SDLK_ESCAPE);
     return 0;
 }
+/* Drive the help UI at presentation boundaries so navigation and restoration
+ * are checked on the UI thread, including the real Ctrl+H input dispatch. */
+static bool testingHelp,closeHelpWithEscape;
+static int helpStep;
+static byte firstHelp[320*200],secondHelp[320*200];
+static u32 helpFrozen;
+bool __real_SDL_RenderPresent(SDL_Renderer* renderer);
+bool __wrap_SDL_RenderPresent(SDL_Renderer* renderer)
+{
+    if(testingHelp) {
+        if(helpStep<8) {
+            assert(GRAP_SDL_PixelUI() && MOUSE_PointerMode());
+            if(!helpStep) helpFrozen=TIME_GetTicksMs();
+            else assert(TIME_GetTicksMs()==helpFrozen);
+        }
+        switch(helpStep++) {
+        case 0: {
+            memcpy(firstHelp,g_linearEgaBuffer0,sizeof(firstHelp));
+            SDL_Surface* preview=SDL_RenderReadPixels(renderer,NULL);assert(preview);
+            assert(SDL_SaveBMP(preview,"keyboard-help.bmp"));SDL_DestroySurface(preview);
+            SDL_Event held={0};held.type=SDL_EVENT_KEY_DOWN;
+            held.key.key=SDLK_H;held.key.mod=SDL_KMOD_CTRL;held.key.repeat=true;
+            assert(SDL_PushEvent(&held));
+            key(SDLK_BACKSPACE);key(SDLK_RIGHT);break;
+        }
+        case 1:
+            memcpy(secondHelp,g_linearEgaBuffer0,sizeof(secondHelp));
+            assert(memcmp(firstHelp,secondHelp,sizeof(firstHelp)));
+            key(SDLK_PAGEDOWN);break;
+        case 2:
+            assert(memcmp(secondHelp,g_linearEgaBuffer0,sizeof(secondHelp)));
+            key(SDLK_END);break;
+        case 3:key(SDLK_HOME);break;
+        case 4: {
+            assert(!memcmp(firstHelp,g_linearEgaBuffer0,sizeof(firstHelp)));
+            SDL_Event wheel={0};wheel.type=SDL_EVENT_MOUSE_WHEEL;wheel.wheel.y=-1;
+            assert(SDL_PushEvent(&wheel));break;
+        }
+        case 5:
+            assert(!memcmp(secondHelp,g_linearEgaBuffer0,sizeof(secondHelp)));
+            clickUI(160,185);break;
+        case 6:key(SDLK_PAGEUP);break;
+        case 7: {
+            assert(!memcmp(secondHelp,g_linearEgaBuffer0,sizeof(secondHelp)));
+            SDL_Event close={0};close.type=SDL_EVENT_KEY_DOWN;
+            close.key.key=closeHelpWithEscape?SDLK_ESCAPE:SDLK_H;
+            close.key.mod=closeHelpWithEscape?0:SDL_KMOD_CTRL;
+            assert(SDL_PushEvent(&close));
+            key(SDLK_A); /* Must not reach the suspended game prompt. */
+            break;
+        }
+        case 8:break; /* Restored gameplay presentation. */
+        default:assert(false);
+        }
+    }
+    return __real_SDL_RenderPresent(renderer);
+}
+static void keyboardHelp(void)
+{
+    extern void KEY_SDL_ProcessKeyDown(SDL_KeyboardEvent);
+    for(int context=0;context<4;context++) {
+        KEY_SDL_SetGameplayInput(context==0);
+        EVT_SetImmediateExit(context==2);
+        D_5893_map_id=context==1?128:0;D_5881=19;D_588b=42;
+        bool pixelUI=context==3,pointer=context==3;
+        GRAP_SDL_SetPixelUI(pixelUI);MOUSE_SetPointerMode(pointer);
+        memset(g_linearEgaBuffer0,3,320*200);GRAP_BUF_Present();
+        helpStep=0;closeHelpWithEscape=context%2;testingHelp=true;
+        SDL_KeyboardEvent shortcut={0};shortcut.key=SDLK_H;shortcut.mod=SDL_KMOD_CTRL;
+        KEY_SDL_ProcessKeyDown(shortcut);
+        assert(KEY_PollKey()==0);testingHelp=false;
+        assert(helpStep==9);
+        assert(GRAP_SDL_PixelUI()==pixelUI && MOUSE_PointerMode()==pointer);
+        assert(D_5881==19 && D_588b==42);
+        for(int i=0;i<320*200;i++) assert(g_linearEgaBuffer0[i]==3);
+        assert(KEY_PollKey()==0);
+        shortcut.repeat=true;KEY_SDL_ProcessKeyDown(shortcut);assert(KEY_PollKey()==0);
+        shortcut=(SDL_KeyboardEvent){0};shortcut.key=SDLK_BACKSPACE;
+        KEY_SDL_ProcessKeyDown(shortcut);assert(KEY_PollKey()==U5_KEY_BACKSPACE);
+        shortcut.key=SDLK_H;KEY_SDL_ProcessKeyDown(shortcut);assert(KEY_PollKey()=='h');
+    }
+    puts("Keyboard help navigation, Ctrl+H, pause, Backspace and restoration passed");
+}
 int main(int argc, char** argv)
 {
     remove("ENGINE.CFG");
@@ -375,6 +459,9 @@ int main(int argc, char** argv)
     D_5893_map_id=0x40;D_58a4=0;
     byte font[1024];FILE* f=fopen("IBM.CH","rb");assert(f);
     assert(fread(font,1,sizeof(font),f)==sizeof(font));fclose(f);D_539c[0]=font;
+    if(argc==2 && !strcmp(argv[1],"keyboard_help")) {
+        keyboardHelp();GRAP_SDL_Cleanup();SDL_Quit();return 0;
+    }
     if(argc==2 && !strcmp(argv[1],"music_picker")) {
         const int modes[]={0,2,3,4,5};
         for(size_t i=0;i<sizeof(modes)/sizeof(modes[0]);i++) {

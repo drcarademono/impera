@@ -7,6 +7,7 @@
 #include "common/movement.h"
 #include "common/save_slots.h"
 #include "common/world_map.h"
+#include "common/help.h"
 #include "event/event.h"
 #include "graphics/grap_sdl.h"
 
@@ -115,6 +116,7 @@ static u16 KeyboardEventToUltimaKeycode(SDL_KeyboardEvent ev)
     {
         switch (ev.key)
         {
+        case SDLK_H: return U5_KEY_CTRL_H;
         case SDLK_B: return 2;
         case SDLK_E: return U5_KEY_CTRL_E;
         case SDLK_K: return U5_KEY_CTRL_K;
@@ -193,7 +195,7 @@ void KEY_SDL_ProcessKeyDown(SDL_KeyboardEvent ev)
     u16 key = KeyboardEventToUltimaKeycode(ev);
     int arrow=ArrowIndex(ev.key);
     if(arrow>=0) { s_arrows[arrow]=true;key=ArrowDirection(key); }
-    if (ev.key == SDLK_TAB && ev.repeat) return;
+    if ((ev.key == SDLK_TAB || key == U5_KEY_CTRL_H) && ev.repeat) return;
     if ((key == U5_KEY_CTRL_O || key == U5_KEY_CTRL_W || key == U5_KEY_CTRL_L) && ev.repeat) return;
     bool direction = IsDirection(key);
     if ((GRAP_SDL_CustomMovementSpeed() || GRAP_SDL_SmoothMovementEnabled()) && direction) {
@@ -228,6 +230,10 @@ int KEY_PollKey(void)
         D_538a = 1;
     }
 
+    if(key == U5_KEY_CTRL_H) {
+        HELP_Show();
+        return 0;
+    }
     if(key == '\t' && s_gameplayInput && !EVT_ImmediateExitEnabled()) {
         KEY_SDL_ClearInput();
         WORLD_MAP_Show();

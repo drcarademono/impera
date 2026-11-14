@@ -248,6 +248,7 @@
     <ClCompile Include="..\src\common\save_slots.c" />
     <ClCompile Include="..\src\common\engine_settings.c" />
     <ClCompile Include="..\src\common\world_map.c" />
+    <ClCompile Include="..\src\common\help.c" />
     <ClCompile Include="..\src\common\debug.c" />
     <ClCompile Include="..\src\mod\package.c" />
     <ClCompile Include="..\src\mod\runtime.c" />
