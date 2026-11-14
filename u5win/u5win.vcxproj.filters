@@ -249,6 +249,9 @@
     <ClCompile Include="..\src\common\engine_settings.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\src\common\world_map.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\src\common\util.c">
       <Filter>common</Filter>
     </ClCompile>

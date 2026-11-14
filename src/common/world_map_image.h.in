@@ -1,0 +1,3 @@
+/* Generated from textures/maps/U5brit.png by CMake. */
+static const unsigned char world_map_png[] = {@WORLD_MAP_BYTES@};
+#define WORLD_MAP_PNG_SIZE @WORLD_MAP_SIZE@

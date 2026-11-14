@@ -760,3 +760,19 @@ Export uses the asset audio, independent of editor preview volume. Music exports
 the source recording’s format. Audio definitions use `AUDIO.OVR` and mod package version
 30, with a 64 MiB audio-resource limit and a 128 MiB total package limit. Imported audio
 is limited to ten minutes per asset; music recordings remain compressed when possible.
+
+### World map
+
+Press **Tab** at a gameplay command prompt to open the Britannia map in the
+viewport. **Tab** or **Esc** closes it. Gameplay pauses while it is open.
+Use the **arrow keys**, **left-button dragging**, or the **mouse wheel** to pan;
+horizontal wheel scrolling is supported too.
+
+With a **Sextant**, the map opens zoomed in and centered on the party, marked
+by a flashing **+**. In a town or dungeon, it marks the surface entrance.
+Without a Sextant, the whole map opens with no position marker. The supplied
+map covers Britannia, so positions in the Underworld or locations without a
+known Britannia entrance use the unmarked whole-map view.
+
+The 256×256 artwork lives at `textures/maps/U5brit.png` and is embedded by
+CMake when building, including release binaries.

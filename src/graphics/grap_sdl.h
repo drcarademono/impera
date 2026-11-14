@@ -9,6 +9,11 @@ void GRAP_SDL_UIThumbnailPNG(int index, const void *png, size_t size, int x, int
 void GRAP_SDL_UIThumbnail(int index,const char* path,int x,int y,int w,int h);
 void GRAP_SDL_ClearUIThumbnails(void);
 
+/* The modal map covers only the game viewport; the sidebar stays visible. */
+bool GRAP_SDL_SetWorldMap(struct SDL_Surface* image);
+void GRAP_SDL_WorldMapView(float cx,float cy,float zoom,float px,float py,bool marker);
+bool GRAP_SDL_WorldMapPoint(float x,float y,float* mx,float* my);
+
 /* Set before BACKEND_Initialize creates the window. */
 enum { GRAP_VIDEO_WINDOWED, GRAP_VIDEO_FULLSCREEN, GRAP_VIDEO_FULLSCREEN_43 };
 void GRAP_SDL_SetVideoMode(int mode);

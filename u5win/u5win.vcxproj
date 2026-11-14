@@ -198,6 +198,11 @@
     <None Include="..\src\u5.rsp" />
     <None Include="vcpkg-configuration.json" />
     <None Include="vcpkg.json" />
+    <Content Include="..\textures\maps\U5brit.png">
+      <Link>textures\maps\U5brit.png</Link>
+      <TargetPath>textures\maps\U5brit.png</TargetPath>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\0000.c" />
@@ -247,6 +252,7 @@
     <ClCompile Include="..\src\common\data_setup.c" />
     <ClCompile Include="..\src\common\save_slots.c" />
     <ClCompile Include="..\src\common\engine_settings.c" />
+    <ClCompile Include="..\src\common\world_map.c" />
     <ClCompile Include="..\src\common\debug.c" />
     <ClCompile Include="..\src\mod\package.c" />
     <ClCompile Include="..\src\mod\runtime.c" />

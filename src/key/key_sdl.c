@@ -6,6 +6,7 @@
 #include "common/engine_settings.h"
 #include "common/movement.h"
 #include "common/save_slots.h"
+#include "common/world_map.h"
 #include "event/event.h"
 #include "graphics/grap_sdl.h"
 
@@ -192,6 +193,7 @@ void KEY_SDL_ProcessKeyDown(SDL_KeyboardEvent ev)
     u16 key = KeyboardEventToUltimaKeycode(ev);
     int arrow=ArrowIndex(ev.key);
     if(arrow>=0) { s_arrows[arrow]=true;key=ArrowDirection(key); }
+    if (ev.key == SDLK_TAB && ev.repeat) return;
     if ((key == U5_KEY_CTRL_O || key == U5_KEY_CTRL_W || key == U5_KEY_CTRL_L) && ev.repeat) return;
     bool direction = IsDirection(key);
     if ((GRAP_SDL_CustomMovementSpeed() || GRAP_SDL_SmoothMovementEnabled()) && direction) {
@@ -226,6 +228,11 @@ int KEY_PollKey(void)
         D_538a = 1;
     }
 
+    if(key == '\t' && s_gameplayInput && !EVT_ImmediateExitEnabled()) {
+        KEY_SDL_ClearInput();
+        WORLD_MAP_Show();
+        return 0;
+    }
     if(s_gameplayInput && !EVT_ImmediateExitEnabled() &&
        (key==U5_KEY_CTRL_W || key==U5_KEY_CTRL_L)) {
         bool loading=key==U5_KEY_CTRL_L;

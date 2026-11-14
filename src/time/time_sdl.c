@@ -4,6 +4,20 @@
 
 #include "event/event.h"
 
+static Uint64 s_pausedTicks, s_pauseStart;
+static bool s_paused;
+void TIME_PauseGameClock(bool paused)
+{
+    if(paused == s_paused) return;
+    if(paused) s_pauseStart = SDL_GetTicks();
+    else s_pausedTicks += SDL_GetTicks() - s_pauseStart;
+    s_paused = paused;
+}
+static Uint64 gameTicks(void)
+{
+    return (s_paused ? s_pauseStart : SDL_GetTicks()) - s_pausedTicks;
+}
+
 void TIME_Initialize(void)
 {}
 
@@ -12,7 +26,7 @@ void TIME_Cleanup(void)
 
 u32 TIME_GetTicksMs(void)
 {
-	return (u32)SDL_GetTicks();
+	return (u32)gameTicks();
 }
 
 void TIME_SleepMs(int ms)
@@ -30,5 +44,5 @@ void TIME_SleepMs(int ms)
 u32 TIME_CurrentFrame(void)
 {
 	// 62.5 hz
-	return SDL_GetTicks() / 16;
+	return gameTicks() / 16;
 }
