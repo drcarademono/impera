@@ -15,6 +15,7 @@ else()
 endif()
 
 set(SOURCES
+    src/common/world_map.c
     src/audio/mod_audio.c
     src/mod/party_game.c
     src/mod/contents.c
@@ -151,6 +152,17 @@ if(U5D_BUILD_TESTS)
     list(APPEND U5D_TARGETS u5d_pcspeaker_test)
     add_test(NAME pcspeaker_algorithms COMMAND u5d_pcspeaker_test)
     list(REMOVE_ITEM TEST_SOURCES src/ultima.c)
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        add_executable(impera_world_map_test tests/world_map_test.c ${TEST_SOURCES})
+        list(APPEND U5D_TARGETS impera_world_map_test)
+        target_compile_definitions(impera_world_map_test PRIVATE TEST_GAME_DIR="${CMAKE_SOURCE_DIR}/Ultima 5")
+        target_link_options(impera_world_map_test PRIVATE "-Wl,--wrap=SDL_GetTicks" "-Wl,--wrap=SDL_RenderPresent")
+        file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/world-map-runtime")
+        add_test(NAME world_map_overlay COMMAND impera_world_map_test)
+        set_tests_properties(world_map_overlay PROPERTIES TIMEOUT 15
+            WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/world-map-runtime"
+            ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software")
+    endif()
     add_executable(impera_tileset_test tests/tileset_test.c ${TEST_SOURCES})
     list(APPEND U5D_TARGETS impera_tileset_test)
     if(UNIX AND NOT APPLE)

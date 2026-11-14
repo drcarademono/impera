@@ -988,6 +988,80 @@ void GRAP_SDL_UIThumbnail(int i,const char* path,int x,int y,int w,int h)
     }
     s_uiThumbnailRects[i]=(SDL_FRect){x,y,w,h};
 }
+/* Map state is display-only. No game callbacks run while its modal loop owns input. */
+static SDL_Texture* s_worldMap;
+static float s_worldCX,s_worldCY,s_worldZoom,s_worldPX,s_worldPY;
+static bool s_worldMarker;
+static SDL_FRect WorldMapRect(void)
+{
+    int w=320,h=200;
+    SDL_GetRenderOutputSize(s_sdlRenderer,&w,&h);
+    if(s_expandedFrame) {
+        WideLayout l=VideoLayout(w,h);
+        return (SDL_FRect){(w-l.width*l.scale)/2+8*l.scale,
+            (h-l.height*l.scaleY)/2+8*l.scaleY,
+            (l.sidebarX-16)*l.scale,(l.height-16)*l.scaleY};
+    }
+    SDL_FRect native = (s_fullscreen || s_pixelUI) ? NativeRect(w,h) : (SDL_FRect){0,0,w,h};
+    return (SDL_FRect){native.x+8*native.w/320,native.y+8*native.h/200,
+                      176*native.w/320,176*native.h/200};
+}
+static SDL_FPoint WorldMapPixelSize(SDL_FRect rect)
+{
+    /* Use the same logical pixel size and DOS aspect ratio as the scene. */
+    if(s_expandedFrame) {
+        int w,h;
+        SDL_GetRenderOutputSize(s_sdlRenderer,&w,&h);
+        WideLayout l=VideoLayout(w,h);
+        return (SDL_FPoint){l.scale*s_worldZoom,l.scaleY*s_worldZoom};
+    }
+    return (SDL_FPoint){rect.w/176*s_worldZoom,rect.h/176*s_worldZoom};
+}
+bool GRAP_SDL_SetWorldMap(SDL_Surface* image)
+{
+    SDL_DestroyTexture(s_worldMap); s_worldMap=NULL;
+    if(!image) return true;
+    s_worldMap=SDL_CreateTextureFromSurface(s_sdlRenderer,image);
+    if(s_worldMap) SDL_SetTextureScaleMode(s_worldMap,SDL_SCALEMODE_NEAREST);
+    return s_worldMap!=NULL;
+}
+void GRAP_SDL_WorldMapView(float cx,float cy,float zoom,float px,float py,bool marker)
+{
+    s_worldCX=cx; s_worldCY=cy; s_worldZoom=zoom;
+    s_worldPX=px; s_worldPY=py; s_worldMarker=marker;
+}
+bool GRAP_SDL_WorldMapPoint(float x,float y,float* mx,float* my)
+{
+    SDL_RenderCoordinatesFromWindow(s_sdlRenderer,x,y,&x,&y);
+    SDL_FRect r=WorldMapRect(); SDL_FPoint scale=WorldMapPixelSize(r);
+    *mx=(x-r.x)/scale.x; *my=(y-r.y)/scale.y;
+    return x>=r.x && x<r.x+r.w && y>=r.y && y<r.y+r.h;
+}
+static void DrawWorldMap(void)
+{
+    if(!s_worldMap) return;
+    SDL_FRect r=WorldMapRect(); SDL_FPoint scale=WorldMapPixelSize(r);
+    SDL_Rect clip={(int)r.x,(int)r.y,(int)r.w,(int)r.h};
+    SDL_SetRenderClipRect(s_sdlRenderer,&clip);
+    SDL_SetRenderDrawColor(s_sdlRenderer,0,0,0,255);
+    SDL_RenderFillRect(s_sdlRenderer,&r);
+    SDL_FRect dst={r.x+r.w/2-s_worldCX*scale.x,r.y+r.h/2-s_worldCY*scale.y,s_worldMap->w*scale.x,s_worldMap->h*scale.y};
+    SDL_RenderTexture(s_sdlRenderer,s_worldMap,NULL,&dst);
+    if(s_worldMarker) {
+        float x=dst.x+s_worldPX*scale.x,y=dst.y+s_worldPY*scale.y;
+        SDL_FRect horizontal={x-4*scale.x,y-scale.y/2,8*scale.x,scale.y};
+        SDL_FRect vertical={x-scale.x/2,y-4*scale.y,scale.x,8*scale.y};
+        SDL_SetRenderDrawColor(s_sdlRenderer,0,0,0,255);
+        SDL_FRect outline={horizontal.x-scale.x,horizontal.y-scale.y,horizontal.w+2*scale.x,3*scale.y};
+        SDL_RenderFillRect(s_sdlRenderer,&outline);
+        outline=(SDL_FRect){vertical.x-scale.x,vertical.y-scale.y,3*scale.x,vertical.h+2*scale.y};
+        SDL_RenderFillRect(s_sdlRenderer,&outline);
+        SDL_SetRenderDrawColor(s_sdlRenderer,255,255,255,255);
+        SDL_RenderFillRect(s_sdlRenderer,&horizontal); SDL_RenderFillRect(s_sdlRenderer,&vertical);
+    }
+    SDL_SetRenderClipRect(s_sdlRenderer,NULL);
+}
+
 extern void DisplayDebugMessages(void);
 
 void GRAP_SDL_FlushFrame(void)
@@ -1119,6 +1193,7 @@ void GRAP_SDL_FlushFrame(void)
             }
         }
     }
+    DrawWorldMap();
     s_mapDrawn=false;
     if(s_captureRequested) s_capturedFrame=SDL_RenderReadPixels(s_sdlRenderer,NULL);
     CRT_EndFrame(s_sdlRenderer);

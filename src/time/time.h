@@ -6,5 +6,8 @@ extern void TIME_Cleanup(void);
 
 extern u32 TIME_GetTicksMs(void);
 extern void TIME_SleepMs(int ms);
+#if defined(TARGET_SDL)
+void TIME_PauseGameClock(bool paused);
+#endif
 
 #endif
