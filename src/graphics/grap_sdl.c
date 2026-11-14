@@ -4,6 +4,7 @@
 #include "common/common.h"
 #include "common/settings.h"
 #include "common/icon.h"
+#include "common/world_map.h"
 
 #include "grap_buf.h"
 #include "grap_ops.h"
@@ -283,7 +284,14 @@ unsigned int GRAP_SDL_MovementInterval(void)
     if (s_smoothMovement) return 7 * (unsigned int)SDL_roundf(16.0f / s_movementSpeed);
     return (unsigned int)SDL_roundf(160.0f / s_movementSpeed);
 }
-void GRAP_SDL_MapDrawn(void) { s_mapDrawn = true; }
+static int s_drawnMap,s_drawnLevel,s_drawnX,s_drawnY;
+static bool s_drawnValid;
+static unsigned s_drawnEpoch;
+void GRAP_SDL_MapDrawn(void) {
+    s_mapDrawn = true;s_drawnValid=true;s_drawnEpoch=WORLD_MAP_ExplorationEpoch();
+    s_drawnMap=D_5893_map_id;s_drawnLevel=D_5895_map_level;
+    s_drawnX=D_5896_map_x;s_drawnY=D_5897_map_y;
+}
 
 
 void GRAP_SDL_CursorSize(int* width, int* height)
@@ -1070,7 +1078,7 @@ void GRAP_SDL_FlushFrame(void)
     /* Reconstruct the original pixels first; CRT owns the gentle softness. */
     SDL_SetTextureScaleMode(s_sdlTexture,
         s_fullscreen || s_pixelUI || CRT_Enabled() || TILESET_Selected()!=TILESET_DOS ? SDL_SCALEMODE_NEAREST : SDL_SCALEMODE_LINEAR);
-    bool completedMap=s_mapDrawn;
+    bool completedMap=s_mapDrawn,reusedWide=false;
     s_expandedFrame = false;
     if(!s_fullscreen || s_pixelUI || !D_58a4) s_completedWideValid=false;
     if (!D_58a4 || (!MAPS_Outside(D_5893_map_id) && D_5893_map_id < 128))
@@ -1121,6 +1129,7 @@ void GRAP_SDL_FlushFrame(void)
              * the original map redraw. Keep expanded tiles from that same
              * completed map; central tiles and modal effects remain live. */
             if(!completedMap && s_completedWideValid && s_completedWideMap==D_5893_map_id && s_completedWideLevel==D_5895_map_level) {
+                reusedWide=true;
                 for(int row=0;row<layout.rows;row++) for(int col=0;col<layout.columns;col++) {
                     if(abs(col-layout.columns/2)<=5 && abs(row-layout.rows/2)<=5) continue;
                     for(int y=0;y<16;y++) {
@@ -1192,6 +1201,17 @@ void GRAP_SDL_FlushFrame(void)
                 SDL_RenderTexture(s_sdlRenderer,s_uiThumbnails[i],NULL,&r);
             }
         }
+    }
+    if(s_drawnValid && !reusedWide && s_drawnEpoch==WORLD_MAP_ExplorationEpoch() &&
+       !s_pixelUI && !s_worldMap && !EVT_ImmediateExitEnabled() && D_587a!='V' &&
+       s_drawnMap==D_5893_map_id && s_drawnLevel==D_5895_map_level &&
+       s_drawnX==D_5896_map_x && s_drawnY==D_5897_map_y) {
+        if(s_expandedFrame) {
+            int w,h;SDL_GetRenderOutputSize(s_sdlRenderer,&w,&h);
+            WideLayout l=VideoLayout(w,h);
+            WORLD_MAP_RecordView(l.columns,l.rows,l.mapY,8,l.height-8);
+        } else WORLD_MAP_RecordView(11,11,8,8,184);
+        s_drawnEpoch=WORLD_MAP_ExplorationEpoch();
     }
     DrawWorldMap();
     s_mapDrawn=false;
