@@ -198,11 +198,6 @@
     <None Include="..\src\u5.rsp" />
     <None Include="vcpkg-configuration.json" />
     <None Include="vcpkg.json" />
-    <Content Include="..\textures\maps\U5brit.png">
-      <Link>textures\maps\U5brit.png</Link>
-      <TargetPath>textures\maps\U5brit.png</TargetPath>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\0000.c" />

@@ -10,7 +10,9 @@
 #include "graphics/grap_sdl.h"
 #include "graphics/grap_buf.h"
 #include "graphics/widescreen.h"
-#include "world_map_image.h"
+#include "common/file.h"
+#include "mod/maps.h"
+#include "mod/types.h"
 #include "key/key.h"
 #include "key/mouse.h"
 #include "time/time.h"
@@ -27,6 +29,7 @@ static SDL_Surface* first;
 static SDL_Surface* second;
 static SDL_Surface* third;
 static SDL_Surface* fourth;
+static SDL_Surface* fifth;
 static SDL_Surface* artwork;
 static int videoMode;
 static void key(SDL_Keycode code,bool repeat)
@@ -56,7 +59,7 @@ bool __wrap_SDL_RenderPresent(SDL_Renderer* r)
 {
     if(running) {
         SDL_Surface* s=SDL_RenderReadPixels(r,NULL); assert(s);
-        if(frame<4) assert(TIME_GetTicksMs()==frozen);
+        if(frame<5) assert(TIME_GetTicksMs()==frozen);
         if(frame==0) {
             first=s; s=NULL;
             /* Held Tab must not close the modal. Other command keys are consumed. */
@@ -67,6 +70,10 @@ bool __wrap_SDL_RenderPresent(SDL_Renderer* r)
             assert(SDL_PushEvent(&e));
         } else if(frame==2) {
             third=s; s=NULL;
+            SDL_Event e={0};e.type=SDL_EVENT_MOUSE_WHEEL;e.wheel.y=2;
+            assert(SDL_PushEvent(&e));
+        } else if(frame==3) {
+            fourth=s; s=NULL;
             int w,h;assert(SDL_GetRenderOutputSize(r,&w,&h));
             SDL_Event e={0};e.type=SDL_EVENT_MOUSE_BUTTON_DOWN;e.button.button=SDL_BUTTON_LEFT;
             e.button.x=w*0.3f;e.button.y=h*0.4f; assert(SDL_PushEvent(&e));
@@ -74,8 +81,8 @@ bool __wrap_SDL_RenderPresent(SDL_Renderer* r)
             assert(SDL_PushEvent(&e));
             e=(SDL_Event){0};e.type=SDL_EVENT_MOUSE_BUTTON_UP;e.button.button=SDL_BUTTON_LEFT;
             assert(SDL_PushEvent(&e));
-        } else if(frame==3) {
-            fourth=s;s=NULL;
+        } else if(frame==4) {
+            fifth=s;s=NULL;
             key(mode?SDLK_TAB:SDLK_ESCAPE,false);
             key(SDLK_DOWN,false); /* Closing input must not leak into gameplay. */
         } else {
@@ -101,7 +108,7 @@ static void run(bool hasSextant,bool shortcut)
         assert(KEY_PollKey()==0);
     } else WORLD_MAP_Show();
     running=false;
-    assert(frame==5);
+    assert(frame==6);
     assert(D_5881==17 && D_588b==33);
     assert(D_5896_map_x==86 && D_5897_map_y==103);
     assert(TIME_GetTicksMs()==frozen+400); /* Only the restored frame ran unpaused. */
@@ -113,19 +120,36 @@ static void run(bool hasSextant,bool shortcut)
     assert(memcmp(first->pixels,second->pixels,size));
     assert(memcmp(second->pixels,third->pixels,size));
     assert(memcmp(third->pixels,fourth->pixels,size));
+    assert(!memcmp(second->pixels,fourth->pixels,size)); /* Wheel zoom in reverses zoom out. */
+    assert(memcmp(fourth->pixels,fifth->pixels,size)); /* Dragging pans at restored scale. */
     SDL_FRect rect=viewport(first->w,first->h);
     int cx=(int)(rect.x+rect.w/2),cy=(int)(rect.y+rect.h/2);
-    float scale=SDL_min(rect.w,rect.h)/256*(hasSextant?3:1);
-    /* Check geographic alignment using real artwork, independently of the +. */
-    int sx=(int)(cx+13*scale),sy=(int)(cy+7*scale);
+    SDL_FPoint scale={rect.w/176,rect.h/176};
+    if(videoMode==GRAP_VIDEO_FULLSCREEN) {
+        WideLayout l=WIDE_Layout(first->w,first->h);
+        scale=(SDL_FPoint){l.scale,l.scaleY};
+    }
+    /* Sample real artwork at native game-pixel scale, then after wheel zoom. */
     float centerX=hasSextant?86.5f:128,centerY=hasSextant?103.5f:128;
-    int ax=(int)(centerX+(sx-(rect.x+rect.w/2))/scale);
-    int ay=(int)(centerY+(sy-(rect.y+rect.h/2))/scale);
-    assert(pixel(first,sx,sy)==pixel(artwork,ax,ay));
+    for(int view=0;view<2;view++) {
+        SDL_Surface* screenshot=view?third:first;
+        float zoom=view?1/1.5625f:1;
+        float xCenter=centerX+(view?8:0);
+        for(int dy=-55;dy<=55;dy+=22) for(int dx=-55;dx<=55;dx+=22) {
+            int ax=(int)xCenter+dx,ay=(int)centerY+dy;
+            int sx=(int)(rect.x+rect.w/2+(ax+0.5f-xCenter)*scale.x*zoom);
+            int sy=(int)(rect.y+rect.h/2+(ay+0.5f-centerY)*scale.y*zoom);
+            unsigned actual=pixel(screenshot,sx,sy);
+            bool matched=false;
+            for(int oy=-1;oy<=1;oy++) for(int ox=-1;ox<=1;ox++)
+                if(actual==pixel(artwork,ax+ox,ay+oy)) matched=true;
+            assert(matched);
+        }
+    }
     assert(pixel(first,first->w-10,first->h/2)==0); /* Sidebar remains untouched. */
     if(hasSextant) {
         assert(pixel(first,cx,cy)==0xffffff); /* + centered on the party. */
-        int movedX=(int)(rect.x+rect.w/2-8*scale/3);
+        int movedX=(int)(rect.x+rect.w/2-8*scale.x);
         assert(pixel(second,movedX,cy)!=0xffffff); /* Flash is off 400 ms later. */
     }
     else {
@@ -133,8 +157,64 @@ static void run(bool hasSextant,bool shortcut)
         assert(pixel(first,cx,cy)!=0xffffff);
     }
     assert(SDL_SaveBMP(first,hasSextant?"sextant.bmp":"whole-map.bmp"));
-    SDL_DestroySurface(first);SDL_DestroySurface(second);SDL_DestroySurface(third);SDL_DestroySurface(fourth);
+    SDL_DestroySurface(first);SDL_DestroySurface(second);SDL_DestroySurface(third);SDL_DestroySurface(fourth);SDL_DestroySurface(fifth);
 }
+static void generation(void)
+{
+    /* Native compressed chunks, including implicit water and changed resources. */
+    FILE* f=fopen("BRIT.DAT","wb");assert(f);
+    unsigned char chunk[256];memset(chunk,5,sizeof(chunk));chunk[0]=7;
+    for(int i=0;i<256;i++) assert(fwrite(chunk,1,sizeof(chunk),f)==sizeof(chunk));
+    fclose(f);FILE_SetDataDirectory(".");
+    SDL_Surface* image=WORLD_MAP_Generate();assert(image && image->w==256 && image->h==256);
+    assert(pixel(image,0,0)==0x0426fc); /* Original implicit ocean chunk. */
+    assert(pixel(image,32,0)==0xdcb604); /* Resource chunk 0 is desert here. */
+    assert(pixel(image,33,0)==0x046e04); /* Grass color from the reference. */
+    SDL_DestroySurface(image);
+    f=fopen("BRIT.DAT","r+b");assert(f);fputc(8,f);fclose(f);
+    image=WORLD_MAP_Generate();assert(image);
+    assert(pixel(image,32,0)==0x049204);SDL_DestroySurface(image);
+    D_58a4=1;D_5893_map_id=0;D_5895_map_level=0;D_589b=32;D_589c=0;
+    memset(D_6608,5,1024);D_6608[0]=9;
+    image=WORLD_MAP_Generate();assert(image);
+    assert(pixel(image,32,0)==0x04b604);SDL_DestroySurface(image);
+    D_58a4=0;D_589b=D_589c=0;
+    remove("BRIT.DAT");
+
+    /* Modded dimensions and mutable terrain take precedence over native files. */
+    unsigned width=80,height=96,size=MAPS_HEADER+MAPS_RECORD+width*height;
+    unsigned char* bytes=calloc(1,size);assert(bytes);
+    memcpy(bytes,"IMAPS001",8);TYPES_Put32(bytes+8,1);
+    unsigned char* r=bytes+MAPS_HEADER;TYPES_Put32(r,MAPS_RECORD+width*height);
+    r[10]=width;r[12]=height;r[14]=254;
+    strcpy((char*)r+24,"Modded Britannia");strcpy((char*)r+88,"BRIT.DAT");
+    memset(r+MAPS_RECORD,5,width*height);
+    assert(MAPS_Mount(bytes,size));
+    *MAPS_ActiveCell(0,0,2,3)=7;
+    *MAPS_ActiveCell(0,0,4,5)=9;
+    image=WORLD_MAP_Generate();assert(image && image->w==80 && image->h==96);
+    assert(pixel(image,2,3)==0xdcb604);
+    assert(pixel(image,4,5)==0x04b604);SDL_DestroySurface(image);
+    *MAPS_ActiveCell(0,0,2,3)=1;
+    image=WORLD_MAP_Generate();assert(image);
+    assert(pixel(image,2,3)==0x0426fc);SDL_DestroySurface(image);
+
+    /* Custom terrain uses its base profile, not a stale pixel in the PNG. */
+    unsigned char types[TYPES_HEADER+TYPES_RECORD+4+16*16*4]={0};
+    memcpy(types,"ITYPES01",8);types[8]=1;TYPES_Put32(types+24,1);
+    TypeDef def;TYPES_Vanilla(0,2,&def);def.id=512;def.frames=1;
+    strcpy(def.name,"Modded shallows");TYPES_Encode(types+TYPES_HEADER,&def);
+    TYPES_Put32(types+TYPES_HEADER,sizeof(types)-TYPES_HEADER);
+    types[TYPES_HEADER+TYPES_RECORD+1]=16;
+    types[TYPES_HEADER+TYPES_RECORD+2]=100;
+    assert(TYPES_Validate(types,sizeof(types)));
+    TYPES_Mount(types,sizeof(types),NULL,0);
+    assert(TYPES_Set((TypeCell){.x=4,.y=5},512));
+    image=WORLD_MAP_Generate();assert(image);
+    assert(pixel(image,4,5)==0x0492fc);SDL_DestroySurface(image);
+    TYPES_Mount(NULL,0,NULL,0);assert(MAPS_Mount(NULL,0));free(bytes);
+}
+
 int main(void)
 {
     assert(SDL_Init(SDL_INIT_VIDEO));
@@ -147,8 +227,9 @@ int main(void)
     /* A Tab in non-gameplay input retains its original character behavior. */
     SDL_KeyboardEvent e={0};e.key=SDLK_TAB;KEY_SDL_ProcessKeyDown(e);
     assert(KEY_PollKey()=='\t');
-    SDL_IOStream* io=SDL_IOFromConstMem(world_map_png,WORLD_MAP_PNG_SIZE);assert(io);
-    artwork=SDL_LoadPNG_IO(io,true);assert(artwork);
+    generation();
+    FILE_SetDataDirectory(TEST_GAME_DIR);
+    artwork=WORLD_MAP_Generate();assert(artwork);
     run(false,false); run(true,true);
     D_58a4=1;
     for(videoMode=GRAP_VIDEO_FULLSCREEN;videoMode<=GRAP_VIDEO_FULLSCREEN_43;videoMode++) {

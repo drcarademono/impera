@@ -14,21 +14,6 @@ else()
     pkg_check_modules(SDL3_MIXER REQUIRED sdl3-mixer)
 endif()
 
-# Embed the optional player-supplied map so release binaries need no sidecar.
-# CONFIGURE_DEPENDS also notices when the artwork is added after configuration.
-file(GLOB WORLD_MAP_ART CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/textures/maps/U5brit.png")
-set(WORLD_MAP_BYTES "0")
-set(WORLD_MAP_SIZE 0)
-if(WORLD_MAP_ART)
-    file(READ "${WORLD_MAP_ART}" WORLD_MAP_BYTES HEX)
-    string(LENGTH "${WORLD_MAP_BYTES}" WORLD_MAP_SIZE)
-    math(EXPR WORLD_MAP_SIZE "${WORLD_MAP_SIZE} / 2")
-    string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," WORLD_MAP_BYTES "${WORLD_MAP_BYTES}")
-    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${WORLD_MAP_ART}")
-endif()
-configure_file(src/common/world_map_image.h.in "${CMAKE_BINARY_DIR}/world_map_image.h" @ONLY)
-set_source_files_properties(src/common/world_map.c PROPERTIES COMPILE_DEFINITIONS IMPERA_EMBED_WORLD_MAP)
-
 set(SOURCES
     src/common/world_map.c
     src/audio/mod_audio.c
@@ -170,6 +155,7 @@ if(U5D_BUILD_TESTS)
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         add_executable(impera_world_map_test tests/world_map_test.c ${TEST_SOURCES})
         list(APPEND U5D_TARGETS impera_world_map_test)
+        target_compile_definitions(impera_world_map_test PRIVATE TEST_GAME_DIR="${CMAKE_SOURCE_DIR}/Ultima 5")
         target_link_options(impera_world_map_test PRIVATE "-Wl,--wrap=SDL_GetTicks" "-Wl,--wrap=SDL_RenderPresent")
         file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/world-map-runtime")
         add_test(NAME world_map_overlay COMMAND impera_world_map_test)
@@ -516,7 +502,6 @@ endif()
 foreach(U5D_TARGET IN LISTS U5D_TARGETS)
 target_include_directories(${U5D_TARGET} PRIVATE
     ${CMAKE_SOURCE_DIR}/src
-    ${CMAKE_BINARY_DIR}
     ${SDL3_INCLUDE_DIRS}
     ${SDL3_MIXER_INCLUDE_DIRS}
 )

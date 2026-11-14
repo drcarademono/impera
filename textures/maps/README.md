@@ -1,8 +1,7 @@
-Place the supplied **256 × 256** Britannia map here as **U5brit.png**.
-Each pixel corresponds to one world tile: (0,0) is the northwest corner.
+`U5brit.png` is the color reference for the generated Britannia map.
 
-CMake embeds this image in the engine, including release packages. Adding or
-replacing it triggers reconfiguration on the next build. During development,
-`textures/maps/U5brit.png` relative to the working directory overrides the
-embedded copy. Visual Studio project builds copy the PNG beside the executable under
-`textures/maps/`. The artwork uses square pixels and nearest-neighbor sampling.
+The game does not load or embed the PNG. It generates one pixel per active
+world terrain tile whenever the map opens, using the colors in
+`src/common/world_map_palette.h`. Custom terrain types inherit their base
+tile color. Pixels initially match the game pixel size and aspect ratio; the
+mouse wheel zooms, and arrows or dragging pan.

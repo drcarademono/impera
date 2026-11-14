@@ -1,11 +1,9 @@
 #include "common.h"
 #include "world_map.h"
-#if defined(IMPERA_EMBED_WORLD_MAP)
-#include "world_map_image.h"
-#else
-static const unsigned char world_map_png[] = {0};
-#define WORLD_MAP_PNG_SIZE 0
-#endif
+#include "world_map_palette.h"
+#include "file.h"
+#include "funcs.h"
+#include "mod/types.h"
 #include "debug.h"
 #include "graphics/grap_buf.h"
 #include "graphics/grap_sdl.h"
@@ -16,6 +14,7 @@ static const unsigned char world_map_png[] = {0};
 #include "time/time.h"
 #include "vars.h"
 #include <SDL3/SDL.h>
+#include <string.h>
 
 extern void KEY_SDL_ClearInput(void);
 
@@ -27,45 +26,74 @@ static bool partyPosition(int* x, int* y)
     *x = D_5896_map_x; *y = D_5897_map_y;
     if(map) {
         if(!MAPS_ReturnPoint(map, &world, x, y)) {
-            if(map > 40 || map == 25) return false;
-            *x = MOD_TableValue(7, map-1, D_1e8a[map-1]);
-            *y = MOD_TableValue(8, map-1, D_1eb2[map-1]);
-            world = 0;
+            const unsigned char* r=MAPS_Record(MAPS_IsDungeon(map)?4:1,map,0);
+            if(r && (int8_t)r[14]!=-2) {
+                world=(int8_t)r[14]; *x=r[15]; *y=r[16];
+            } else {
+                if(map > 40 || map == 25) return false;
+                *x = MOD_TableValue(7, map-1, D_1e8a[map-1]);
+                *y = MOD_TableValue(8, map-1, D_1eb2[map-1]);
+                world = 0;
+            }
         }
     }
     return world == 0;
 }
 
+SDL_Surface* WORLD_MAP_Generate(void)
+{
+    int w=MAPS_ActiveWidth(0,0), h=MAPS_ActiveHeight(0,0);
+    SDL_Surface* image=SDL_CreateSurface(w,h,SDL_PIXELFORMAT_ARGB8888);
+    if(!image) return NULL;
+    const unsigned char* extended=MAPS_ActiveCell(0,0,0,0);
+    FILE* file=extended?NULL:FILE_Open("BRIT.DAT","rb");
+    if(!extended && !file) { SDL_DestroySurface(image); return NULL; }
+    unsigned char blocks[256][256],loaded[256]={0};
+    const uint8_t* index=MOD_BritanniaIndex();
+    for(int y=0;y<h;y++) for(int x=0;x<w;x++) {
+        unsigned tile;
+        if(extended) tile=*MAPS_ActiveCell(0,0,x,y);
+        else {
+            int block=(y/16)*16+x/16, resource=index[block];
+            if(!loaded[block]) {
+                if(resource==255) memset(blocks[block],1,256);
+                else if(fseek(file,resource*256,SEEK_SET) || fread(blocks[block],1,256,file)!=256) {
+                    fclose(file); SDL_DestroySurface(image); return NULL;
+                }
+                loaded[block]=1;
+            }
+            tile=blocks[block][(y%16)*16+x%16];
+            /* Include live native terrain changes in the resident world blocks. */
+            if(D_58a4 && !D_5893_map_id && !D_5895_map_level &&
+               ((x-D_589b)&255)<32 && ((y-D_589c)&255)<32)
+                tile=*ULTIMA_4402_GetTileAddr(x,y);
+        }
+        TypeCell cell={0}; cell.x=x; cell.y=y;
+        uint32_t type=TYPES_At(cell,tile);
+        TypeDef def;
+        if(TYPES_Get(type,&def) && !def.kind) tile=def.base;
+        Uint32* row=(Uint32*)((unsigned char*)image->pixels+y*image->pitch);
+        row[x]=0xff000000u | world_map_colors[tile&255];
+    }
+    if(file) fclose(file);
+    return image;
+}
+
 void WORLD_MAP_Show(void)
 {
-    SDL_Surface* image = SDL_LoadPNG("textures/maps/U5brit.png");
+    SDL_Surface* image=WORLD_MAP_Generate();
     if(!image) {
-        char path[4096];
-        const char* base=SDL_GetBasePath();
-        if(base && SDL_snprintf(path,sizeof(path),"%stextures/maps/U5brit.png",base)<(int)sizeof(path))
-            image=SDL_LoadPNG(path);
-    }
-    if(!image && WORLD_MAP_PNG_SIZE) {
-        SDL_IOStream* io = SDL_IOFromConstMem(world_map_png, WORLD_MAP_PNG_SIZE);
-        if(io) image = SDL_LoadPNG_IO(io, true);
-    }
-    if(image && (image->w != 256 || image->h != 256)) {
-        DEBUG_Error("World map must be 256x256: textures/maps/U5brit.png");
-        SDL_DestroySurface(image); image = NULL;
-    }
-    if(!image) {
-        DEBUG_Error("Add the map artwork at textures/maps/U5brit.png and rebuild");
-        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR,"Map artwork missing",
-            "Add the 256x256 map at textures/maps/U5brit.png and rebuild Impera.",NULL);
+        DEBUG_Error("Cannot generate the world map from active Britannia terrain");
         KEY_SDL_ClearInput(); MOUSE_Cancel(); return;
     }
+    int width=image->w,height=image->h;
     if(!GRAP_SDL_SetWorldMap(image)) { SDL_DestroySurface(image); return; }
     SDL_DestroySurface(image);
 
     int px=0, py=0;
     bool marker = D_57bc && partyPosition(&px, &py);
-    float cx = marker ? px+0.5f : 128, cy = marker ? py+0.5f : 128;
-    float zoom = marker ? 3 : 1;
+    float cx = marker ? px+0.5f : width/2.0f, cy = marker ? py+0.5f : height/2.0f;
+    float zoom=1;
     bool pointer = MOUSE_PointerMode(), done=false, dragging=false;
     float dragX=0, dragY=0;
     KEY_SDL_ClearInput(); MOUSE_Cancel(); MOUSE_SetPointerMode(true);
@@ -89,8 +117,8 @@ void WORLD_MAP_Show(void)
             }
             if(e.type==SDL_EVENT_MOUSE_WHEEL) {
                 float direction=e.wheel.direction==SDL_MOUSEWHEEL_FLIPPED?-1:1;
+                zoom=SDL_clamp(zoom*SDL_powf(1.25f,e.wheel.y*direction),0.25f,8.0f);
                 cx-=e.wheel.x*direction*12/zoom;
-                cy-=e.wheel.y*direction*12/zoom;
             }
             if(e.type==SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button==SDL_BUTTON_LEFT)
                 dragging=GRAP_SDL_WorldMapPoint(e.button.x,e.button.y,&dragX,&dragY);
@@ -102,7 +130,7 @@ void WORLD_MAP_Show(void)
                 GRAP_SDL_WorldMapPoint(e.motion.x,e.motion.y,&x,&y);
                 cx-=x-dragX; cy-=y-dragY; dragX=x; dragY=y;
             }
-            cx=SDL_clamp(cx,0,256); cy=SDL_clamp(cy,0,256);
+            cx=SDL_clamp(cx,0,width); cy=SDL_clamp(cy,0,height);
         }
         MOUSE_UpdateCursor();
         if(!done) SDL_Delay(16);
