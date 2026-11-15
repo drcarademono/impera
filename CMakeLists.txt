@@ -15,6 +15,7 @@ else()
 endif()
 
 set(SOURCES
+    src/common/help.c
     src/common/world_map.c
     src/audio/mod_audio.c
     src/mod/party_game.c
@@ -406,6 +407,11 @@ if(U5D_BUILD_TESTS)
             ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software" TIMEOUT 20)
         add_executable(u5d_engine_settings_test tests/engine_settings_test.c ${TEST_SOURCES})
         list(APPEND U5D_TARGETS u5d_engine_settings_test)
+        target_link_options(u5d_engine_settings_test PRIVATE "-Wl,--wrap=SDL_RenderPresent")
+        add_test(NAME keyboard_help COMMAND u5d_engine_settings_test keyboard_help)
+        set_tests_properties(keyboard_help PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/settings-runtime" TIMEOUT 20
+            ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software")
         add_test(NAME music_directory_picker COMMAND u5d_engine_settings_test music_picker)
         set_tests_properties(music_directory_picker PROPERTIES WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/settings-runtime"
             ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software" TIMEOUT 10 RUN_SERIAL TRUE)

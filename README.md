@@ -112,6 +112,7 @@ and the keys used by its new screens:
 
 | Key | Context | Action |
 | --- | --- | --- |
+| `Ctrl+H` | Game keyboard input | Open **Keyboard Help**; `Esc` or `Ctrl+H` closes it. |
 | `Ctrl+O` | Gameplay | Open **Engine Options**; return to the suspended game afterward. |
 | `Ctrl+W` | World, town, or dungeon command prompt | Open **Save Game**. |
 | `Ctrl+L` | World, town, or dungeon command prompt | Open **Load Game**. |
@@ -126,6 +127,10 @@ and the keys used by its new screens:
 | Two perpendicular arrow keys, or numpad `7/9/1/3`, or `Home`, `Page Up`, `End`, `Page Down` | Gameplay, with Diagonal Movement enabled | Northwest, northeast, southwest, southeast respectively. |
 | `Ctrl+E` | Gameplay | Preserve the original **Exit to DOS?** confirmation. |
 | `Ctrl+E` | Main menu, Engine Options, save/load browsers, or cutscenes | Exit immediately. |
+
+Keyboard Help is a single-screen command reference with the original game keys
+and Impera's help, options, save, load, and map shortcuts. Esc or Ctrl+H closes it
+and resumes the suspended game.
 
 `Ctrl+W` and `Ctrl+L` are gameplay shortcuts and do not open another browser from
 inside menus or other prompts. Normal keyboard action selection still works when
