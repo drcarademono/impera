@@ -368,6 +368,13 @@ static Uint32 closeGameplayOptions(void* userdata, SDL_TimerID timer, Uint32 int
     key(SDLK_ESCAPE);
     return 0;
 }
+static Uint32 worldMapOption(void* userdata,SDL_TimerID timer,Uint32 interval)
+{
+    (void)userdata;(void)timer;(void)interval;
+    clickUI(180,28); /* Gameplay tab. */
+    clickUI(100,114); /* World Map, after the five existing gameplay options. */
+    key(SDLK_ESCAPE);return 0;
+}
 /* Check the single-screen reference and its real Ctrl+H input dispatch. */
 static bool testingHelp,closeHelpWithEscape;
 static int helpStep;
@@ -434,6 +441,15 @@ int main(int argc, char** argv)
     D_5893_map_id=0x40;D_58a4=0;
     byte font[1024];FILE* f=fopen("IBM.CH","rb");assert(f);
     assert(fread(font,1,sizeof(font),f)==sizeof(font));fclose(f);D_539c[0]=font;
+    if(argc==2 && !strcmp(argv[1],"world_map_option")) {
+        assert(ENGINE_Get(ENGINE_WORLD_MAP));
+        assert(SDL_AddTimer(50,worldMapOption,NULL));ENGINE_ShowOptions(true);
+        assert(!ENGINE_Get(ENGINE_WORLD_MAP));
+        ENGINE_Set(ENGINE_WORLD_MAP,1);ENGINE_Load();
+        assert(!ENGINE_Get(ENGINE_WORLD_MAP));
+        ENGINE_Set(ENGINE_WORLD_MAP,1);remove("ENGINE.CFG");
+        GRAP_SDL_Cleanup();SDL_Quit();return 0;
+    }
     if(argc==2 && !strcmp(argv[1],"keyboard_help")) {
         keyboardHelp();GRAP_SDL_Cleanup();SDL_Quit();return 0;
     }

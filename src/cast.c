@@ -8,6 +8,10 @@
 #include "vars.h"
 
 #include "cast.h"
+#if defined(TARGET_SDL)
+#include "common/world_map.h"
+#include "common/engine_settings.h"
+#endif
 #include "cast2.h"
 #include "combat.h"
 #include "comsubs.h"
@@ -336,6 +340,9 @@ static void CAST_043e_AnCorpXen(void)
 static void CAST_04a4_InWis(void)
 {
     CAST2_0000_CastEffect(2);
+#if defined(TARGET_SDL)
+    if(WORLD_MAP_ShowSpell()) return;
+#endif
     CAST2_06ec();
 }
 
@@ -931,6 +938,7 @@ int CAST_0dba_CastSpellCmd(void)
     int local_a;
     int local_c;
     int local_e;
+    int permissions;
 
     local_c = local_e = D_5890 = D_588f = local_8 = 1;
 
@@ -962,18 +970,23 @@ int CAST_0dba_CastSpellCmd(void)
 #endif
     }
 
+    permissions=D_1c90[local_4];
+#if defined(TARGET_SDL)
+    if(local_4==9 && MAPS_IsDungeon(D_5893_map_id) && ENGINE_Get(ENGINE_WORLD_MAP))
+        permissions|=2;
+#endif
     D_588f = local_a = local_4 / 6 + 1;
 
     if (D_5893_map_id == 0)
     {
-        if ((D_1c90[local_4] & 8) == 0)
+        if ((permissions & 8) == 0)
         {
             local_e = 0;
         }
     }
     else if (D_5893_map_id > 0x7f)
     {
-        if ((D_1c90[local_4] & 1) == 0)
+        if ((permissions & 1) == 0)
         {
             local_e = 0;
         }
@@ -992,12 +1005,12 @@ int CAST_0dba_CastSpellCmd(void)
         }
 
         if (MAPS_Outside(D_5893_map_id)) {
-            if ((D_1c90[local_4] & 4) == 0)
+            if ((permissions & 4) == 0)
             {
                 local_e = 0;
             }
         } else {
-            if ((D_1c90[local_4] & 2) == 0)
+            if ((permissions & 2) == 0)
             {
                 local_e = 0;
             }

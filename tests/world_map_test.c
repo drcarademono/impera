@@ -5,6 +5,7 @@
 #include <SDL3/SDL.h>
 #include "common/common.h"
 #include "common/world_map.h"
+#include "common/engine_settings.h"
 #include "event/event.h"
 #include "graphics/grap.h"
 #include "graphics/grap_sdl.h"
@@ -16,11 +17,20 @@
 #include "macros.h"
 #include "tiles.h"
 #include "savegame.h"
+#include "cast.h"
 #include "key/key.h"
 #include "key/mouse.h"
 #include "time/time.h"
 #include "vars.h"
 
+static int castEffects,coordinateReadouts;
+static unsigned spellMap,spellLevel;
+int __wrap_ULTIMA_4988(void) { return 0; }
+int __wrap_CAST2_00de_SelectSpell(void) { return 9; }
+void __wrap_CAST2_0000_CastEffect(int level) { assert(level==2);++castEffects; }
+void __wrap_CAST2_06ec(void) { ++coordinateReadouts; }
+void __wrap_ULTIMA_1850_PrintString(char* text) { (void)text; }
+void __wrap_ULTIMA_43ae_AudioSweepTone(int a,int b,int c,int d) { (void)a;(void)b;(void)c;(void)d; }
 extern void KEY_SDL_ProcessKeyDown(SDL_KeyboardEvent);
 extern void KEY_SDL_ClearInput(void);
 static Uint64 ticks;
@@ -97,11 +107,18 @@ bool __wrap_SDL_RenderPresent(SDL_Renderer* r)
     }
     return __real_SDL_RenderPresent(r);
 }
-static void run(bool hasSextant,bool shortcut)
+static void run(bool hasSextant,bool shortcut,bool spell)
 {
     mode=shortcut; frame=0;
-    D_57bc=hasSextant;D_5893_map_id=0;D_5895_map_level=0;
+    bool marker=hasSextant || spell;
+    D_57bc=hasSextant;D_587f=spell?12:0;D_5893_map_id=0;D_5895_map_level=0;
     D_5896_map_x=86;D_5897_map_y=103;
+    int markerX=86,markerY=103,world=0;
+    if(spell) {
+        D_5893_map_id=spellMap;D_5895_map_level=spellLevel;
+        assert(WORLD_MAP_MarkerPosition(1,&markerX,&markerY,&world));
+    }
+    SDL_Surface* reference=world?WORLD_MAP_Generate():artwork;assert(reference);
     D_5881=17;D_588b=33;
     ticks=(ticks+799)/800*800;frozen=TIME_GetTicksMs();running=true;
     KEY_SDL_SetGameplayInput(1);
@@ -109,7 +126,14 @@ static void run(bool hasSextant,bool shortcut)
         SDL_KeyboardEvent e={0};e.key=SDLK_TAB;
         KEY_SDL_ProcessKeyDown(e);
         assert(KEY_PollKey()==0);
-    } else WORLD_MAP_Show();
+    } else if(spell) {
+        D_57f0[9]=1;D_55a8_party[0].level=8;D_55a8_party[0].mag=20;
+        int effects=castEffects,readouts=coordinateReadouts;
+        CAST_0dba_CastSpellCmd();
+        assert(castEffects==effects+1 && coordinateReadouts==readouts);
+        assert(D_57f0[9]==0 && D_55a8_party[0].mag==18);
+    }
+    else WORLD_MAP_Show();
     running=false;
     assert(frame==6);
     assert(D_5881==17 && D_588b==33);
@@ -133,24 +157,25 @@ static void run(bool hasSextant,bool shortcut)
         scale=(SDL_FPoint){l.scale,l.scaleY};
     }
     /* Sample real artwork at native game-pixel scale, then after wheel zoom. */
-    float centerX=hasSextant?86.5f:128,centerY=hasSextant?103.5f:128;
+    float centerX=marker?markerX+0.5f:128,centerY=marker?markerY+0.5f:128;
     for(int view=0;view<2;view++) {
         SDL_Surface* screenshot=view?third:first;
         float zoom=view?1/1.5625f:1;
         float xCenter=centerX+(view?8:0);
         for(int dy=-55;dy<=55;dy+=22) for(int dx=-55;dx<=55;dx+=22) {
             int ax=(int)xCenter+dx,ay=(int)centerY+dy;
+            if(ax<1 || ay<1 || ax>=reference->w-1 || ay>=reference->h-1) continue;
             int sx=(int)(rect.x+rect.w/2+(ax+0.5f-xCenter)*scale.x*zoom);
             int sy=(int)(rect.y+rect.h/2+(ay+0.5f-centerY)*scale.y*zoom);
             unsigned actual=pixel(screenshot,sx,sy);
             bool matched=false;
             for(int oy=-1;oy<=1;oy++) for(int ox=-1;ox<=1;ox++)
-                if(actual==pixel(artwork,ax+ox,ay+oy)) matched=true;
+                if(actual==pixel(reference,ax+ox,ay+oy)) matched=true;
             assert(matched);
         }
     }
     assert(pixel(first,first->w-10,first->h/2)==0); /* Sidebar remains untouched. */
-    if(hasSextant) {
+    if(marker) {
         assert(pixel(first,cx,cy)==0xffffff); /* + centered on the party. */
         int movedX=(int)(rect.x+rect.w/2-8*scale.x);
         assert(pixel(second,movedX,cy)!=0xffffff); /* Flash is off 400 ms later. */
@@ -159,6 +184,7 @@ static void run(bool hasSextant,bool shortcut)
         /* The map's center is visible, with no white position cross. */
         assert(pixel(first,cx,cy)!=0xffffff);
     }
+    if(reference!=artwork) SDL_DestroySurface(reference);
     assert(SDL_SaveBMP(first,hasSextant?"sextant.bmp":"whole-map.bmp"));
     SDL_DestroySurface(first);SDL_DestroySurface(second);SDL_DestroySurface(third);SDL_DestroySurface(fourth);SDL_DestroySurface(fifth);
 }
@@ -251,6 +277,11 @@ static void underworld(void)
     image=WORLD_MAP_Generate();assert(image && pixel(image,127,128)==0x046e04);SDL_DestroySurface(image);
     WORLD_MAP_ResetExploration();GRAP_BUF_Present(); /* Previous save's frame is stale. */
     image=WORLD_MAP_Generate();assert(image && pixel(image,128,128)==0);SDL_DestroySurface(image);
+    WORLD_MAP_RecordGem(128,128,32,32);
+    image=WORLD_MAP_Generate();assert(image);
+    assert(pixel(image,130,128)==0x046e04 && pixel(image,129,129)==0x046e04);
+    assert(pixel(image,159,159)==0x046e04 && pixel(image,160,160)==0);
+    SDL_DestroySurface(image);
     WORLD_MAP_ResetExploration();GRAP_SDL_SetPixelUI(true);
     GRAP_SDL_MapDrawn();GRAP_BUF_Present();
     image=WORLD_MAP_Generate();assert(image && pixel(image,128,128)==0);SDL_DestroySurface(image);
@@ -301,6 +332,47 @@ static void underworld(void)
     memset(D_ab02,0,sizeof(D_ab02));
 }
 
+static void markerRules(void)
+{
+    int x,y,world;
+    D_57bc=1;D_5893_map_id=D_5895_map_level=0;D_5896_map_x=86;D_5897_map_y=103;
+    const int hours[]={0,5,6,12,18,19,23};
+    for(unsigned i=0;i<sizeof(hours)/sizeof(hours[0]);i++) {
+        D_587f=hours[i];
+        assert(WORLD_MAP_MarkerPosition(0,&x,&y,&world)==(hours[i]<=5 || hours[i]>=19));
+        assert(WORLD_MAP_MarkerPosition(1,&x,&y,&world));
+        assert(x==86 && y==103 && world==0);
+    }
+    D_57bc=0;assert(!WORLD_MAP_MarkerPosition(0,&x,&y,&world));
+    assert(WORLD_MAP_MarkerPosition(1,&x,&y,&world));
+    D_57bc=1;D_587f=0;D_5895_map_level=255;
+    assert(!WORLD_MAP_MarkerPosition(0,&x,&y,&world));
+    assert(WORLD_MAP_MarkerPosition(1,&x,&y,&world) && world==-1);
+    D_5893_map_id=33;D_5895_map_level=2;
+    assert(!WORLD_MAP_MarkerPosition(0,&x,&y,&world));
+    assert(WORLD_MAP_MarkerPosition(1,&x,&y,&world) && world==0);
+    assert(x==D_1e8a[32] && y==D_1eb2[32]); /* Britannia entrance, not dungeon coordinates. */
+    D_5893_map_id=40;
+    assert(WORLD_MAP_MarkerPosition(1,&x,&y,&world) && world==0);
+    D_5893_map_id=1;
+    assert(!WORLD_MAP_MarkerPosition(0,&x,&y,&world));
+    assert(WORLD_MAP_MarkerPosition(1,&x,&y,&world) && world==0);
+    D_5893_map_id=D_5895_map_level=D_57bc=D_58a4=0;
+    assert(ENGINE_Get(ENGINE_WORLD_MAP));
+    ENGINE_Set(ENGINE_WORLD_MAP,0);GRAP_BUF_Present();
+    assert(!WORLD_MAP_ShowSpell());
+    D_57f0[9]=1;D_55a8_party[0].level=8;D_55a8_party[0].mag=20;
+    int readouts=coordinateReadouts;CAST_0dba_CastSpellCmd();
+    assert(coordinateReadouts==readouts+1 && D_57f0[9]==0);
+    D_5893_map_id=33;D_5895_map_level=2;D_57f0[9]=1;
+    CAST_0dba_CastSpellCmd();assert(D_57f0[9]==1); /* Original restriction when disabled. */
+    D_5893_map_id=D_5895_map_level=0;
+    KEY_SDL_SetGameplayInput(1);
+    SDL_KeyboardEvent e={0};e.key=SDLK_TAB;KEY_SDL_ProcessKeyDown(e);
+    assert(KEY_PollKey()==0);KEY_SDL_SetGameplayInput(0);
+    ENGINE_Set(ENGINE_WORLD_MAP,1);
+}
+
 int main(void)
 {
     assert(SDL_Init(SDL_INIT_VIDEO));
@@ -313,16 +385,21 @@ int main(void)
     /* A Tab in non-gameplay input retains its original character behavior. */
     SDL_KeyboardEvent e={0};e.key=SDLK_TAB;KEY_SDL_ProcessKeyDown(e);
     assert(KEY_PollKey()=='\t');
+    markerRules();
     generation();
     underworld();
     FILE_SetDataDirectory(TEST_GAME_DIR);
     artwork=WORLD_MAP_Generate();assert(artwork);
-    run(false,false); run(true,true);
+    run(false,false,false);run(true,true,false);
+    run(false,false,true);run(false,true,false);
+    spellMap=33;spellLevel=2;run(false,false,true);
+    spellMap=0;spellLevel=255;run(false,false,true);
+    spellLevel=0;run(false,true,false);
     D_58a4=1;
     for(videoMode=GRAP_VIDEO_FULLSCREEN;videoMode<=GRAP_VIDEO_FULLSCREEN_43;videoMode++) {
         GRAP_SDL_SetVideoMode(videoMode);
         GRAP_BUF_Present();SDL_FlushEvents(SDL_EVENT_FIRST,SDL_EVENT_LAST);
-        run(false,false);run(true,true);
+        run(false,false,false);run(true,true,false);
     }
     SDL_DestroySurface(artwork);
     GRAP_Cleanup();SDL_Quit();

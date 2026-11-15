@@ -157,7 +157,9 @@ if(U5D_BUILD_TESTS)
         add_executable(impera_world_map_test tests/world_map_test.c ${TEST_SOURCES})
         list(APPEND U5D_TARGETS impera_world_map_test)
         target_compile_definitions(impera_world_map_test PRIVATE TEST_GAME_DIR="${CMAKE_SOURCE_DIR}/Ultima 5")
-        target_link_options(impera_world_map_test PRIVATE "-Wl,--wrap=SDL_GetTicks" "-Wl,--wrap=SDL_RenderPresent")
+        target_link_options(impera_world_map_test PRIVATE "-Wl,--wrap=SDL_GetTicks" "-Wl,--wrap=SDL_RenderPresent"
+            "-Wl,--wrap=ULTIMA_4988" "-Wl,--wrap=CAST2_00de_SelectSpell" "-Wl,--wrap=CAST2_0000_CastEffect"
+            "-Wl,--wrap=CAST2_06ec" "-Wl,--wrap=ULTIMA_1850_PrintString" "-Wl,--wrap=ULTIMA_43ae_AudioSweepTone")
         file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/world-map-runtime")
         add_test(NAME world_map_overlay COMMAND impera_world_map_test)
         set_tests_properties(world_map_overlay PROPERTIES TIMEOUT 15
@@ -425,6 +427,10 @@ if(U5D_BUILD_TESTS)
         endforeach()
         set_tests_properties(engine_settings PROPERTIES WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/settings-runtime"
             ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software" TIMEOUT 10)
+        add_test(NAME world_map_option COMMAND u5d_engine_settings_test world_map_option)
+        set_tests_properties(world_map_option PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/settings-runtime" TIMEOUT 10
+            ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software")
         add_test(NAME gameplay_engine_options COMMAND u5d_engine_settings_test gameplay_options)
         set_tests_properties(gameplay_engine_options PROPERTIES
             WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/settings-runtime"

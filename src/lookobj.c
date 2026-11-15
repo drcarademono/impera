@@ -1,4 +1,7 @@
 #include "common/engine_settings.h"
+#if defined(TARGET_SDL)
+#include "common/world_map.h"
+#endif
 #include "talk.h"
 #include "common/common.h"
 #include "mod/signs.h"
@@ -1054,6 +1057,9 @@ void LOOKOBJ_10fc_ViewCmd(int param_1, int param_2)
 
     ULTIMA_0ace_GRAP_18_TransferArea(1, 0, 8, 8, 0xb7, 0xb7);
     ULTIMA_0c22_GRAP_0f_SelectPage(0);
+#if defined(TARGET_SDL)
+    WORLD_MAP_RecordGem(D_589b,D_589c,32,32);
+#endif
     LOOKOBJ_0a9c(param_1, param_2);
 
     local_4 = 0;
