@@ -1,5 +1,6 @@
 #include "common.h"
 #include "world_map.h"
+#include "engine_settings.h"
 #include "world_map_palette.h"
 #include "file.h"
 #include "funcs.h"
@@ -44,6 +45,16 @@ static bool partyPosition(int* x, int* y, int* resultWorld)
     return true;
 }
 
+int WORLD_MAP_MarkerPosition(int spell,int* x,int* y,int* world)
+{
+    if(!partyPosition(x,y,world)) return 0;
+    if(spell) {
+        if(MAPS_IsDungeon(D_5893_map_id)) *world=0;
+        return 1;
+    }
+    return D_57bc && !D_5893_map_id && !*world && (D_587f<=5 || D_587f>=19);
+}
+
 /* Keep the terrain as last observed, not fresh terrain from unseen locations. */
 static struct { byte known[8192]; byte terrain[65536]; } explored;
 static int exploredWidth,exploredHeight;
@@ -60,6 +71,22 @@ static void explorationSize(void)
         WORLD_MAP_ResetExploration(); exploredWidth=w; exploredHeight=h;
     }
 }
+static void remember(int x,int y,unsigned tile)
+{
+    x=MAPS_Wrap(x,exploredWidth);y=MAPS_Wrap(y,exploredHeight);
+    TypeCell cell={0};cell.floor=-1;cell.x=x;cell.y=y;
+    TypeDef def;
+    if(TYPES_Get(TYPES_At(cell,tile),&def) && !def.kind) tile=def.base;
+    int index=y*256+x;
+    explored.known[index/8]|=1u<<(index%8);explored.terrain[index]=tile;
+}
+void WORLD_MAP_RecordGem(int x,int y,int columns,int rows)
+{
+    if(D_5893_map_id || !D_5895_map_level) return;
+    explorationSize();
+    for(int row=0;row<rows;row++) for(int col=0;col<columns;col++)
+        remember(x+col,y+row,*ULTIMA_4402_GetTileAddr(x+col,y+row));
+}
 void WORLD_MAP_RecordView(int columns,int rows,int mapY,int clipTop,int clipBottom)
 {
     if(D_5893_map_id || !D_5895_map_level || !D_58a4) return;
@@ -71,13 +98,7 @@ void WORLD_MAP_RecordView(int columns,int rows,int mapY,int clipTop,int clipBott
         if(!WIDE_Visible(dx,dy)) continue;
         unsigned tile=WIDE_MapTile(dx,dy);
         if(tile==255) continue;
-        int x=MAPS_Wrap(D_5896_map_x+dx,exploredWidth);
-        int y=MAPS_Wrap(D_5897_map_y+dy,exploredHeight);
-        TypeCell cell={0};cell.floor=-1;cell.x=x;cell.y=y;
-        TypeDef def;
-        if(TYPES_Get(TYPES_At(cell,tile),&def) && !def.kind) tile=def.base;
-        int index=y*256+x;
-        explored.known[index/8]|=1u<<(index%8); explored.terrain[index]=tile;
+        remember(D_5896_map_x+dx,D_5897_map_y+dy,tile);
     }
 }
 int WORLD_MAP_WriteExploration(FILE* file)
@@ -111,9 +132,8 @@ int WORLD_MAP_ReadExploration(FILE* file,int apply)
     free(next);return ok;
 }
 
-SDL_Surface* WORLD_MAP_Generate(void)
+static SDL_Surface* generate(int world)
 {
-    int world=0,px,py;partyPosition(&px,&py,&world);
     int w=MAPS_ActiveWidth(0,world), h=MAPS_ActiveHeight(0,world);
     SDL_Surface* image=SDL_CreateSurface(w,h,SDL_PIXELFORMAT_ARGB8888);
     if(!image) return NULL;
@@ -162,19 +182,26 @@ SDL_Surface* WORLD_MAP_Generate(void)
     return image;
 }
 
-void WORLD_MAP_Show(void)
+SDL_Surface* WORLD_MAP_Generate(void)
 {
-    SDL_Surface* image=WORLD_MAP_Generate();
+    int world=0,x,y;partyPosition(&x,&y,&world);
+    return generate(world);
+}
+
+static int show(int spell)
+{
+    if(!ENGINE_Get(ENGINE_WORLD_MAP)) return 0;
+    int px=0,py=0,world=0;
+    bool marker=WORLD_MAP_MarkerPosition(spell,&px,&py,&world);
+    SDL_Surface* image=generate(world);
     if(!image) {
         DEBUG_Error("Cannot generate the active world map");
-        KEY_SDL_ClearInput(); MOUSE_Cancel(); return;
+        KEY_SDL_ClearInput(); MOUSE_Cancel(); return 0;
     }
     int width=image->w,height=image->h;
-    if(!GRAP_SDL_SetWorldMap(image)) { SDL_DestroySurface(image); return; }
+    if(!GRAP_SDL_SetWorldMap(image)) { SDL_DestroySurface(image); return 0; }
     SDL_DestroySurface(image);
 
-    int px=0, py=0,world=0;
-    bool marker = D_57bc && partyPosition(&px, &py, &world);
     float cx = marker ? px+0.5f : width/2.0f, cy = marker ? py+0.5f : height/2.0f;
     float zoom=1;
     bool pointer = MOUSE_PointerMode(), done=false, dragging=false;
@@ -225,4 +252,7 @@ void WORLD_MAP_Show(void)
     SDL_FlushEvents(SDL_EVENT_MOUSE_MOTION,SDL_EVENT_MOUSE_WHEEL);
     MOUSE_SetPointerMode(pointer);
     GRAP_BUF_MarkDirty(); GRAP_BUF_Present();
+    return 1;
 }
+void WORLD_MAP_Show(void) { (void)show(0); }
+int WORLD_MAP_ShowSpell(void) { return show(1); }

@@ -772,14 +772,23 @@ The map opens at 100%: its pixels match the size and aspect ratio of regular
 game pixels. It does not automatically shrink to fit. Scroll to reach the edges
 when the map is larger than the viewport.
 
-With a **Sextant**, the map opens centered on the party, marked by a flashing
-**+**. In a town or dungeon, it marks the surface entrance.
-Without a Sextant, it opens centered on the map with no position marker.
+**Engine Options > Gameplay > World Map** enables or disables the map (on by
+default). With it off, Tab does nothing and In Wis retains its original
+coordinate readout.
+
+A **Sextant** centers the map on a flashing **+** only outdoors in Britannia
+at night (19:00–05:59). Otherwise, Tab opens an unmarked map.
+
+**In Wis** opens the map with a temporary position marker, without requiring a
+Sextant or nighttime. In dungeons, it marks the entrance on Britannia; in the
+Underworld, it marks the party on the explored Underworld map. Closing the map
+ends the spell's marker; reopening with Tab follows the normal Sextant rules.
 
 The Underworld map starts black and remembers only terrain actually visible
 in the gameplay viewport, respecting light range and blocked sight. Exploration
 is stored per save, including named slots; old saves start with no explored
-Underworld terrain. A Sextant marks the party on either world's map.
+Underworld terrain. Gem views also reveal their displayed area, even through
+blocked sight; areas beyond the gem view remain hidden.
 
 The Britannia map is generated each time it opens from the active terrain,
 including modded resources, resized world maps, and custom terrain types

@@ -24,9 +24,9 @@
 #include <math.h>
 
 static const char* keys[]={"video_mode","tileset","crt_filter","transparent","dithered_darkness",
-    "music","sound","sound_speed","enhanced_look","mouse","smooth","diagonal","movement_speed","animation_speed","music_volume","sound_volume","footsteps"};
+    "music","sound","sound_speed","enhanced_look","mouse","smooth","diagonal","movement_speed","animation_speed","music_volume","sound_volume","footsteps","world_map"};
 static const char* labels[]={"Video Mode","Tileset","CRT Filter","Transparent Sprites","Dithered Darkness",
-    "Music","Sound Effects","Sound Effect Speed","Enhanced Look","Mouse Control","Smooth Movement","Diagonal Movement","Movement Speed","Animation Speed","Music Volume","Sound Volume","Footstep Sounds"};
+    "Music","Sound Effects","Sound Effect Speed","Enhanced Look","Mouse Control","Smooth Movement","Diagonal Movement","Movement Speed","Animation Speed","Music Volume","Sound Volume","Footstep Sounds","World Map"};
 static bool isSpeed(int row) { return row==ENGINE_SOUND_SPEED || row==ENGINE_MOVEMENT_SPEED || row==ENGINE_ANIMATION_SPEED; }
 static const float ticks[]={0.5f,0.75f,1.0f};
 static bool isVolume(int row) { return row==ENGINE_MUSIC_VOLUME || row==ENGINE_SOUND_VOLUME; }
@@ -34,9 +34,9 @@ static bool isSlider(int row) { return isSpeed(row) || isVolume(row); }
 enum { TAB_GRAPHICS, TAB_SOUND, TAB_GAMEPLAY, TAB_MODS, TAB_COUNT };
 static const int graphicsRows[]={ENGINE_FULLSCREEN,ENGINE_TILESET,ENGINE_CRT,ENGINE_TRANSPARENT,ENGINE_DITHERED_DARKNESS,ENGINE_ANIMATION_SPEED};
 static const int soundRows[]={ENGINE_MUSIC,ENGINE_SOUND,ENGINE_FOOTSTEPS,ENGINE_MUSIC_VOLUME,ENGINE_SOUND_VOLUME,ENGINE_SOUND_SPEED};
-static const int gameplayRows[]={ENGINE_ENHANCED_LOOK,ENGINE_MOUSE,ENGINE_SMOOTH,ENGINE_DIAGONAL,ENGINE_MOVEMENT_SPEED};
+static const int gameplayRows[]={ENGINE_ENHANCED_LOOK,ENGINE_MOUSE,ENGINE_SMOOTH,ENGINE_DIAGONAL,ENGINE_MOVEMENT_SPEED,ENGINE_WORLD_MAP};
 static const int *tabRows[]={graphicsRows,soundRows,gameplayRows};
-static const int tabCounts[]={6,6,5};
+static const int tabCounts[]={6,6,6};
 static const int tabX[]={16,96,152,240},tabWidth[]={72,48,80,48};
 static const char *tabNames[]={"Graphics","Sound","Gameplay","Mods"};
 static int s_optionsTab;
@@ -59,6 +59,7 @@ static float sliderValue(int row,float x) {
 }
 static const char* optionStatus;
 static bool s_enhancedLook;
+static bool s_worldMap=true;
 
 float ENGINE_Get(int row)
 {
@@ -66,6 +67,7 @@ float ENGINE_Get(int row)
     case ENGINE_FULLSCREEN:return GRAP_SDL_VideoMode();
     case ENGINE_TILESET:return TILESET_Selected();
     case ENGINE_ENHANCED_LOOK:return s_enhancedLook;
+    case ENGINE_WORLD_MAP:return s_worldMap;
     case ENGINE_MOUSE:return MOUSE_Enabled();
     case ENGINE_SMOOTH:return GRAP_SDL_SmoothMovementEnabled();
     case ENGINE_DIAGONAL:return MOVEMENT_Diagonal();
@@ -97,6 +99,7 @@ void ENGINE_Set(int row,float value)
     case ENGINE_FULLSCREEN:GRAP_SDL_SetVideoMode((int)value);break;
     case ENGINE_TILESET:optionStatus=TILESET_Select((int)value)?NULL:"Tileset files unavailable";break;
     case ENGINE_ENHANCED_LOOK:s_enhancedLook=value!=0;break;
+    case ENGINE_WORLD_MAP:s_worldMap=value!=0;break;
     case ENGINE_MOUSE:MOUSE_SetEnabled(value!=0);break;
     case ENGINE_SMOOTH:GRAP_SDL_SetSmoothMovement(value!=0);break;
     case ENGINE_DIAGONAL:MOVEMENT_SetDiagonal(value!=0);break;
