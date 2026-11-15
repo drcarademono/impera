@@ -128,10 +128,9 @@ and the keys used by its new screens:
 | `Ctrl+E` | Gameplay | Preserve the original **Exit to DOS?** confirmation. |
 | `Ctrl+E` | Main menu, Engine Options, save/load browsers, or cutscenes | Exit immediately. |
 
-Keyboard Help lists game commands A–Z, movement and dungeon controls, combat,
-engine shortcuts, the world map, and menus. Browse with Left/Right, Page Up/Down,
-Tab, the mouse wheel, or the Previous/Next buttons. Home/End jumps to the first
-or last page. Gameplay pauses until help closes, then resumes the suspended screen.
+Keyboard Help is a single-screen command reference with the original game keys
+and Impera's help, options, save, load, and map shortcuts. Esc or Ctrl+H closes it
+and resumes the suspended game.
 
 `Ctrl+W` and `Ctrl+L` are gameplay shortcuts and do not open another browser from
 inside menus or other prompts. Normal keyboard action selection still works when

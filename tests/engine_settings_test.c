@@ -368,50 +368,25 @@ static Uint32 closeGameplayOptions(void* userdata, SDL_TimerID timer, Uint32 int
     key(SDLK_ESCAPE);
     return 0;
 }
-/* Drive the help UI at presentation boundaries so navigation and restoration
- * are checked on the UI thread, including the real Ctrl+H input dispatch. */
+/* Check the single-screen reference and its real Ctrl+H input dispatch. */
 static bool testingHelp,closeHelpWithEscape;
 static int helpStep;
-static byte firstHelp[320*200],secondHelp[320*200];
 static u32 helpFrozen;
 bool __real_SDL_RenderPresent(SDL_Renderer* renderer);
 bool __wrap_SDL_RenderPresent(SDL_Renderer* renderer)
 {
     if(testingHelp) {
-        if(helpStep<8) {
-            assert(GRAP_SDL_PixelUI() && MOUSE_PointerMode());
-            if(!helpStep) helpFrozen=TIME_GetTicksMs();
-            else assert(TIME_GetTicksMs()==helpFrozen);
-        }
         switch(helpStep++) {
         case 0: {
-            memcpy(firstHelp,g_linearEgaBuffer0,sizeof(firstHelp));
+            assert(GRAP_SDL_PixelUI() && MOUSE_PointerMode());
+            helpFrozen=TIME_GetTicksMs();SDL_Delay(25);
+            assert(TIME_GetTicksMs()==helpFrozen);
             SDL_Surface* preview=SDL_RenderReadPixels(renderer,NULL);assert(preview);
             assert(SDL_SaveBMP(preview,"keyboard-help.bmp"));SDL_DestroySurface(preview);
             SDL_Event held={0};held.type=SDL_EVENT_KEY_DOWN;
             held.key.key=SDLK_H;held.key.mod=SDL_KMOD_CTRL;held.key.repeat=true;
             assert(SDL_PushEvent(&held));
-            key(SDLK_BACKSPACE);key(SDLK_RIGHT);break;
-        }
-        case 1:
-            memcpy(secondHelp,g_linearEgaBuffer0,sizeof(secondHelp));
-            assert(memcmp(firstHelp,secondHelp,sizeof(firstHelp)));
-            key(SDLK_PAGEDOWN);break;
-        case 2:
-            assert(memcmp(secondHelp,g_linearEgaBuffer0,sizeof(secondHelp)));
-            key(SDLK_END);break;
-        case 3:key(SDLK_HOME);break;
-        case 4: {
-            assert(!memcmp(firstHelp,g_linearEgaBuffer0,sizeof(firstHelp)));
-            SDL_Event wheel={0};wheel.type=SDL_EVENT_MOUSE_WHEEL;wheel.wheel.y=-1;
-            assert(SDL_PushEvent(&wheel));break;
-        }
-        case 5:
-            assert(!memcmp(secondHelp,g_linearEgaBuffer0,sizeof(secondHelp)));
-            clickUI(160,185);break;
-        case 6:key(SDLK_PAGEUP);break;
-        case 7: {
-            assert(!memcmp(secondHelp,g_linearEgaBuffer0,sizeof(secondHelp)));
+            key(SDLK_BACKSPACE);key(SDLK_RIGHT);
             SDL_Event close={0};close.type=SDL_EVENT_KEY_DOWN;
             close.key.key=closeHelpWithEscape?SDLK_ESCAPE:SDLK_H;
             close.key.mod=closeHelpWithEscape?0:SDL_KMOD_CTRL;
@@ -419,7 +394,7 @@ bool __wrap_SDL_RenderPresent(SDL_Renderer* renderer)
             key(SDLK_A); /* Must not reach the suspended game prompt. */
             break;
         }
-        case 8:break; /* Restored gameplay presentation. */
+        case 1:break; /* Restored gameplay presentation. */
         default:assert(false);
         }
     }
@@ -439,7 +414,7 @@ static void keyboardHelp(void)
         SDL_KeyboardEvent shortcut={0};shortcut.key=SDLK_H;shortcut.mod=SDL_KMOD_CTRL;
         KEY_SDL_ProcessKeyDown(shortcut);
         assert(KEY_PollKey()==0);testingHelp=false;
-        assert(helpStep==9);
+        assert(helpStep==2);
         assert(GRAP_SDL_PixelUI()==pixelUI && MOUSE_PointerMode()==pointer);
         assert(D_5881==19 && D_588b==42);
         for(int i=0;i<320*200;i++) assert(g_linearEgaBuffer0[i]==3);
@@ -449,7 +424,7 @@ static void keyboardHelp(void)
         KEY_SDL_ProcessKeyDown(shortcut);assert(KEY_PollKey()==U5_KEY_BACKSPACE);
         shortcut.key=SDLK_H;KEY_SDL_ProcessKeyDown(shortcut);assert(KEY_PollKey()=='h');
     }
-    puts("Keyboard help navigation, Ctrl+H, pause, Backspace and restoration passed");
+    puts("Keyboard help, Ctrl+H, pause, Backspace and restoration passed");
 }
 int main(int argc, char** argv)
 {
