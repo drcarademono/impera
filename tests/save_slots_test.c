@@ -15,6 +15,7 @@
 #include "graphics/grap.h"
 #include "funcs.h"
 #include "savegame.h"
+#include "common/world_map.h"
 #include "npc.h"
 #include "talk.h"
 #include "vars.h"
@@ -205,6 +206,20 @@ int main(void)
     assert(!SLOTS_Write("../escape","Bad",NULL));
     assert(!SLOTS_Write("1","Bad\nName",NULL));
     assert(SLOTS_Load("1"));assert(FILE_ReadSavegameFile("SAVED.GAM")==0);assert(D_57a8==123);
+    /* Exploration travels with the named slot, and legacy slots clear it. */
+    D_5893_map_id=0;D_5895_map_level=255;D_58a4=1;D_58a5=0;
+    D_5896_map_x=D_5897_map_y=16;D_589b=D_589c=0;
+    memset(D_6608,5,1024);memset(D_ab02,5,sizeof(D_ab02));
+    WORLD_MAP_RecordView(11,11,8,8,184);
+    assert(SLOTS_Write("9988","Underworld exploration",NULL));
+    WORLD_MAP_ResetExploration();
+    assert(SLOTS_Load("9988") && FILE_ReadSavegameFile("SAVED.GAM")==0);
+    FILE* explored=tmpfile();assert(explored && WORLD_MAP_WriteExploration(explored));
+    assert(ftell(explored)>16);fclose(explored);
+    assert(SLOTS_Load("1") && FILE_ReadSavegameFile("SAVED.GAM")==0);
+    explored=tmpfile();assert(explored && WORLD_MAP_WriteExploration(explored));
+    assert(ftell(explored)==0);fclose(explored);
+    assert(SLOTS_Delete("9988"));D_58a4=0;
     known=tmpfile();assert(known && TALK_WriteKnowledge(known));
     assert(ftell(known)==sizeof(knowledge));rewind(known);
     unsigned char restored[17];assert(fread(restored,1,sizeof(restored),known)==sizeof(restored));

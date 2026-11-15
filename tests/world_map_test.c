@@ -13,6 +13,9 @@
 #include "common/file.h"
 #include "mod/maps.h"
 #include "mod/types.h"
+#include "macros.h"
+#include "tiles.h"
+#include "savegame.h"
 #include "key/key.h"
 #include "key/mouse.h"
 #include "time/time.h"
@@ -215,6 +218,89 @@ static void generation(void)
     TYPES_Mount(NULL,0,NULL,0);assert(MAPS_Mount(NULL,0));free(bytes);
 }
 
+static void underworld(void)
+{
+    unsigned size=MAPS_HEADER+MAPS_RECORD+256*256;
+    unsigned char* bytes=calloc(1,size);assert(bytes);
+    memcpy(bytes,"IMAPS001",8);TYPES_Put32(bytes+8,1);
+    unsigned char* r=bytes+MAPS_HEADER;TYPES_Put32(r,MAPS_RECORD+256*256);
+    r[5]=1;r[11]=r[13]=1;r[14]=254;
+    strcpy((char*)r+24,"Underworld");strcpy((char*)r+88,"UNDER.DAT");
+    memset(r+MAPS_RECORD,5,256*256);assert(MAPS_Mount(bytes,size));
+    D_5893_map_id=0;D_5895_map_level=255;D_58a4=1;D_58a5=50;
+    D_5896_map_x=D_5897_map_y=128;memset(D_ab02,5,sizeof(D_ab02));
+    *MAPS_ActiveCell(0,-1,129,128)=TILE_MAP_WALL;
+    *MAPS_ActiveCell(0,-1,128,129)=TILE_MAP_WALL;
+    assert(WIDE_Visible(1,0) && !WIDE_Visible(2,0) && !WIDE_Visible(1,1));
+    GetMapViewport(4,5)=255; /* Authoritative native-view hidden cell. */
+    WORLD_MAP_ResetExploration();
+    SDL_Surface* image=WORLD_MAP_Generate();assert(image);
+    assert(pixel(image,128,128)==0 && pixel(image,129,128)==0);SDL_DestroySurface(image);
+    /* Generating/zooming a map cannot reveal anything. A presented game map can. */
+    GRAP_BUF_Present();
+    image=WORLD_MAP_Generate();assert(image && pixel(image,128,128)==0);SDL_DestroySurface(image);
+    GRAP_SDL_MapDrawn();GRAP_BUF_Present();
+    image=WORLD_MAP_Generate();assert(image);
+    assert(pixel(image,128,128)==0x046e04);
+    assert(pixel(image,129,128)!=0); /* The near wall is visible. */
+    assert(pixel(image,130,128)==0 && pixel(image,129,129)==0); /* Behind wall/corner. */
+    assert(pixel(image,127,128)==0 && pixel(image,122,128)==0); /* Hidden/offscreen. */
+    SDL_DestroySurface(image);
+    /* Repaint a changed visibility field without a new map draw (e.g. resize). */
+    GetMapViewport(4,5)=5;GRAP_BUF_Present();
+    image=WORLD_MAP_Generate();assert(image && pixel(image,127,128)==0x046e04);SDL_DestroySurface(image);
+    WORLD_MAP_ResetExploration();GRAP_BUF_Present(); /* Previous save's frame is stale. */
+    image=WORLD_MAP_Generate();assert(image && pixel(image,128,128)==0);SDL_DestroySurface(image);
+    WORLD_MAP_ResetExploration();GRAP_SDL_SetPixelUI(true);
+    GRAP_SDL_MapDrawn();GRAP_BUF_Present();
+    image=WORLD_MAP_Generate();assert(image && pixel(image,128,128)==0);SDL_DestroySurface(image);
+    GRAP_SDL_SetPixelUI(false);
+    memset(D_ab02,5,sizeof(D_ab02));
+    D_58a5=0;WORLD_MAP_RecordView(11,11,8,8,184);
+    image=WORLD_MAP_Generate();assert(image);
+    assert(pixel(image,128,128)==0x046e04 && pixel(image,127,128)==0);SDL_DestroySurface(image);
+    D_5896_map_x=140;
+    WORLD_MAP_RecordView(11,11,8,8,184);
+    *MAPS_ActiveCell(0,-1,128,128)=7; /* Remote change is not yet witnessed. */
+    image=WORLD_MAP_Generate();assert(image && pixel(image,128,128)==0x046e04);SDL_DestroySurface(image);
+    D_5896_map_x=128;WORLD_MAP_RecordView(11,11,8,8,184);
+    image=WORLD_MAP_Generate();assert(image && pixel(image,128,128)==0xdcb604);SDL_DestroySurface(image);
+
+    /* Save validation is read-only; restore replaces, rather than unions, history. */
+    FILE* state=tmpfile();assert(state && WORLD_MAP_WriteExploration(state));
+    long length=ftell(state);assert(length>16);
+    WORLD_MAP_ResetExploration();rewind(state);assert(WORLD_MAP_ReadExploration(state,0));
+    image=WORLD_MAP_Generate();assert(image && pixel(image,128,128)==0);SDL_DestroySurface(image);
+    rewind(state);assert(WORLD_MAP_ReadExploration(state,1));
+    image=WORLD_MAP_Generate();assert(image && pixel(image,128,128)==0xdcb604);SDL_DestroySurface(image);
+    assert(FILE_WriteSavegameFile("underworld.gam")==0);
+    WORLD_MAP_ResetExploration();assert(FILE_ReadSavegameFile("underworld.gam")==0);
+    image=WORLD_MAP_Generate();assert(image && pixel(image,128,128)==0xdcb604);SDL_DestroySurface(image);
+    remove("underworld.gam");
+    assert(!fseek(state,16,SEEK_SET));int original=fgetc(state);
+    assert(!fseek(state,16,SEEK_SET));fputc(original^1,state);fflush(state);rewind(state);
+    assert(!WORLD_MAP_ReadExploration(state,1));
+    image=WORLD_MAP_Generate();assert(image && pixel(image,128,128)==0xdcb604);SDL_DestroySurface(image);
+    fclose(state);
+    state=tmpfile();assert(state);assert(WORLD_MAP_ReadExploration(state,1));fclose(state);
+    image=WORLD_MAP_Generate();assert(image && pixel(image,128,128)==0);SDL_DestroySurface(image);
+    state=tmpfile();assert(state);assert(fwrite("IUWMAP01",1,8,state)==8);rewind(state);
+    assert(!WORLD_MAP_ReadExploration(state,1));fclose(state);
+
+    D_58a5=50;D_5896_map_x=0;
+    WORLD_MAP_RecordView(11,11,8,8,184);
+    image=WORLD_MAP_Generate();assert(image && pixel(image,255,128)==0x046e04);SDL_DestroySurface(image);
+    D_5896_map_x=128;WORLD_MAP_ResetExploration();
+    WORLD_MAP_RecordView(21,11,8,8,184); /* Larger viewport reveals additional cells. */
+    image=WORLD_MAP_Generate();assert(image);
+    assert(pixel(image,122,128)==0x046e04 && pixel(image,117,128)==0);SDL_DestroySurface(image);
+    WORLD_MAP_ResetExploration();WORLD_MAP_RecordView(11,13,-8,8,184);
+    image=WORLD_MAP_Generate();assert(image && pixel(image,128,122)==0);SDL_DestroySurface(image);
+    WORLD_MAP_ResetExploration();assert(MAPS_Mount(NULL,0));free(bytes);
+    D_5893_map_id=D_5895_map_level=D_58a4=0;
+    memset(D_ab02,0,sizeof(D_ab02));
+}
+
 int main(void)
 {
     assert(SDL_Init(SDL_INIT_VIDEO));
@@ -228,6 +314,7 @@ int main(void)
     SDL_KeyboardEvent e={0};e.key=SDLK_TAB;KEY_SDL_ProcessKeyDown(e);
     assert(KEY_PollKey()=='\t');
     generation();
+    underworld();
     FILE_SetDataDirectory(TEST_GAME_DIR);
     artwork=WORLD_MAP_Generate();assert(artwork);
     run(false,false); run(true,true);

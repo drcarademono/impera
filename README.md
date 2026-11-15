@@ -763,7 +763,7 @@ is limited to ten minutes per asset; music recordings remain compressed when pos
 
 ### World map
 
-Press **Tab** at a gameplay command prompt to open the Britannia map in the
+Press **Tab** at a gameplay command prompt to open the current world map in the
 viewport. **Tab** or **Esc** closes it. Gameplay pauses while it is open.
 Use the **arrow keys** or **left-button dragging** to pan. The **mouse wheel**
 zooms in and out (25%–800%); horizontal wheel scrolling pans.
@@ -774,11 +774,14 @@ when the map is larger than the viewport.
 
 With a **Sextant**, the map opens centered on the party, marked by a flashing
 **+**. In a town or dungeon, it marks the surface entrance.
-Without a Sextant, it opens centered on the map with no position marker. This
-map covers Britannia, so positions in the Underworld or locations without a
-known Britannia entrance use the unmarked map view.
+Without a Sextant, it opens centered on the map with no position marker.
 
-The map is generated each time it opens from the active Britannia terrain,
+The Underworld map starts black and remembers only terrain actually visible
+in the gameplay viewport, respecting light range and blocked sight. Exploration
+is stored per save, including named slots; old saves start with no explored
+Underworld terrain. A Sextant marks the party on either world's map.
+
+The Britannia map is generated each time it opens from the active terrain,
 including modded resources, resized world maps, and custom terrain types
 (using their base terrain color). Its palette matches `textures/maps/U5brit.png`;
 the PNG is a color reference and is not loaded by the game.

@@ -5,6 +5,7 @@
 #include "mod/types.h"
 #if defined(TARGET_SDL)
 #include "engine_settings.h"
+#include "world_map.h"
 #include "file.h"
 #include "savegame.h"
 #include "npc.h"
@@ -192,6 +193,7 @@ bool SLOTS_CreateInitial(void)
     if(D_5893_map_id == 0)
         memcpy(D_5c5a, D_b21e + (D_5895_map_level ? 256 : 0), 256);
     TYPES_Reset();
+    WORLD_MAP_ResetExploration();
     if(!NPC_InitializeNewGame()) return false;
     SLOTS_ResetTime();
     char name[sizeof(D_55a8_party[0].name)+1];
@@ -212,7 +214,7 @@ static bool SLOTS_Load_Impl(const char* id)
                   (i ? ftell(f) == 512
                      : (ftell(f) >= 0x1060 && fseek(f, 0x1060, SEEK_SET) == 0 &&
                         MAPS_ReadState(f, 0) && NPC_ReadExtraState(f, 0) &&
-                        PARTY_ReadState(f, 0) && TALK_ReadKnowledge(f, 0) && CONTENTS_ReadState(f, 0)));
+                        PARTY_ReadState(f, 0) && TALK_ReadKnowledge(f, 0) && WORLD_MAP_ReadExploration(f, 0) && CONTENTS_ReadState(f, 0)));
         fclose(f);
         if (!ok)
             return false;
@@ -379,7 +381,7 @@ static bool validLegacy(void)
                   (i ? ftell(f) == 512
                      : (ftell(f) >= 0x1060 && fseek(f, 0x1060, SEEK_SET) == 0 &&
                         MAPS_ReadState(f, 0) && NPC_ReadExtraState(f, 0) &&
-                        PARTY_ReadState(f, 0) && TALK_ReadKnowledge(f, 0) && CONTENTS_ReadState(f, 0)));
+                        PARTY_ReadState(f, 0) && TALK_ReadKnowledge(f, 0) && WORLD_MAP_ReadExploration(f, 0) && CONTENTS_ReadState(f, 0)));
         fclose(f);if(!ok) return false;
     }
     return true;

@@ -11,6 +11,13 @@
 #include <string.h>
 
 #include "common/file.h"
+#if defined(TARGET_SDL)
+#include "common/world_map.h"
+#else
+#define WORLD_MAP_ReadExploration(file,apply) 1
+#define WORLD_MAP_WriteExploration(file) 1
+#define WORLD_MAP_ResetExploration() ((void)0)
+#endif
 
 #if !defined(TARGET_DOS16)
 
@@ -62,7 +69,7 @@ int FILE_ReadSavegameFile(char* fileName)
         return -1;
     }
     if (fseek(stream, 0x1060, SEEK_SET) || !MAPS_ReadState(stream, 0) ||
-        !NPC_ReadExtraState(stream, 0) || !PARTY_ReadState(stream, 0) || !TALK_ReadKnowledge(stream, 0) || !CONTENTS_ReadState(stream, 0) ||
+        !NPC_ReadExtraState(stream, 0) || !PARTY_ReadState(stream, 0) || !TALK_ReadKnowledge(stream, 0) || !WORLD_MAP_ReadExploration(stream, 0) || !CONTENTS_ReadState(stream, 0) ||
         fseek(stream, 0, SEEK_SET)) {
         DEBUG_Error("Invalid map contents save state");
         fclose(stream);
@@ -213,12 +220,14 @@ int FILE_ReadSavegameFile(char* fileName)
         TYPES_Reset();
         NPC_ResetExtra();
         TALK_ResetKnowledge();
+        WORLD_MAP_ResetExploration();
         PARTY_InitExtras();
     } else {
         MAPS_ReadState(stream, 1);
         NPC_ReadExtraState(stream, 1);
         PARTY_ReadState(stream, 1);
         TALK_ReadKnowledge(stream, 1);
+        WORLD_MAP_ReadExploration(stream, 1);
         CONTENTS_ReadState(stream, 1);
     }
     fclose(stream);
@@ -386,7 +395,7 @@ int FILE_WriteSavegameFile(char* fileName)
     debug("Party serializer file=%s final offset=%d expected=4192",fileName,pos);
 
     int failed = ferror(stream) || !MAPS_WriteState(stream) || !NPC_WriteExtraState(stream) ||
-                 !PARTY_WriteState(stream) || !TALK_WriteKnowledge(stream) || !CONTENTS_WriteState(stream);
+                 !PARTY_WriteState(stream) || !TALK_WriteKnowledge(stream) || !WORLD_MAP_WriteExploration(stream) || !CONTENTS_WriteState(stream);
     if (fclose(stream) != 0) failed = 1;
 
     ASSERT(pos == 0x1060);
