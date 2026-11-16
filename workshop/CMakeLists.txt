@@ -218,7 +218,9 @@ if(BUILD_TESTING OR U5D_BUILD_TESTS)
     add_test(NAME workshop_audio COMMAND impera_workshop_audio_test)
     set_tests_properties(workshop_audio PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;SDL_AUDIO_DRIVER=dummy" TIMEOUT 120)
     add_test(NAME workshop_custom_types COMMAND impera_workshop_custom_types_test)
-    set_tests_properties(workshop_custom_types PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 60)
+    # Artwork editing and package/project roundtrips vary with hosted GUI runner load.
+    # Allow the same budget as the main Workshop suite, especially on Intel macOS.
+    set_tests_properties(workshop_custom_types PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 180)
     add_test(NAME workshop_map_json COMMAND impera_workshop_test --map-json-tests)
     set_tests_properties(workshop_map_json PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 240)
     add_test(NAME workshop COMMAND impera_workshop_test)
