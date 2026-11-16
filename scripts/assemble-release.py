@@ -16,6 +16,32 @@ WINDOWS_FILES = {'Impera.exe', 'Run Impera.cmd', 'README.md',
                  'Licenses/dr_libs.txt', 'Licenses/stb_vorbis.txt'}
 
 
+def assemble_verified(artifacts, version, output):
+    """Publish exactly the combined archives smoke-tested by each native build."""
+    version = re.sub(r'[^A-Za-z0-9._-]', '-', version)
+    platforms = {p: '.tar.gz' for p in PLATFORMS}
+    platforms['windows-x86_64'] = '.zip'
+    if {p.name for p in artifacts.iterdir()} != {f'Build-{p}' for p in platforms}:
+        raise ValueError('Missing or unexpected platform artifacts')
+    verified = []
+    for platform, suffix in platforms.items():
+        folder = artifacts / f'Build-{platform}'
+        name = f'Impera-{version}-{platform}{suffix}'
+        if {p.name for p in folder.iterdir()} != {name, name + '.sha256'}:
+            raise ValueError(f'Unexpected combined release files for {platform}')
+        archive, checksum = folder / name, folder / (name + '.sha256')
+        if archive.is_symlink() or checksum.is_symlink() or not archive.is_file() or not checksum.is_file():
+            raise ValueError(f'Invalid combined release files for {platform}')
+        digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+        if checksum.read_text().strip() != f'{digest}  {name}':
+            raise ValueError(f'Checksum mismatch for {name}')
+        verified.extend((archive, checksum))
+    # Validate every platform before copying any release downloads.
+    output.mkdir(parents=True, exist_ok=True)
+    for source in verified:
+        shutil.copy2(source, output / source.name)
+
+
 def assemble(artifacts, version, output, with_workshop=False):
     version = re.sub(r'[^A-Za-z0-9._-]', '-', version)
     expected = {f'Impera-{p}' for p in (*PLATFORMS, 'windows-x86_64')}
@@ -155,7 +181,12 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--artifacts', type=Path, required=True)
     parser.add_argument('--version', required=True)
-    parser.add_argument('--with-workshop', action='store_true')
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument('--with-workshop', action='store_true')
+    mode.add_argument('--verified-combined', action='store_true')
     parser.add_argument('--output', type=Path, default=Path('dist'))
     args = parser.parse_args()
-    assemble(args.artifacts, args.version, args.output, args.with_workshop)
+    if args.verified_combined:
+        assemble_verified(args.artifacts, args.version, args.output)
+    else:
+        assemble(args.artifacts, args.version, args.output, args.with_workshop)
