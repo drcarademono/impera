@@ -92,6 +92,42 @@ class WorkshopReleaseTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'Checksum mismatch'):
                 assembly.assemble(artifacts, 'vtest', output, with_workshop=True)
 
+    def test_release_reuses_identical_verified_packages(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            artifacts = root / 'artifacts'
+            originals = {}
+            for platform in (*assembly.PLATFORMS, 'windows-x86_64'):
+                folder = artifacts / f'Build-{platform}'
+                folder.mkdir(parents=True)
+                suffix = '.zip' if platform.startswith('windows') else '.tar.gz'
+                name = f'Impera-vtest-{platform}{suffix}'
+                payload = f'verified combined {platform}'.encode()
+                (folder / name).write_bytes(payload)
+                digest = hashlib.sha256(payload).hexdigest()
+                checksum = f'{digest}  {name}\n'.encode()
+                (folder / (name + '.sha256')).write_bytes(checksum)
+                originals.update({name: payload, name + '.sha256': checksum})
+            output = root / 'release'
+            for _ in range(2):
+                assembly.assemble_verified(artifacts, 'vtest', output)
+                self.assertEqual({p.name: p.read_bytes() for p in output.iterdir()}, originals)
+            folder = artifacts / 'Build-macos-arm64'
+            with tempfile.TemporaryDirectory() as missing:
+                folder.rename(Path(missing) / folder.name)
+                with self.assertRaisesRegex(ValueError, 'Missing or unexpected'):
+                    assembly.assemble_verified(artifacts, 'vtest', root / 'missing')
+                (Path(missing) / folder.name).rename(folder)
+            extra = folder / 'ImperaWorkshop-vtest-macos-arm64.tar.gz'
+            extra.write_bytes(b'separate product')
+            with self.assertRaisesRegex(ValueError, 'Unexpected combined'):
+                assembly.assemble_verified(artifacts, 'vtest', root / 'extra')
+            extra.unlink()
+            next(folder.glob('*.tar.gz')).write_bytes(b'corrupt')
+            with self.assertRaisesRegex(ValueError, 'Checksum mismatch'):
+                assembly.assemble_verified(artifacts, 'vtest', root / 'corrupt')
+            self.assertFalse((root / 'corrupt').exists())
+
     def test_windows_help_check_redirects_output_and_suppresses_dialogs(self):
         workflow = yaml.safe_load((ROOT / '.github/workflows/release.yml').read_text())
         step = next(s for s in workflow['jobs']['build']['steps']
@@ -239,8 +275,12 @@ class WorkshopReleaseTest(unittest.TestCase):
             if step.get('uses', '').startswith('actions/upload-artifact'):
                 continue
             self.assertNotIn('refs/tags/', step.get('if', ''))
-        self.assertEqual(steps['Upload testing packages']['with']['path'], 'build-artifacts/*')
-        self.assertIn("!startsWith(github.ref, 'refs/tags/v')", steps['Upload testing packages']['if'])
+        upload = steps['Upload verified combined package']
+        self.assertEqual(upload['with']['path'], 'build-artifacts/*')
+        self.assertEqual(upload['with']['name'], 'Build-${{ matrix.platform }}')
+        self.assertNotIn('if', upload)
+        self.assertEqual(sum(s.get('uses', '').startswith('actions/upload-artifact@')
+                             for s in builds['steps']), 1)
         self.assertIn('--output build-artifacts', steps['Combined distribution startup smoke check']['run'])
         self.assertIn('github.sha', builds['env']['RELEASE_VERSION'])
         self.assertIn('github.ref_name', builds['env']['RELEASE_VERSION'])
@@ -248,8 +288,10 @@ class WorkshopReleaseTest(unittest.TestCase):
         release = workflow['jobs']['release']
         self.assertEqual(release['needs'], 'build')
         self.assertEqual(release['if'], "startsWith(github.ref, 'refs/tags/v')")
-        self.assertIn('--with-workshop', next(s['run'] for s in release['steps']
+        self.assertIn('--verified-combined', next(s['run'] for s in release['steps']
                                             if s.get('name') == 'Assemble release downloads'))
+        download = next(s for s in release['steps'] if s.get('uses', '').startswith('actions/download-artifact@'))
+        self.assertEqual(download['with']['pattern'], 'Build-*')
         events = workflow.get('on', workflow.get(True))
         self.assertEqual(events['push']['branches'], ['main'])
         self.assertEqual(events['push']['tags'], ['v*'])

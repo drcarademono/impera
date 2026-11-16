@@ -165,12 +165,6 @@ jobs:
         run: |
           import pathlib, shutil
           shutil.move(str(next(pathlib.Path('dist').glob('Impera-*-windows-x86_64'))), 'windows-artifact')
-      - uses: actions/upload-artifact@v4
-        if: startsWith(github.ref, 'refs/tags/v')
-        with:
-          name: Impera-${{ matrix.platform }}
-          path: ${{ runner.os == 'Windows' && 'windows-artifact/' || 'dist/*' }}
-          if-no-files-found: error
       - name: Package Workshop with Qt runtime
         run: python scripts/package-workshop.py --build release-build/workshop --platform ${{ matrix.platform }}
       - name: Workshop package startup smoke check
@@ -219,14 +213,7 @@ jobs:
           shutil.move(str(next(pathlib.Path('workshop-dist').glob('ImperaWorkshop-*'))), 'workshop-windows-artifact')
       - name: Combined distribution startup smoke check
         run: python scripts/check-combined-release.py --platform ${{ matrix.platform }} --output build-artifacts
-      - uses: actions/upload-artifact@v4
-        if: startsWith(github.ref, 'refs/tags/v')
-        with:
-          name: Impera-Workshop-${{ matrix.platform }}
-          path: ${{ runner.os == 'Windows' && 'workshop-windows-artifact/' || 'workshop-dist/*' }}
-          if-no-files-found: error
-      - name: Upload testing packages
-        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+      - name: Upload verified combined package
         uses: actions/upload-artifact@v4
         with:
           name: Build-${{ matrix.platform }}
@@ -246,9 +233,9 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
-          pattern: Impera-*
+          pattern: Build-*
       - name: Assemble release downloads
-        run: python scripts/assemble-release.py --artifacts artifacts --with-workshop --version "${{ github.ref_name }}"
+        run: python scripts/assemble-release.py --artifacts artifacts --verified-combined --version "${{ github.ref_name }}"
       - name: Create or reuse release and replace assets
         env:
           GH_TOKEN: ${{ github.token }}
