@@ -610,7 +610,10 @@ static void DrawDarkness(SDL_FRect dst,int width,int height,int mapX,int mapY,in
     SDL_FRect map={dst.x+mapX*dst.w/width,dst.y+mapY*dst.h/height,columns*16*dst.w/width,rows*16*dst.h/height};
     SDL_FRect source={16,16,columns*16,rows*16};
     SDL_Rect clip={(int)map.x,(int)(dst.y+8*dst.h/height),(int)map.w,(int)((height-16)*dst.h/height)};
-    if(s_expandedFrame) SDL_SetRenderClipRect(s_sdlRenderer,&clip);
+    if(s_expandedFrame) {
+        map.y += WIDE_ShakeAmount()*dst.h/height;
+        SDL_SetRenderClipRect(s_sdlRenderer,&clip);
+    }
     SDL_RenderTexture(s_sdlRenderer,s_darknessTexture,&source,&map);
     if(s_expandedFrame) SDL_SetRenderClipRect(s_sdlRenderer,NULL);
 }
@@ -621,6 +624,7 @@ static bool CombatSelectionPixel(int x, int y) { return x < 2 || x >= 14 || y < 
 static void SmoothFrame(const byte* indices, int w, int h, int mapX, int mapY,
                         int columns, int rows, SDL_Texture* native, int sourceScale, SDL_FRect dst)
 {
+    if (WIDE_ShakeAmount()) { s_previousValid = false; return; }
     if ((EVT_ImmediateExitEnabled() && D_5893_map_id != 255) || s_pixelUI || !s_smoothMovement ||
         !s_mapDrawn || !D_58a4 || (!MAPS_Outside(D_5893_map_id) && D_5893_map_id < 128))
         return;
@@ -1144,6 +1148,7 @@ void GRAP_SDL_FlushFrame(void)
             TILESET_Copy(s_completedWidePixels,s_widePixels,(size_t)layout.width*layout.height);
             memcpy(s_completedWidePixels,s_widePixels,(size_t)layout.width*layout.height);
             s_completedWideMap=D_5893_map_id;s_completedWideLevel=D_5895_map_level;s_completedWideValid=true;
+            WIDE_ApplyShake(s_widePixels,layout);
             bool showHistory = TextHistoryVisible();
             for(int y=0;y<layout.height;y++) for(int x=0;x<layout.width;x++)
                 for(int sy=0;sy<2;sy++) for(int sx=0;sx<2;sx++) {

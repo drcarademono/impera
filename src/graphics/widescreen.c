@@ -11,7 +11,25 @@
 #include "tiles.h"
 #include "tileset.h"
 #include "vars.h"
+#include "text/text_window.h"
 #include <string.h>
+
+/* The original quake scrolls overlapping strips, equivalent to a two-pixel
+ * vertical shift. Apply it after composing/caching the entire expanded map. */
+static int s_shakeAmount;
+void WIDE_SetShake(int amount) { s_shakeAmount = amount; }
+int WIDE_ShakeAmount(void) { return s_shakeAmount; }
+static void ShakeCopy(void* host, byte* dst, const byte* src, size_t size)
+{
+    (void)host;
+    TILESET_Copy(dst, src, size);
+}
+void WIDE_ApplyShake(byte* pixels, WideLayout l)
+{
+    if (s_shakeAmount)
+        IMPERA_TextScroll(pixels, l.width, 8, 8, l.sidebarX - 9, l.height - 9,
+                          s_shakeAmount, NULL, ShakeCopy);
+}
 
 static int s_actorTiles[IMPERA_NPC_CAPACITY];
 int WIDE_ActorTile(int actor) { return s_actorTiles[actor]; }
@@ -235,12 +253,17 @@ bool WIDE_FootprintVisible(int dx, int dy, unsigned width, unsigned height) {
     return false;
 }
 
-static void Copy(byte* dst, int stride, int dx, int dy, int sx, int sy, int w, int h)
+static void CopyFrom(byte* dst, const byte* source, int stride, int dx, int dy, int sx, int sy, int w, int h)
 {
     for (int y = 0; y < h; y++) {
-        TILESET_Copy(dst+(dy+y)*stride+dx,g_linearEgaBuffer0+(sy+y)*320+sx,w);
-        memcpy(dst + (dy + y) * stride + dx,g_linearEgaBuffer0 + (sy + y) * 320 + sx,w);
+        TILESET_Copy(dst+(dy+y)*stride+dx,source+(sy+y)*320+sx,w);
+        memcpy(dst + (dy + y) * stride + dx,source + (sy + y) * 320 + sx,w);
     }
+}
+
+static void Copy(byte* dst, int stride, int dx, int dy, int sx, int sy, int w, int h)
+{
+    CopyFrom(dst, g_linearEgaBuffer0, stride, dx, dy, sx, sy, w, h);
 }
 
 bool WIDE_Compose(byte* pixels, WideLayout l)
@@ -348,7 +371,9 @@ bool WIDE_Compose(byte* pixels, WideLayout l)
                                 l.height - 8);
         }
     /* Keep the engine's central tiles, effects, targeting and modal overlays. */
-    Copy(pixels, l.width, l.mapX + (cx - (MAP_LARGE_COMBAT ? MAP_CENTER_X : 5)) * 16,
+    /* Page 1 is the quake's clean backup; avoid shifting the center twice. */
+    CopyFrom(pixels, s_shakeAmount ? g_linearEgaBuffer1 : g_linearEgaBuffer0,
+         l.width, l.mapX + (cx - (MAP_LARGE_COMBAT ? MAP_CENTER_X : 5)) * 16,
          l.mapY + (cy - (MAP_LARGE_COMBAT ? MAP_CENTER_Y : 5)) * 16, 8, 8, 176,
          l.height - 8 - (l.mapY + (cy - (MAP_LARGE_COMBAT ? MAP_CENTER_Y : 5)) * 16) < 176
              ? l.height - 8 - (l.mapY + (cy - (MAP_LARGE_COMBAT ? MAP_CENTER_Y : 5)) * 16)

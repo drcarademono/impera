@@ -10,12 +10,85 @@
 #include "graphics/grap_buf.h"
 #include "graphics/grap.h"
 #include "graphics/widescreen.h"
+#include "graphics/tileset.h"
 
 static byte pixel(byte* pixels, WideLayout l, int dx, int dy)
 {
     return pixels[(l.mapY + (l.rows / 2 + dy) * 16) * l.width + l.mapX + (l.columns / 2 + dx) * 16];
 }
 #include "synthetic_tileset_mask.h"
+/* Compare the expanded effect against the original strip-scrolling routine,
+ * including native artwork metadata and the unshaken frame/sidebar. */
+static void testShake(byte* tiles)
+{
+    memset(D_ab02, 1, sizeof(D_ab02));
+    for (int y = 0; y < 16; y++)
+        memset(tiles + 128 + y * 8, ((y % 14) + 1) * 0x11, 8);
+    for (int y = 0; y < 200; y++) for (int x = 0; x < 320; x++) {
+        byte* p = g_linearEgaBuffer0 + y * 320 + x;
+        *p = (x + y) % 15 + 1;
+        TILESET_RecordRGBA(p, 0xff000000u | (y << 16) | x);
+    }
+    ULTIMA_0f6e_GRAP_1b_TransferFullscreen(0, 1);
+    const int sizes[][2] = {{1920,1080}, {2560,1080}, {1920,1200}};
+    Uint32 palette[16];
+    for (int i = 0; i < 16; i++) palette[i] = 0xff000000u | i;
+    for (unsigned n = 0; n < sizeof(sizes)/sizeof(*sizes); n++) {
+        WideLayout l = WIDE_Layout(sizes[n][0], sizes[n][1]);
+        size_t size = (size_t)l.width * l.height;
+        byte* baseline = malloc(size);
+        byte* shaken = malloc(size);
+        TILESET_Register(baseline, size);
+        TILESET_Register(shaken, size);
+        assert(WIDE_Compose(baseline, l));
+        for (int amount = -2; amount <= 2; amount += 4) {
+            ULTIMA_0f6e_GRAP_1b_TransferFullscreen(1, 0);
+            if (amount < 0)
+                for (int y = 8; y <= 179; y += 3)
+                    GRAP_BUF_ScrollWindow(8, y, 183, y + 4, amount);
+            else
+                for (int y = 179; y >= 8; y -= 3)
+                    GRAP_BUF_ScrollWindow(8, y, 183, y + 4, amount);
+            WIDE_SetShake(amount);
+            assert(WIDE_Compose(shaken, l));
+            WIDE_ApplyShake(shaken, l);
+            for (int y = 0; y < l.height; y++) for (int x = 0; x < l.width; x++) {
+                bool map = x >= 8 && x < l.sidebarX - 8 && y >= 8 && y < l.height - 8;
+                int sourceY = map ? y - amount : y;
+                bool blank = sourceY < 8 || sourceY >= l.height - 8;
+                size_t dst = (size_t)y * l.width + x;
+                if (map && blank) assert(shaken[dst] == 0);
+                else {
+                    size_t src = (size_t)sourceY * l.width + x;
+                    assert(shaken[dst] == baseline[src]);
+                    for (int sy = 0; sy < 2; sy++) for (int sx = 0; sx < 2; sx++)
+                        assert(TILESET_BufferColor(shaken + dst, sx, sy, palette) ==
+                               TILESET_BufferColor(baseline + src, sx, sy, palette));
+                }
+            }
+            /* Away from the original map's exposed edge, retain the exact
+             * legacy earthquake, with no extra displacement at the seam. */
+            int left = l.mapX + (l.columns/2 - 5)*16;
+            int top = l.mapY + (l.rows/2 - 5)*16;
+            for (int y = 2; y < 174; y++) {
+                if (top+y < 8 || top+y >= l.height-8 ||
+                    top+y-amount < 8 || top+y-amount >= l.height-8) continue;
+                for (int x = 0; x < 176; x++)
+                    assert(shaken[(top+y)*l.width+left+x] == g_linearEgaBuffer0[(8+y)*320+8+x]);
+            }
+            WIDE_SetShake(0);
+            ULTIMA_0f6e_GRAP_1b_TransferFullscreen(1, 0);
+            assert(WIDE_Compose(shaken, l));
+            WIDE_ApplyShake(shaken, l);
+            assert(memcmp(shaken, baseline, size) == 0);
+        }
+        TILESET_Unregister(shaken);
+        TILESET_Unregister(baseline);
+        free(shaken);
+        free(baseline);
+    }
+}
+
 int main(void)
 {
     syntheticMaskBegin();
@@ -585,6 +658,7 @@ int main(void)
     assert(pixels[8*l.width+edgeX]==1);
     assert(pixels[(l.height-9)*l.width+edgeX]==1);
     free(pixels);
+    testShake(tiles);
     GRAP_Cleanup();
     syntheticMaskEnd();
     puts("Expanded map, sidebar, visibility, actors, and layout tests passed.");

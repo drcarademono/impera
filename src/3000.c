@@ -5,6 +5,7 @@
 #include "text/text_input.h"
 #if defined(TARGET_SDL)
 #include "key/mouse.h"
+#include "graphics/widescreen.h"
 #endif
 #include "time/time.h"
 
@@ -77,6 +78,10 @@ void ULTIMA_3072_ShakeScreen(void)
 #endif
         }
 
+#if defined(TARGET_SDL)
+        WIDE_SetShake(-2);
+#endif
+
 #if defined(TARGET_DOS32)
         ULTIMA_223c_AudioWhiteNoise(0x13, 700, 0x96);
 #elif defined(ENABLE_SPEED_FIX)
@@ -90,6 +95,10 @@ void ULTIMA_3072_ShakeScreen(void)
             ULTIMA_22e2_PcspkOn(ULTIMA_2092_RandomRange(0x13, 0x96));
 #endif
         }
+
+#if defined(TARGET_SDL)
+        WIDE_SetShake(0);
+#endif
 
 #if defined(TARGET_DOS32)
         ULTIMA_223c_AudioWhiteNoise(0x13, 300, 0x96);
@@ -105,6 +114,10 @@ void ULTIMA_3072_ShakeScreen(void)
 #endif
         }
 
+#if defined(TARGET_SDL)
+        WIDE_SetShake(2);
+#endif
+
 #if defined(TARGET_DOS32)
         ULTIMA_223c_AudioWhiteNoise(0x13, 700, 0x96);
 #elif defined(ENABLE_SPEED_FIX)
@@ -118,6 +131,10 @@ void ULTIMA_3072_ShakeScreen(void)
             ULTIMA_22e2_PcspkOn(ULTIMA_2092_RandomRange(0x13, 0x96));
 #endif
         }
+
+#if defined(TARGET_SDL)
+        WIDE_SetShake(0);
+#endif
 
 #if defined(TARGET_DOS32)
         ULTIMA_223c_AudioWhiteNoise(0x13, 300, 0x96);

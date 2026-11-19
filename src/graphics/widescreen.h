@@ -17,5 +17,8 @@ bool WIDE_DarknessMask(byte* mask,int columns,int rows);
 bool WIDE_Visible(int dx, int dy);
 bool WIDE_FootprintVisible(int dx, int dy, unsigned width, unsigned height);
 int WIDE_ActorTile(int actor);
+void WIDE_SetShake(int amount);
+int WIDE_ShakeAmount(void);
+void WIDE_ApplyShake(byte* pixels, WideLayout layout);
 bool WIDE_Compose(byte* pixels, WideLayout layout);
 #endif
